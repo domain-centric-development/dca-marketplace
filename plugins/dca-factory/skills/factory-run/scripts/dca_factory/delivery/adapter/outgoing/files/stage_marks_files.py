@@ -5,8 +5,8 @@ from __future__ import annotations
 import os
 
 from ..pipeline.stage_rows import order_for
-from ..build import commands
-from ..build.commands import open_suites_record
+from ..stack import commands
+from ..stack.commands import open_suites_record
 from .run_marks import current_stage_files
 from .signals import record_judge_signal
 

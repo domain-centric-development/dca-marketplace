@@ -7,7 +7,7 @@ import unittest
 from unittest import mock
 
 import support  # noqa: F401 — puts the package on the path
-from dca_factory.delivery.adapter.outgoing.build import commands
+from dca_factory.delivery.adapter.outgoing.stack import commands
 
 
 class SuitesRecordTest(unittest.TestCase):

@@ -22,8 +22,8 @@ from ....domain.model.stage_story import Presence
 from ....domain.model.story import StoryId
 from ....domain.model.story_state import Detail
 from ....domain.service.acceptance_rules import AcceptanceMode, AcceptanceRules
-from ..build.commands import command_for
-from ..build.suite_runs import test_files
+from ..stack.commands import command_for
+from ..stack.suite_runs import test_files
 from ..claims.remote_claims import PUBLISHED
 from ..git.integration import integration_target
 from ..git.repository import git, git_identity

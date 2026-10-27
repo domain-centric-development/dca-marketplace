@@ -22,7 +22,7 @@ import time
 import typing
 
 from .....sharedkernel.adapter.outgoing.profile.profile_files import place
-from ..build.commands import posix_shell
+from ..stack.commands import posix_shell
 from ....application.status.texts import parse_time
 from ..claims.checkout_claim import claim_path, dead_runner, read_claim
 from ..files.run_marks import running_stages, stale_after

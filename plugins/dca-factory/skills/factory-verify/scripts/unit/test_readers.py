@@ -8,7 +8,7 @@ import support  # noqa: F401 — puts the package on the path
 from dca_factory.delivery.adapter.incoming.cli import cli_command as cli
 from dca_factory.delivery.adapter.outgoing.tools import streams
 from dca_factory.delivery.adapter.outgoing.tools import agents
-from dca_factory.delivery.adapter.outgoing.build import commands
+from dca_factory.delivery.adapter.outgoing.stack import commands
 from dca_factory.delivery.domain.service import profile_checks
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
 

@@ -15,8 +15,8 @@ from .....sharedkernel.adapter.outgoing.profile.profile_files import (
 from ....domain.model.stage_story import (
     Count, ImplementationReports, ParityFacts, ParityScenario, Place, Presence, Snapshot)
 from ....domain.model.story_state import Detail
-from ..build.commands import tail, TOOL_FOLDERS
-from ..build.test_reports import read_scenarios, reported_names
+from ..stack.commands import tail, TOOL_FOLDERS
+from ..stack.test_reports import read_scenarios, reported_names
 from ..files.decision_record_files import project_decisions_rel
 from .repository import git
 

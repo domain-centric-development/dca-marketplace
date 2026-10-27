@@ -7,8 +7,8 @@ from __future__ import annotations
 import os
 import typing
 
-from ..delivery.adapter.outgoing.build.commands import MISSING_TOOLS
-from ..delivery.adapter.outgoing.build.stage_runs import StageRunFiles
+from ..delivery.adapter.outgoing.stack.commands import MISSING_TOOLS
+from ..delivery.adapter.outgoing.stack.stage_runs import StageRunFiles
 from ..delivery.adapter.outgoing.files.criteria_files import criteria_of
 from ..delivery.adapter.outgoing.files.gate_journal import close_record, journal_gate
 from ..delivery.adapter.outgoing.files.migrations import layout_hint

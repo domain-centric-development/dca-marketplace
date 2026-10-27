@@ -43,7 +43,7 @@ from ..files.usage_files import journal_usage
 from ..files.run_marks import back_in, run_stories, step_open
 from ..files.journal_files import journal_writer
 from ..files.kept_files import stale_red_proof
-from ..build.commands import run as run_command
+from ..stack.commands import run as run_command
 from ..git.integration import integration_target, lost_text
 from ....application.profile.profile_rules import first_word, perspectives_of
 from ..tools.agents import TOOL, TOOLS

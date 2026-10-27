@@ -9,7 +9,7 @@ import typing
 
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_rel
 from ....application.shared.backlog_changes import Committed
-from ..build.commands import tail
+from ..stack.commands import tail
 from ..files.delivery_writes import story_journals
 from .change import in_places, people_places
 from .repository import git, git_identity

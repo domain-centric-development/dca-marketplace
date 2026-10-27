@@ -8,7 +8,7 @@ import unittest
 from support import write
 from dca_factory.delivery.application.status import texts
 from dca_factory.delivery.adapter.outgoing.tools import streams
-from dca_factory.delivery.adapter.outgoing.build import test_reports
+from dca_factory.delivery.adapter.outgoing.stack import test_reports
 
 JUNIT = """<?xml version="1.0" encoding="UTF-8"?>
 <testsuite name="com.example.WidgetTest" tests="5">

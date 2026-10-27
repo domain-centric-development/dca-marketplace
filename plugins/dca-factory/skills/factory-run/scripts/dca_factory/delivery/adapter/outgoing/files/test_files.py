@@ -13,8 +13,8 @@ from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_text
 from ....domain.model.stage_story import (
     CommandKey, MappedTest, Place, ScenarioKey, Selector, TestLocation, TitleCheck, TitleFound)
 from ....domain.model.story_state import Detail
-from ..build.commands import command_for
-from ..build.test_reports import display_name_of, unescape_literal
+from ..stack.commands import command_for
+from ..stack.test_reports import display_name_of, unescape_literal
 
 Mapping = typing.Dict[str, typing.List[str]]
 
