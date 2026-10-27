@@ -2751,6 +2751,18 @@ exit 0
         cached = [d for d, subdirs, _ in os.walk(skills_dir) if os.path.basename(d) == "__pycache__"]
         check("copies: no __pycache__ a run left in the source travels into the project's skills", not cached, cached)
 
+    # 1s. a Python older than the package needs is refused in one line, before anything runs
+    for root in throwaway():
+        backlog_fixture(root)
+        write_file(root, "old-python", "#!/bin/sh\nexit 1\n")              # answers every version question with no
+        os.chmod(os.path.join(root, "old-python"), 0o755)
+        result = subprocess.run([BASH, runner, "backlog"], cwd=root, capture_output=True, text=True,
+                                env=dict(os.environ, FACTORY_PYTHON=shell_path(os.path.join(root, "old-python"))),
+                                encoding="utf-8", errors="replace")
+        check("runner: a FACTORY_PYTHON older than 3.12 is refused in one line, without a traceback",
+              result.returncode == 2 and "needs Python 3.12 or newer" in result.stderr
+              and "Traceback" not in result.stderr, f"exit {result.returncode}; {result.stderr.strip()[-300:]}")
+
     # 1r. inside an agent session the runner does not start a real tool
     for root in throwaway():
         env = backlog_fixture(root)
@@ -4403,9 +4415,10 @@ def verify_setup(runner, verbose=False):
     check("package: no import cycle among the package's modules", not cycles, cycles[:4])
     entries = {name: open(os.path.join(os.path.dirname(runner), name), encoding="utf-8").read()
                for name in ("story-gate.py", "factory-cli.py")}
-    check("package: story-gate.py and factory-cli.py are entry points — bytecode in the user's cache, never in the "
-          "project, the package's main, nothing more",
-          all(len(text.splitlines()) <= 12 and "sys.pycache_prefix = sys.pycache_prefix or" in text
+    check("package: story-gate.py and factory-cli.py are entry points — a Python older than 3.12 refused, bytecode in "
+          "the user's cache, never in the project, the package's main, nothing more",
+          all(len(text.splitlines()) <= 14 and "sys.version_info < (3, 12)" in text
+              and "sys.pycache_prefix = sys.pycache_prefix or" in text
               and "dont_write_bytecode" not in text and "import main" in text
               for text in entries.values()), {k: len(v.splitlines()) for k, v in entries.items()})
     check("stages: no list of stage names outside the gate's table — the gate, the cli and the runner read STAGES",

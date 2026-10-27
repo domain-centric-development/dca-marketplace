@@ -718,11 +718,11 @@ stage starts at 16.2k tokens instead of 25.9k. For a local model through OpenCod
 the loaded context window and warns below `FACTORY_LOCAL_CONTEXT_MIN` (default 65536 tokens). The journal records
 each invocation's wall-clock time, and `status <story>` shows it.
 
-**Operating systems.** The gate is standard-library Python 3 and runs wherever Python does. The
+**Operating systems.** The gate is standard-library Python, 3.12 or newer, and runs wherever that Python does. The
 runner and the commit hook are bash, so both want a POSIX shell. Linux, macOS and **Windows under
 Git Bash** are what the pipeline's own suite runs on in CI. On Windows the install copies the skills
 where `ln -s` cannot link (a symlink needs developer mode and `MSYS=winsymlinks:nativestrict`;
-without them `ln -s` makes a silent copy anyway, so the installer probes and says which it did), the runner picks `python3` or `python`, whichever the machine has (`FACTORY_PYTHON`
+without them `ln -s` makes a silent copy anyway, so the installer probes and says which it did), the runner picks the first of `python3`, `python`, `py`, `python3.14` … `python3.12` that is 3.12 or newer, and refuses in one line where none is (`FACTORY_PYTHON`
 overrides), and the gate runs the profile's commands through Git's bash — found beside `git`, never the
 WSL launcher in `System32`; `FACTORY_BASH` names another — so a profile is written for a POSIX
 shell on every platform. WSL is the same route with a Linux userland and needs

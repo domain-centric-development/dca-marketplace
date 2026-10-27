@@ -120,13 +120,23 @@ refuse_nested() {
 # `python` or `py`, and `python3` is often the WindowsApps alias that opens a shop window instead of
 # running — found on PATH all the same. So each name is asked to run, not only looked up.
 # FACTORY_PYTHON overrides, for a project that pins one. Resolved once, and the *name* is what
-# reaches the profile and the permission list, so both stay portable between machines.
+# reaches the profile and the permission list, so both stay portable between machines. The package needs
+# Python 3.12 or newer; a versioned name is asked after the plain ones, for a machine whose `python3` is the
+# system's older one (macOS' /usr/bin) while a newer one sits beside it on PATH.
+PY_MIN="3.12"
+fits() { "$1" -c 'import sys; sys.exit(sys.version_info < (3, 12))' >/dev/null 2>&1; }
 PY="${FACTORY_PYTHON:-}"
 if [ -z "$PY" ]; then
-  for candidate in python3 python py; do
-    "$candidate" -c 'import sys; sys.exit(sys.version_info[0] != 3)' >/dev/null 2>&1 && { PY=$candidate; break; }
+  for candidate in python3 python py python3.14 python3.13 python3.12; do
+    fits "$candidate" && { PY=$candidate; break; }
   done
-  PY=${PY:-python3}                            # named in the error the first call then produces
+fi
+if [ -z "$PY" ]; then
+  echo "factory: needs Python $PY_MIN or newer — none on PATH (python3, python, py, python3.12–3.14); FACTORY_PYTHON names one" >&2
+  exit 2
+elif ! fits "$PY"; then
+  echo "factory: needs Python $PY_MIN or newer — FACTORY_PYTHON=$PY is older or does not run" >&2
+  exit 2
 fi
 # Every Python this runner starts writes UTF-8 — the gate's and the setup's lines carry `—` and `→`,
 # and a Windows console's code page (cp1252) cannot encode them: the print raises and the step dies.
