@@ -5,10 +5,11 @@ from __future__ import annotations
 
 import typing
 
+from ....building_blocks import OutputPort
 from .requests import Request
 
 
-class Child(typing.Protocol):
+class Child(OutputPort, typing.Protocol):
     """A story's or a request's process started beside the run."""
 
     def ended(self) -> typing.Optional[int]:
@@ -16,7 +17,7 @@ class Child(typing.Protocol):
         ...
 
 
-class BacklogCheckout(typing.Protocol):
+class BacklogCheckout(OutputPort, typing.Protocol):
     """The main checkout under the run's claim."""
 
     def prune(self) -> None:
@@ -52,7 +53,7 @@ class BacklogCheckout(typing.Protocol):
         ...
 
 
-class BacklogWorker(typing.Protocol):
+class BacklogWorker(OutputPort, typing.Protocol):
     """The processes a backlog run starts."""
 
     def run(self, story: str, start: str) -> int:

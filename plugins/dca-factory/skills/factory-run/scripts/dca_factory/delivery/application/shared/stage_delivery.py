@@ -6,6 +6,7 @@ from __future__ import annotations
 import dataclasses
 import typing
 
+from ....building_blocks import OutputPort
 from ...domain.model.story_state import Acceptance
 
 
@@ -19,7 +20,7 @@ class AcceptanceFacts:
     refused: typing.Optional[str]
 
 
-class StageDelivery(typing.Protocol):
+class StageDelivery(OutputPort, typing.Protocol):
     """The writes of a passing gate over one story. `result` is the gate run's verdict the writes report into."""
 
     def plan_marks(self, story: str, story_path: str) -> None:

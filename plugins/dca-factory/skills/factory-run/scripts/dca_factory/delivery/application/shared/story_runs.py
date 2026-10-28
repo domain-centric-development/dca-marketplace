@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import typing
 
+from ....building_blocks import OutputPort
 from ...domain.model.moment import Moment
 from ...domain.model.story import Delivery, StoryId
 
 
-class StoryRuns(typing.Protocol):
+class StoryRuns(OutputPort, typing.Protocol):
     """The stories' runs, as a command beside a run asks them."""
 
     def holding_checkout(self, exclude: StoryId) -> typing.Sequence[StoryId]:

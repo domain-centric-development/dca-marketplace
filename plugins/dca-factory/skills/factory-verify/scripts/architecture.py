@@ -9,6 +9,7 @@ package sits the version stamp `contract.py` alone, read by name by every instal
     layer_findings(package)   an import against the direction of the layers, with the DCA rule id it breaks
     value_findings(package)   a bare primitive or time type in a domain field or a domain signature
     marker_findings(package)  a dataclass decorator on a value, an identifier or a domain event — their base makes them
+    port_findings(package)    an output port unmarked, in the domain, unimplemented, or implemented inside the core
     cycle_findings(package)   an import cycle between two modules of the package
 
 Each returns its findings as lines `<module>:<line> <what>`; none means the package holds. Exempt: `web/fonts.py`,
@@ -281,6 +282,97 @@ def marker_findings(package):
                     found.append(f"{rel}:{decorator.lineno} {node.name} is a "
                                  f"{', '.join(sorted(marker_bases(node)))} — a frozen dataclass by its base, "
                                  f"without a decorator")
+    return found
+
+
+#: The building blocks that make a protocol an output port, and the ones that make it something else on purpose.
+PORT_MARKERS = frozenset(("OutputPort", "Repository", "Store"))
+OTHER_MARKERS = frozenset(("InputPort", "UseCase", "DomainGateway"))
+
+
+def class_bases(cls):
+    """The names of a class's direct bases — `OutputPort`, `bb.Store`, `Repository[Story, StoryId]` by its name."""
+    return {getattr(b.value if isinstance(b, ast.Subscript) else b, "attr",
+                    getattr(b.value if isinstance(b, ast.Subscript) else b, "id", "")) for b in cls.bases}
+
+
+def public_methods(cls):
+    """{name: parameter names without `self`} of the methods a class declares itself, the private ones left out."""
+    return {item.name: tuple(a.arg for a in item.args.posonlyargs + item.args.args + item.args.kwonlyargs
+                             if a.arg not in ("self", "cls"))
+            for item in cls.body if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and not item.name.startswith("_")}
+
+
+def port_findings(package):
+    """Every output port that is not one, has no implementation, or has one in the wrong place. Python's ports are
+    protocols: an adapter fits a port by its shape and never names it, so the type checker sees a fit only where an
+    adapter is assigned to the port — that a port is marked, implemented, and implemented outside the core is checked
+    here. A class implements a port when it declares each of the port's methods (its own and its port bases') with
+    the same parameter names. By DCA's ids:
+
+    - DCA-HEX-009  a protocol in an application's `shared` package extends `OutputPort`, `Repository` or `Store`
+      (`InputPort`, `UseCase` and a domain's `DomainGateway` are what they say);
+    - DCA-HEX-010  an output port is declared in no domain;
+    - DCA-TAC-015  a repository is implemented in an outgoing adapter alone;
+    - DCA-TAC-020  a store is implemented in an outgoing adapter alone.
+
+    Without a rule id, as the libraries have none: a protocol elsewhere in an application that is no port, an output
+    port no class implements, and a plain output port implemented outside the outgoing adapters and the composition
+    root."""
+    trees = parsed(package)
+    classes = [(dotted, rel, node) for dotted, (rel, tree) in sorted(trees.items())
+               for node in ast.walk(tree) if isinstance(node, ast.ClassDef)]
+    blocks = {node.name: node for dotted, _rel, node in classes if dotted == "building_blocks"}
+    found = []
+    ports = {}
+    kinds = dict.fromkeys(PORT_MARKERS)
+    grown = True
+    while grown:
+        grown = False
+        for dotted, rel, node in classes:
+            kind = next((kinds[b] or b for b in sorted(class_bases(node)) if b in kinds), None)
+            if dotted != "building_blocks" and kind and node.name not in ports:
+                ports[node.name] = (dotted, rel, node, kind)
+                kinds[node.name] = kind
+                grown = True
+    for dotted, rel, node in classes:
+        layer = place_of(dotted)[1]
+        bases = class_bases(node)
+        if layer == "application" and "Protocol" in bases and not bases & (set(kinds) | OTHER_MARKERS):
+            shared = ".shared." in f".{dotted}." or dotted.endswith(".shared")
+            found.append(f"{rel}:{node.lineno} {'DCA-HEX-009 ' if shared else ''}{node.name} is a protocol of the "
+                         f"application but no port — it extends OutputPort, Repository or Store")
+
+    def wanted(node):
+        methods = {}
+        for base in sorted(class_bases(node)):
+            source = ports[base][2] if base in ports else blocks.get(base)
+            if source is not None and source is not node:
+                methods.update(wanted(source))
+        methods.update(public_methods(node))
+        return methods
+
+    for name, (dotted, rel, node, kind) in sorted(ports.items()):
+        if place_of(dotted)[1] == "domain":
+            found.append(f"{rel}:{node.lineno} DCA-HEX-010 the output port {name} is declared in the domain")
+        methods = wanted(node)
+        if not methods:
+            continue
+        implementations = [(d, r, c) for d, r, c in classes
+                           if d != "building_blocks" and c.name not in ports and "Protocol" not in class_bases(c)
+                           and all(public_methods(c).get(m) == p for m, p in methods.items())]
+        if not implementations:
+            found.append(f"{rel}:{node.lineno} the output port {name} has no implementation")
+        for d, r, c in implementations:
+            layer = place_of(d)[1]
+            if kind in ("Repository", "Store") and layer != "outgoing":
+                rule = "DCA-TAC-015" if kind == "Repository" else "DCA-TAC-020"
+                found.append(f"{r}:{c.lineno} {rule} {c.name} implements the {kind.lower()} {name} outside the "
+                             f"outgoing adapters")
+            elif layer not in ("outgoing", "root"):
+                found.append(f"{r}:{c.lineno} {c.name} implements the output port {name} outside the outgoing "
+                             f"adapters and the composition root")
     return found
 
 

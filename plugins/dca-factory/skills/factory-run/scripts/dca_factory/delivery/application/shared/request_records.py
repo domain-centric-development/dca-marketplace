@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import typing
 
+from ....building_blocks import OutputPort
 
-class RequestRecords(typing.Protocol):
+
+class RequestRecords(OutputPort, typing.Protocol):
     """The records of the requests."""
 
     def asked(self, request: str) -> typing.List[typing.Tuple[str, str, str]]:

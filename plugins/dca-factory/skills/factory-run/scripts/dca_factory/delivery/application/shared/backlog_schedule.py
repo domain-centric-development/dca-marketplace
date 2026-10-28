@@ -6,6 +6,8 @@ from __future__ import annotations
 import dataclasses
 import typing
 
+from ....building_blocks import OutputPort
+
 
 @dataclasses.dataclass(frozen=True)
 class ScheduleRead:
@@ -18,7 +20,7 @@ class ScheduleRead:
     waits: bool = False
 
 
-class BacklogSchedule(typing.Protocol):
+class BacklogSchedule(OutputPort, typing.Protocol):
     """The schedule of the checkout, read off its files every time."""
 
     def read(self, slots: int, busy: typing.Sequence[str], skip: typing.Sequence[str]) -> ScheduleRead:

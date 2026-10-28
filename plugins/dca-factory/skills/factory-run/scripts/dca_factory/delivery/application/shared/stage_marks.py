@@ -5,8 +5,10 @@ from __future__ import annotations
 
 import typing
 
+from ....building_blocks import OutputPort
 
-class StageMarks(typing.Protocol):
+
+class StageMarks(OutputPort, typing.Protocol):
     """The marks of a gate run over one story."""
 
     def judge_passed(self, story: str) -> None:

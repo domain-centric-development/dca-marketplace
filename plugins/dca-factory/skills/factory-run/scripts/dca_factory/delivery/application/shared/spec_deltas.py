@@ -5,6 +5,8 @@ from __future__ import annotations
 import dataclasses
 import typing
 
+from ....building_blocks import OutputPort
+
 #: A criterion: its key, the feature it stands under ("" for the context itself), its lines.
 Criterion = typing.Tuple[str, str, typing.Tuple[str, ...]]
 
@@ -26,7 +28,7 @@ class SpecDeltaFacts:
     features: typing.Tuple[str, ...]
 
 
-class SpecDeltas(typing.Protocol):
+class SpecDeltas(OutputPort, typing.Protocol):
     def facts(self, story: str) -> typing.Optional[SpecDeltaFacts]:
         """The story's delta; None for a story that names no spec."""
         ...

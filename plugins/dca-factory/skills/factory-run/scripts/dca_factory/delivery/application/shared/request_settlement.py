@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import typing
 
+from ....building_blocks import OutputPort
 from .requests import Kind, Request
 
 
-class RequestSettlement(typing.Protocol):
+class RequestSettlement(OutputPort, typing.Protocol):
     """The checks and use cases a request reaches without a skill."""
 
     def holds(self, kind: Kind, fields: typing.Mapping[str, str], words: str) -> None:

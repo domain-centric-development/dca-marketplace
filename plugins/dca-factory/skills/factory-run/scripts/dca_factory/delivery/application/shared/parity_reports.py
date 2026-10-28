@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import typing
 
+from ....building_blocks import OutputPort
 from ...domain.model.stage_story import ParityFacts
 
 
-class ParityReports(typing.Protocol):
+class ParityReports(OutputPort, typing.Protocol):
     """The parity configs of a project."""
 
     def facts(self, config: str) -> ParityFacts:

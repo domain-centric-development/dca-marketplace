@@ -5,6 +5,8 @@ from __future__ import annotations
 import dataclasses
 import typing
 
+from ....building_blocks import OutputPort
+
 
 @dataclasses.dataclass(frozen=True)
 class Committed:
@@ -14,7 +16,7 @@ class Committed:
     refusal: str
 
 
-class BacklogChanges(typing.Protocol):
+class BacklogChanges(OutputPort, typing.Protocol):
     """The main checkout's changes."""
 
     def dirty(self) -> typing.Dict[str, str]:

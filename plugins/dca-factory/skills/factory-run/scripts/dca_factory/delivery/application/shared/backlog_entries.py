@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import typing
 
+from ....building_blocks import OutputPort
 from ...domain.model.stage_story import Place, StageStory
 from ...domain.model.story import StoryId
 from ...domain.model.story_state import Detail, StatusWord
@@ -24,7 +25,7 @@ class BacklogEntry:
     unreadable: typing.Optional[Detail]
 
 
-class BacklogEntries(typing.Protocol):
+class BacklogEntries(OutputPort, typing.Protocol):
     """Every story under the epics."""
 
     def twice(self) -> typing.Mapping[StoryId, typing.Tuple[Place, ...]]:

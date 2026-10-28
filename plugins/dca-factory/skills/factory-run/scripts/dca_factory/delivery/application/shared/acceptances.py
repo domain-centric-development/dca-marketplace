@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import typing
 
+from ....building_blocks import OutputPort
 from ...domain.model.decision_record import RecordId
 from ...domain.model.story import StoryId
 
 
-class Acceptances(typing.Protocol):
+class Acceptances(OutputPort, typing.Protocol):
     """What the acceptance records say about a delivered story."""
 
     def correction_of(self, story: StoryId) -> typing.Optional[RecordId]:

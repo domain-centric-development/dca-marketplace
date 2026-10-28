@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import typing
 
+from ....building_blocks import OutputPort
 
-class RunLines(typing.Protocol):
+
+class RunLines(OutputPort, typing.Protocol):
     """The run's lines as a person follows them."""
 
     def out(self, line: str) -> None:

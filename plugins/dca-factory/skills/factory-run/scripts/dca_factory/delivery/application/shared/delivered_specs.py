@@ -5,6 +5,8 @@ from __future__ import annotations
 import dataclasses
 import typing
 
+from ....building_blocks import OutputPort
+
 
 @dataclasses.dataclass(frozen=True)
 class DeliveredCriteria:
@@ -20,7 +22,7 @@ class DeliveredCriteria:
     removes: typing.Tuple[str, ...]
 
 
-class DeliveredSpecs(typing.Protocol):
+class DeliveredSpecs(OutputPort, typing.Protocol):
     """The stories and the spec as the files hold them."""
 
     def delivered(self) -> typing.List[DeliveredCriteria]:

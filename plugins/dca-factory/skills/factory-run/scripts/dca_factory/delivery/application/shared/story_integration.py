@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import typing
 
+from ....building_blocks import OutputPort
 from ...domain.model.story_state import GateReport, Rounds
 
 #: What a resolution lost of the main line's tests: (test file, [line, …]).
 Lost = typing.Sequence[typing.Tuple[str, typing.Sequence[str]]]
 
 
-class StoryIntegration(typing.Protocol):
+class StoryIntegration(OutputPort, typing.Protocol):
     """One story's integration into the main line, from its worktree."""
 
     def lock(self) -> None:

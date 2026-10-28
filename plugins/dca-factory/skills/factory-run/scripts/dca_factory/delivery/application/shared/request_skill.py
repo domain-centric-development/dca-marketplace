@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import typing
 
+from ....building_blocks import OutputPort
 from .requests import Kind, Request
 
 
@@ -17,7 +18,7 @@ class SkillRun:
     output: str
 
 
-class RequestSkill(typing.Protocol):
+class RequestSkill(OutputPort, typing.Protocol):
     """The tools a request's skill runs with."""
 
     def tool_for(self, unit: str, given: str) -> str:

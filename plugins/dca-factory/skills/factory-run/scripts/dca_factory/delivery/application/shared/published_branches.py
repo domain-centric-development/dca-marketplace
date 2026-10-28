@@ -5,6 +5,8 @@ from __future__ import annotations
 import dataclasses
 import typing
 
+from ....building_blocks import OutputPort
+
 
 @dataclasses.dataclass(frozen=True)
 class TakenBack:
@@ -14,7 +16,7 @@ class TakenBack:
     main: str
 
 
-class PublishedBranches(typing.Protocol):
+class PublishedBranches(OutputPort, typing.Protocol):
     def published(self, story: str) -> bool:
         """The story has a published branch in this checkout."""
         ...

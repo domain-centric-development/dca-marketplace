@@ -5,10 +5,11 @@ from __future__ import annotations
 
 import typing
 
+from ....building_blocks import OutputPort
 from ...domain.model.stage_story import Snapshot
 
 
-class ChangeIndex(typing.Protocol):
+class ChangeIndex(OutputPort, typing.Protocol):
     """The index and the working tree of one project."""
 
     def backlog_paths(self) -> typing.Optional[typing.List[str]]:

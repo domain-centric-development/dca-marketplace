@@ -6,6 +6,7 @@ import dataclasses
 import enum
 import typing
 
+from ....building_blocks import OutputPort
 from ...domain.model.story import StoryId
 
 
@@ -40,7 +41,7 @@ class ClaimOutcome:
     said: typing.Tuple[str, ...]
 
 
-class StoryClaims(typing.Protocol):
+class StoryClaims(OutputPort, typing.Protocol):
     """The remote's story claims, where the profile names a claim remote."""
 
     def held_elsewhere(self, story: StoryId) -> typing.Optional[ClaimHeld]:

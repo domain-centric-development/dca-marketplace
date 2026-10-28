@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import typing
 
+from ....building_blocks import OutputPort
 from ...domain.model.stage import StageName, StoryKind
 from ...domain.model.story_state import GateReport, Rounds, VerdictWord
 
 
-class StoryStages(typing.Protocol):
+class StoryStages(OutputPort, typing.Protocol):
     """One story's stages as the runner carries them, in the checkout or the worktree the story runs in."""
 
     def open_decisions(self, story: str) -> typing.List[str]:

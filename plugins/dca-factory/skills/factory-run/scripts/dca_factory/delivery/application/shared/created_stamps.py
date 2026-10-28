@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import typing
 
+from ....building_blocks import OutputPort
 from ...domain.model.moment import Moment
 
 
@@ -17,7 +18,7 @@ class Unstamped:
     kind: str
 
 
-class CreatedStamps(typing.Protocol):
+class CreatedStamps(OutputPort, typing.Protocol):
     """The backlog's files and when each came to be."""
 
     def unstamped(self) -> typing.Sequence[Unstamped]:

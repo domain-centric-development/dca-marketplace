@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import typing
 
+from ....building_blocks import OutputPort
 from ...domain.model.stage_story import CommandRun, RedLedger, SuiteCommands, SuiteRun, TestRun
 
 Mapping = typing.Mapping[str, typing.Sequence[str]]
@@ -14,7 +15,7 @@ WholeRuns = typing.Dict[str, typing.Tuple[str, int, str, typing.Dict[typing.Tupl
 Rows = typing.List[typing.Tuple[str, typing.List[int], str]]
 
 
-class StageRuns(typing.Protocol):
+class StageRuns(OutputPort, typing.Protocol):
     """The runs of one project tree — the working tree, or a scratch copy (`on`)."""
 
     def on(self, cwd: str) -> StageRuns:

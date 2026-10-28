@@ -4411,6 +4411,9 @@ def verify_setup(runner, verbose=False):
     decorated = architecture.marker_findings(package)
     check("package: a value, an identifier, a domain event is a frozen dataclass by its base — no decorator of its own",
           not decorated, decorated[:8])
+    ports = architecture.port_findings(package)
+    check("package: every output port is marked, implemented, and implemented outside the core — DCA-HEX-009/010, "
+          "DCA-TAC-015/020", not ports, ports[:8])
     cycles = architecture.cycle_findings(package)
     check("package: no import cycle among the package's modules", not cycles, cycles[:4])
     entries = {name: open(os.path.join(os.path.dirname(runner), name), encoding="utf-8").read()

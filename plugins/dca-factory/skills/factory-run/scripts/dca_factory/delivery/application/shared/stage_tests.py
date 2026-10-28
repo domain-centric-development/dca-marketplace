@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import typing
 
+from ....building_blocks import OutputPort
 from ...domain.model.stage_story import MappedTest, TestLocation
 
 Mapping = typing.Dict[str, typing.List[str]]
 
 
-class StageTests(typing.Protocol):
+class StageTests(OutputPort, typing.Protocol):
     """The tests table of a story and its tests in the project."""
 
     def table(self, story: str) -> typing.Tuple[typing.Optional[str], Mapping, typing.Optional[str]]:

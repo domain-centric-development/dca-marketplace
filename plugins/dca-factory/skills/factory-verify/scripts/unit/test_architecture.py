@@ -126,6 +126,54 @@ class MarkersTest(unittest.TestCase):
                          [f.split(" ", 1)[1].split(" —")[0] for f in found], found)
 
 
+class PortsTest(unittest.TestCase):
+
+    def test_every_port_of_the_factory_is_marked_and_implemented_outside_the_core(self):
+        self.assertEqual([], architecture.port_findings(PACKAGE))
+
+    def test_an_unmarked_a_misplaced_and_an_unimplemented_port_are_found(self):
+        blocks = ("import typing\nclass OutputPort(typing.Protocol): ...\n"
+                  "class Store(OutputPort, typing.Protocol): ...\n"
+                  "class Repository(OutputPort, typing.Protocol):\n"
+                  "    def find_by_id(self, aggregate_id): ...\n    def save(self, aggregate): ...\n"
+                  "class DomainGateway(typing.Protocol): ...\n")
+        with tempfile.TemporaryDirectory() as root:
+            plant(root, {
+                "building_blocks.py": blocks,
+                "delivery/application/shared/ports.py":
+                    "import typing\nfrom ....building_blocks import OutputPort, Store\n"
+                    "class Clock(typing.Protocol):\n    def now(self): ...\n"
+                    "class Journal(Store, typing.Protocol):\n    def append(self, line): ...\n"
+                    "class Mailer(OutputPort, typing.Protocol):\n    def send(self, to, text): ...\n"
+                    "class Archive(OutputPort, typing.Protocol):\n    def keep(self, item): ...\n",
+                "delivery/application/run/run_story.py":
+                    "class MemoryJournal:\n    def append(self, line): ...\n",
+                "delivery/adapter/incoming/cli/mail.py":
+                    "class CliMailer:\n    def send(self, to, text): ...\n",
+                "delivery/adapter/outgoing/files/journal.py":
+                    "class JournalFiles:\n    def append(self, line): ...\n"
+                    "class SystemClock:\n    def now(self): ...\n",
+                "delivery/domain/gateway/lines.py":
+                    "import typing\nfrom ....building_blocks import DomainGateway, OutputPort\n"
+                    "class MainLine(DomainGateway, typing.Protocol):\n    def head(self): ...\n"
+                    "class Ledger(OutputPort, typing.Protocol):\n    def book(self, entry): ...\n",
+                "infrastructure/root.py":
+                    "class RootLedger:\n    def book(self, entry): ...\n",
+            })
+            found = architecture.port_findings(root)
+        said = "\n".join(found)
+        self.assertIn("DCA-HEX-009 Clock is a protocol of the application but no port", said)
+        self.assertIn("DCA-HEX-010 the output port Ledger is declared in the domain", said)
+        self.assertIn("the output port Archive has no implementation", said)
+        self.assertIn("DCA-TAC-020 MemoryJournal implements the store Journal outside the outgoing adapters", said)
+        self.assertIn("CliMailer implements the output port Mailer outside the outgoing adapters and the "
+                      "composition root", said)
+        self.assertNotIn("MainLine", said)
+        self.assertNotIn("JournalFiles", said)
+        self.assertNotIn("RootLedger", said)
+        self.assertEqual(5, len(found), found)
+
+
 class CyclesTest(unittest.TestCase):
 
     def test_the_factory_has_no_cycle(self):

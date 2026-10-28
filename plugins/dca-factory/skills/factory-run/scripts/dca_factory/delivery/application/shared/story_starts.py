@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import typing
 
+from ....building_blocks import OutputPort
+
 #: (state, the stage it starts from or None, detail)
 Start = typing.Tuple[str, typing.Optional[str], str]
 
 
-class StoryStarts(typing.Protocol):
+class StoryStarts(OutputPort, typing.Protocol):
     """The schedule, asked about one story."""
 
     def start(self, story: str) -> typing.Optional[Start]:

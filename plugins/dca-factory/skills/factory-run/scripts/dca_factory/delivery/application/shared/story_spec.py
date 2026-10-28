@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import typing
 
+from ....building_blocks import OutputPort
 from ...domain.model.story import StoryId
 
 
@@ -16,7 +17,7 @@ class SpecChange:
     where: str
 
 
-class StorySpec(typing.Protocol):
+class StorySpec(OutputPort, typing.Protocol):
     """The spec beside one story's criteria."""
 
     def changing(self, story: StoryId) -> SpecChange:
