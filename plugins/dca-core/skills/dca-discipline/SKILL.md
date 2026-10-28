@@ -156,6 +156,11 @@ Synchronous remote effects cannot roll back with local state. Event snapshot pol
 3. **`occurredOn` field** of type `Instant` / `DateTimeOffset` (or matching convention).
 4. **Carries IDs and value objects only**, no aggregate references.
 
+**Reacting to an event.** A listener that drives an input port runs after the commit, in its own transaction, from
+an outbox — `@ApplicationModuleListener` in Spring, the project's transactional listener type in .NET — for a
+foreign contract and for the context's own domain event alike. A synchronous listener (`@EventListener`, a plain
+listener) calls output ports only: the translator that captures an integration event, a metric.
+
 ### 5. Domain-model and transaction discipline
 
 When writing or editing domain model classes:

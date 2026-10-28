@@ -147,6 +147,9 @@ The explicit exception to "domain services over supplied facts". Legitimate, not
 - [ ] Uses domain methods, not raw field access (e.g. `order.cancel(reason)`, not `order.setStatus(CANCELLED)`)
 - [ ] Order inside the use case: `save`, then `publishAndClearEvents` — never publish before the save; the publisher dispatches first and clears afterwards (clear = acknowledgement)
 - [ ] Integration events go through a transactional outbox registered *inside* the transaction and released after commit; consumers idempotent
+- [ ] A listener that drives an input port — for a foreign contract or the context's own domain event — is a transactional
+      listener: after the commit, in its own transaction, from an outbox (`@ApplicationModuleListener`; .NET the project's
+      transactional listener type) — `DCA-HEX-017`; a synchronous listener calls output ports only
 - [ ] Publishes domain events after persistence
 - [ ] Maps domain output to a `*Result` record
 

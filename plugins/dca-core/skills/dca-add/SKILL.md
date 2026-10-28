@@ -7,10 +7,11 @@ description: |
   formatting run over the whole code base) and `browser` (a browser runner and a smoke test, through
   `e2e-testing`), `integration-tests` (an integration source set or test project with its own command and
   one smoke test), `http-stub` (WireMock or WireMock.Net, for integration tests against an external
-  system stubbed at the protocol) and `coverage` (JaCoCo or coverlet, one report over every suite, no
-  threshold). Use when the user asks to "add the tactical rules", "freeze the existing
+  system stubbed at the protocol), `coverage` (JaCoCo or coverlet, one report over every suite, no
+  threshold) and `event-delivery` (an outbox for transactional listeners — Spring Modulith's event publication
+  registry, an outbox table with a worker, or Wolverine — and one test shown to fail). Use when the user asks to "add the tactical rules", "freeze the existing
   violations", "set up a formatter", "add Playwright", "add browser tests", "add WireMock", "stub the
-  payment provider in tests", "add an integration test level", "add test coverage", "add JaCoCo", or "/dca-add <capability>". Java (Gradle, Maven)
+  payment provider in tests", "add an integration test level", "add test coverage", "add JaCoCo", "add an outbox", "make event reactions durable", or "/dca-add <capability>". Java (Gradle, Maven)
   and .NET. Changes only what the capability needs, never overwrites a file, and records the capability as one
   line of the technical description.
 ---
@@ -23,7 +24,7 @@ run.
 
 **What belongs on this list:** a capability carries knowledge beyond the tool's own documentation, or a
 delivery pipeline needs it. Everything else is ordinary work without a skill — do it, but do not add it here.
-Today the list is seven entries:
+Today the list is eight entries:
 
 | Capability | Does | The knowledge lives in |
 |---|---|---|
@@ -34,6 +35,7 @@ Today the list is seven entries:
 | `integration-tests` | an integration source set or test project, its command, one smoke test shown to fail | `reference/integration-tests.md` |
 | `http-stub` | an HTTP stub for integration tests, on a free port, and one smoke test shown to fail | `reference/http-stub.md` |
 | `coverage` | line and branch coverage over every suite together and per suite, one report, no threshold | `reference/coverage.md` |
+| `event-delivery` | an outbox under the transactional listeners, the rule's roles, one test shown to fail | `reference/event-delivery.md` |
 
 ## Before any capability
 
@@ -226,6 +228,30 @@ stack is in `reference/coverage.md`: JaCoCo for Gradle and Maven, coverlet with 
 4. **Shown to work:** the domain's types in the report with covered lines; one unit test of a guard commented
    out shows that branch missed; the test restored.
 5. **Record it** in `dca.profile.yaml`: `coverage:` (the command) and `coverageReport:` (the report's path).
+
+## `event-delivery`
+
+A reaction to an event — the context's own domain event or another context's contract — drives a use case after the
+commit, in a transaction of its own, from a publication captured in the publishing transaction. The libraries ship no
+runtime for that; this capability puts the outbox into the project. The forms, their configuration and the parts
+every form has are in `reference/event-delivery.md`.
+
+1. **Already there?** Spring Modulith's events starter with a publication registry, an outbox table with a worker,
+   Wolverine's durable local queues: report what is there — and which of the parts it lacks (a staleness monitor,
+   bounded retry) — and stop.
+2. **The form, by the person's choice:** Spring Modulith where Spring is the framework (the default); an outbox table
+   and a worker without it; in .NET, Wolverine or an own outbox. An in-memory outbox is a stand-in for a sample: say
+   so when the project has no database.
+3. **Two listener kinds.** The synchronous kind runs in the publishing transaction and calls output ports only; the
+   transactional kind drives an input port and is delivered from the outbox. Existing listeners that drive an input
+   port move to the transactional kind; a translator stays synchronous. Ask before moving one that a test expects to
+   run inside the transaction.
+4. **The rule's roles** (`DCA-HEX-017`, experimental): Spring needs nothing; another Java framework sets
+   `withTransactionalEventListener(...)`; .NET names the project's listener types in `EventListenerTypes` and
+   `TransactionalEventListenerTypes`. Switch the rule on by id or with the experimental rules.
+5. **One integration test**, shown to fail: the reaction is not called before the commit, called once after it, never
+   after a rollback; make the listener synchronous and see it red; restore it.
+6. **Record it**: `event.delivery: modulith` / `outbox` / `wolverine` in `dca.profile.yaml`.
 
 ## After each capability
 
