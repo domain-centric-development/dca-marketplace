@@ -82,7 +82,7 @@ class ValuesTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             plant(root, {
                 "delivery/domain/model/story.py":
-                    "import dataclasses, datetime, typing\n"
+                    "import dataclasses, datetime, typing, uuid\n"
                     "class StoryId(Id):\n    value: str\n"
                     "class Pair(Value):\n    value: str\n    other: int\n"
                     "@dataclasses.dataclass(frozen=True)\nclass Loose:\n    value: str\n"
@@ -90,14 +90,15 @@ class ValuesTest(unittest.TestCase):
                     "    def __str__(self) -> str: ...\n"
                     "    def rename(self, title: typing.Optional[str]) -> None: ...\n"
                     "    def is_draft(self) -> bool: ...\n"
-                    "def due(at: datetime.datetime) -> StoryId: ...\n",
+                    "def due(at: datetime.datetime) -> StoryId: ...\n"
+                    "def owner_of(story: StoryId) -> uuid.UUID: ...\n",
                 "delivery/application/release.py": "def release(story: str) -> bool: ...\n",
             })
             found = architecture.value_findings(root)
         said = " ".join(found)
-        self.assertEqual(6, len(found), found)
+        self.assertEqual(7, len(found), found)
         for part in ("Pair.value is str", "Pair.other is int", "Loose.value is str", "Story.title is str",
-                     "rename(title) takes str", "due(at) takes datetime"):
+                     "rename(title) takes str", "due(at) takes datetime", "owner_of returns UUID"):
             self.assertIn(part, said)
         self.assertNotIn("is_draft", said)      # a predicate returns bool
         self.assertNotIn("StoryId", said)

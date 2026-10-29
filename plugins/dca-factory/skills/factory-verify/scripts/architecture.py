@@ -36,8 +36,9 @@ PURE_STDLIB = frozenset((
 #: it asks through an output port; everything else outside it reaches through its ports alone (DCA-LAY-003).
 APPLICATION_STDLIB = PURE_STDLIB | {"datetime"}
 
-#: A primitive or a time type: in the domain, each is wrapped in a value object (`value` its one field).
-PRIMITIVES = frozenset(("str", "int", "float", "bool", "datetime", "date", "time"))
+#: A primitive, a time type or a bare UUID: in the domain, each is wrapped in a value object (`value` its one field) —
+#: an identifier says whose it is through a typed id.
+PRIMITIVES = frozenset(("str", "int", "float", "bool", "datetime", "date", "time", "UUID"))
 
 
 def modules(package):
