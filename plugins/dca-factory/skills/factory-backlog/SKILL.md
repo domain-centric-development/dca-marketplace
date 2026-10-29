@@ -107,80 +107,18 @@ that smuggles the decision in.
    is a criterion waiting for its answer, not a footnote: the plan stage builds the next best shape
    around an open assumption, and that shape then reaches delivery unconfirmed. Ask for it before
    the story is released, or write the answer in as a criterion.
-6. **Run the question pass before the story is released.** Read the story, the three files of the
-   project description, the glossary and the code the story touches, and go through this list. Ask the
-   human what it turns up, while they are here — a question left for the plan stage stops a loop
-   later, when nobody is there to answer:
-   - **context:** is the story's context on the designed map? If not, it is a question about the
-     description — a new context, a new relationship — asked now, not a story;
-   - **surface and actor:** does a trigger or an outcome need an entry point, a page or a message
-     `## Surfaces` does not list, or an actor `## What and for whom` does not name? Who may reach
-     it? (Ask *whether* a way exists, never *which* one to build.)
-   - **technical fit:** does the story need what `product/tech.md` excludes — a second persistence,
-     a client framework where pages are server-rendered — or what the stack cannot do? That is a
-     question about the technical description, not a detail of the story;
-   - **external dependency:** a system neither the designed map nor `## Integrations` carries is a
-     question about the description, not a story. Its contract (endpoints, the request and answer
-     bodies with each field's type — a money amount as a decimal string, never a JSON number — status
-     codes, what counts as unavailable) goes into the description and the configuration once, never
-     into the story. A shape the description leaves open is a question now: two implementations fill
-     it differently;
-   - **inputs:** format, allowed range, and what happens at its edges. Every limit a rule names gets two
-     scenarios, one on each side: the limit itself accepted and the first value past it refused — "1 to 200
-     characters" is four (200 accepted, 201 refused, 1 accepted, an empty value refused), "at most 5" is two
-     (5 accepted, 6 refused). A limit with only its refusal written leaves its acceptance untested, and the
-     gate can only hold the tests to the scenarios there are;
-   - **examples:** the values of a rule's scenario sit where the rule differs from the obvious neighbour —
-     a rounding exactly on the half cent, where rounding half up and half to even part; a limit on both
-     sides of it. An example both rules answer alike proves neither;
-   - **malformed address:** an address that carries an id (`/tasks/{id}/…`) gets a scenario for an id that is
-     not even well-formed, answered as the product answers an unknown one — not by the framework's default
-     error;
-   - **position and order:** a rule about where an item stands — the order of a list, its place after a
-     change — gets a scenario that changes an item in the middle, not only at the ends;
-   - **defaults:** one stated value, and where the user sees it;
-   - **failure of a dependency:** the behaviour, and after how long a slow answer counts as a failure;
-   - **state and lifecycle:** every transition a rule names, including the conflict case where two
-     sources of the same value meet;
-   - **changed behaviour:** what looks different afterwards → `## Changed expectations`. Where the change alters
-     a scenario the spec already holds (`product/spec/<context>/…/scenarios.md`) — its outcome, or only its
-     example — the story also carries that scenario as a criterion: its `#### <key>` from the spec, with the
-     new text. The spec takes a story's criteria by key; a change said only in prose leaves the old text
-     standing, and the spec then contradicts the test that proves it;
-   - **already a story's:** compare every scenario with the scenarios of the delivered and adopted stories
-     under the epics, and with the tests that assert them. A scenario another story already carries is
-     not written again: name that story and leave it out. A whole story that is covered so is not
-     written — or, where it exists already, is set `superseded` on the person's say-so;
-   - **already the system's behaviour:** a whole story whose scenarios the system already shows, and
-     no story carries, is not a story to build but one to **adopt** — `status: adopted` (the backlog
-     contract's "Adopted story"): the factory maps it to green tests, writes the missing ones with a
-     break each, and records it as delivered with evidence. Offer it; on a brownfield project, offer
-     once per new story to adopt the existing behaviour the new story depends on — never as a stop;
-   - **already green:** check every scenario whose outcome is an absence or a non-change — "no …
-     is shown", "nothing changes", "… still works" — against the code as it is today. If it already
-     holds (the element does not exist yet, so it is not shown), it is a guarantee, not a
-     criterion: its test would be green before the build, and the gate refuses that. Take it out
-     of the criteria and say so; the plan stage turns it into a guard for the existing tests. Keep
-     it only when today's system does show what the scenario forbids;
-   - **repeated or abusive use:** a rule a user can probe or exhaust;
-   - **coverage:** a rule without a scenario, a scenario with two causes, a `Then` no test can observe;
-   - **out of scope:** what this story leaves to another → `## Out of scope`.
-   - **operations:** is every scenario's `When` an operation the glossary or the description names,
-     with the word the code uses? Ask a missing one as its effect — what exists before the step and
-     after it, and whose state changes (e.g. does the thing exist before, or does the step create it?
-     is it gone afterwards, or kept with a state?) — never as a translation. Where the session can
-     search, look up first how the field of the story's context names that operation (a standard, the
-     vocabulary of widely used systems, the look-alike operations they keep apart) and offer what you
-     find, with its source, as the options. The answer is an `answered:`
-     assumption with both words (`anlegen (create)`); the plan proposes it for the glossary.
-   - **outcome:** is this the story after which the epic's outcome event (`metric:`) can happen — the
-     step that completes the flow? Then it says so in its front matter, `publishes: <Event>`, with the
-     event's name exactly as the epic's `metric:` writes it. The plan gate refuses a name the metric does
-     not carry, and the document gate refuses the story while the code declares no such type or nothing
-     the story changed raises it. Ask where it is not obvious: "After which story can the outcome happen?"
+6. **Run the question pass before the story is released** — `reference/question-pass.md`, every item,
+   against the story, the three files of the project description, the glossary and the code it touches:
+   context on the
+   map, surface and actor, technical fit, external dependency, inputs at both sides of every limit,
+   examples where rules part, malformed address, position and order, defaults, failure of a
+   dependency, state and lifecycle, changed behaviour (and the spec scenario it alters), already a
+   story's, already the system's (adopt), already green (a guarantee, not a criterion), repeated or
+   abusive use, coverage, out of scope, operations (the glossary's word, looked up in the field),
+   outcome (`publishes:`). Ask the human what it turns up, while they are here. What the description
+   already answers is not asked again; answers go into rules, scenarios or `answered:` assumptions,
+   what stays open is an `open:` assumption.
 
-   What the project description already answers is not asked again. Answers go into rules, scenarios or
-   `answered:` assumptions; what stays open is an `open:` assumption.
 7. **Use the project's own words.** Read the context's glossary and the description's `## Glossary`
    first and write the story in those terms and operations. A term or a verb the story needs that
    neither carries goes into `## Assumptions` as a question for the domain contact, not into the story
@@ -222,100 +160,24 @@ that smuggles the decision in.
    the tokens and *Next* — without retelling it, reformatting it or adding after its *Next*. Say more
    only when asked, read from the file the answer comes from.
 
-## A journey
+## Kinds of item
 
-An epic may name its **journey** — `## Journey` in `epic.md`: the steps as a user takes them, across the
-epic's stories and contexts, to the epic's outcome event, and why a break would hurt. Write the steps
-as an event timeline — each a command and the event it causes (`place → OrderPlaced`), the last
-one the outcome event; a step whose command or event the glossary does not name is a question first. Ask for it when an
-epic is created ("Which flow through this epic must never break, and why?"); leave it `open:` when the
-person cannot say yet — a journey emerges from delivered stories — and add it at any later time. An epic
-decides against one with `- none: <why>` under `## Journey`; without the section it has decided nothing, and once
-every story of the epic is delivered the status names it *delivered, unguarded*. Then propose its journey item:
-the delivered stories' operations and events as the timeline, ending in the outcome event — or the `none:` line,
-if the person decides against it. The product description's
-`## Qualities` may name flows that must never break; offer them as an epic's journey.
+Before writing one of these, read its section in `reference/item-kinds.md`:
 
-The journey test is its own backlog item in the epic's folder: `kind: journey`, `depends_on:` the stories
-that build its steps, one scenario walking the steps to the outcome event (no happy-path mark — it is a
-guard, not acceptance). It becomes ready when those stories are delivered, runs plan, test, judge and
-document — nothing to build — and its test is green at its test gate. Template:
-`factory-run/templates/backlog/journey.md.tmpl`.
-
-## A feature
-
-A story names the feature it changes — `feature:` beside `context:`, the feature's name as its glossary entry spells
-it in parentheses (`productdetails`); without one its criteria belong to the context as a whole. A feature is a term of
-the context's language: look it up in `product/spec/<context>/glossary.md` (`Type: Feature`) and in the spec's
-folders; a story that needs one the context does not have names it, and its plan brings it in. Criteria of two
-features are two stories: split the story, one feature each.
-
-## A task
-
-One question decides between a story and a task: **would an actor notice the change?** Yes — a missing or wrong
-behaviour, a bug, a feature taken away — is a story, with a criterion and a red test (a feature taken away has the
-absence as its criterion). No — dead code, a helper nothing calls, a method a port inherits and nobody uses, a
-placeholder file, copied test helpers, a dependency or build change, a unit test for an invariant that already holds —
-is a task (`kind: task`, `factory-run/templates/backlog/task.md.tmpl`): no criterion, a sentence or two of what changes
-in the code, `closes:` the finding rows it settles. Where a person's words or a finding leave it unclear, ask that one
-question. A finding that makes a test assert more is neither: the test's expectation changes, which is a story's
-`## Changed expectations` or a decision of the test stage.
-
-A task lives in the epic of the code it touches — for a finding, the epic of the story the finding belongs to; for a
-project finding (`flaky#<n>`), the epic whose code the test covers.
-Several findings of one kind may go into one task; findings that touch unrelated code are separate tasks.
-
-## Taking a feature away
-
-A feature taken away is a story — an actor sees it gone. Its criterion is the **absence**, in the actor's words and
-observable: "the list offers no export", "the export address answers that there is no such page"; that criterion is
-its happy path and its test is red until the feature is gone. Under `## Changed expectations` say what no longer
-holds, in a person's sentence — it backs the plan's `- removes <key>: <why>` for every scenario of the feature in the
-spec and the deletion of the feature's tests (`## Changed tests`). Where the feature leaves code nobody needs, the plan
-lists it `changes: removed`; the build takes it away.
-
-## A story from a wish
-
-`/factory-run <words>` hands you a wish: a user story in the person's words, with the id still to give.
-Draft the story from it in the contract — the words become `## Story`, rules and keyed scenarios, open points
-`open:` assumptions — and then ask from `reference/questions.md`: only the open entries, all at once, in the
-catalogue's order, word for word, followed by what the question pass (step 6) turns up. A new epic gets its
-four fields from these answers, never from the wish alone. Everything else is as for any story — the checks
-against the description, the gate's `--check-backlog`, the measuring window. On "run it now" the story is
-released (`status: approved`) and you hand its id back to `/factory-run`; on "keep it as a draft" it waits for
-its release like any other.
-
-## A story pasted from a tracker
-
-A story pasted from an issue tracker — Jira wiki markup, GitHub Markdown, a document — is rewritten
-into the contract, not copied: its goal becomes `## Story`; its scope rules become `### Rule:`
-headings; its scenarios become keyed scenarios with one `When` each; its out-of-scope sentences go
-to `## Out of scope`; integration notes (endpoints, environments, status codes) become a question
-about the project description (item 6, external dependency); open points become `open:`
-assumptions. Then run the question pass over the result. The wording of criteria and messages stays
-the human's.
-
-## Splitting
-
-A story one run cannot deliver is two stories, not a bigger one. The tell is not length but
-seams: two actors, two contexts, a criterion that only makes sense after another has shipped.
-Split along the seam, give each part its own keys, and put the order in `depends_on` — never a
-"part 1 / part 2" pair whose halves are meaningless alone.
-
-## Repairing an item the gate refused
-
-Fix exactly what the gate named. An incomplete epic gets its missing fields from the human, not
-from you; a story without a context gets one only if the map already has it; a criterion without a
-key gets a key that names its behaviour. Do not rewrite the parts the gate did not complain about
-— a story's wording is the domain contact's, not yours.
-
-**Speak in skills.** You run the commands; the person gets the result and, for a next step, the
-skill that does it (`/factory-status`, `/factory-decisions`, `/factory-run <story>`,
-`/factory-backlog`) — never a shell command to type, unless the person asks how to do something
-without a session. You may run `factory.sh` for everything that starts no tool — `setup`,
-`backlog`, `status`, `decisions`, `update`, `verify`, `check` — but never `run`: it starts a tool
-process per stage (`claude -p` and the like) on top of this session, and the runner refuses it
-inside one anyway.
+- **a journey** — an epic's `## Journey` as an event timeline to its outcome event, and the journey item
+  (`kind: journey`, `depends_on:` its stories, one scenario, no happy-path mark) once the epic is delivered;
+- **a feature** — `feature:` beside `context:`, a term of the context's glossary; criteria of two features
+  are two stories;
+- **a task** (`kind: task`) — a change no actor notices: no criterion, `closes:` the finding rows it settles;
+  the one question that decides between story and task is *would an actor notice?*;
+- **taking a feature away** — a story whose criterion is the absence, its `## Changed expectations` what
+  no longer holds;
+- **a story from a wish** (`/factory-run <words>`) — drafted in the contract, then the open entries of
+  `reference/questions.md` asked at once, in order, word for word;
+- **a story pasted from a tracker** — rewritten into the contract, never copied;
+- **splitting** — along a seam (two actors, two contexts, a criterion that needs another shipped), order in
+  `depends_on`, never "part 1 / part 2";
+- **repairing an item the gate refused** — exactly what the gate named, nothing else.
 
 ## Run for a request
 

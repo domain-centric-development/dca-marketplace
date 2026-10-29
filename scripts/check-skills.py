@@ -182,6 +182,7 @@ def self_test(patterns):
 
 # The size past which some tools cut a project document without saying so.
 SKILL_LIMIT = 32 * 1024
+SKILL_WARN = 20 * 1024  # a SKILL.md is loaded whole on every call: past this, move detail into a reference beside it
 
 
 def check_skill_sizes(root):
@@ -198,6 +199,9 @@ def check_skill_sizes(root):
         size = len(text) + text.count(b"\n")
         where = os.path.relpath(path, root)
         largest = max(largest, (size, where))
+        if SKILL_WARN <= size < SKILL_LIMIT:
+            print(f"check-skills: WARN {where}: {size} bytes with CRLF line endings — past {SKILL_WARN // 1024} KiB; "
+                  "move detail into a reference the SKILL.md names", file=sys.stderr)
         if size >= SKILL_LIMIT:
             problems.append(f"{where}: {size} bytes with CRLF line endings, over the {SKILL_LIMIT // 1024} KiB a tool may cut without "
                             f"saying so — move detail into a file beside it that it names")
@@ -268,7 +272,7 @@ def main():
             continue
         for name in sorted(os.listdir(skills)):
             folder = os.path.join(skills, name)
-            if not os.path.isdir(folder):
+            if not os.path.isdir(folder) or name.startswith("."):
                 continue
             path = os.path.join(folder, "SKILL.md")
             where = f"{plugin}/skills/{name}"

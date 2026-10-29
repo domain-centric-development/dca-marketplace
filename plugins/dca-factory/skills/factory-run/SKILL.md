@@ -10,6 +10,9 @@ gate calls and the escalation. You do **no** domain work yourself: no plan, no t
 production code, no review verdict. That belongs to the stage assignments below, and keeping
 them apart is what makes a run reproducible.
 
+This file is the route; the detail sits in `reference/`, named at the step that needs it. Read a
+reference when its step comes, not before.
+
 ## What the run needs
 
 | Thing | Where | Missing? |
@@ -17,10 +20,10 @@ them apart is what makes a run reproducible.
 | the project description | `product/overview.md`, `product/tech.md` (and the optional designed map `product/domain.md`), or where the profile points | `/factory-setup` writes it with the person, through the project's description skill; stop and say so |
 | the story | `product/epics/<epic>/<story>/story.md`, or under the profile's `epics:` | offer to write one (`/factory-backlog`) and stop |
 | the epic | `product/epics/<epic>/epic.md` | same |
-| the stack profile | `dca-factory.profile.yaml` | create it from the template by detecting the build (see below) |
+| the stack profile | `dca-factory.profile.yaml` | create it from the template by detecting the build (`reference/first-run.md`) |
 | an architecture the gate can check | the project's rule suite and building blocks | this is **not** the pipeline's job: the project installs it once with the method's setup skill (in a DCA project `/dca-init`), and the factory never calls a skill that writes code. Without one, the build gate skips the architecture check and names it |
-| the gate | `.agents/factory/story-gate.py` — it decides; `factory-cli.py` beside it shows and coordinates (status, schedule, marks, the checkout) | the installer writes both (step 1 below) |
-| the commit guard | `.githooks/pre-commit` | the installer writes it and sets `core.hooksPath` (step 1 below) |
+| the gate | `.agents/factory/story-gate.py` — it decides; `factory-cli.py` beside it shows and coordinates (status, schedule, marks, the checkout) | the installer writes both |
+| the commit guard | `.githooks/pre-commit` | the installer writes it and sets `core.hooksPath` |
 
 Read `reference/backlog-contract.md` for the backlog format and `reference/file-contracts.md`
 for what each stage reads and writes. Both are part of this skill.
@@ -31,40 +34,10 @@ say precisely which file to create, create it when the user agrees, then continu
 ## First run in a project
 
 The entry is `/factory-setup`: it checks the project description, git, the runner and the stack
-profile, and does only what is missing. Where you are asked to run a story in a project without a
-pipeline, say so and hand over to it. What it runs:
-
-0. The project has an architecture to gate on — a rule suite and the building blocks its code
-   implements — or the architecture check is skipped and named. Installing one is the method's
-   (in a DCA project `/dca-init`), once per project; the factory delivers stories and calls no skill
-   that writes code.
-1. Run the pipeline's setup from this skill's folder, for the tool you are:
-   `bash <this skill's folder>/scripts/factory.sh setup --tool <claude|codex|opencode>`, and report
-   what it printed. It starts no tool, and it stops with one line where the directory is not a git
-   repository. It puts the gate, the runner and the observer under `.agents/factory/`, the commit
-   hook under `.githooks/`, `.gitattributes`, the `.gitignore` lines for `.DS_Store` and `Thumbs.db`
-   (a file manager's drop would otherwise stop a run as an unclaimed change) and for `/.dca-factory/*`, the
-   pipeline's protocol, with the story journals let in (left out where the `.gitignore` already names it), the pipeline's section in `AGENTS.md` and, for Claude
-   Code, the gate's permission and a SessionStart hook; it writes the stack profile first, from what
-   it detects. The hook runs `factory.sh check --staged`: tool hooks and deny rules do not port
-   between agent tools, but every tool commits through git, so that is where the guard belongs.
-2. Check the stack profile setup wrote (`dca-factory.profile.yaml`, from
-   `templates/factory.profile.yaml.tmpl`), and add the `required:` line with what the human says
-   must hold for every change. Where a command is wrong or missing, fix it there.
-   **Detected, not assumed:** the commands come from the presets in `templates/presets/` — one flat
-   file per build tool, browser runner, formatter or rule package the setup can recognise, each with
-   the files that give it away and the profile lines it writes. What no preset recognises stays out
-   of the profile. Leave a command out when the project has none: the gate then skips that check
-   and names it — which is honest, whereas gating on a command that does not exist turns governance
-   off after the second red run.
-3. Adding a capability later means one more line in the profile, not an edit to any stage: a
-   formatter under `format:` and `formatFix:`, a rule suite under `architecture:` (both run by the
-   build gate), a further review perspective under `reviews:`, the reviewer for an existing
-   perspective under `review.<perspective>:` (both read by `stage-judge`), or the skill that carries
-   a stage's craft under `carrier.<stage>:` (read by that stage). Where the project set the
-   capability up since — a browser runner, a formatter —
-   `bash .agents/factory/factory.sh setup --check` names the lines detection would add, and
-   `setup --write` adds them once the human agrees; a value the human wrote is never overwritten.
+profile, and does only what is missing. Asked to run a story in a project without a pipeline, say so
+and hand over to it. What it installs, how the profile's commands are detected from the presets
+(never assumed — a command the project has not is left out, and the gate names the skipped check),
+and how a capability is added later with one profile line: `reference/first-run.md`.
 
 ## The run
 
@@ -73,65 +46,63 @@ from the project root. Exit code 0 means proceed; any `gate:fail` line stops the
 about to run, and the fix belongs to the stage that produced the artefact, not to you.
 
 1. **gate `plan`** — refuses an incomplete epic, a story without a context or criteria, a story
-   still in `draft`, and a context that is not on the designed map (or, without one, the generated map). It also reports when
-   the project's instruction file is past the size a tool loads, since the rest is truncated in
-   silence. Do not
-   repair the backlog yourself beyond obvious typos; an epic without an intent is a question for
-   the story's `domain_contact`.
+   still in `draft`, and a context that is not on the designed map (or, without one, the generated
+   map). It also reports when the project's instruction file is past the size a tool loads, since the
+   rest is truncated in silence. Do not repair the backlog yourself beyond obvious typos; an epic
+   without an intent is a question for the story's `domain_contact`.
 2. **`stage-plan`** → `.dca-factory/runs/<story>/plan.md`
 3. **`stage-test`** → `.dca-factory/runs/<story>/tests.md`
 4. **gate `test`** — every criterion mapped, test sources compile, every mapped test red. A
    mapped test that is already green means the criterion is not new behaviour or the test asserts
-   nothing; send it back to `stage-test`. With contract 9 it also holds the levels: a test the
-   end-user command runs must belong to the happy path or to a scenario the plan gave `browser-only`.
+   nothing; send it back to `stage-test`. It also holds the levels: a test the end-user command runs
+   must belong to the happy path or to a scenario the plan gave `browser-only`.
 5. **`stage-build`** → `.dca-factory/runs/<story>/build.md`
 6. **gate `build`** — every mapped test green, and the profile's `architecture:` and `format:`
-   commands succeed. Both run in the gate, not on a stage's word. On failure, hand the gate output back to
-   `stage-build`. Every repeat round — this one, a refused gate after any stage, a judge's
+   commands succeed. Both run in the gate, not on a stage's word. On failure, hand the gate output
+   back to `stage-build`. Every repeat round — this one, a refused gate after any stage, a judge's
    `changes-requested` — increments `.dca-factory/evidence/<story>/.rounds`; at **three** the run
    stops and escalates. The counter is a file, not something you remember — an in-session run has
    no other honest way to count, and a resumed run must see the same number. Two refusals count no
-   round: `gate:fail environment` — a profile command whose program the gate's shell did not find, which
-   no stage can fix; stop and name it — and none at all when a person restarts the story with
+   round: `gate:fail environment` — a profile command whose program the gate's shell did not find,
+   which no stage can fix; stop and name it — and none at all when a person restarts the story with
    `--from`, which starts a new count (the runner keeps the old one under `.dca-factory/evidence/<story>/`).
-7. **`stage-tidy`** → `.dca-factory/runs/<story>/tidy.md`: the refactor half of red–green–refactor, inside
-   this story's footprint, with every test green and no test changed. A stage that changes nothing
-   and says why is finished, not skipped.
+7. **`stage-tidy`** → `.dca-factory/runs/<story>/tidy.md`: the refactor half of red–green–refactor,
+   inside this story's footprint, with every test green and no test changed. A stage that changes
+   nothing and says why is finished, not skipped.
 8. **gate `tidy`** — the same checks as the build gate, run again: the stage's whole claim is that
    nothing it touched changed what the code does.
-9. **`stage-judge`** → `.dca-factory/runs/<story>/judge.md`. Hand it what its skill names as input — the story,
-   the plan, `tests.md`, `build.md` and `.dca-factory/evidence/<story>/story.diff`, which the end mark of the
-   stage before wrote — never "the tree against HEAD": the diff is the story's, HEAD may hold more.
-   The file carries one of three verdicts:
+9. **`stage-judge`** → `.dca-factory/runs/<story>/judge.md`. Hand it what its skill names as input —
+   the story, the plan, `tests.md`, `build.md` and `.dca-factory/evidence/<story>/story.diff`, which
+   the end mark of the stage before wrote — never "the tree against HEAD": the diff is the story's,
+   HEAD may hold more. The file carries one of three verdicts:
    - `pass` — done, go to the report.
    - `changes-requested` — back to `stage-build` with the confirmed defects, then gate `build`
      again; the round counter applies.
    - `story-conflict` — the story or the plan is wrong. **Stop.** This never goes back to
      `stage-build`: a correction that changes an agreed criterion belongs in the story, and a
      human decides it. Say which criterion conflicts with what.
-10. **`stage-document`** → `.dca-factory/runs/<story>/document.md`: the glossary, the context map and the
-   project's reader documentation follow what the story changed.
+10. **`stage-document`** → `.dca-factory/runs/<story>/document.md`: the glossary, the context map
+   and the project's reader documentation follow what the story changed.
 11. **gate `document`** — every stage of this pass wrote its file after the one before it, the judge
    passed it, the story is the one that was planned, every file, path and identifier the stage claims
-   exists, and every claim says how it was checked. A story whose documents still describe yesterday is not delivered.
-   Where the profile's `acceptance:` applies, the gate does not deliver yet: it writes an
-   acceptance record and exits **3** — a question to a human, not a refusal; count no round. Stop,
-   and name in the report what to look at (the record lists it) and `/factory-decisions` to answer.
-   "Accepted" delivers the story at the next document gate; a correction goes into the same story,
-   which runs again from plan.
-12. Report: first the story's own view, as it is — `bash .agents/factory/factory.sh status --story
+   exists, and every claim says how it was checked. A story whose documents still describe yesterday
+   is not delivered. Where the profile's `acceptance:` applies, the gate does not deliver yet: it
+   writes an acceptance record and exits **3** — a question to a human, not a refusal; count no
+   round. Stop, and name in the report what to look at (the record lists it) and `/factory-decisions`
+   to answer. "Accepted" delivers the story at the next document gate; a correction goes into the
+   same story, which runs again from plan.
+12. **Report**: first the story's own view, as it is — `bash .agents/factory/factory.sh status --story
    <story> --format md` (passes, stages with their tokens, decisions, and *Next*); do not retell it.
    Then only what that view does not show: the criteria and their tests, what the gate **skipped**,
-   and every open assumption from the story. A run that skipped a check must not read as a
-   complete verification. The run commits nothing — and a story waiting for acceptance is not
-   ready to commit; say what the story's commit holds — the code
-   and tests the stages changed, the story (its `status: delivered` line) and its `decisions/`, and —
-   where the project commits its run history — `.dca-factory/runs/<story>/` and
-   `.dca-factory/evidence/<story>/` with its hidden files (the red ledger, the story digest, the journal). The commit hook checks the index against
-   the working tree, so a commit that leaves any of them behind untracked is refused.
-   Then give the checkout back — `python3 .agents/factory/factory-cli.py --release` — delivered or
-   stopped alike: a claim nobody releases keeps every other worker out until it goes stale
-   (`FACTORY_STALE_AFTER`, two hours).
+   and every open assumption from the story. A run that skipped a check must not read as a complete
+   verification. The run commits nothing — and a story waiting for acceptance is not ready to
+   commit; say what the story's commit holds — the code and tests the stages changed, the story (its
+   `status: delivered` line) and its `decisions/`, and — where the project commits its run history —
+   `.dca-factory/runs/<story>/` and `.dca-factory/evidence/<story>/` with its hidden files (the red
+   ledger, the story digest, the journal). The commit hook checks the index against the working tree,
+   so a commit that leaves any of them behind untracked is refused. Then give the checkout back —
+   `python3 .agents/factory/factory-cli.py --release` — delivered or stopped alike: a claim nobody
+   releases keeps every other worker out until it goes stale (`FACTORY_STALE_AFTER`, two hours).
 
 ## Where a run stands
 
@@ -144,15 +115,15 @@ correctly after an interruption, in another session or in another tool:
 | `plan.md`, no `tests.md` | `stage-test` |
 | `tests.md`, gate `test` red-and-mapped | `stage-build` |
 | `build.md`, gate `build` failing | `stage-build` again (count the round) — the runner does this for every refused gate after its stage |
-| `document.md`, the story not `status: delivered` | gate `document`; it writes `status: delivered` and `delivered:` into the story when it passes, and only then is the story delivered — the gate is the one writer of that line |
-| `.story-digest` differs from the story file | the story changed after it was planned: `stage-plan` again, and every stage after it |
-| a stage file journaled before the one before it | it belongs to an earlier pass — a stage ran again (a re-plan, a build after `changes-requested`); that stage file and every later one count as unwritten |
 | `build.md`, gate `build` passing, no `tidy.md` | `stage-tidy` |
 | `tidy.md`, gate `tidy` passing, no `judge.md` | `stage-judge` |
 | `judge.md` with `changes-requested` | `stage-build` (count the round) |
 | `judge.md` with `story-conflict` | stop, escalate to the human |
-| `judge.md` with `pass`, no `document.md` | gate `document` is next after `stage-document` |
+| `judge.md` with `pass`, no `document.md` | `stage-document`, then gate `document` |
+| `document.md`, the story not `status: delivered` | gate `document`; it writes `status: delivered` and `delivered:` into the story when it passes, and only then is the story delivered — the gate is the one writer of that line |
 | `document.md`, gate `document` passing | report and stop |
+| `.story-digest` differs from the story file | the story changed after it was planned: `stage-plan` again, and every stage after it |
+| a stage file journaled before the one before it | it belongs to an earlier pass — a stage ran again (a re-plan, a build after `changes-requested`); that stage file and every later one count as unwritten |
 | `.rounds` at 3 | stop, escalate to the human |
 | any stage file with a `## needs-human` section | stop; the section names a decision record under `<story>/decisions/` in the story's folder — say which file and what to write into it |
 | a decision record for the story is open (no `## Answer`, or one without `by:` and `at:`) | stop — no stage runs while the story waits |
@@ -167,110 +138,31 @@ Who runs the stages is the human's choice, not yours, and it decides what the ru
 | `/factory-run [story]`, "deliver STORY-1", `/loop /factory-run` | **in this session** — a subagent per stage where the tool can start one and it comes back, otherwise in-session | none beyond this session |
 | the person runs `factory.sh run [--story X]` in a shell | **the runner**, one process per stage | one per stage |
 
-The runner — `factory.sh run` — is the person's, never yours: it starts a tool process
-per stage on top of this session, and refuses to inside one. Asked for "one process per stage", "unattended" or "in the
-background", say that this is the runner and that they start it in a shell. Say in the report which
-tier ran.
+The runner — `factory.sh run` — is the person's, never yours: it starts a tool process per stage on
+top of this session, and refuses to inside one. Asked for "one process per stage", "unattended" or
+"in the background", say that this is the runner and that they start it in a shell. Say in the
+report which tier ran, and which variant (shared or separate stages).
 
-- **subagent per stage**: the stage gets the story and its predecessor file as its whole input and a
-  fresh context of its own — the isolation the runner gives, without a process per stage.
-- **in-session** where the tool has no subagents: you carry out the stage assignment yourself, in
-  order, reading only the story and the predecessor file for that stage — not what you remember
-  from earlier stages. The file contract plus the gate is what keeps this honest.
-- **the runner**: it calls the tool once per stage, and each stage process sees only the project —
-  its skills, the carriers the profile names, its settings — not the person's plugins or MCP
-  servers, with one prefix shared by every stage. So every stage begins with an empty context by
-  construction; it applies the gates, the judge's verdict, the round counter and the file checks
-  itself, and records each stage's cost with its price. Per-tool flags (a model, an effort level, a
-  sandbox) come from the environment — `FACTORY_CLAUDE_ARGS`, `FACTORY_CODEX_ARGS`,
-  `FACTORY_OPENCODE_ARGS` — because they are the tool's configuration and never the process's.
+**Before running a stage in this session, read `reference/execution-tiers.md`** — what each tier
+carries, the shared builder and verifier (the default; `reference/shared-stages.md`), the reviews
+that run beside each other before the judge, and the stage marks: `factory-cli.py --stage-start
+<stage> --story <id>` right before a stage and `--stage-end` right after its file is written, with
+the gate called **after** the end mark. Then `reference/running-stages.md` — a defect in a test goes
+back to the test stage (`back: test`), what every stage prompt names, and the model per stage.
 
-**Shared stages — the default.** Plan to tidy run in one context (the "shared builder", window
-`builder`), judge and document in another (the "shared verifier", window `verifier`) — never in one: the
-judge's independence from the builder is the point of the split. The profile's `stages: separate`,
-`factory.sh run --separate-stages` or `FACTORY_SHARED_BUILDER=0` / `FACTORY_SHARED_VERIFIER=0` separate
-them. `reference/shared-stages.md` says what each process carries, how a session marks its window and
-what to check after the end mark — read it before running either in a session. Say in the report which
-variant ran.
+Rules that hold in every tier:
 
-**The reviews run beside each other, before the judge.** In every tier the judge converges from one
-review file per perspective — `.dca-factory/runs/<story>/reviews/<perspective>.md`, the three built-ins
-plus the profile's `reviews:`, each written by the carrier `review.<perspective>:` names — instead of
-reviewing in its own context. The runner starts one tool process per perspective **at once** and waits
-for all before the judge (an adoption gets none: nothing was built); each is a `review:<perspective>`
-window in the journal with its cost. In a session, start one subagent per perspective at once where
-the tool has them — the reviewer agents the craft plugin carries are these — each writing its file;
-without subagents, run each review skill in-session one after another and still write the files. A
-perspective without a file is the judge's own pass, named so under `## Perspectives covered`; the
-document gate notes a missing file and refuses one without a findings section (`reviews`).
-`factory-cli.py --perspectives` lists the perspectives with their carriers; `--contract review` the
-file's shape.
-
-**A defect in a test goes back to the test stage.** Two stages can send a round there, with a line
-`back: test`: the judge, when a test asserts less than its criterion, and the build, when a test cannot
-pass because of its own code (a helper, a locator) while what it asserts stays the same. The build may
-change no test, so without this way back it would have to ask a human about a repair that changes no
-expectation. The repaired test is green — the code already meets it — so the test gate asks for its
-break instead of a red run. A change to what a test asserts stays a human's question. A merge of the main line
-that changed one of the story's tests after it was seen failing sends the story to the test stage the same way,
-by the runner's own step: build and tidy never start on a stale red proof. Tidy's own moves in the story's tests —
-a copy lifted into the support, a page object instead of a raw locator, what each test asserts kept — are the one
-exception: its gate runs each moved test on the tree the test stage left (`red-tree`) and takes the new version
-where it is red there (`red-reproof`).
-
-**What a stage is told, so it searches for nothing.** Every stage prompt names the skill, the story and
-where things are: the stack profile, the story's run folder and evidence folder, the knowledge skill's
-catalog where the profile names one, `factory-cli.py --contract <stage>` — the exact shape the gate holds
-that stage's file to, in a page, from the gate's own constants — the reports of an earlier round, and
-the path of `reference/stage-common.md`. What a session does with them is said there, once, for every
-stage, and the stage skills say to read it first — so a stage in a session and a stage the runner
-started hold to the same text. A stage that runs its own gate runs it with `--brief`: what passed is one
-line, what did not stays verbatim. Before the document stage the runner writes the stage's file as a
-skeleton (`factory-cli.py --document-skeleton <story>`) with every changed path and run file
-root-relative under `## Paths`; in a session run it yourself before the stage, and cite from it. The
-prompt also names the shell the stage has without asking — the gate, the cli, the profile's commands
-and the ordinary reading and text tools (`reference/stage-common.md`, *The shell a stage has*, which
-also says that a file is changed with the editor, never with a script on stdin): in an unattended run a
-refused command is a lost turn, nothing more, and the bench counted three per story before the list
-carried what a stage reaches for.
-
-**A model per stage.** The profile may name one: `model.<tool>.<stage>`, or `model.<tool>` for
-every stage. The runner passes it as the tool's model flag. In the subagent tier, start the stage's
-subagent on that model where the tool lets a subagent take one (Claude Code's subagents take an
-alias such as the ones the profile names; a full model name the subagent tool does not accept runs
-on the session's model). In-session the model cannot change. `--stage-start` records the request
-either way, and the status shows a stage whose model is not the one requested — so a request that
-had no effect is visible, not assumed.
-
-In the subagent and in-session tiers, mark every stage so its cost is known: run
-`python3 .agents/factory/factory-cli.py --stage-start <stage> --story <id>` right before it and
-`--stage-end <stage> --story <id>` right after its file is written. The gate records the window in
-the story's journal and reads the tool's own session log for it later — Claude Code's log of this
-session, subagents included, or Codex's — so `--usage`, the schedule and a budget see in-session
-stages the way they see the runner's. A mark without a log it can read records the stage as
-unknown. Do not work on anything else between the two marks: the window counts everything the
-session did in it. The marks also record what the stage changed — the start its tree, the end the
-changed-files record — so call the stage's gate **after** `--stage-end`: a gate inside the window
-(a stage checking its own work) skips the files check and says the stage is still open. `--stage-end`
-exits 7 where the story file or a `## Answer` changed inside the window: stop the story and tell the human —
-`factory-cli.py --owned-confirm <id>` is theirs to run once they looked.
-
-A single stage the human asked for (`/stage-build` on a story that already has a plan) is always
-done here — the runner delivers whole stories.
-
-Degrade rather than wait. A stage is finished when **its file exists**, not when a delegation
-reports success. If a stage you delegated has produced no file when control returns to you, do
-that stage in-session and note the fall-back in the report — a run that stalls waiting for a
-subagent mechanism delivers nothing, and the file contract makes the in-session variant just as
-correct.
-
-One thing the runner does that an in-session run cannot: it reads the judge's verdict from the
-file and acts on it — `changes-requested` goes back to the build stage and increments the round
-counter, `story-conflict` stops the run. In-session you do that yourself, from the file rather than
-from what you remember writing.
-
-Isolation is a comfort; the gate is the correctness argument. Never skip a gate because a stage
-reported success — a stage judging its own work is exactly what the gate replaces.
+- A single stage the human asked for (`/stage-build` on a story that already has a plan) is always
+  done here — the runner delivers whole stories.
+- Degrade rather than wait. A stage is finished when **its file exists**, not when a delegation
+  reports success. If a stage you delegated has produced no file when control returns to you, do that
+  stage in-session and note the fall-back in the report — a run that stalls waiting for a subagent
+  mechanism delivers nothing, and the file contract makes the in-session variant just as correct.
+- The runner reads the judge's verdict from the file and acts on it — `changes-requested` goes back
+  to the build stage and increments the round counter, `story-conflict` stops the run. In-session
+  you do that yourself, from the file rather than from what you remember writing.
+- Isolation is a comfort; the gate is the correctness argument. Never skip a gate because a stage
+  reported success — a stage judging its own work is exactly what the gate replaces.
 
 **Speak in skills.** You run the commands; the person gets the result and, for a next step, the
 skill that does it (`/factory-status`, `/factory-decisions`, `/factory-run <story>`,
@@ -293,64 +185,27 @@ Stop the run and hand back to the human when:
 - `stage-judge` returned `story-conflict`;
 - a stage would have to add a test framework, a dependency or a build-file change to do its work.
 
-Name the decision, the file it belongs in, and who is asked. Do not decide it yourself.
+Name the decision, the file it belongs in, and who is asked. Do not decide it yourself. A question
+is a **file** — `<story>/decisions/<nn>.md`, named in the stage's `## needs-human` — never a sentence
+in a report; how it is written, answered and applied: `reference/running-stages.md`, *A question is
+a file*, and `reference/file-contracts.md`, *Decision records*.
 
-A question is a **file**, not a sentence in a report: the stage writes
-`<story>/decisions/<nn>.md` in the story's folder from `templates/decision.md.tmpl` — the question, the
-options, its recommendation, never an answer — and names it in its `## needs-human` as
-`decision: <id>`. That is what makes the question survive the session and reach whoever answers
-it, in this session or another (see `reference/file-contracts.md`, *Decision records*). When you
-resume a story whose record is answered, run the stage it resumes at — the earlier of `stage:` in the
-record and `applies:` in the answer — with the answer in front of it; the gate checks that its new file cites the id, and stamps the record
-applied. The human answers through `factory-decisions` — in this session or another — which lists
-the records (`factory-cli.py --list-decisions`), explains one and writes `## Answer` only on their
-confirmation.
+## Other kinds of item
 
-## Outside a story
+`factory-cli.py --story <id> --kind` says what an item is; each kind runs a different subset of the
+stages, with the gates, rounds and decisions of a story. Read `reference/story-kinds.md` before one
+of these:
 
-A direct edit gets the same checks without a story: `python3 .agents/factory/story-gate.py
---change` runs the profile's compile, test, architecture and format commands and fails a required
-one (the profile's `required:` line) that is missing, left out or ran no test. `--staged` checks
-what a commit contains and refuses when the working tree differs from the index; the commit hook
-is that command, and CI runs `--change` on its checkout. Recommend it when someone asks whether a
-change is ready to commit — do not invent a story for it. `--parity <config>` checks that several
-implementations each prove a scenario contract from their reports (`reference/file-contracts.md`).
-
-## An adopted story
-
-A story with `status: adopted` describes behaviour the project already has (`--kind` prints `adopt`). It
-runs **plan, test, judge**, then the **adopt gate** (`story-gate.py --story <id> --stage adopt`) — skip
-build, tidy and document, nothing is built. The stages work in adopt mode: the plan names where each
-scenario's behaviour lives and which existing test covers it, and the invariants of the domain types the
-scenarios exercise; the test stage maps those tests, gives every invariant a unit test of its own, writes a
-characterization test with its break for a scenario or a rule without one, and changes no production code and
-no existing test; its gate expects every mapped test **green**. The judge confirms each test asserts its
-scenario. The adopt gate checks it all again, applies every break to a scratch copy, and delivers the
-story — `status: delivered`, `delivered_by: gate`, the same end state as a built story. A judge's
-`changes-requested` or a refused adopt gate sends it back to the test stage.
-
-## A story delivered by hand
-
-A person who built a story themselves marks it `factory-cli.py --deliver-by-hand <story> --by <who>`
-(`status: delivered`, `delivered:`, `delivered_by: hand:<who>`): delivered, claimed; the schedule never runs
-it. `factory-cli.py --prove <story>` sets it `status: adopted`, and the next run checks it as an adopted story
-above — the gate then writes `delivered_by: gate`. Neither is the way to change a delivered story: a change of
-delivered behaviour is a new story.
-
-## Several factories on one backlog
-
-With `claim_remote:` in the profile the runner claims each story on that remote before it runs it, skips one
-another factory claimed, and publishes a delivered story on its branch instead of moving `main`. Running a story's
-stages in a session yourself, claim it first: `python3 .agents/factory/factory-cli.py --claim-story <id>` — exit 3
-means another factory has it: stop and say who.
-
-## A journey item
-
-A backlog item with `kind: journey` (`factory-cli.py --story <id> --kind` prints it) is a guard over
-delivered stories. It runs **plan, test, judge, document** — skip build and tidy, there is nothing to
-build — and its test gate expects the journey test **green**, the inverse of a story. A judge's
-`changes-requested` sends it back to the test stage, not the build stage. Everything else — the gates,
-the rounds, the decisions — is a story's.
+- **an adopted story** (`status: adopted`) — behaviour the project already has: plan, test, judge, then
+  the adopt gate; nothing is built, every mapped test is green;
+- **a journey item** (`kind: journey`) — a guard over delivered stories: plan, test, judge, document;
+  its test gate expects the test green;
+- **a story delivered by hand** (`--deliver-by-hand`, `--prove`) — never the way to change a
+  delivered story: that is a new story;
+- **several factories on one backlog** (`claim_remote:`) — claim the story first
+  (`factory-cli.py --claim-story <id>`; exit 3: another factory has it, stop and say who);
+- **a change outside any story** — `story-gate.py --change` / `--staged` give a direct edit the same
+  checks; recommend it, do not invent a story for it.
 
 ## A wish instead of a story
 
@@ -364,48 +219,25 @@ What `/factory-run <argument>` means is the gate's to say, not yours: run
 | `unknown <word> …` | stop and show the line — the ids the backlog has; a word that names no story is never a new one |
 | `backlog` | no argument: work the backlog, below |
 
-## Without a story — work the backlog
+## Without a story, and several stories
 
-`/factory-run` with no story named works the backlog instead of one story:
+One story per run; several stories are a loop over it, never two builders working in parallel on
+one code base. What comes next is read off the files: `factory-cli.py --listening`, then
+`story-gate.py --schedule`, whose last line is `next: <story> <stage>` or `next: none — <why>`.
+Deliver what it names exactly as a named story, ask again; on `none` say why, give the checkout back
+(`factory-cli.py --release`) and end the turn — never wait or poll inside it, never pick a story
+yourself. One worker per checkout: `--stage-start` exits 3 when another holds it — stop and say who.
 
-1. Run `python3 .agents/factory/factory-cli.py --listening` — the sign of life a second session sees
-   in `/factory-status` while this one waits — then `python3 .agents/factory/story-gate.py
-   --schedule`. Its last line is `next: <story> <stage>` or `next: none — <why>`.
-2. For `next: <story> <stage>`: deliver that story from that stage, exactly as a named story —
-   the gates, the stage marks, the escalations. When it is delivered or stops for a decision, go
-   back to 1. Never pick a story yourself; the schedule orders by dependencies and keeps one story
-   with unfinished code at a time.
-3. For `next: none`: say why in one or two lines — which decision waits (and that it is answered
-   through `/factory-decisions`), which story is stopped or running elsewhere, or that the backlog is
-   done — give the checkout back (`python3 .agents/factory/factory-cli.py --release`) and end the
-   turn. Do not wait inside the turn and do not poll: files do not change while you wait.
-
-**One worker per checkout.** `--stage-start` takes the checkout for this session and exits 3 when
-another worker holds it — a second session, or a runner. Then stop, say who holds it (the gate prints
-it; `/factory-status` too), and end the turn; never work around it. A holder that shows no sign of
-life for two hours (`FACTORY_STALE_AFTER`) is taken as stopped, and the next worker takes over — a
-runner's claim (`runner:<host>:<pid>`) at once when that process no longer runs on this host.
-
-**Listening on the backlog.** A session that should pick up new stories and answered decisions
-by itself in its own context runs this under a scheduler: in Claude Code `/loop /factory-run` (it
-wakes, works what is ready, and sleeps again). A second session — or a person — manages meanwhile: writes stories with
-`/factory-backlog`, answers questions with `/factory-decisions`, watches with `/factory-status`. It
-changes backlog and decision files only, never code; the working session is the one writer. The
-same loop outside any session is the runner's `factory.sh run --watch`, which the person starts in a shell.
-
-## Several stories
-
-One story per run; several stories are a loop over it, never two builders working in parallel on one
-code base. What comes next is read off the files (`python3 .agents/factory/factory-cli.py --schedule`).
-Read `reference/several-stories.md` before working more than one story or explaining how the runner
-works the backlog: the schedule's states and order, one story with unfinished code per checkout, the
-runner's worktrees, `--parallel`, `--watch`, `--keep-going` and `--max-stages`, where `run --story` starts, what a
-running stage does (`factory.sh follow`), a shared process's stages, and what a story cost (`--usage`,
-`--story-budget`). In-session, do the same loop yourself — ask the schedule, run the story it names,
-ask again — and stop instead of waiting.
+Read `reference/several-stories.md` before working the backlog or more than one story, or
+explaining how the runner does: the schedule's states and order, one story with unfinished code per
+checkout, the stale claim, listening under a scheduler (`/loop /factory-run`, `factory.sh run
+--watch`), the runner's worktrees, `--parallel`, `--keep-going` and `--max-stages`, where
+`run --story` starts, what a running stage does (`factory.sh follow`), and what a story cost
+(`--usage`, `--story-budget`).
 
 ## The factory without a session
 
-`factory.sh up` runs the factory in the background until `down`; `serve` shows it in a browser, and every press
-there — or `factory.sh request <kind> …` — writes a request it works before the next story. A prompt that says
-*request `<id>` … you run headless* is such a request: read `reference/requests.md` first.
+`factory.sh up` runs the factory in the background until `down`; `serve` shows it in a browser, and
+every press there — or `factory.sh request <kind> …` — writes a request it works before the next
+story. A prompt that says *request `<id>` … you run headless* is such a request: read
+`reference/requests.md` first.

@@ -98,3 +98,32 @@ holds only the session's id, and a story's last stages are frozen by whatever ru
 An old session log can be read whole: `factory-cli.py --usage-from claude-session|codex-session <log>`. The watch lives as long as its process: a closed session or terminal ends it, and a
 file wakes nobody. In-session, do the same loop yourself — ask the schedule, run the story it
 names, ask again — and stop instead of waiting.
+
+## Without a story — work the backlog, in a session
+
+`/factory-run` with no story named works the backlog instead of one story:
+
+1. Run `python3 .agents/factory/factory-cli.py --listening` — the sign of life a second session sees
+   in `/factory-status` while this one waits — then `python3 .agents/factory/story-gate.py
+   --schedule`. Its last line is `next: <story> <stage>` or `next: none — <why>`.
+2. For `next: <story> <stage>`: deliver that story from that stage, exactly as a named story —
+   the gates, the stage marks, the escalations. When it is delivered or stops for a decision, go
+   back to 1. Never pick a story yourself; the schedule orders by dependencies and keeps one story
+   with unfinished code at a time.
+3. For `next: none`: say why in one or two lines — which decision waits (and that it is answered
+   through `/factory-decisions`), which story is stopped or running elsewhere, or that the backlog is
+   done — give the checkout back (`python3 .agents/factory/factory-cli.py --release`) and end the
+   turn. Do not wait inside the turn and do not poll: files do not change while you wait.
+
+**One worker per checkout.** `--stage-start` takes the checkout for this session and exits 3 when
+another worker holds it — a second session, or a runner. Then stop, say who holds it (the gate prints
+it; `/factory-status` too), and end the turn; never work around it. A holder that shows no sign of
+life for two hours (`FACTORY_STALE_AFTER`) is taken as stopped, and the next worker takes over — a
+runner's claim (`runner:<host>:<pid>`) at once when that process no longer runs on this host.
+
+**Listening on the backlog.** A session that should pick up new stories and answered decisions
+by itself in its own context runs this under a scheduler: in Claude Code `/loop /factory-run` (it
+wakes, works what is ready, and sleeps again). A second session — or a person — manages meanwhile: writes stories with
+`/factory-backlog`, answers questions with `/factory-decisions`, watches with `/factory-status`. It
+changes backlog and decision files only, never code; the working session is the one writer. The
+same loop outside any session is the runner's `factory.sh run --watch`, which the person starts in a shell.
