@@ -192,11 +192,14 @@ def check_skill_sizes(root):
         if "SKILL.md" not in files:
             continue
         path = os.path.join(folder, "SKILL.md")
-        size = os.path.getsize(path)
+        with open(path, "rb") as handle:
+            text = handle.read().replace(b"\r\n", b"\n")
+        # Measured as a Windows checkout has it: every line ending is two bytes there.
+        size = len(text) + text.count(b"\n")
         where = os.path.relpath(path, root)
         largest = max(largest, (size, where))
         if size >= SKILL_LIMIT:
-            problems.append(f"{where}: {size} bytes, over the {SKILL_LIMIT // 1024} KiB a tool may cut without "
+            problems.append(f"{where}: {size} bytes with CRLF line endings, over the {SKILL_LIMIT // 1024} KiB a tool may cut without "
                             f"saying so — move detail into a file beside it that it names")
     return problems, largest
 

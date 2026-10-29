@@ -86,3 +86,13 @@ call out of the process from inside a declarative transaction.
 
 `withInputPortSuffix("UseCase")` / `WithInputPortSuffix("UseCase")` for interfaces named `*UseCase` (.NET:
 `I*UseCase`); `DCA-NAM-003` then holds the project to it.
+
+## Wiring and metadata review
+
+Check how operations are registered: a stereotype or configuration is equally valid.
+Static references cannot prove runtime wiring; NAM-002 is informational only.
+Presets also configure member roles (`injectionSite`, `persistenceMapping` in Java;
+attribute namespace roles in .NET). Review prohibited roles on types and members,
+including composed annotations/derived attributes; unknown metadata is unclassified
+and allowed by these checks. Outgoing adapters can reuse own/global infrastructure,
+while another module’s infrastructure remains private.

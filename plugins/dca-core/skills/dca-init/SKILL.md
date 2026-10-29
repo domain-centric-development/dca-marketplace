@@ -418,21 +418,13 @@ constants class to consult.
   types onto them; rules pinned to unrelated interfaces see nothing.
 - **Don't** name a skill in the `AGENTS.md` section that is not installed. A session or a stage told to use a
   missing skill improvises without saying so.
-- **Don't freehand-scaffold example bounded contexts, aggregates, use cases or ports.** Init ends at packages +
-  architecture test + context declarations + the `AGENTS.md` section. Hand "also build me a first context" to
-  `/dca-new`, which owns the placement rules (output ports in `application/shared/`, never `domain/model/`,
-  the shared-vs-local port decision). Writing example domain code inline here is how structural mistakes ship
-  even though the freshly installed suite passes.
+- **Don't freehand-scaffold example contexts, aggregates, use cases or ports.** Init ends at packages, the
+  architecture test, context declarations and the `AGENTS.md` section; "also build a first context" is
+  `/dca-new`'s, which owns the placement rules.
 
 ### Wiring and metadata review
 
-Check how operations are registered: a stereotype or configuration is equally valid.
-Static references cannot prove runtime wiring; NAM-002 is informational only.
-Presets also configure member roles (`injectionSite`, `persistenceMapping` in Java;
-attribute namespace roles in .NET). Review prohibited roles on types and members,
-including composed annotations/derived attributes; unknown metadata is unclassified
-and allowed by these checks. Outgoing adapters can reuse own/global infrastructure,
-while another module’s infrastructure remains private.
+Review operation wiring and the preset's metadata roles as `reference/own-vocabulary.md` describes.
 
 ## Resolved configuration
 
