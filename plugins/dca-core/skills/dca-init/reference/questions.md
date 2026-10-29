@@ -18,10 +18,18 @@ call. The summary before the questions names them.
 ### INIT-MARKERS
 - look up: Phase 1 item 6 — the marker-like types
 - asked: once per marker-like type found
-- question: `<type>` (<n> types use it) — migrate it to the package marker, or keep it as an alias of the package marker?
-- options: Alias — keep the type, make it extend the package marker · Migrate — replace it, delete the old type
+- question: `<type>` (<n> types use it) — keep it as an alias of the package marker, point the rules' role at it, or migrate it to the package marker?
+- options: Alias — keep the type, make it extend the package marker · Role — keep the type unchanged, name it in the layout's marker roles · Migrate — replace it, delete the old type
 - default: Alias
-- answer goes to: the edits of Phase 3 (Java step 6, .NET step 6)
+- answer goes to: the edits of Phase 3 (Java step 6, .NET step 6), or `withMarkers(...)` / `WithMarkers(...)` in the layout (Role). An own context, shared-kernel or integration-event-type annotation is not asked: it is always a role
+
+### INIT-EXCLUDE
+- look up: Phase 1 item 3 — a start-up module below the base package named like a layer
+- asked: when one is found
+- question: `<package>` holds the start-up code and is named like a layer, so the rules would read the base package as a module next to the contexts. Leave it out of the architecture test?
+- options: leave it out · keep it in
+- default: leave it out
+- answer goes to: `DcaLayout` (`withExcludedPackages` / `WithExcludedNamespaces`)
 
 ### INIT-LAYOUT
 - look up: Phase 1 item 5 — folders the layout cannot express (`service/` instead of `application/`, a flat `controller/`–`service/`–`repository/`)
@@ -33,11 +41,11 @@ call. The summary before the questions names them.
 
 ### INIT-SUFFIX
 - look up: Phase 1 items 4 and 5 — the suffixes the code uses
-- asked: once per role where the code uses two suffixes for it (use case, MVC controller, REST adapter)
+- asked: once per role where the code uses two suffixes for it (use case, input-port interface, MVC controller, REST adapter)
 - question: `<role>` classes end in `<a>` and in `<b>`. Which one does the `naming` set hold the project to?
 - options: `<a>` · `<b>`
 - default: the one more classes use
-- answer goes to: `DcaLayout` (`withUseCaseSuffix`, `withControllerSuffix`, `withRestControllerSuffix`)
+- answer goes to: `DcaLayout` (`withUseCaseSuffix`, `withInputPortSuffix`, `withControllerSuffix`, `withRestControllerSuffix`)
 
 ### INIT-RULES
 - look up: an existing `dca-archunit.properties` (`dca.rules.sets`)
@@ -46,6 +54,14 @@ call. The summary before the questions names them.
 - options: the whole catalog · the recommendation for this project from `reference/module-selection-guide.md` · a selection of `layered`, `onion`, `hexagonal`, `naming`, `tactical`, `strategic`, `contextmap`, `advanced`, `usecase`, `errors`
 - default: the whole catalog for a new project (`dca-new`); the guide's profile for an existing one — the profile named in the question
 - answer goes to: `dca.rules.sets` in `dca-archunit.properties` (the key omitted for the whole catalog)
+
+### INIT-LOCAL-PORTS
+- look up: the output ports that are no repository, store or event publisher (Phase 1 item 6, the port interfaces)
+- asked: when the `usecase` set runs and such ports exist
+- question: Which of these output ports never leave the process (a hasher, a clock, an id source, a metrics port) — `<ports>`? The rest count as remote calls a transaction must not wait on.
+- options: a selection of `<ports>` · none
+- default: none
+- answer goes to: `DcaLayout` (`withLocalOutputPorts` / `WithLocalOutputPorts`; one own supertype covers them all)
 
 ### INIT-MODULITH
 - look up: Phase 1 item 1 — Spring Modulith on the class path

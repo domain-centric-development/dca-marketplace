@@ -85,6 +85,8 @@ Use `Glob`, `Read`, `Grep` and `Bash` to determine:
    assembly in `Assemblies`. Both loaders refuse a run that imported nothing below the base package or root
    namespace, and `DCA-STR-011` fails when no package or namespace declares a bounded context — say so in the
    report instead of treating the green suite as an adoption result.
+   A start-up module below the base package named like a layer makes the base package a module root beside
+   the contexts — thousands of findings about nothing: INIT-EXCLUDE.
 
 4. **Existing architecture tests.**
 
@@ -118,8 +120,9 @@ Use `Glob`, `Read`, `Grep` and `Bash` to determine:
 
    Read each hit and verify its role (a class named `Entity` may be a JPA `@Entity`). Look for near-empty
    interfaces under `common/`, `core/`, `shared/`, `sharedkernel/`. Keep scanning after the first find —
-   projects have partial sets. The rule libraries recognise **only their own markers**; every hit becomes a
-   migrate-or-alias decision in Phase 2.
+   projects have partial sets. The rules select every building block through a *role* (`DcaMarkers`), by
+   default the library's own marker; every hit becomes an alias, role or migrate decision in Phase 2 — own
+   context annotations included (`reference/own-vocabulary.md`).
 
 7. **Installed skills.** Which of the skills the `AGENTS.md` section names by role are installed: the session
    lists them, or a project skill directory holds them (`.claude/skills/`, `.agents/skills/`,
@@ -150,6 +153,7 @@ A. **Marker policy** (INIT-MARKERS) — per existing marker-like type:
      (`interface Aggregate<T, ID> extends AggregateRoot<T, ID>`); existing code compiles unchanged and the
      rules see every implementor. Recommend this for large code bases; note that the rules still report the
      class by *its* markers, so an alias must carry the same generics.
+   - `Role` — keep the type, name it in the layout's marker roles (`reference/own-vocabulary.md`, with limits).
 
 B. **Layout** (INIT-LAYOUT where folders cannot be mapped) — every deviation from the DCA defaults becomes a `DcaLayout` builder call (Java / .NET):
    - `adapter/in`, `adapter/out` → `withIncomingSubpackage("in")`, `withOutgoingSubpackage("out")` /
@@ -158,6 +162,7 @@ B. **Layout** (INIT-LAYOUT where folders cannot be mapped) — every deviation f
      `WithApiSegment`, `WithEventsSegment`
    - third-party packages the domain may use → `allowingInDomain("org.jmolecules..")` /
      `AllowingInDomain("NodaTime")`
+   - INIT-EXCLUDE, INIT-LOCAL-PORTS, an undeclared shared kernel → `reference/own-vocabulary.md`
    - framework (Java): write **no** preset call — `DcaLayout.forBasePackage` detects Spring, Jakarta EE,
      Quarkus or Micronaut from the test class path and the report's first line shows the choice
      (`framework annotations: quarkus (detected)`). Name a preset only when detection cannot decide (mixed
@@ -191,7 +196,7 @@ D. **Suffix conventions** (INIT-SUFFIX where the code uses two) — DCA's defaul
    interface, `*Controller` for MVC (server-rendered) controllers and `*Resource` for REST adapters (.NET
    default `Controller` for both). `*ApplicationService` / `*Service` → `withUseCaseSuffix(...)`; `*Page` /
    `*Handler` for MVC controllers → `withControllerSuffix(...)`; `*Controller` / `*Endpoint` for REST →
-   `withRestControllerSuffix(...)`. The `naming` set then holds the project to *its* convention, and
+   `withRestControllerSuffix(...)`; input-port interfaces not named `*InputPort` → `withInputPortSuffix(...)`. The `naming` set then holds the project to *its* convention, and
    `dca.profile.yaml` records the resolved suffixes (`use_case_suffix:` and the others) so that whoever names a
    new element reads them there, before the suite runs.
    The failure suffix is the project's choice, not the suite's: a domain or use-case failure is named by the
@@ -386,6 +391,7 @@ constants class to consult.
   with `dca-new`
 - `reference/placeholders.md` — the templates' placeholders, where each value comes from
 - `reference/in-memory-transactions.md` — the transaction manager a Spring project without a data starter needs
+- `reference/own-vocabulary.md` — marker roles, own context annotations, excluded packages, local ports
 - `reference/questions.md` — every question this skill may ask, word for word, with where its answer is looked
   up first; `dca-new` asks the entries that apply to an empty directory in its one pass
 - `scripts/dca-report.py` — the report of this skill and of `dca-new project`, read from the disk
