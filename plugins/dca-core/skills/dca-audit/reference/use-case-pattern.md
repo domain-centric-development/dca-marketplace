@@ -376,5 +376,5 @@ public sealed class PlaceOrderUseCase : IPlaceOrderInputPort
 - [checklist.md](checklist.md) — per-layer audit checks (Application — Use Cases, Application — Output Ports)
 - [naming-conventions.md](naming-conventions.md) — complete naming tables
 - [archunit-rule-catalog.md](archunit-rule-catalog.md) — the static rules that enforce the pattern
-- [DTO Mapping Strategy](../../dca-new/SKILL.md#dto-mapping-at-the-adapter-boundary) — how adapters map to commands and results
-- [Module Selection Guide](../../dca-init/reference/module-selection-guide.md) — which rule modules enforce the use-case pattern
+- DTO mapping — how adapters map to commands and results: the `dca-new` skill's `reference/dto-mapping.md`
+- Module selection — which rule sets enforce the use-case pattern: the `dca-init` skill's `reference/module-selection-guide.md`
