@@ -55,7 +55,9 @@ its own or jMolecules' — names the annotation: `DcaMarker.anyOf(DcaMarker.ofPa
 DcaMarker.ofAnnotation("<its layer annotation>"))`. On a `package-info` it holds for the package tree below; on a
 class it places that class. In .NET the attribute sits on the type, on the assembly, or as an assembly attribute
 that names the namespace. The library ships no annotations; never add one to the project for this. Run the suite
-once with `DCA-LAY-007` (experimental) on: it lists the classes of a module that sit in no layer.
+once with `DCA-LAY-007` (experimental) on: it lists the classes of a module that sit in no layer. A project with no
+layers yet runs without the `hexagonal` and `layered` sets (`dca.rules.off.sets`, with the reason) until they stand:
+`DCA-HEX-019` reports every output port implementation that sits in no layer.
 
 ## Own context annotations
 
