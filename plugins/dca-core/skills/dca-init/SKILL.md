@@ -21,7 +21,7 @@ Maven, JUnit 5) and .NET (xUnit) are supported.
 
 DCA = synthesis of DDD, Hexagonal Architecture and Clean Architecture. The rule libraries pin to the package
 markers, so a project must implement *those* markers — the retrofit path for existing marker-like interfaces
-is below.
+is decision A.
 
 The skill does the DCA part and nothing else. The stack, the build skeleton and the repository are the
 project's (`dca-new` creates them from nothing); a browser runner, a formatter or a frozen baseline are single
@@ -36,6 +36,9 @@ capabilities (`dca-add`); the project description is `dca-describe`'s.
 | Context declaration | `@BoundedContext` on `package-info.java` | `[BoundedContext]` on a marker class in the context root namespace |
 | Rule selection | `dca-archunit.properties` on the test class path | `dca-archunit.properties` copied next to the test assembly |
 | Run | `./gradlew test-architecture` / `mvn test` | `dotnet test` (Debug) |
+
+This file is the route; each phase's detail sits in `reference/`, named where the phase starts. Read a
+reference when its phase comes, not before.
 
 ## Core principle: adapt, don't overwrite
 
@@ -54,88 +57,22 @@ and then runs this skill. The same holds for a directory that holds only a proje
 
 ### Phase 1 — Inspection
 
-Use `Glob`, `Read`, `Grep` and `Bash` to determine:
+Read `reference/inspection.md` and determine, with `Glob`, `Read`, `Grep` and `Bash`, in this order:
 
-1. **Language and build system.** `build.gradle(.kts)` / `pom.xml` → Java branch; `*.sln` / `*.csproj` → .NET
-   branch. Read the Java version (`toolchain`, `sourceCompatibility`, `<java.version>`), Spring Boot version,
-   whether Spring Modulith is present; or the `TargetFramework`, the test framework already in use (xUnit /
-   NUnit / MSTest), and whether a `Directory.Build.props` exists. Note whether the directory is a Git
-   repository (`git rev-parse --is-inside-work-tree`); this skill creates none, and the report says so where
-   it is missing.
-
-2. **Versions — look them up, never recall them.** Package versions go stale in training data. Resolve:
-   - `{{dcaJavaVersion}}` — the latest release of `dev.domaincentric:dca-archunit` (Maven Central search or
-     mvnrepository via `WebFetch`). The four Java artifacts are versioned independently: look up
-     `dca-building-blocks` (`{{dcaBuildingBlocksVersion}}`), `dca-spring` (`{{dcaSpringVersion}}`) and
-     `dca-archunit-spring-modulith` (`{{dcaModulithVersion}}`) the same way.
-   - `{{dcaDotnetVersion}}` — the latest `DomainCentric.ArchRules.Xunit` on NuGet.org
-     (`https://api.nuget.org/v3-flatcontainer/domaincentric.archrules.xunit/index.json` lists the versions);
-     `DomainCentric.BuildingBlocks` is versioned independently — take the version the chosen `ArchRules`
-     package depends on. Only when the user says they work against unreleased rules from a sibling
-     `dca-dotnet` checkout, offer the conditional `ProjectReference` switch
-     (`templates/dotnet/Directory.Build.props-local-fallback.tmpl`).
-   Re-verify per project; do not carry a version over from another session.
-
-3. **Source layout.** Source root, base package (Java: a few `package` declarations under `src/main/java`) or
-   root namespace (.NET: `RootNamespace` or the first namespace segments of the production projects);
-   multi-module (`settings.gradle` `include`, Maven modules, several `*.csproj`). In multi-module Java builds
-   the module hosting `src/test-architecture` must depend on every production module —
-   `DcaArchitecture.load(layout)` imports jars as well, so a sibling module reaches it as its jar, but only if
-   it is on the test class path at all; in .NET, list every production project in the test project and every
-   assembly in `Assemblies`. Both loaders refuse a run that imported nothing below the base package or root
-   namespace, and `DCA-STR-011` fails when no package or namespace declares a bounded context — say so in the
-   report instead of treating the green suite as an adoption result.
-   A start-up module below the base package named like a layer makes the base package a module root beside
-   the contexts — thousands of findings about nothing: INIT-EXCLUDE.
-
-4. **Existing architecture tests.**
-
-   ```bash
-   grep -rln --include='*.java' --include='*.kt' --include='*.groovy' --include='*.cs' \
-     -E 'com\.tngtech\.archunit|ArchUnitNET|extends DcaArchitectureTest|: DcaArchitectureTest' .
-   ```
-
-   Read each hit: which rules does it enforce, which conventions do its constants reveal
-   (`APPLICATION_SERVICE_SUFFIX = "ApplicationService"` is a decision), which source set does it live in. A
-   project that already extends `DcaArchitectureTest` has DCA — do not install a second test; refresh the
-   `AGENTS.md` section (decision G) and `dca.profile.yaml`, and hand a further rule set to `dca-add rules`.
-   Hand-written rules that a catalog set duplicates: recommend leaving that set out (`dca.rules.sets`) rather
-   than enforcing the same thing twice.
-
-5. **Existing structure conventions.** Layer-like folders (`domain/`, `application/`, `adapter/`,
-   `infrastructure/`, or `service/`, `controller/`, `repository/`, `usecase/`, `port/`); records vs Lombok;
-   `@RestController` vs `@Controller`; existing `package-info.java` / context marker classes with
-   `@BoundedContext` / `@SharedKernel` (reuse, never duplicate); the root packages of the bounded contexts if
-   none are declared yet. Read the designed domain where `dca.profile.yaml` puts it (`domain:`, by default
-   `product/domain.md`) — its contexts are the first proposal for the context roots.
-
-6. **Existing marker-like interfaces and annotations (critical).**
-
-   ```bash
-   # Tactical / port markers
-   grep -rln --include='*.java' --include='*.cs' -E '\b(public\s+)?interface\s+I?(AggregateRoot|Aggregate|BaseAggregateRoot|Entity|Value|ValueObject|Id|Identifier|Repository|UseCase|InputPort|OutputPort|DomainEvent|IntegrationEvent|DomainService|Factory|Specification)\b' .
-   # Strategic markers
-   grep -rln --include='*.java' --include='*.cs' -E '(@interface\s+|class\s+)(BoundedContext|SharedKernel|OpenHostService|Upstream|Partnership)(Attribute)?\b' .
-   ```
-
-   Read each hit and verify its role (a class named `Entity` may be a JPA `@Entity`). Look for near-empty
-   interfaces under `common/`, `core/`, `shared/`, `sharedkernel/`. Keep scanning after the first find —
-   projects have partial sets. The rules select every building block through a *role* (`DcaMarkers`), by
-   default the library's own marker; every hit becomes an alias, role or migrate decision in Phase 2 — own
-   context annotations included (`reference/own-vocabulary.md`).
-
-7. **Installed skills.** Which of the skills the `AGENTS.md` section names by role are installed: the session
-   lists them, or a project skill directory holds them (`.claude/skills/`, `.agents/skills/`,
-   `.codex/skills/`, `.opencode/skills/`). The roles are build (`dca-modelling`), guard (`dca-discipline`),
-   glossary (`ubiquitous-language`), map (`context-map`), browser tests (`e2e-testing`) and review
-   (`review-ddd`, `review-hexagonal`, `review-clean-code`, `dca-audit`). A skill that is not installed is
-   left out of the section, never named.
-
-8. **Summarize** to the user before asking anything:
-   > Found: Gradle 9, Java 25, Spring Boot 4.0, Spring Modulith present · base package `com.acme.shop`
-   > · contexts `order`, `customer`, `product` (no `package-info.java`) · existing marker
-   > `com.acme.shop.common.BaseAggregate` (8 subclasses), `com.acme.shop.common.Identifier` · no
-   > architecture tests · Lombok, no records · skills: dca-core and dca-craft installed.
+1. **Language and build system** — Java or .NET branch, versions, Spring Modulith, the test framework, git.
+2. **Versions — look them up, never recall them.** Every DCA package version is resolved at init time
+   (Maven Central, NuGet.org); re-verify per project.
+3. **Source layout** — source root, base package or root namespace, multi-module; both loaders refuse a run
+   that imported nothing, and a start-up module named like a layer is INIT-EXCLUDE.
+4. **Existing architecture tests** — a project that already extends `DcaArchitectureTest` has DCA: refresh,
+   do not install a second test.
+5. **Existing structure conventions** — layer-like folders, records vs Lombok, existing context declarations
+   (reuse, never duplicate), the designed domain (`domain:` in `dca.profile.yaml`).
+6. **Existing marker-like interfaces and annotations (critical)** — every hit becomes an alias, role or
+   migrate decision in Phase 2; keep scanning after the first find.
+7. **Installed skills** — which of the skills the `AGENTS.md` section names by role are installed; one
+   that is not is left out, never named.
+8. **Summarize** to the user before asking anything, in the shape the reference shows.
 
 ### Phase 2 — Decisions (ask the user)
 
@@ -143,185 +80,48 @@ Use `Glob`, `Read`, `Grep` and `Bash` to determine:
 looked up first and when it is asked at all. After the summary, look every answer up and ask **only the open
 ones — all at once, in catalogue order, word for word**, with the options and the default the catalogue gives;
 through a structured question tool where the harness has one, in prose otherwise. Ask nothing the catalogue
-does not list. Called by `dca-new`, take the answers it hands over; they were asked in its one pass. What the
-decisions below mean — the knowledge behind each question — follows; the catalogue holds the wording.
+does not list. Called by `dca-new`, take the answers it hands over; they were asked in its one pass.
 
-A. **Marker policy** (INIT-MARKERS) — per existing marker-like type:
-   - `Migrate` — replace it with the package marker (`extends BaseAggregateRoot<T, ID>`, `implements Value`,
-     …); mechanical, the old type is deleted.
-   - `Alias` — keep the type, make it extend or implement the package marker
-     (`interface Aggregate<T, ID> extends AggregateRoot<T, ID>`); existing code compiles unchanged and the
-     rules see every implementor. Recommend this for large code bases; note that the rules still report the
-     class by *its* markers, so an alias must carry the same generics.
-   - `Role` — keep the type, name it in the layout's marker roles (`reference/own-vocabulary.md`, with limits).
+What each decision means — the knowledge behind the question — is in `reference/decisions.md`; read it
+before asking:
 
-B. **Layout** (INIT-LAYOUT where folders cannot be mapped) — every deviation from the DCA defaults becomes a `DcaLayout` builder call (Java / .NET):
-   - `adapter/in`, `adapter/out` → `withIncomingSubpackage("in")`, `withOutgoingSubpackage("out")` /
-     `WithIncomingSegment("In")`, `WithOutgoingSegment("Out")`
-   - published contract package other than `api` / `events` → `withApiSubpackage`, `withEventsSubpackage` /
-     `WithApiSegment`, `WithEventsSegment`
-   - third-party packages the domain may use → `allowingInDomain("org.jmolecules..")` /
-     `AllowingInDomain("NodaTime")`
-   - INIT-EXCLUDE, INIT-LOCAL-PORTS, an undeclared shared kernel → `reference/own-vocabulary.md`
-   - framework (Java): write **no** preset call — `DcaLayout.forBasePackage` detects Spring, Jakarta EE,
-     Quarkus or Micronaut from the test class path and the report's first line shows the choice
-     (`framework annotations: quarkus (detected)`). Name a preset only when detection cannot decide (mixed
-     class paths, a hand-wired application → `dca.framework=none` in `dca-archunit.properties`) or when a role
-     differs from the preset (`withFrameworkAnnotations(FrameworkAnnotations.jakarta().withRestController("..."))`).
-     A company platform ships its preset as a `FrameworkAnnotationsProvider` library; then
-     `dca.framework=<name>`.
-   - framework (.NET): `WithFrameworkTypes(FrameworkTypes.None())` for a hand-hosted application, otherwise the
-     ASP.NET Core default, adjusted with a `with` expression where a role differs
-   Folder names the layout cannot express (`service/` instead of `application/`, flat
-   `controller/`–`service/`–`repository/`) are a migration, not a configuration: offer `Adopt DCA naming` (the
-   user moves code later; expect violations until then) or leaving the affected sets out for now.
-
-C. **Rule sets** (INIT-RULES) — multi-select; the answer is the `dca.rules.sets` line:
-   - **Always:** `cycles`
-   - **Recommended:** `layered`, `onion`, `hexagonal`, `naming`
-   - **DDD-specific:** `tactical`, `strategic`, `contextmap`, `advanced`
-   - **DCA-specific:** `usecase`, `errors`
-   - **.NET only, always on the .NET branch:** `dotnet`
-   Share `reference/module-selection-guide.md` for the recommendation by project profile and subdomain type.
-   It is the one place for that knowledge: `dca-add rules` reads the same file when a set is added later.
-   Strictness varies by subdomain: core contexts run the full catalog, supporting and generic contexts may run
-   the structural baseline only — record that in a pattern-selection ADR. The subdomain types come from the
-   designed map (`domain:` in `dca.profile.yaml`, `product/domain.md` by default); where it
-   has none, ask. A single rule the team rejects
-   becomes `dca.rules.off` + `dca.rule.<id>.reason`; one they are working towards `dca.rules.warn`. Both stay
-   visible in the report — prefer that over a silent gap. Existing violations the team accepts as a baseline
-   are `dca-add freeze`, after this skill.
-
-D. **Suffix conventions** (INIT-SUFFIX where the code uses two) — DCA's defaults are `*UseCase` for the use-case class, `*InputPort` for its
-   interface, `*Controller` for MVC (server-rendered) controllers and `*Resource` for REST adapters (.NET
-   default `Controller` for both). `*ApplicationService` / `*Service` → `withUseCaseSuffix(...)`; `*Page` /
-   `*Handler` for MVC controllers → `withControllerSuffix(...)`; `*Controller` / `*Endpoint` for REST →
-   `withRestControllerSuffix(...)`; input-port interfaces not named `*InputPort` → `withInputPortSuffix(...)`. The `naming` set then holds the project to *its* convention, and
-   `dca.profile.yaml` records the resolved suffixes (`use_case_suffix:` and the others) so that whoever names a
-   new element reads them there, before the suite runs.
-   The failure suffix is the project's choice, not the suite's: a domain or use-case failure is named by the
-   rule it breaks, and `failure_suffix:` says what follows — `Exception` by default, as Java
-   and .NET expect, `none` where the team names failures without it (`InsufficientStock`). On a retrofit,
-   read it from the existing failures; where they use both, ask.
-
-E. **Spring Modulith** (INIT-MODULITH; Java, only when detected) — add `dev.domaincentric:dca-archunit-spring-modulith` and a
-   second thin test, `class ModulithTest extends DcaSpringModulithTest` with the same layout? It runs
-   Modulith's own analyzer (not an ArchUnit rule) and excludes the architecture tests in the base package from
-   Modulith's root module. Requires `spring-modulith-starter-test` on the class path.
-
-F. **Context map** (INIT-CONTEXT-MAP, never asked) — `ContextMapDocumentationTest` renders
-   `docs/architecture/context-map.md` from the `@BoundedContext` / `@Upstream` / `@Partnership` declarations and
-   fails when the committed file is stale. Installed when more than one context is declared. Java and .NET alike. That file is the map *as built*; the
-   designed map is the project description's (`dca-describe`, through `context-map`), and a difference
-   between the two is a finding.
-
-G. **Project instructions (`AGENTS.md`)** (INIT-CATALOG, never asked) — the method's section, read by every
-   tool, always written. `dca-knowledge` resolves the catalog vendored with this plugin; a live catalog is
-   `catalog_path:` in `dca.profile.yaml`, set by hand, pointing at a locally regenerable
-   `dca-knowledge-catalog/bundle` (verify it holds `index.md` and `log.md`).
+- **A. Marker policy** (INIT-MARKERS) — per existing marker-like type: `Migrate`, `Alias` (recommended for
+  large code bases) or `Role` (`reference/own-vocabulary.md`).
+- **B. Layout** (INIT-LAYOUT) — every deviation from the defaults is a `DcaLayout` builder call; the framework
+  preset is detected, never written unless detection cannot decide; INIT-EXCLUDE, INIT-LOCAL-PORTS and an
+  undeclared shared kernel → `reference/own-vocabulary.md`; folders the layout cannot express are a
+  migration, not a configuration.
+- **C. Rule sets** (INIT-RULES) — the `dca.rules.sets` line; `reference/module-selection-guide.md` for the
+  recommendation by project profile and subdomain type; a rejected rule is `dca.rules.off` + reason, one
+  the team works towards `dca.rules.warn`, an accepted baseline `dca-add freeze`.
+- **D. Suffix conventions** (INIT-SUFFIX) — use case, input port, controller, REST adapter and the failure
+  suffix; recorded in `dca.profile.yaml`.
+- **E. Spring Modulith** (INIT-MODULITH; Java, only when detected) — the second thin test.
+- **F. Context map** (INIT-CONTEXT-MAP, never asked) — `ContextMapDocumentationTest`, installed when more
+  than one context is declared.
+- **G. Project instructions** (INIT-CATALOG, never asked) — the `AGENTS.md` section, always written.
 
 ### Phase 3 — Generation
 
-Only after Phase 2. Placeholders use `{{name}}`; `{{#if}}` / `{{#each}}` blocks are resolved by you. Before
-each write: if the target exists, ask *overwrite / skip / abort* (default skip). The skill changes no build
-file outside the DCA part: dependencies, the architecture source set or project, and nothing else.
+Only after Phase 2. Placeholders use `{{name}}`; `{{#if}}` / `{{#each}}` blocks are resolved by you
+(`reference/placeholders.md` says where each value comes from). Before each write: if the target exists, ask
+*overwrite / skip / abort* (default skip). The skill changes no build file outside the DCA part.
 
-**Java**
+Read `reference/generation.md` for the steps; in short:
 
-1. `templates/gradle/build-snippet.gradle.tmpl` → add `dca-building-blocks` and (Spring) `dca-spring` to the
-   production `dependencies` (Groovy or Kotlin DSL as the build uses). Maven: `templates/maven/pom-snippet.xml.tmpl`
-   (all dependencies; the test then lives in `src/test/java` and `src/test/resources`).
-   **Transactions in an in-memory start:** without a data starter there is no `PlatformTransactionManager`,
-   so `@Transactional` is silently inert and after-commit listeners never fire while every rule stays green.
-   Read `reference/in-memory-transactions.md` and add what it names — the dependency, the placeholder bean
-   from `templates/java/InMemoryTransactionManagerConfiguration.java.tmpl` in the package `DCA-LAY-004`
-   allows, with Modulith the events API. Say so in the summary.
-2. `templates/gradle/test-architecture.gradle.tmpl` → `gradle/plugins/test-architecture.gradle`, plus
-   `apply from: "gradle/plugins/test-architecture.gradle"` in `build.gradle`. Creates the `testArchitecture`
-   source set and the `test-architecture` task, wired into `check`.
-3. `templates/java/ArchitectureTest.java.tmpl` → `src/test-architecture/java/{{basePackagePath}}/ArchitectureTest.java`
-   with the `DcaLayout` calls from decisions B and D (`{{layoutCalls}}` — none for a default layout).
-4. `templates/java/dca-archunit.properties.tmpl` → `src/test-architecture/resources/dca-archunit.properties`
-   with `dca.rules.sets` from decision C (omit the key when every set was chosen). Set `{{noLayeredModuleYet}}`
-   when no package below the base package has a `domain`, `application` or `adapter` subpackage yet — always
-   on a project `dca-new` has just created. `DCA-STR-012` would otherwise fail the first run by construction;
-   on `warn` it stays in the report until `dca-new` creates the first layered module and removes the entry.
-   Empty means green: a project with no domain code yet passes the whole selection, with that one entry
-   named in the report.
-5. `templates/java/package-info.java.tmpl` → one per bounded-context root package
-   (`@BoundedContext(name, description)`) and one for the shared kernel (`@SharedKernel`; with Modulith also
-   `@ApplicationModule(type = OPEN)`, otherwise Modulith closes the kernel and the markers it re-exports
-   become invisible). Skip where a `package-info.java` exists.
-6. Decision A: apply the migrate/alias edits to the existing marker types.
-7. Decision F: `templates/java/ContextMapDocumentationTest.java.tmpl` (`{{contextMapPath}}`, default
-   `docs/architecture/context-map.md`). The first run creates the file and reports the test as skipped; the
-   map belongs in the user's next commit, after which the test fails whenever the map is stale. Decision E: no
-   template — write the four-line subclass of
-   `dev.domaincentric.dca.archunit.springmodulith.DcaSpringModulithTest` next to `ArchitectureTest`,
-   overriding `layout()` the same way; the dependency comes from the `test-architecture.gradle` / `pom`
-   snippet.
-8. `dca.profile.yaml` and the `AGENTS.md` section, as below (`{{verifyCommand}}` = `./gradlew
-   test-architecture` or `mvn test`).
-
-**.NET**
-
-1. `dotnet add package DomainCentric.BuildingBlocks` in every production project (the conditional
-   `ProjectReference` pair from `templates/dotnet/Directory.Build.props-local-fallback.tmpl` only on request,
-   for work against an unreleased sibling `dca-dotnet` checkout).
-2. `templates/dotnet/ArchitectureTests.csproj.tmpl` → `tests/{{solutionName}}.ArchitectureTests/` with a
-   `ProjectReference` per production project; add it to the solution (`dotnet sln add`). Test SDK / xUnit
-   versions: look them up like every other version.
-3. `templates/dotnet/ArchitectureTest.cs.tmpl` — `Layout` with the calls from decisions B and D, `Assemblies`
-   with one `typeof(<ContextMarkerClass>).Assembly` per production assembly.
-4. `templates/dotnet/dca-archunit.properties.tmpl` next to the csproj (the csproj copies it to the output
-   directory); `{{noLayeredModuleYet}}` as in Java step 4.
-5. `templates/dotnet/Context.cs.tmpl` → `{{ContextClassName}}.cs` in each context's root namespace,
-   `templates/dotnet/SharedKernelContext.cs.tmpl` for the shared kernel. Skip where a class with
-   `[BoundedContext]` / `[SharedKernel]` exists.
-6. Decision A as for Java (`: IAggregateRoot<T, TId>`, `: IValue`, …).
-7. Decision F: `templates/dotnet/ContextMapDocumentationTest.cs.tmpl` → next to `ArchitectureTest.cs`, with
-   the same assemblies (`{{assemblyAnchors}}`), `{{contextMapPath}}` and the solution file that marks the
-   repository root (`{{solutionName}}.slnx`, or `.sln` before .NET 10). xUnit 2 cannot skip at run time, so
-   where Java reports the first run as skipped, the .NET test writes the map and fails once with "commit it";
-   the report names that.
-8. `dca.profile.yaml` and the `AGENTS.md` section, as below (`{{verifyCommand}}` = `dotnet test
-   tests/{{solutionName}}.ArchitectureTests`).
-
-**`dca.profile.yaml` and `AGENTS.md` section (both languages)**
-
-- `templates/dca.profile.yaml.tmpl` → `dca.profile.yaml` at the project root: flat `key: value` lines, every
-  key optional, a missing key takes its default. Write the template's keys and keep every other line
-  already there — other skills record their keys in the same file. Its `building_blocks_api:` line points a
-  session at the catalog node that documents the markers, so no session hunts for the library's jar; the
-  resolved configuration (`reference/resolved-configuration.md`) carries the suffixes from decision D or the
-  existing `DcaLayout`; `catalog_path` only with decision G's live catalog. A file that lacks the suffix lines
-  gets them on the next run, read from its `DcaLayout`.
-- **Migration.** A project with the old conventions file (`.agents/dca/conventions.md`, or
-  `.claude/dca/conventions.md`) gets its `key: value` lines moved into `dca.profile.yaml` on this run — a key
-  already in `dca.profile.yaml` keeps its value, headings and blank lines are dropped — then the old file is
-  removed and the `AGENTS.md` line ``- conventions: `<path>` `` becomes ``- configuration: `dca.profile.yaml` ``.
-  A delivery pipeline's `factory.sh update` does the same in code. Say in the summary that the file moved.
-- **Glossaries beside the code.** A context's glossary lives in the spec, `<spec>/<context>/glossary.md`
-  (`spec:` in `dca.profile.yaml`, `product/spec` by default; `<context>` the context's name in lowercase,
-  words joined by `-`). One still beside the domain code (`…/domain/glossary.md`, `…/Domain/glossary.md`) is
-  named in the report's Open section; a migration moves it — `factory.sh update` in a project with a
-  delivery pipeline, otherwise `git mv` to its place in the spec on the person's confirmation.
-- `templates/agents/AGENTS-dca-section.md.tmpl` → the block between `<!-- dca-core: start -->` and
-  `<!-- dca-core: end -->` in `AGENTS.md`: added where there is none, replaced where there is one, never
-  duplicated. Only this block is the skill's; the rest of `AGENTS.md` — the `dca-describe` section, a delivery
-  pipeline's block, the project's own text — stays as it is. Create `AGENTS.md` where the project has none.
-- The section carries the line the general skills read — ``- configuration: `dca.profile.yaml` ``, a fixed
-  name, the agents' pointer to the file — and the skills by
-  role from Phase 1 item 7, each only where it is installed; a role with nothing installed is left out.
-  `{{reviewSkills}}` lists the installed ones of `review-ddd`, `review-hexagonal`, `review-clean-code` and
-  `dca-audit`. The `- configuration:` and `- <role>:` lines are read by other tools (general skills find the
-  configuration through them, a delivery pipeline its carrier names), so keep their form.
-- Why the section exists: a person developing by hand in a session has the same information and the same
-  means as a stage of a delivery pipeline — the conventions, the skill that carries each craft, the check.
-  The pipeline's own configuration is its view of the same installed skills, so the two never name
-  different skills.
-- Where the project keeps a `CLAUDE.md` without `@AGENTS.md`, say that Claude Code does not read the section
-  then, and offer to add the `@AGENTS.md` line.
+- **Java** — the production dependencies (with the in-memory transaction manager where
+  `reference/in-memory-transactions.md` says so), the `test-architecture` source set and task,
+  `ArchitectureTest` with the layout calls from B and D, `dca-archunit.properties` from C
+  (`{{noLayeredModuleYet}}` on a project without a layered module), one `package-info.java` per context root
+  and one for the shared kernel, decision A's edits, decision F's and E's tests.
+- **.NET** — `DomainCentric.BuildingBlocks` in every production project, the `*.ArchitectureTests` project
+  with a reference per production project, `ArchitectureTest.cs` with `Layout` and `Assemblies`, the
+  properties file next to the csproj, one context marker class per context root and one for the shared
+  kernel, decision A's edits, decision F's test.
+- **Both** — `dca.profile.yaml` at the project root (the template's keys, every other line kept; the old
+  conventions file migrated into it; glossaries beside the code named for the spec) and the block between
+  `<!-- dca-core: start -->` and `<!-- dca-core: end -->` in `AGENTS.md`, with the `- configuration:` line and
+  the installed skills by role — read by every tool, so keep their form.
 
 ### Phase 4 — Verification
 
@@ -338,12 +138,6 @@ not failures: `DCA-STR-012` on `warn` (no layered module yet) and, with decision
 findings about the existing code, not bugs of this skill: point the user to `dca.rules.warn` or
 `dca-add freeze` for a staged adoption, `/dca-audit` to triage, `/dca-new` for new code that complies from
 the start.
-
-## Placeholders
-
-The placeholders the templates carry — where each value comes from (detected, looked up at init time, a
-Phase 2 decision) and an example — are listed in `reference/placeholders.md`; read it before filling a
-template.
 
 ## After init — for the user
 
@@ -379,21 +173,26 @@ The report's Open section already names what is missing; the skills that close i
 `dca-new`, `dca-audit`, `dca-modelling` and `dca-discipline` read the project's conventions from the
 generated `ArchitectureTest` (the `DcaLayout` builder calls: subpackage names, suffixes) and from
 `dca.profile.yaml` at the project root; where it is missing or a key is absent, the defaults. There is no
-constants class to consult.
+constants class to consult. The resolved-configuration contract both this skill and `dca-new` write is
+`reference/resolved-configuration.md`: this skill writes its keys for every project, `dca-new` reads and
+refreshes them from the resolved preset before filling annotation/import placeholders; `none` uses explicit
+constructor wiring without framework imports.
 
 ## Reference materials
 
-- `reference/archunit-rule-catalog.md` — every rule of both libraries (generated from the rule catalogs;
-  regenerate with `python3 scripts/render-rule-catalog.py` from the marketplace root)
+- `reference/inspection.md`, `reference/decisions.md`, `reference/generation.md` — Phases 1 to 4 in full
+- `reference/questions.md` — every question this skill may ask, word for word, with where its answer is looked
+  up first; `dca-new` asks the entries that apply to an empty directory in its one pass
+- `reference/own-vocabulary.md` — marker roles, own layer and context annotations, excluded packages, local
+  ports, the wiring and metadata review
 - `reference/module-selection-guide.md` — which rule sets to pick for which project and subdomain; also read by
   `dca-add rules`
+- `reference/archunit-rule-catalog.md` — every rule of both libraries (generated from the rule catalogs;
+  regenerate with `python3 scripts/render-rule-catalog.py` from the marketplace root)
 - `reference/resolved-configuration.md` — the resolved-configuration keys of `dca.profile.yaml`, shared
   with `dca-new`
 - `reference/placeholders.md` — the templates' placeholders, where each value comes from
 - `reference/in-memory-transactions.md` — the transaction manager a Spring project without a data starter needs
-- `reference/own-vocabulary.md` — marker roles, own context annotations, excluded packages, local ports
-- `reference/questions.md` — every question this skill may ask, word for word, with where its answer is looked
-  up first; `dca-new` asks the entries that apply to an empty directory in its one pass
 - `scripts/dca-report.py` — the report of this skill and of `dca-new project`, read from the disk
   (`--self-test` checks it)
 
@@ -421,14 +220,3 @@ constants class to consult.
 - **Don't freehand-scaffold example contexts, aggregates, use cases or ports.** Init ends at packages, the
   architecture test, context declarations and the `AGENTS.md` section; "also build a first context" is
   `/dca-new`'s, which owns the placement rules.
-
-### Wiring and metadata review
-
-Review operation wiring and the preset's metadata roles as `reference/own-vocabulary.md` describes.
-
-## Resolved configuration
-
-Read the shared resolved-configuration contract, `reference/resolved-configuration.md`. This skill writes its
-keys into `dca.profile.yaml` for every project; `dca-new` reads and refreshes them from the resolved preset before filling
-annotation/import placeholders. `none` uses explicit constructor wiring and `Configuration.java.tmpl`, without
-framework imports.

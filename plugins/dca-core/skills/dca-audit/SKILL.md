@@ -28,6 +28,9 @@ from the architecture test and the naming conventions from `dca.profile.yaml` at
 where it is missing or a key is absent, the defaults. Java and C# are reviewed against the same checklist —
 `reference/naming-conventions.md` carries the language mapping.
 
+This file is the router: the scope, the five phases in order, the shape of the answer and the hard rules; for
+every phase the reference to read before it. The detail is in `reference/`.
+
 ## The method's view beside the general ones
 
 This is the one DCA reviewer: it checks conformance with the method — use-case shape, port hierarchy,
@@ -43,134 +46,41 @@ story; this audit is not one of its defaults — the rules it would confirm alre
 every gate, and its anti-patterns that neither the suite nor the general reviews catch are few. It is
 not a judge perspective at all: a person runs it to examine a project by hand.
 
-## Where ArchUnit ends and dca-audit begins
-
-| Checked by ArchUnit | Checked by dca-audit |
-|---|---|
-| Class names match suffix patterns | Whether the names actually describe what the class does |
-| Domain doesn't depend on adapters | Whether use cases hold too many output ports (god-use-case) |
-| Aggregates implement marker | Whether aggregates have real invariants vs. anemic |
-| Domain events implement marker | Whether events are emitted at the right state-transition points |
-| Cross-context refs forbidden | Whether the cross-context API is well-designed |
-| Records/finals on value objects | Whether value objects model the domain or just hold getters |
-| Failures extend the base type of their layer | Whether a refusal should have been a named failure at all, and whether an adapter catches too widely — a `throw` and a `catch` are not in the import model |
-
-The rule suite has grown into semantic territory (`DCA-USE-015/016/017`, `DCA-HEX-012`, `DCA-TAC-021`, `DCA-MAP-008`).
-Where the checklist cites a rule id, the review confirms what that rule cannot see — it does not repeat the rule.
+Where ArchUnit ends and this audit begins — the table of what each checks — opens
+`reference/audit-phases.md`. The rule suite has grown into semantic territory (`DCA-USE-015/016/017`,
+`DCA-HEX-012`, `DCA-TAC-021`, `DCA-MAP-008`). Where the checklist cites a rule id, the review confirms what
+that rule cannot see — it does not repeat the rule.
 
 ## Workflow
 
-### Phase 1: Scope
+Read `reference/audit-phases.md` before the first phase: it carries each phase below in full, and before them
+*Reading the project's DCA setup* — the `DcaLayout` builder chain as the convention list, the rule sets
+switched off in `dca-archunit.properties`, the designed map and the glossaries, and `dca-knowledge` for the
+doctrine behind a finding. This makes the review match the project's actual conventions, not DCA defaults.
 
-Determine which files to audit. The scope is the argument (`/dca-audit <scope>`):
+1. **Phase 1: Scope** — the argument (`/dca-audit <scope>`): nothing, or `project` — every source file under
+   the base package or namespace, the brownfield audit, the default, reported per bounded context in the
+   order the designed map lists them; a context name or a path — that context's files; `diff` — what changed
+   on this branch (the git commands are in the reference), user-specified paths instead where given. Without
+   a repository or a diff, `diff` falls back to the whole project and says so.
+2. **Phase 2: Layer classification** — each file's DCA layer from its path, by the classification table in
+   the reference (`domain.model` … `published.events`, `infrastructure`), through the project's `DcaLayout`
+   segments, C# in PascalCase matched case-insensitively; files outside the patterns are "uncategorized".
+3. **Phase 3: Apply review checks per layer** — `reference/checklist.md` for the per-layer checklist, run
+   only the checks that apply to each file's layer; `reference/use-case-pattern.md` for application-layer
+   files; `reference/anti-patterns.md` for the findings catalogue, each with symptoms and the reason. For each
+   finding capture file + line, severity (`must-fix` violates a DCA invariant, `should-fix` an anti-pattern,
+   `nit` style), rule, why, suggested fix.
+4. **Phase 4: The structure, rule by rule** — Block A: where the code stands against the rule suite of
+   `reference/archunit-rule-catalog.md`, whether the suite is installed or not — read against each rule's
+   *Selects* and *Checks* by default, taken from the suite's last report where one is younger than the newest
+   source file, never by running the build; what counts follows the suite's configuration (sets on `off`,
+   `warn`, frozen rules, experimental rules only with the opt-in); a set opens to its failing rules. Then the
+   two lists: the rules the project does not enforce yet and could, and the patterns the suite has no rule for.
+   The detail of the reading, the run, what counts and the two lists is in the reference.
+5. **Phase 5: Output** — the report below.
 
-- nothing, or `project` — every source file under the base package or namespace: the brownfield audit,
-  the default. Report per bounded context, contexts in the order the designed map lists them.
-- a context name (`billing`) or a path (`src/main/java/com/example/billing`) — that context's files.
-- `diff` — what changed on this branch, the reader of a change before it is committed:
-
-**`diff` — git:**
-```bash
-git diff --name-only main...HEAD                  # commits on this branch
-git diff --name-only HEAD                         # uncommitted (modified + staged)
-git diff --name-only --diff-filter=A main...HEAD  # added in this branch
-```
-Combine to get all changed `*.java` / `*.cs` files. If no git repo or no diff, fall back to:
-
-**User-specified paths.** If the user passed explicit paths (files or directories), review those instead.
-
-Without a repository or a diff, `diff` falls back to the whole project and says so.
-
-### Phase 2: Layer classification
-
-For each file, determine its DCA layer from path:
-
-```
-**/domain/model/**         → domain.model
-**/domain/event/**         → domain.event          (domain events, internal to the context)
-**/domain/service/**       → domain.service
-**/domain/gateway/**       → domain.gateway        (DomainGateway interfaces owned by the domain)
-**/domain/readmodel/**     → domain.readmodel      (Value snapshots and read models)
-**/domain/specification/** → domain.specification
-**/application/{usecasename}/**  → application.usecase
-**/application/{feature}/{usecasename}/**  → application.usecase (feature-grouped context)
-**/application/shared/**   → application.outputports
-**/adapter/{in,incoming}/**  → adapter.incoming
-**/adapter/{out,outgoing}/** → adapter.outgoing
-**/{context}/api/**        → published.api         (synchronous published contract, Open Host Service)
-**/{context}/events/**     → published.events      (integration events, asynchronous published contract)
-**/infrastructure/**       → infrastructure        (per-context or global wiring)
-```
-
-The `api`/`events` segment names follow the project's `DcaLayout` (`withApiSubpackage`/`withEventsSubpackage`).
-C# uses the same segments in PascalCase (`Domain/Model`, `Application/{UseCase}`, `Application/Shared`,
-`Adapter/Incoming`, `Adapter/Outgoing`, `Api`, `Events`); match case-insensitively.
-
-Files outside these patterns: report as "uncategorized" — could be the shared kernel or a layout deviation.
-
-### Phase 3: Apply review checks per layer
-
-See `reference/checklist.md` for the full per-layer checklist. Run only the checks that
-apply to each file's layer. For application-layer files (use cases, output ports), consult
-`reference/use-case-pattern.md` for the canonical folder structure, shape, and
-shared-vs-local port decision guide.
-
-For each finding, capture:
-- **File + line** (use file_path:line)
-- **Severity:** `must-fix` (violates DCA invariant), `should-fix` (anti-pattern), `nit` (style)
-- **Rule** (short name from checklist)
-- **Why** (one sentence — quote the principle)
-- **Suggested fix** (one-line code suggestion when feasible)
-
-### Phase 4: The structure, rule by rule
-
-Block A of the report: where the code stands against the rule suite, **whether the suite is installed or
-not**. On a brownfield project it is not — that is the point of the block: it shows what already holds and
-what would fail on the first run, before anyone adds a dependency. The rules are those of
-`reference/archunit-rule-catalog.md` (Java and .NET, generated from both rule libraries), grouped by its rule
-sets; the set names are the rows, the bounded contexts the columns.
-
-**The reading — the default.** For every rule, its *Selects* and *Checks* columns say which classes it looks at
-and what it asserts; judge the code in scope against exactly that, with the layout the project actually has
-(Phase 2) — a project whose packages do not match the default layout is read through the `DcaLayout` options
-the rule catalog names, and the deviations are said once in the summary. A rule that selects nothing in a
-context is `–` there. Informational rules have no mark. The marks are the audit's reading, not a run: the
-summary line says so, and the first run of the suite confirms or corrects them.
-
-**The run — where the suite is installed.** A project with the architecture test (`dca-init` ran) may have its
-last result: the JUnit report (Java: `build/test-results/<task>/TEST-*.xml` of the task that runs the
-`DcaArchitectureTest`; .NET: the `.trx` of the architecture test project). Where it is younger than the newest
-source file, its outcomes replace the reading: one test case per rule id (`[DCA-TAC-002] …`), a failure's
-message lists the violating classes, which name their context, a skipped case is a rule on `off` or
-informational. A stale report is not used. The audit reads a report — it never runs the build.
-
-**What counts.** With the suite installed, its configuration decides: `dca-archunit.properties` (or the .NET
-configuration) and the architecture test's `additionalSelection()` — a set or rule on `off` is `off` in its
-cell, one on `warn` keeps its mark with `(warn)`, a frozen rule counts only what is not in its baseline.
-Without the suite every released rule counts — Block A then answers "what if we switched all of it on today".
-An experimental rule (*(experimental)* in the rule catalog, `maturity: experimental` on its node) counts only
-where the project opted in — `withExperimental()` / `WithExperimental()` in the architecture test, or
-`dca.rules.experimental = true` in `dca-archunit.properties`. Check that before citing one; without the
-opt-in it gets no mark and no finding, at most a line under the summary as information.
-
-**Fine where it fails.** A set every rule of which holds in a context is one row with `✓`. A set with a
-failing rule in any context opens: its row shows the count, and below it one row per failing rule — id,
-short name, places per context — while the rules that hold stay summarised in the set row (`12 of 14 hold`).
-A failing rule is never hidden in a set total, and a holding one never gets a row of its own.
-
-Then two lists:
-
-1. **Rules of the suite the project does not enforce yet** and could: the sets and rules on `warn`, `off` or
-   absent, each with the places that would fail today — from Block A, and from the findings of Block B a
-   rule would have caught statically. That is the adoption path: switch on what fails nowhere, freeze what
-   fails somewhere, and fix the frozen list story by story. The catalog's adoption tiers (`dca-knowledge`:
-   `guide/archunit-governance/`) say the order.
-2. **Patterns the suite has no rule for** that *could* be enforced statically: propose one only for a
-   structural property with named positive and negative fixtures and a clear selection scope. Past-tense
-   event names are a language review prompt: `Sent` is valid without an `ed` suffix — do not propose a
-   suffix rule to infer tense.
-
-### Phase 5: Output
+## Phase 5: Output — the shape of the answer
 
 Produce a structured report. It **leads with the standing**: how far the code fits the method, so a reader
 sees it before the findings — that is what an audit is for. Two blocks, kept apart, because they answer
@@ -254,181 +164,13 @@ a team compares between two runs.
 
 ## Anti-patterns this review catches
 
-These are project-experience-derived. Document each so the user understands.
-
-### Anemic aggregate
-Symptoms: aggregate is mostly getters/setters; business logic lives in use case.
-Why: aggregates should *protect invariants* — if they don't, they're just data containers.
-
-### God use case
-Review prompts, not numerical thresholds: a use case with more than five output ports, a long method, or multiple
-nested if-blocks.
-Why: a use case should be one cohesive operation. Big ones suggest missing domain service or
-mis-bounded context.
-
-### Leaky output port
-Symptoms: an output port name reveals the implementation (`*JdbcRepository`, `*RestClient`,
-`*KafkaPublisher`).
-Why: ports are technology-agnostic by definition. Implementation details belong in the adapter.
-
-### Port without an application-side caller
-Symptoms: an `OutputPort` subtype that no use case depends on and that is not the identity port —
-cookie or token handling, session logout (adapter mechanics); or a filter asking its own context
-whether an account exists through an output port (an inbound question).
-Why: an output port is a capability the application needs but does not own, fulfilled by an adapter
-(in-memory or remote). Adapter mechanics stay in
-the adapter without a marker; a question into the own context is a query use case or the
-published API. The identity port is legitimate: the caller's identity comes from an identity system.
-
-### Cookies of one exchange with different policies
-Symptoms: the identity cookie is configured (`SameSite`, `Secure`) while the CSRF/antiforgery cookie keeps the
-framework default; a cookie contract or test that names only the hand-written cookies.
-Why: a request that needs both arrives incomplete wherever the policies diverge — an iframe, a cross-site redirect,
-another scheme — and is refused as a *missing* token rather than a refused one, which points the reader at form
-handling instead of at a cookie attribute. Framing belongs on its own switch: it is an origin question, the cookie
-policy a site question.
-
-### Domain event without identity or timestamp
-Symptoms: a `DomainEvent` record without `eventId()` / `occurredOn()` (C#: `EventId` / `OccurredOn`).
-Why: events are causal records; without an id they cannot be deduplicated, without time you can't
-reason about ordering. Both members are the marker's contract, not a project convention — do not
-suggest other spellings (`occurredAt`, `timestamp`).
-
-### Domain event with mutable field
-Why: events are facts about the past — facts don't change.
-
-### Setter on value object
-Why: value objects are immutable by definition.
-
-### Public setter on entity or aggregate
-Symptoms: `setX(...)` on a domain model class, even when it validates internally.
-Why: state changes go through intention-revealing methods from the ubiquitous language
-(`adjustStockTo`, not `setAvailableQuantity`). A setter name hides the business operation.
-
-### Injected dependency in aggregate
-Symptoms: an aggregate holds a `*Repository`, output port, or service as a field (`DCA-TAC-002`).
-Why: aggregates are persistence-ignorant — dependencies are loaded by the use case and
-passed as method parameters. Moving the lookup behind a callback or resolver parameter does not change
-who owns the calculation; review such parameters manually.
-
-### Business rule as an argument exception
-Symptoms: a state transition or a cross-field invariant refuses with `IllegalStateException` /
-`InvalidOperationException` or `IllegalArgumentException` / `ArgumentException`.
-Why: the adapter cannot tell the case apart from a defect of this application, and answers both the same way.
-`DCA-ERR-001` sees only the types that *are* declared, so this one is the review's: would a domain expert have
-a word for the failure? If yes, it is a `DomainException` subtype with that word in it. A null or range check
-is not — that stays an argument guard.
-
-### Blanket catch around a use-case call
-Symptoms: `catch (Exception)` / `catch (RuntimeException)` in an incoming adapter, or in a use case that
-converts a rule into a result variant.
-Why: a defect of this application is reported as the caller's mistake and disappears from anything watching
-for server faults. Name the types the call can produce. `DCA-ERR-006` lists the packages worth looking at and
-cannot decide this.
-
-### Failure translated in more than one place
-Symptoms: a `try`/`catch` in a resource for a failure the context's exception handler already maps, a
-handler in global infrastructure naming one context's failure, or the same `catch` of a refusal in every
-handler of a page adapter, each building its own redirect with a notice.
-Why: two sites decide the same answer and drift apart. One translation site per context, and infrastructure
-keeps only the last-resort handler for an exception nobody named. A page adapter has one method that turns
-the refusal and its notice into the redirect, and every handler calls it.
-
-### Status derived from the base type
-Symptoms: every `DomainException` mapped to one status, every `UseCaseException` to another.
-Why: the base type says which layer owns the failure, not what the caller should do next. A position missing
-from a cart is a rule of the model and still answers `404`.
-
-### Domain gateway without a rationale
-Symptoms: a `DomainGateway` interface in `domain/gateway/` — or a domain service holding one — where the
-facts could have been supplied by the use case as an immutable snapshot; or a gateway that writes.
-Why: the default is *domain services over supplied facts*: the use case fetches through output ports and hands
-snapshots in. A `DomainGateway` is the explicit exception — a narrow, read-only interface in the ubiquitous
-language, owned by the domain, implemented in an outgoing adapter — and needs a recorded effect-and-dependency
-rationale. It is legitimate; it is not a finding by itself. A pure algorithmic strategy passed in is not a gateway.
-The aggregate never holds a gateway; the domain service or the use case passes it in.
-
-### Transaction outside the application layer
-Symptoms: `@Transactional` on a domain class or incoming adapter.
-Why: the use case owns the unit of work. (Outgoing persistence adapters may use it for
-multi-statement atomicity — joins the caller's transaction.)
-
-### Controller reaching past the use case
-Symptoms: a `*Controller`/`*Resource` injects a `*Repository`.
-Why: incoming adapters drive the application through input ports only — direct repository
-access bypasses transactions, authorization, and orchestration.
-
-### Technical names in the domain
-Symptoms: `*Helper`/`*Util`/`*Impl`/`*Implementation` classes in `domain/` (`DCA-NAM-010`), or bucket packages
-like `entities/`, `valueobjects/`, `helpers/`, `util/` (`DCA-NAM-009`). A term the ubiquitous language uses
-(`PortfolioManager`, `PriceCalculator`) is not a technical name, whatever its suffix looks like.
-Why: technical names signal a missing domain concept; packages are named by domain concept.
-
-### Spring annotation on domain class
-Why: domain stays framework-free (DCA invariant). The C# twin: an ASP.NET, EF Core (`[Table]`, `DbContext`)
-or `System.Text.Json` attribute on a class in `Domain/`, or an `async` member on an aggregate — the .NET
-catalog keeps the domain synchronous and framework-free (`DCA-NET-00x`).
-
-### Cross-context import not via the published packages
-Symptoms: file in `contextA/...` imports from `contextB/domain/...` or `contextB/application/...` directly.
-Why: contexts communicate through the other context's published packages only — `api/` (the synchronous
-contract, Open Host Service) and `events/` (its integration events) — never raw domain or application types.
-The consuming use case sees its own output port (`*DataPort`); the outgoing adapter calls the `api/` contract.
-
-### Use-case naming mismatch
-Symptoms: class name doesn't match the action it performs (`OrderHandler` instead of
-`PlaceOrderUseCase`; or use case named for the output, not the verb).
-Why: use cases are named for user intent, not technical mechanism.
-
-### DTO in domain or application
-Why: DTOs are an adapter concern. If domain or application has a `*Dto`, a transformation
-boundary is misplaced.
-
-### Mutable Result/Command/Query
-Why: messages are immutable. Java records make this trivial.
-
-### Repository for non-aggregate
-Symptoms: a `*Repository` exists for an Entity that isn't an AggregateRoot.
-Why: only aggregate roots have repositories — non-root entities are loaded through their
-aggregate.
-
-### Repository vs. Store mismatch
-Symptoms: a `*Store` exposes aggregate persistence methods (`save`, `delete`), OR a `*Repository`'s stored type is a Value
-Object / record without aggregate lifecycle.
-Why: DCA distinguishes Repository (for Aggregate Roots — collection-like, identity-based) from
-Store (for operational data — record/count/exists). Confusing them breaks the Ubiquitous
-Language: a reader can no longer tell from the port name what kind of data it manages.
-Fix: rename and re-marker. If the type has an aggregate lifecycle → `*Repository extends
-Repository<T,ID>`. If it is an operational record → `*Store extends Store`. Lookup by key
-(`findById`) is allowed on a Store too — the difference is lifecycle, not lookup.
-Note: the Store half is now mechanical — ArchUnit checks the marker, both placements, and the
-forbidden `save`/`delete` method names (`DCA-TAC-021`). What remains for review is the direction
-ArchUnit cannot see: a `*Repository` whose stored type has no aggregate lifecycle.
-
-## Reading the project's DCA setup (if `dca-init` ran)
-
-Find the architecture test (`grep -rn "DcaLayout\." --include='*.java' --include='*.cs'`) and read its
-`DcaLayout` builder chain — every `with…`/`With…` call is a deviation from the DCA default:
-- The use-case-impl suffix (`withUseCaseSuffix` — default `UseCase`, but may be `ApplicationService`)
-- The adapter sub-folder names (`withIncomingSubpackage`/`withOutgoingSubpackage` — `incoming`/`outgoing` or `in`/`out`)
-- The REST adapter suffix (`withRestControllerSuffix` — `Resource` or `Controller`)
-- `dca-archunit.properties`: rule sets switched off there mark patterns the project deliberately does not use
-  (a context without `tactical` is not an anemic-model finding)
-The markers are the library's (`dev.domaincentric.dca.buildingblocks.…` / `DomainCentric.BuildingBlocks.…`).
-
-This makes the review match the project's actual conventions, not DCA defaults.
-
-**The designed map and the glossary.** The designed context map is where `dca.profile.yaml` puts it
-(`domain:`, by default `product/domain.md`), `docs/context-map.md` where neither exists; the glossaries are
-in the spec, one per context at `<spec>/<context>/glossary.md` (`spec:` in `dca.profile.yaml`,
-`product/spec/<context>/glossary.md` by default) — where the `ubiquitous-language` skill puts them. A glossary
-still beside the domain code is named as a finding: a migration moves it (`factory.sh update` in a project
-with a delivery pipeline, `git mv` otherwise). Read the map's subdomain column to calibrate strictness, and check the strategic declarations against it — see *Declared
-relationships against the designed map* in `reference/checklist.md`.
-
-**Doctrine behind a finding.** When a finding needs the reason, consult `dca-knowledge` (the vendored
-catalog: `guide/elements.md`, `guide/rules.md`, the `pitfall/` and `decision/` nodes) and cite the node;
-never invent a DCA convention from memory.
+The catalogue is `reference/anti-patterns.md`, each entry with symptoms and the reason — anemic aggregate, god
+use case, leaky output port, port without an application-side caller, cookies of one exchange with different
+policies, the domain-event contract, setters, injected dependency in an aggregate, a business rule as an
+argument exception, a blanket catch, a failure translated in more than one place, status derived from the base
+type, a domain gateway without a rationale, transaction and controller placement, technical names and framework
+annotations in the domain, cross-context imports, naming, DTOs and mutable messages, repository versus store.
+Document each so the user understands.
 
 ## Things this review does NOT do
 
@@ -446,21 +188,13 @@ never invent a DCA convention from memory.
 
 ## Reference
 
+- `reference/audit-phases.md` — where ArchUnit ends, reading the project's DCA setup, and Phases 1–4 in full
 - `reference/checklist.md` — the complete per-layer checklist (includes Output Port Granularity section)
+- `reference/anti-patterns.md` — the findings catalogue: symptoms and the reason behind each anti-pattern
 - `reference/use-case-pattern.md` — central reference for use-case folder structure, file roles, shared-vs-local output-port decision guide, ArchUnit rules
 - `reference/naming-conventions.md` — extracted from the guide's package-structure chapter
 - `reference/archunit-rule-catalog.md` — every rule of both libraries, set by set, with what it selects and checks;
   generated (`scripts/render-rule-catalog.py`), the same text as `dca-init`'s — Block A reads it
-
-### Wiring and metadata review
-
-Check how operations are registered: a stereotype or configuration is equally valid.
-Static references cannot prove runtime wiring; NAM-002 is informational only.
-Presets also configure member roles (`injectionSite`, `persistenceMapping` in Java;
-attribute namespace roles in .NET). Review prohibited roles on types and members,
-including composed annotations/derived attributes; unknown metadata is unclassified
-and allowed by these checks. Outgoing adapters can reuse own/global infrastructure,
-while another module’s infrastructure remains private.
 
 ## Twin implementation checkpoint
 
