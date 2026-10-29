@@ -53,12 +53,17 @@ DcaRule.check(
                     e.interaction() == ExternalUpstream.Interaction.OUTBOUND
                         ? layout.outgoingAdapterPattern(pkg)
                         : layout.incomingAdapterPattern(pkg);
+                DescribedPredicate<JavaClass> inAllowedAdapter =
+                    arch.inLayerOf(
+                        e.interaction() == ExternalUpstream.Interaction.OUTBOUND
+                            ? DcaLayout.Layer.OUTGOING_ADAPTER
+                            : DcaLayout.Layer.INCOMING_ADAPTER,
+                        pkg);
                 violations.addAll(
                     noClasses()
                         .that()
                         .resideInAPackage(pkg + "..")
-                        .and()
-                        .resideOutsideOfPackage(allowedAdapter)
+                        .and(DescribedPredicate.not(inAllowedAdapter))
                         .should()
                         .dependOnClassesThat()
                         .resideInAnyPackage(e.contractPackages())
@@ -77,8 +82,7 @@ DcaRule.check(
               } else {
                 violations.addAll(
                     noClasses()
-                        .that()
-                        .resideInAPackage(layout.domainPattern(pkg))
+                        .that(arch.inLayerOf(DcaLayout.Layer.DOMAIN, pkg))
                         .should()
                         .dependOnClassesThat()
                         .resideInAnyPackage(e.contractPackages())
@@ -186,7 +190,7 @@ boolean isEmpty() {
 
 ## Architecture queries
 
-[DcaArchitecture](/reference/architecture.md) methods the rule relies on: `boundedContextPackages()`, `classes()`, `contextName()`, `packageAnnotations()` - how they resolve packages is described there and in [DcaLayout](/reference/layout.md).
+[DcaArchitecture](/reference/architecture.md) methods the rule relies on: `boundedContextPackages()`, `classes()`, `contextName()`, `inLayerOf()`, `packageAnnotations()` - how they resolve packages is described there and in [DcaLayout](/reference/layout.md).
 ### C# expression
 
 ```csharp
@@ -214,7 +218,8 @@ DcaRule.Check(
                         var allowedAdapter = e.Interaction == Interaction.Outbound
                             ? OutgoingAdapterNamespace(ns)
                             : IncomingAdapterNamespace(ns);
-                        foreach (var type in TypesBelow(arch, ns).Where(t => !IsBelow(t, allowedAdapter)))
+                        var inAllowedAdapter = arch.InLayerOf(e.Interaction == Interaction.Outbound ? DcaLayout.Layer.OutgoingAdapter : DcaLayout.Layer.IncomingAdapter, ns);
+                        foreach (var type in TypesBelow(arch, ns).Where(t => !inAllowedAdapter(t)))
                         {
                             if (e.ContractNamespaces.Any(c => DependsOnNamespace(type, c)))
                             {
@@ -226,7 +231,7 @@ DcaRule.Check(
                     }
                     else
                     {
-                        foreach (var type in TypesBelow(arch, DomainNamespace(ns)))
+                        foreach (var type in arch.Types.Where(arch.InLayerOf(DcaLayout.Layer.Domain, ns)))
                         {
                             if (e.ContractNamespaces.Any(c => DependsOnNamespace(type, c)))
                             {

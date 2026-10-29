@@ -42,14 +42,12 @@ DcaRule.of(
             + " (Hexagonal Architecture)",
         arch ->
             classes()
-                .that()
-                .resideInAnyPackage(arch.allApplicationPatterns())
+                .that(arch.inApplication())
                 .and()
                 .areNotInterfaces()
                 .and()
                 .areNotRecords()
-                .and()
-                .areAssignableTo(arch.layout().markers().useCase())
+                .and(arch.layout().markers().is("useCase"))
                 .should()
                 .haveSimpleNameEndingWith(layout.useCaseSuffix())
                 .allowEmptyShould(true))
@@ -66,7 +64,7 @@ DcaRule.of(
 
 ## Architecture queries
 
-[DcaArchitecture](/reference/architecture.md) methods the rule relies on: `allApplicationPatterns()`, `layout()` - how they resolve packages is described there and in [DcaLayout](/reference/layout.md).
+[DcaArchitecture](/reference/architecture.md) methods the rule relies on: `inApplication()`, `layout()` - how they resolve packages is described there and in [DcaLayout](/reference/layout.md).
 ### C# expression
 
 ```csharp
@@ -77,7 +75,7 @@ DcaRule.Check(
         arch =>
         {
             var violations = arch.Classes
-                .Where(c => InNamespace(c, DcaLayout.AnyOf(arch.AllApplicationPatterns()))
+                .Where(c => arch.InApplication(c)
                     && c.IsRecord != true
                     && ImplementsUseCase(arch, c)
                     && !c.Name.EndsWith(arch.Layout.UseCaseSuffix, StringComparison.Ordinal))

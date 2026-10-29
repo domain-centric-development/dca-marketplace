@@ -42,8 +42,7 @@ DcaRule.of(
             + " read",
         arch ->
             classes()
-                .that()
-                .areAssignableTo(arch.layout().markers().integrationEvent())
+                .that(arch.layout().markers().is("integrationEvent"))
                 .and()
                 .areNotInterfaces()
                 .should(TypeInspection.haveImmutableShape())
@@ -125,7 +124,7 @@ DcaRule.Check(
         {
             var violations = arch.Types
                 .Where(t => t is not Interface && !t.IsCompilerGenerated)
-                .Where(t => t.ImplementedInterfaces.Any(i => i.FullName == arch.Layout.Markers.IntegrationEvent))
+                .Where(t => arch.Layout.Markers.Is(nameof(DcaMarkers.IntegrationEvent), t))
                 .Where(t => !TacticalPatternRules.IsImmutableShape(t))
                 .Select(t => "Integration event " + t.FullName + " has mutable shape")
                 .ToList();

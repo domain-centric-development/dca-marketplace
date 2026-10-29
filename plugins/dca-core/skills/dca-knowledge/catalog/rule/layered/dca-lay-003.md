@@ -40,8 +40,7 @@ DcaRule.of(
             + " infrastructure implementation details",
         arch ->
             noClasses()
-                .that()
-                .resideInAnyPackage(arch.allApplicationPatterns())
+                .that(arch.inApplication())
                 .should()
                 .dependOnClassesThat(arch.infrastructureImplementation())
                 .allowEmptyShould(true))
@@ -55,7 +54,7 @@ DcaRule.of(
 
 ## Architecture queries
 
-[DcaArchitecture](/reference/architecture.md) methods the rule relies on: `allApplicationPatterns()`, `infrastructureImplementation()` - how they resolve packages is described there and in [DcaLayout](/reference/layout.md).
+[DcaArchitecture](/reference/architecture.md) methods the rule relies on: `inApplication()`, `infrastructureImplementation()` - how they resolve packages is described there and in [DcaLayout](/reference/layout.md).
 ### C# expression
 
 ```csharp
@@ -64,7 +63,7 @@ DcaRule.Of(
     "Application Services must only use outbound ports (not infrastructure implementations)",
     "Application services should only use outbound ports declared as interfaces (Ports.Out), not"
         + " infrastructure implementation details",
-    arch => Types().That().ResideInNamespaceMatching(DcaLayout.AnyOf(arch.AllApplicationPatterns()))
+    arch => Types().That().FollowCustomPredicate(arch.InApplication, "are in the application layer")
         .Should().NotDependOnAnyTypesThat()
         .FollowCustomPredicate(arch.IsInfrastructureImplementation, "are infrastructure implementations"))
     .Selecting(

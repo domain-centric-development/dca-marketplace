@@ -51,8 +51,7 @@ DcaRule.check(
               for (Upstream.Consumes channel : u.via()) {
                 violations.addAll(
                     noClasses()
-                        .that()
-                        .resideInAPackage(layout.domainPattern(pkg))
+                        .that(arch.inLayerOf(DcaLayout.Layer.DOMAIN, pkg))
                         .should()
                         .dependOnClassesThat()
                         .resideInAPackage(targetPkg + "." + channelName(arch, channel) + "..")
@@ -178,7 +177,7 @@ boolean isEmpty() {
 
 ## Architecture queries
 
-[DcaArchitecture](/reference/architecture.md) methods the rule relies on: `boundedContextPackages()`, `classes()`, `contextName()`, `layout()`, `packageAnnotations()` - how they resolve packages is described there and in [DcaLayout](/reference/layout.md).
+[DcaArchitecture](/reference/architecture.md) methods the rule relies on: `boundedContextPackages()`, `classes()`, `contextName()`, `inLayerOf()`, `layout()`, `packageAnnotations()` - how they resolve packages is described there and in [DcaLayout](/reference/layout.md).
 ### C# expression
 
 ```csharp
@@ -202,7 +201,7 @@ DcaRule.Check(
                     foreach (var channel in u.Via)
                     {
                         var channelNs = targetNs + "." + ChannelName(arch, channel);
-                        foreach (var type in TypesBelow(arch, DomainNamespace(ns)))
+                        foreach (var type in arch.Types.Where(arch.InLayerOf(DcaLayout.Layer.Domain, ns)))
                         {
                             if (DependsOnNamespace(type, channelNs))
                             {

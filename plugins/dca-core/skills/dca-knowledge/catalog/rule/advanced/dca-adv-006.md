@@ -43,7 +43,7 @@ DcaRule.check(
               violations(
                   arch,
                   c ->
-                      c.isAssignableTo(arch.layout().markers().integrationEvent())
+                      arch.layout().markers().is("integrationEvent").test(c)
                           && !c.isInterface(),
                   AdvancedPatternRules::hasVersionField,
                   c ->

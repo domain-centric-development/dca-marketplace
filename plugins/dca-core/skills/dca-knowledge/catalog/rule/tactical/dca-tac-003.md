@@ -41,7 +41,7 @@ DcaRule.check(
         arch -> {
           List<String> violations = new ArrayList<>();
           for (JavaClass aggregate :
-              concreteClassesAssignableTo(arch, arch.layout().markers().aggregateRoot())) {
+              concreteClassesAssignableTo(arch, arch.layout().markers().is("aggregateRoot"))) {
             for (JavaField field : TypeInspection.instanceFields(aggregate)) {
               for (JavaClass involved : TypeInspection.involvedTypes(field, aggregate)) {
                 if (isConcreteAggregateRoot(involved, arch.layout().markers())) {
@@ -68,8 +68,9 @@ DcaRule.check(
 ### `concreteClassesAssignableTo`
 
 ```java
-private static List<JavaClass> concreteClassesAssignableTo(DcaArchitecture arch, String marker) {
-  return classesMatching(arch, c -> c.isAssignableTo(marker) && !c.isInterface());
+private static List<JavaClass> concreteClassesAssignableTo(
+    DcaArchitecture arch, DescribedPredicate<JavaClass> role) {
+  return classesMatching(arch, c -> role.test(c) && !c.isInterface());
 }
 ```
 
@@ -77,7 +78,7 @@ private static List<JavaClass> concreteClassesAssignableTo(DcaArchitecture arch,
 
 ```java
 private static boolean isConcreteAggregateRoot(JavaClass type, DcaMarkers markers) {
-  return type.isAssignableTo(markers.aggregateRoot());
+  return markers.is("aggregateRoot").test(type);
 }
 ```
 
@@ -248,7 +249,7 @@ DcaRule.Check(
     arch =>
     {
         var violations = new List<string>();
-        foreach (var aggregate in ConcreteTypesAssignableTo(arch, arch.Layout.Markers.AggregateRoot))
+        foreach (var aggregate in ConcreteTypesAssignableTo(arch, nameof(DcaMarkers.AggregateRoot)))
         {
             foreach (var member in InstanceDataMembers(arch, aggregate))
             {

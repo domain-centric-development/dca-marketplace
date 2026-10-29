@@ -42,7 +42,7 @@ DcaRule.check(
             + " through that interface, not only the payload",
         arch -> {
           List<String> violations = new ArrayList<>();
-          String marker = arch.layout().markers().integrationEvent();
+          var marker = arch.layout().markers().is("integrationEvent");
           for (String root : arch.moduleRoots()) {
             String events = root + "." + layout.eventsSubpackage();
             for (JavaClass type : arch.classes()) {
@@ -54,7 +54,7 @@ DcaRule.check(
                   && !type.isAnnotation()
                   && type.isTopLevelClass()
                   && !type.getSimpleName().equals("package-info")
-                  && !type.isAssignableTo(marker)) {
+                  && !marker.test(type)) {
                 violations.add(
                     type.getName()
                         + " is an event contract without the integration event identity");
@@ -96,7 +96,6 @@ DcaRule.Check(
         arch =>
         {
             var violations = new List<string>();
-            var marker = arch.Layout.Markers.IntegrationEvent;
             foreach (var root in arch.ModuleRoots())
             {
                 var events = root + "." + Layout.EventsSegment;
@@ -104,7 +103,7 @@ DcaRule.Check(
                 {
                     var ns = type.Namespace?.FullName ?? string.Empty;
                     var inEvents = ns == events || ns.StartsWith(events + ".", StringComparison.Ordinal);
-                    if (inEvents && !type.IsNested && !type.IsCompilerGenerated && !IsAssignableTo(arch, type, marker))
+                    if (inEvents && !type.IsNested && !type.IsCompilerGenerated && !IsRole(arch, type, nameof(DcaMarkers.IntegrationEvent)))
                     {
                         violations.Add(type.FullName + " is an event contract without the integration event identity");
                     }

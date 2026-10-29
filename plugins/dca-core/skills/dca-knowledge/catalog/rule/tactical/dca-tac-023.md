@@ -81,7 +81,7 @@ private static List<JavaClass> aggregateRootClasses(DcaArchitecture arch) {
   return classesMatching(
       arch,
       c ->
-          c.isAssignableTo(arch.layout().markers().aggregateRoot())
+          arch.layout().markers().is("aggregateRoot").test(c)
               && !c.isInterface()
               && !c.getModifiers().contains(JavaModifier.ABSTRACT)
               && !c.isRecord());

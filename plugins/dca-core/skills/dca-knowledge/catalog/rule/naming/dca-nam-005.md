@@ -39,8 +39,7 @@ DcaRule.of(
         "Classes carrying the web-controller stereotype should follow naming conventions",
         arch ->
             classes()
-                .that()
-                .resideInAnyPackage(arch.allIncomingAdapterPatterns())
+                .that(arch.inIncomingAdapter())
                 .and(
                     AnnotationRoles.annotatedWithAny(
                         layout.frameworkAnnotations().webController()))
@@ -94,7 +93,7 @@ static DescribedPredicate<CanBeAnnotated> annotatedWithAny(List<String>... roles
 
 ## Architecture queries
 
-[DcaArchitecture](/reference/architecture.md) methods the rule relies on: `allIncomingAdapterPatterns()` - how they resolve packages is described there and in [DcaLayout](/reference/layout.md).
+[DcaArchitecture](/reference/architecture.md) methods the rule relies on: `inIncomingAdapter()` - how they resolve packages is described there and in [DcaLayout](/reference/layout.md).
 ### C# expression
 
 ```csharp
@@ -105,7 +104,7 @@ DcaRule.Check(
         arch =>
         {
             var violations = arch.Classes
-                .Where(c => InNamespace(c, DcaLayout.AnyOf(arch.AllIncomingAdapterPatterns()))
+                .Where(c => arch.InIncomingAdapter(c)
                     && IsMvcController(arch, c)
                     && !c.Name.EndsWith(arch.Layout.ControllerSuffix, StringComparison.Ordinal))
                 .Select(c => $"{c.FullName} is a controller but does not end with '{arch.Layout.ControllerSuffix}'")

@@ -40,7 +40,7 @@ DcaRule.check(
         arch -> {
           List<String> violations = new ArrayList<>();
           for (JavaClass valueObject :
-              concreteClassesAssignableTo(arch, arch.layout().markers().value())) {
+              concreteClassesAssignableTo(arch, arch.layout().markers().is("value"))) {
             for (JavaMethod method : valueObject.getAllMethods()) {
               if (isSetter(method)) {
                 violations.add(
@@ -67,8 +67,9 @@ DcaRule.check(
 ### `concreteClassesAssignableTo`
 
 ```java
-private static List<JavaClass> concreteClassesAssignableTo(DcaArchitecture arch, String marker) {
-  return classesMatching(arch, c -> c.isAssignableTo(marker) && !c.isInterface());
+private static List<JavaClass> concreteClassesAssignableTo(
+    DcaArchitecture arch, DescribedPredicate<JavaClass> role) {
+  return classesMatching(arch, c -> role.test(c) && !c.isInterface());
 }
 ```
 
@@ -117,7 +118,7 @@ DcaRule.Check(
     arch =>
     {
         var violations = new List<string>();
-        foreach (var valueObject in ConcreteTypesAssignableTo(arch, arch.Layout.Markers.Value))
+        foreach (var valueObject in ConcreteTypesAssignableTo(arch, nameof(DcaMarkers.Value)))
         {
             foreach (var setter in Setters(valueObject, publicOnly: false))
             {
