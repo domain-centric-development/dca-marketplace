@@ -95,10 +95,11 @@ class ValuesTest(unittest.TestCase):
             })
             found = architecture.value_findings(root)
         said = " ".join(found)
-        self.assertEqual(7, len(found), found)
+        self.assertEqual(6, len(found), found)
         for part in ("Pair.value is str", "Pair.other is int", "Loose.value is str", "Story.title is str",
-                     "rename(title) takes str", "is_draft returns bool", "due(at) takes datetime"):
+                     "rename(title) takes str", "due(at) takes datetime"):
             self.assertIn(part, said)
+        self.assertNotIn("is_draft", said)      # a predicate returns bool
         self.assertNotIn("StoryId", said)
         self.assertNotIn("release", said)
 
@@ -158,16 +159,17 @@ class PortsTest(unittest.TestCase):
                     "class MainLine(DomainGateway, typing.Protocol):\n    def head(self): ...\n"
                     "class Ledger(OutputPort, typing.Protocol):\n    def book(self, entry): ...\n",
                 "infrastructure/root.py":
-                    "class RootLedger:\n    def book(self, entry): ...\n",
+                    "class RootLedger:\n    def __init__(self, book: BookInputPort): ...\n"
+                    "    def book(self, entry): ...\n"
+                    "class FileArchive:\n    def keep(self, item): ...\n",
             })
             found = architecture.port_findings(root)
         said = "\n".join(found)
         self.assertIn("DCA-HEX-009 Clock is a protocol of the application but no port", said)
         self.assertIn("DCA-HEX-010 the output port Ledger is declared in the domain", said)
-        self.assertIn("the output port Archive has no implementation", said)
+        self.assertIn("DCA-HEX-019 FileArchive implements the output port Archive outside the outgoing adapters", said)
         self.assertIn("DCA-TAC-020 MemoryJournal implements the store Journal outside the outgoing adapters", said)
-        self.assertIn("CliMailer implements the output port Mailer outside the outgoing adapters and the "
-                      "composition root", said)
+        self.assertIn("DCA-HEX-019 CliMailer implements the output port Mailer outside the outgoing adapters", said)
         self.assertNotIn("MainLine", said)
         self.assertNotIn("JournalFiles", said)
         self.assertNotIn("RootLedger", said)

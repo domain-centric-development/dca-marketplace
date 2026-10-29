@@ -226,8 +226,9 @@ def is_wrapper(cls):
 
 def value_findings(package):
     """Every bare primitive (`str`, `int`, `float`, `bool`) or time type (`datetime`, `date`, `time`) in a domain
-    field — an annotated class attribute that is no `ClassVar` — or a domain signature, a parameter's or a return's.
-    Exempt: the one `value` field of a frozen dataclass that wraps it, and the dunder methods."""
+    field — an annotated class attribute that is no `ClassVar` — or a domain signature, a parameter's or a return's
+    (DCA-TAC-025). Exempt: the one `value` field of a frozen dataclass that wraps it, the dunder methods, and a
+    return of `bool` alone — a predicate, a question to the object."""
     found = []
     for dotted, (rel, tree) in sorted(parsed(package).items()):
         if place_of(dotted)[1] != "domain":
@@ -245,6 +246,8 @@ def value_findings(package):
                 if bare:
                     found.append(f"{rel}:{argument.lineno} {where}{function.name}({argument.arg}) takes {', '.join(bare)}")
             bare = sorted(PRIMITIVES & set(annotation_names(function.returns)))
+            if bare == ["bool"]:     # a predicate: a question to the object, not a value without a name
+                bare = []
             if bare:
                 found.append(f"{rel}:{function.lineno} {where}{function.name} returns {', '.join(bare)}")
 
@@ -304,6 +307,13 @@ def public_methods(cls):
             and not item.name.startswith("_")}
 
 
+def drives_an_input_port(cls):
+    """Whether a class drives a use case — names an input port or calls `execute` — the bridge that hands an output
+    port a second use case."""
+    return any((isinstance(n, (ast.Name, ast.Attribute)) and getattr(n, "id", getattr(n, "attr", "")).endswith("InputPort"))
+               or (isinstance(n, ast.Call) and getattr(n.func, "attr", "") == "execute") for n in ast.walk(cls))
+
+
 def port_findings(package):
     """Every output port that is not one, has no implementation, or has one in the wrong place. Python's ports are
     protocols: an adapter fits a port by its shape and never names it, so the type checker sees a fit only where an
@@ -315,11 +325,11 @@ def port_findings(package):
       (`InputPort`, `UseCase` and a domain's `DomainGateway` are what they say);
     - DCA-HEX-010  an output port is declared in no domain;
     - DCA-TAC-015  a repository is implemented in an outgoing adapter alone;
-    - DCA-TAC-020  a store is implemented in an outgoing adapter alone.
+    - DCA-TAC-020  a store is implemented in an outgoing adapter alone;
+    - DCA-HEX-019  any other output port too — in the composition root only the bridge that names an input port.
 
-    Without a rule id, as the libraries have none: a protocol elsewhere in an application that is no port, an output
-    port no class implements, and a plain output port implemented outside the outgoing adapters and the composition
-    root."""
+    Without a rule id, as the libraries have none: a protocol elsewhere in an application that is no port, and an
+    output port no class implements."""
     trees = parsed(package)
     classes = [(dotted, rel, node) for dotted, (rel, tree) in sorted(trees.items())
                for node in ast.walk(tree) if isinstance(node, ast.ClassDef)]
@@ -366,13 +376,15 @@ def port_findings(package):
             found.append(f"{rel}:{node.lineno} the output port {name} has no implementation")
         for d, r, c in implementations:
             layer = place_of(d)[1]
+            if layer == "root" and not drives_an_input_port(c):
+                layer = "root without an input port"
             if kind in ("Repository", "Store") and layer != "outgoing":
                 rule = "DCA-TAC-015" if kind == "Repository" else "DCA-TAC-020"
                 found.append(f"{r}:{c.lineno} {rule} {c.name} implements the {kind.lower()} {name} outside the "
                              f"outgoing adapters")
             elif layer not in ("outgoing", "root"):
-                found.append(f"{r}:{c.lineno} {c.name} implements the output port {name} outside the outgoing "
-                             f"adapters and the composition root")
+                found.append(f"{r}:{c.lineno} DCA-HEX-019 {c.name} implements the output port {name} outside the "
+                             f"outgoing adapters — in the composition root only a bridge to an input port")
     return found
 
 

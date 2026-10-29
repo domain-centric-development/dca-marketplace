@@ -3,25 +3,20 @@ changes, the checks and use cases that settle it — and the skill the runner st
 
 from __future__ import annotations
 
-import datetime
 import typing
 
 from ..building_blocks import UseCaseException
-from ..delivery.adapter.outgoing.files.backlog_files import BacklogFiles
 from ..delivery.adapter.outgoing.files.decision_record_files import RequestRecordFiles
 from ..delivery.adapter.outgoing.files.request_files import RequestFiles, stamp_utc
+from ..delivery.adapter.outgoing.files.scheduled_starts import ScheduledStarts
 from ..delivery.adapter.outgoing.git.backlog_changes import BacklogChangeFiles
 from ..delivery.adapter.outgoing.process.console_lines import ConsoleLines
 from ..delivery.application.requests.check_request import CheckRequestCommand
 from ..delivery.application.requests.request_queue import RequestQueue
 from ..delivery.application.requests.work_request import WorkRequestUseCase
-from ..delivery.application.schedule.schedule_backlog import schedule_backlog
-from ..delivery.application.schedule.start_story import start_story
 from ..delivery.application.shared.request_skill import RequestSkill
 from ..delivery.application.shared.requests import Kind, Request, RequestRefused
-from ..delivery.application.shared.story_starts import Start
 from ..sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError
-from ..sharedkernel.adapter.outgoing.profile.profile_files import place
 from . import delivery as wiring
 
 
@@ -44,18 +39,6 @@ class HeldRequests:
             return wiring.settlement(self._cwd, self._runs).settle(request, at)
         except (UseCaseException, MarkdownError) as error:
             raise RequestRefused(str(error)) from error
-
-
-class ScheduledStarts:
-    """Where a story begins, as the schedule of the checkout reads it now."""
-
-    def __init__(self, cwd: str) -> None:
-        self._cwd = cwd
-
-    def start(self, story: str) -> typing.Optional[Start]:
-        schedule = schedule_backlog(BacklogFiles(self._cwd, place("epics"), place("runs")),
-                                    datetime.datetime.now(datetime.timezone.utc), 1)
-        return start_story(schedule, story, 1)
 
 
 class PlacedRequests(RequestFiles):
