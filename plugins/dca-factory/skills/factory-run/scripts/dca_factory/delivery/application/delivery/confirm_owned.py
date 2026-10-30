@@ -9,6 +9,7 @@ from ....building_blocks import UseCase
 from ...domain.model.story import StoryId
 from ..shared.owned_changes import OwnedChanges
 from ..shared.story_journal import StoryJournal
+from .pipeline_rules import decides, rule
 
 
 @dataclasses.dataclass(frozen=True)
@@ -40,6 +41,10 @@ class ConfirmOwnedUseCase:
         self._owned = owned
         self._journal = journal
 
+    @decides(rule(
+        "RUN-OWNED-1", "a stage window ends", "the story and the answers are the person's",
+        ok="nothing they own changed", fail="it changed — the run stops (exit 7) and the story waits until "
+        "`--owned-confirm`"))
     def execute(self, command: ConfirmOwnedCommand) -> ConfirmOwnedResult:
         parts = tuple(self._owned.changed(command.story))
         if not parts:

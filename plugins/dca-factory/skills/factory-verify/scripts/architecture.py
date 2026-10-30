@@ -1,7 +1,7 @@
 """The factory's own architecture, checked over its package's source — DCA's rules in a third language, over `ast`.
 
 The package is built in DCA layers (WP-152): `building_blocks.py` outside every context, the bounded contexts
-`discovery/`, `delivery/` and `spec/` each with `domain/`, `application/` and `adapter/{incoming,outgoing}/`, the
+`discovery/`, `delivery/`, `spec/` and `rulebook/` each with `domain/`, `application/` and `adapter/{incoming,outgoing}/`, the
 shared kernel `sharedkernel/`, the web host `web/` and the composition root `infrastructure/`. At the top of the
 package sits the version stamp `contract.py` alone, read by name by every installed release.
 
@@ -19,7 +19,7 @@ generated data.
 import ast
 import os
 
-CONTEXTS = ("discovery", "delivery", "spec")
+CONTEXTS = ("discovery", "delivery", "spec", "rulebook")
 #: The one module at the package's top besides the building blocks: the version stamp, which `factory.sh` and an
 #: installed copy of any release read by its name.
 STAMP = "contract"

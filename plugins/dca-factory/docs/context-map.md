@@ -1,6 +1,6 @@
 # Context map — the factory
 
-The factory's package (`skills/factory-run/scripts/dca_factory/`) is built the way it teaches: three bounded contexts,
+The factory's package (`skills/factory-run/scripts/dca_factory/`) is built the way it teaches: four bounded contexts,
 each in DCA layers, a shared kernel, the building blocks outside them, a web host across them and a composition root.
 
 ```mermaid
@@ -9,6 +9,7 @@ flowchart LR
     delivery -- "delta: the story's criteria and the plan's delta" --> spec["spec<br/>(core)"]
     spec -. "query: is journey X there and proven?" .-> delivery
     spec -. "future: delivered, unguarded → a new discovery" .-> discovery
+    delivery -- "published: the registered rules and the stage table" --> rulebook["rulebook<br/>(supporting)"]
 ```
 
 | Context | Subdomain | Language | Glossary |
@@ -16,6 +17,7 @@ flowchart LR
 | **discovery** | supporting | problem, option, outcome, evidence, proposal, report | [glossary/discovery.md](glossary/discovery.md) |
 | **delivery** | core | epic, story, decision record, stage, gate, journal, usage — features: backlog, decisions, delivery, description, cost | [glossary/delivery.md](glossary/delivery.md) |
 | **spec** | core | criterion, rule, scenario, feature, test line, journey, delta | [glossary/spec.md](glossary/spec.md) |
+| **rulebook** | supporting | rule, rule id, enforcement, part, outcome, flow, marker, citation | [glossary/rulebook.md](glossary/rulebook.md) |
 
 ## Relationships
 
@@ -29,6 +31,12 @@ then on the epic is delivery's. Which proposals became epics, discovery asks del
 `spec/api/`: a criterion as an entry, the delta as the plan writes it, problems as sentences. Spec knows no story, no epic and no way
 of delivery: two implementations of the same backlog end in the same spec. Delivery asks spec in spec's terms
 whether a journey is there and proven; "delivered, unguarded" is delivery's state.
+
+**delivery → rulebook — Published Language, the rulebook Conformist, through delivery's `api/rules.py`.** Delivery registers each rule where it decides
+— a gate check with `@check(..., rule=…)`, a pass action with `@on_pass(..., rule=…)`, a runner's step with
+`@decides(…)` — and publishes them with the stage table as plain data; the rulebook takes them as delivery says them
+and adds the rules the skills mark in their text. Delivery knows no rulebook. A *rule* there is the factory's; a *rule*
+in spec is a `### Rule:` that groups criteria — two words, two contexts.
 
 **spec → discovery — not built.** An epic delivered and unguarded, or an outcome that does not happen, would start a
 new discovery: a future crossing, shown so it is not forgotten.

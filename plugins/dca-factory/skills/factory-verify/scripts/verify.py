@@ -168,7 +168,7 @@ CLI_MODULE = "delivery/adapter/incoming/cli/cli_command"
 #: The runner's process and the ports of a run's use cases on it, outgoing adapters: what starts the stages.
 RUNNER_MODULES = ("delivery/adapter/outgoing/process/runner_process", "delivery/adapter/outgoing/process/runner_ports")
 #: What is built in layers (WP-152): the building blocks, the shared kernel, the contexts, the web host, the root.
-LAYERED = ("building_blocks", "sharedkernel", "discovery", "delivery", "spec", "web", "infrastructure")
+LAYERED = ("building_blocks", "sharedkernel", "discovery", "delivery", "spec", "rulebook", "web", "infrastructure")
 
 
 def package_modules(folder):

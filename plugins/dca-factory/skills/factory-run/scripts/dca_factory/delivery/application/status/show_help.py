@@ -54,6 +54,8 @@ HELP_COMMANDS = (
     ("deliver again", "with `claim_remote:` — a published story whose merge request lost the race, merged again",
      "", "integrate <story>"),
     ("the profile", "what detection finds against the stack profile", "/factory-setup", "setup --check"),
+    ("the rules", "every rule the gate, the runner and the stage skills hold a story to, in each kind's flow", "",
+     "rules"),
     ("observe a story", "what a delivered story changed, measured from its files", "/factory-verify <story>",
      "verify --story <story>"),
     ("the machinery", "the pipeline's own suite against fixtures — for whoever changes the pipeline",

@@ -7,6 +7,7 @@ import typing
 
 from ...domain.model.stage import ALL_KINDS, PIPELINE, Stage, StoryKind, Trait
 from ...domain.model.verdict import FindingState, Findings
+from .pipeline_rules import PipelineRule, placed
 
 Entry = typing.Tuple[str, str, str]
 Run = typing.Any
@@ -76,6 +77,8 @@ class Check(typing.NamedTuple):
     unrun: typing.Callable[[Run], typing.List[str]]
     #: the story kinds it holds (a task has no criteria, so none of their checks)
     kinds: typing.FrozenSet[StoryKind]
+    #: what it holds the story to, one rule per name it reports under — the rulebook reads them here
+    rules: typing.Tuple[PipelineRule, ...]
 
 
 #: The checks a gate run holds a story to, in this order: every check that needs no process first, and a refusal among
@@ -92,15 +95,20 @@ ORDER = ("story", "contract", "status", "epic", "outcome", "rounds", "suites", "
 
 #: What a passing gate does, per stage — the writes a verdict makes.
 PASSED: typing.Dict[str, typing.List[CheckRun]] = {}
+#: The rules of what a passing gate does, per stage.
+PASS_RULES: typing.Dict[str, typing.List[PipelineRule]] = {}
+
+Rules = typing.Union[PipelineRule, typing.Tuple[PipelineRule, ...]]
 
 GATED = tuple(s for s in PIPELINE if Trait.GATED in s.traits)
 
 
 def check(name: str, stages: typing.Union[None, typing.Tuple[str, ...], typing.Callable[[Stage], bool]] = None,
           needs_process: bool = False, unrun: typing.Optional[typing.Callable[[Run], typing.List[str]]] = None,
-          kinds: typing.FrozenSet[StoryKind] = ALL_KINDS) -> typing.Callable[[CheckRun], CheckRun]:
+          kinds: typing.FrozenSet[StoryKind] = ALL_KINDS, *, rule: Rules) -> typing.Callable[[CheckRun], CheckRun]:
     """Register a check against the stage table: `stages` names rows (None — every gated stage) or is a predicate
-    over a row; `kinds` the story kinds it holds."""
+    over a row; `kinds` the story kinds it holds; `rule` what it holds the story to — one rule, or one per name it
+    reports under. A check without a rule is no check: the rulebook could not show it."""
     if stages is None:
         chosen = tuple(s.name.value for s in GATED)
     elif callable(stages):
@@ -115,20 +123,27 @@ def check(name: str, stages: typing.Union[None, typing.Tuple[str, ...], typing.C
     if name not in ORDER:
         raise ValueError(f"check {name}: not in the checks' order")
 
+    rules = (rule,) if isinstance(rule, PipelineRule) else rule
+    if not rules or not all(r.id.startswith("GATE-") for r in rules):
+        raise ValueError(f"check {name}: carries its rules, each a GATE- id")
+
     def register(function: CheckRun) -> CheckRun:
-        CHECKS.append(Check(name, function, chosen, needs_process, unrun or (lambda run: [name]), kinds))
+        CHECKS.append(Check(name, function, chosen, needs_process, unrun or (lambda run: [name]), kinds,
+                            placed(rules, function)))
         CHECKS.sort(key=lambda c: ORDER.index(c.name))
         return function
     return register
 
 
-def on_pass(stage: str) -> typing.Callable[[CheckRun], CheckRun]:
-    """Register what a passing gate of the stage does."""
+def on_pass(stage: str, *, rule: Rules) -> typing.Callable[[CheckRun], CheckRun]:
+    """Register what a passing gate of the stage does, and the rules it does it by."""
     if stage not in {s.name.value for s in GATED}:
         raise ValueError(f"on_pass: no gated stage {stage}")
+    rules = (rule,) if isinstance(rule, PipelineRule) else rule
 
     def register(function: CheckRun) -> CheckRun:
         PASSED.setdefault(stage, []).append(function)
+        PASS_RULES.setdefault(stage, []).extend(placed(rules, function))
         return function
     return register
 

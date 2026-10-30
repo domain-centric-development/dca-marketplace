@@ -490,8 +490,8 @@ class StageEvidenceFiles:
         arranged: typing.List[Place] = []
         renamed: typing.List[RenamedTest] = []
         base_file = os.path.join(evidence_dir(runs, story_id), "base-tree")
-        base = read_text(base_file).strip() if os.path.isfile(base_file) else ""
-        base = base if base and base != "none" else None
+        recorded = read_text(base_file).strip() if os.path.isfile(base_file) else ""
+        base = recorded if recorded and recorded != "none" else None
         for line in read_text(path).splitlines():
             if "  " not in line:
                 continue

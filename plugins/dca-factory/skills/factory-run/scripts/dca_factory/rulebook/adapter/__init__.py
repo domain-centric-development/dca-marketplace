@@ -1,0 +1,1 @@
+"""The rulebook's adapters."""

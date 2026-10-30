@@ -59,6 +59,7 @@ from ....application.requests.request_queue import RequestQueue
 from ....application.requests.work_request import RequestWorked
 from ....application.shared.requests import Request
 from ....application.shared.story_integration import Lost
+from ....application.delivery.pipeline_rules import decides, rule
 
 
 # --- the run: what `factory.sh run` starts once its checks before the first stage passed -------------------------
@@ -646,6 +647,9 @@ class Run:
         return 0
 
     # --- the shared processes ----------------------------------------------------------------------------------
+    @decides(rule(
+        "RUN-LIMIT-3", "`--max-stages` or `--story-budget` is reached", "a person sets how much a run may spend",
+        fail="nothing more is dispatched (exit 4); the work stays"))
     def budget_note(self, story: str, what: str) -> int:
         err(f"factory: story {story} has reached its --story-budget {self.story_budget} — {what} are not dispatched.")
         return 4

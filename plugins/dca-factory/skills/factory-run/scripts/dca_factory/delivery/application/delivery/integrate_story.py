@@ -10,6 +10,7 @@ from ....building_blocks import UseCase
 from ...domain.service.story_route import Refusal, StoryRoute
 from ..shared.run_lines import RunLines
 from ..shared.story_integration import Lost, StoryIntegration
+from .pipeline_rules import decides, rule
 
 
 @dataclasses.dataclass(frozen=True)
@@ -32,6 +33,12 @@ class IntegrateStoryUseCase:
         self._integration = integration
         self._lines = lines
 
+    @decides(
+        rule("RUN-INTEGRATE-1", "a story's stages passed in its worktree", "a story reaches the main line only through "
+             "the integrate gate", ok="the target is merged into the story's branch and the integrate gate runs",
+             fail="a conflict — the integrate stage resolves it; a refusal on the main line costs a round",
+             stages=("integrate",)),
+    )
     def execute(self, command: IntegrateStoryCommand) -> typing.Optional[int]:
         story = command.story
         self._lines.out("── integrate")

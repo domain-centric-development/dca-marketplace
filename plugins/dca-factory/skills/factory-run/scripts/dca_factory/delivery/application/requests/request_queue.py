@@ -11,6 +11,7 @@ from ..shared.requests import KIND, Request, RequestRefused, RequestStore, stori
 from ..shared.run_lines import RunLines
 from ..shared.story_starts import StoryStarts
 from ...domain.model.decision_record import ANSWERED_WORDS
+from ..delivery.pipeline_rules import decides, rule
 
 #: The exits of a request's process that end it with no word of its own: a hang-up, an interrupt, a TERM.
 STOPPED_EXITS = (129, 130, 143)
@@ -46,6 +47,9 @@ class RequestQueue:
                 self._lines.out(f"factory: request {request['id']} was left running by "
                                 f"{request.get('worker') or 'a factory'} — queued again")
 
+    @decides(rule(
+        "RUN-REQUEST-2", "a request waits for records", "an answered question takes its request up again",
+        ok="queued again, with what was answered"))
     def wake_waiting(self) -> None:
         """A waiting request whose records are all answered is queued again, with the answers to read."""
         for request in self._store.all():
@@ -61,6 +65,9 @@ class RequestQueue:
                                    answered=" ".join(rid for _p, rid, _s in records))
                 self._lines.out(f"factory: request {request['id']} — its question is answered; it runs again")
 
+    @decides(rule(
+        "RUN-REQUEST-1", "the factory takes a request", "requests run in the order they came, never over a busy story",
+        ok="the oldest queued one whose stories nothing runs"))
     def next(self, busy: typing.Iterable[str] = (),
              kinds: typing.Optional[typing.Sequence[str]] = None) -> typing.Optional[Request]:
         """The oldest queued request this runner may work now: of the kinds given (else every kind a skill works), and
@@ -116,6 +123,10 @@ class RequestQueue:
         """A `run` request's story ended: the journal says how."""
         self._store.journal("request-end", "run", request["id"], f"exit={code}")
 
+    @decides(rule(
+        "RUN-REQUEST-3", "a request's process ended", "a request interrupted is not a request failed",
+        ok="exit 0 or 3 — done or waiting", fail="any other exit — failed, kept for a retry",
+        note="interrupted (a signal) — queued again"))
     def ended(self, request: Request, code: int) -> None:
         """After a request's process: one that ended without saying how — killed, a crash before its first line — is
         failed, so it is never taken again on its own; one stopped by a signal is queued for the next start."""

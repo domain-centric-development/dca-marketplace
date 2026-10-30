@@ -1,0 +1,145 @@
+"""The rulebook: every rule, the stage table they are placed in, and the flow of a story of each kind — per stage the
+gate before it, what it is told, the gate after it, what a passing gate does and what the runner decides there."""
+
+from __future__ import annotations
+
+import collections
+import enum
+import typing
+
+from ....building_blocks import Value
+from .rule import Citation, Enforcement, KindName, Part, Rule, RuleState, StageName, Words
+
+
+class GateTime(enum.Enum):
+    """When a stage's gate runs: before the stage (the plan's), after its file is written, or not at all (the judge's
+    verdict is read at the next gate)."""
+
+    BEFORE = "before"
+    AFTER = "after"
+    NONE = "none"
+
+
+class OrderPlace(enum.Enum):
+    """A step of a kind's run order, or a step after it (adopt, integrate)."""
+
+    IN_ORDER = "in-order"
+    AFTER_ORDER = "after-order"
+
+
+class StageRow(Value):
+    name: StageName
+    kinds: typing.Tuple[KindName, ...]
+    gate: GateTime
+    place: OrderPlace
+    window: Words
+
+
+class KindOrder(Value):
+    kind: KindName
+    stages: typing.Tuple[StageName, ...]
+
+
+class FlowStep(Value):
+    """One stage of a kind's flow, the rules in the order they come: the gate before it, what the stage is told, the
+    gate after it, what a passing gate does, what the runner decides there."""
+
+    stage: StageName
+    gate: GateTime
+    window: Words
+    gate_before: typing.Tuple[Rule, ...]
+    told: typing.Tuple[Rule, ...]
+    gate_after: typing.Tuple[Rule, ...]
+    passed: typing.Tuple[Rule, ...]
+    decided: typing.Tuple[Rule, ...]
+
+
+class Problem(Value):
+    """What does not hold in the rulebook itself, in a sentence."""
+
+    said: Words
+
+
+class Rulebook(Value):
+    """All rules and the table they are placed in."""
+
+    rules: typing.Tuple[Rule, ...]
+    rows: typing.Tuple[StageRow, ...]
+    orders: typing.Tuple[KindOrder, ...]
+
+    def active(self) -> typing.Tuple[Rule, ...]:
+        return tuple(r for r in self.rules if r.state is RuleState.ACTIVE)
+
+    def chosen(self, stage: typing.Optional[StageName], kind: typing.Optional[KindName]) -> typing.Tuple[Rule, ...]:
+        """The active rules at a stage and for a kind — either left out, all of them."""
+        return tuple(r for r in self.active() if (stage is None or r.holds_at(stage))
+                     and (kind is None or r.holds_for(kind)))
+
+    def kinds(self) -> typing.Tuple[KindName, ...]:
+        return tuple(order.kind for order in self.orders)
+
+    def steps(self, kind: KindName) -> typing.Tuple[StageName, ...]:
+        """The kind's stages in its run order, then the steps after it that the kind takes."""
+        order = next((o.stages for o in self.orders if o.kind == kind), ())
+        return order + tuple(row.name for row in self.rows if row.place is OrderPlace.AFTER_ORDER and kind in row.kinds)
+
+    def at_every_gate(self, kind: KindName) -> typing.Tuple[Rule, ...]:
+        """The checks every gate of the kind's flow holds — said once, not at each stage."""
+        gated = [name for name in self.steps(kind) if self.row(name).gate is not GateTime.NONE]
+        return tuple(r for r in self.chosen(None, kind)
+                     if r.part is Part.CHECK and gated and all(r.holds_at(name) for name in gated))
+
+    def row(self, name: StageName) -> StageRow:
+        return next(row for row in self.rows if row.name == name)
+
+    def flow(self, kind: KindName) -> typing.Tuple[FlowStep, ...]:
+        """Each step of the kind with its rules — the checks every gate holds left to `at_every_gate`."""
+        everywhere = set(self.at_every_gate(kind))
+        steps = []
+        for name in self.steps(kind):
+            row = self.row(name)
+            here = [r for r in self.chosen(name, kind)]
+            checks = tuple(r for r in here if r.part is Part.CHECK and r not in everywhere)
+            steps.append(FlowStep(
+                name, row.gate, row.window,
+                checks if row.gate is GateTime.BEFORE else (),
+                tuple(r for r in here if r.part is Part.INSTRUCTION),
+                checks if row.gate is GateTime.AFTER else (),
+                tuple(r for r in here if r.part is Part.PASS_ACTION),
+                tuple(r for r in here if r.part is Part.DECISION)))
+        return tuple(steps)
+
+    def outside(self) -> typing.Tuple[Rule, ...]:
+        """The active rules no stage of any flow holds: the runner's whole run, the commit hook, every stage alike."""
+        staged = {row.name for row in self.rows}
+        return tuple(r for r in self.active() if not any(stage in staged for stage in r.stages))
+
+    def problems(self, citations: typing.Tuple[Citation, ...]) -> typing.Tuple[Problem, ...]:
+        """An id used twice, a stage no row has, a cited id no rule has, a retired rule still written somewhere."""
+        found = []
+        counted = collections.Counter(r.id for r in self.rules)
+        for rule_id, count in counted.items():
+            if count > 1:
+                written = ", ".join(r.source.value for r in self.rules if r.id == rule_id)
+                found.append(Problem(Words(f"{rule_id.value} is used {count} times — {written}")))
+        places = {row.name for row in self.rows}
+        for rule in self.active():
+            if rule.part is Part.INSTRUCTION and rule.enforcement is not Enforcement.INSTRUCTED:
+                found.append(Problem(Words(f"{rule.id.value} in a skill's text — {rule.source.value}: a skill "
+                                           f"carries STAGE- ids, the gate and the runner register theirs")))
+            unknown = [s.value for s in rule.stages if s not in places and s.value not in OUTSIDE_PLACES]
+            if unknown:
+                found.append(Problem(Words(f"{rule.id.value} names no stage {', '.join(unknown)} — "
+                                           f"{rule.source.value}")))
+        known = {r.id.value: r for r in self.rules}
+        for citation in citations:
+            cited = known.get(citation.id.value)
+            if cited is None:
+                found.append(Problem(Words(f"{citation.source.value} cites {citation.id.value}, which no rule has")))
+            elif cited.state is RuleState.RETIRED:
+                found.append(Problem(Words(f"{citation.source.value} cites {citation.id.value}, which is retired")))
+        return tuple(found)
+
+
+#: The places a rule may name beside the stage table: the commit hook and CI, a discovery's report.
+OUTSIDE_PLACES = ("commit", "discover")

@@ -36,7 +36,11 @@ def split_off(lines: typing.List[str], keys: typing.Collection[str]
         return lines, []
     end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("## ")), len(lines))
     # blocks: (rule heading index or None, scenario key or None, lines)
-    kept, moved, rule, rule_kept, rule_moved = [], [], [], [], []
+    kept: typing.List[str] = []
+    moved: typing.List[str] = []
+    rule: typing.List[str] = []
+    rule_kept: typing.List[str] = []
+    rule_moved: typing.List[str] = []
     current: typing.List[str] = []
     key: typing.Optional[str] = None
 

@@ -8,6 +8,7 @@ import typing
 from ...domain.model.stack_profile import (
     BUILT_IN_PERSPECTIVES, ProfileKey, ProfileValue, StackProfile, ToolName, Unit)
 from ...domain.model.stage import StageName
+from ..delivery.pipeline_rules import decides, rule
 
 __all__ = ["BUILT_IN_PERSPECTIVES", "carrier_lines", "carriers", "command_heads", "first_word", "model_for",
            "perspectives_of", "stack_profile", "tool_for", "effort_for"]
@@ -29,14 +30,24 @@ def command_heads(profile: Profile) -> typing.List[str]:
     return [head.value for head in stack_profile(profile).command_heads()]
 
 
+@decides(rule(
+    "RUN-MODEL-1", "a unit is dispatched", "one model flag, the most specific the profile names",
+    ok="`model.<tool>.<stage>`, else `model.<tool>`, else the tool's default; a model in the tool's arguments wins"))
 def model_for(profile: Profile, tool: str, stage: str) -> str:
     return stack_profile(profile).model_for(ToolName(tool), StageName(stage)).value
 
 
+@decides(rule(
+    "RUN-TOOL-1", "a unit is dispatched — the builder, the verifier, a review, a stage, a request",
+    "the tool is the most specific the profile names", ok="`--tool` or `FACTORY_TOOL_CMD`, else `tool.<unit>`, "
+    "else `tool`, else the run's tool; every tool on the PATH before the first stage (else exit 2)"))
 def tool_for(profile: Profile, unit: str) -> str:
     return stack_profile(profile).tool_for(Unit(unit)).value
 
 
+@decides(rule(
+    "RUN-EFFORT-1", "a unit is dispatched to a tool with an effort flag", "effort is set where it is named",
+    ok="`effort.<tool>.<unit>`, else `effort.<tool>`", note="the tool has no effort flag — said, not dropped"))
 def effort_for(profile: Profile, tool: str, unit: typing.Optional[str]) -> str:
     return stack_profile(profile).effort_for(ToolName(tool), Unit(unit or "")).value
 

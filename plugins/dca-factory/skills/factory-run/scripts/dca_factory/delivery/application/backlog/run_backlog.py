@@ -12,6 +12,7 @@ from ..shared.backlog_schedule import BacklogSchedule, ScheduleRead
 from ..shared.backlog_worker import BacklogCheckout, BacklogWorker, Child
 from ..shared.requests import Request, stories_of
 from ..shared.run_lines import RunLines
+from ..delivery.pipeline_rules import decides, rule
 
 
 @dataclasses.dataclass(frozen=True)
@@ -51,6 +52,16 @@ class RunBacklogUseCase:
             return self._side_by_side(command)
         return self._one_at_a_time(command)
 
+    @decides(
+        rule("RUN-BACKLOG-1", "the runner works the backlog", "a person's request goes before the next story",
+             ok="requests first, then the next story the schedule names; nothing runnable — the run ends or, with "
+                "`--watch`, waits"),
+        rule("RUN-BACKLOG-2", "the same story would start at the same stage after it exited 0",
+             "a run that makes no progress stops", fail="skipped with `--keep-going`, else exit 1"),
+        rule("RUN-BACKLOG-3", "a stop file or a `stop` request", "a stop ends the run after the running stage",
+             ok="nothing new starts; the run ends 0"),
+        rule("RUN-BACKLOG-4", "the checkout's claim is lost", "one worker per checkout", fail="exit 5"),
+    )
     def _one_at_a_time(self, command: RunBacklogCommand) -> int:
         previous, last, claims = "", None, ""
         while True:
@@ -222,6 +233,9 @@ class RunBacklogUseCase:
             self._worker.fresh(asked.request["story"], asked.start)
         return asked
 
+    @decides(rule(
+        "RUN-BACKLOG-5", "a story fails under `--keep-going`", "one failing story does not hold the rest",
+        ok="it and its dependants are skipped, the others run on", fail="never for exit 2, 5, or a reached `--max-stages`"))
     def _skip(self, command: RunBacklogCommand, story: str, code: int) -> bool:
         """--keep-going: a story that stopped is set aside for the rest of this run — the schedule skips it and what
         depends on it — unless the stop concerns the whole run: the checkout taken over (5), the run's --max-stages
