@@ -14,7 +14,7 @@ from ...domain.service.change_checks import CHANGE_CHECKS, ChangeChecks
 from ..shared.change_index import ChangeIndex
 from ..shared.stage_runs import StageRuns
 from .check_stage import Verdict
-from .pipeline_rules import decides, rule
+from .pipeline_rules import decides
 from .process_checks import judge_suite
 
 
@@ -46,20 +46,9 @@ class CheckChangeUseCase:
         self._runs = runs
 
     @decides(
-        rule("GATE-POLICY", "the commit hook and CI (`factory.sh check`)",
-             "`required:` says which commands must hold; a key nothing runs is a promise nobody keeps",
-             ok="`required:` names known commands only", fail="it names another key",
-             note="no `required:` — nothing is mandatory, a red command still fails", stages=("commit",)),
-        rule("GATE-SNAPSHOT", "the commit hook (`--staged`)", "a commit is checked as it will be committed",
-             ok="the index is the tree checked", fail="the working tree differs from the index — stash the rest, "
-             "or the index changed during the run", note="the backlog alone — no snapshot, no check unless "
-             "`checks.backlog` names some; or the working tree as it is, without `--staged`",
-             stages=("commit",)),
-        rule("GATE-SCOPE", "the commit hook and CI, for each check", "a check outside the scope is named, not hidden",
-             ok="every command in scope ran green", fail="a required command missing or red",
-             skip="out of scope (a required one: CI has to run it), or not declared",
-             note="red, but not required — it does not decide", stages=("commit",),
-             reports=("scope", "test", "compile", "architecture", "format")),
+        "GATE-POLICY",
+        "GATE-SNAPSHOT",
+        "GATE-SCOPE",
     )
     def execute(self, command: CheckChangeCommand) -> Verdict:
         result, profile = Verdict(), self._profile

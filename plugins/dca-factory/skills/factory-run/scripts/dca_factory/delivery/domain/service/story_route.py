@@ -7,7 +7,7 @@ import enum
 import typing
 
 from ....building_blocks import DomainService, Value
-from ..model.jump import AGAIN, Jump, Next, RuleName, STOP, Target
+from ..model.jump import AGAIN, Jump, Next, RuleId, STOP, Target
 from ..model.stage import PIPELINE, Pipeline, Stage, StageName, StoryKind, Trait, Window
 from ..model.verdict import CheckName
 from ..model.story_state import Detail, GateReport, HandOverText, MAX_ROUNDS, Rounds, VerdictWord
@@ -169,7 +169,7 @@ class StoryRoute(DomainService):
 
     @staticmethod
     def after_refusal(kind: StoryKind, refused: StageName, resumes: typing.Optional[StageName],
-                      jumps: typing.Sequence[Jump], fallback: RuleName) -> Next:
+                      jumps: typing.Sequence[Jump], fallback: RuleId) -> Next:
         """Where a refused gate sends the story — by the rules that failed: a rule whose one way is `stop` ends the
         run; else the earliest stage any of them names, or the refused stage (or the earlier one the story's state
         resumes at, the <fallback> rule's way) — an earlier stage covers the later ones."""
@@ -183,7 +183,7 @@ class StoryRoute(DomainService):
         return min(ways, key=lambda way: order.index(way.stage) if way.stage in order else len(order))
 
     @staticmethod
-    def _to(kind: StoryKind, here: StageName, target: Target, rule: RuleName) -> Next:
+    def _to(kind: StoryKind, here: StageName, target: Target, rule: RuleId) -> Next:
         if target == Target(STOP):
             return Next(None, rule)
         if target == Target(AGAIN):

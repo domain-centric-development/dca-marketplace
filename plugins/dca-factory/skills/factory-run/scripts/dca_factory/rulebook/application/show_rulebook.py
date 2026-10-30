@@ -36,7 +36,7 @@ def rule_model(rule: Rule) -> Model:
                 outcomes=[dict(state=o.state.value, said=o.said.value, goes=[t.value for t in o.goes])
                           for o in rule.outcomes],
                 why=rule.reason.value, text=rule.text.value, reports=[w.value for w in rule.reports],
-                source=rule.source.value, state=rule.state.value)
+                source=rule.source.value, bound=rule.bound.value, state=rule.state.value)
 
 
 def ids(rules: typing.Tuple[Rule, ...]) -> typing.List[str]:

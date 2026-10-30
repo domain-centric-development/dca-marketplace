@@ -334,6 +334,17 @@ story's state names), a runner's decision by its own rule (`jump`), a choice the
 
 **Type:** Value
 
+### Workflow rule (WorkflowRule) · Rule id (RuleId) · Outcome (Outcome) · Rule repository (RuleRepository)
+
+**Definition:** A rule of the gate or the runner as data: its id (`GATE-<CHECK>`, `RUN-<AREA>-<n>`), the part of the
+code that binds it (check, pass action, decision), when it applies and why, its outcomes — each with what it means and
+where it sends the story (`goes`) — and the stages, kinds and report names where it is narrower than its code. An
+aggregate, kept by the `RuleRepository`: Markdown files under `workflow/rules/` today, another store later. The code
+binds a rule by its id and says *how* it is checked or decided; the rule says *what* it holds and *where* the story
+goes. A rule that goes keeps its file, `retired:` with the reason.
+
+**Type:** Aggregate
+
 ### Check · Finding (Finding) · Stage evidence (StageEvidence)
 
 **Definition:** A gate is a set of checks, each a domain service over the story as the gate reads it (`StageStory`)

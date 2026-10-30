@@ -14,7 +14,7 @@ from ..shared.request_skill import RequestSkill
 from ..shared.requests import Kind, KIND, Request, RequestRefused, RequestStore, written_keys
 from .list_requests import target_text
 from ...domain.model.decision_record import WAITING_WORDS
-from ..delivery.pipeline_rules import decides, rule
+from ..delivery.pipeline_rules import decides
 
 #: (stream, line): what the factory says on its way — `out` for the person, `err` for a refusal or a failure
 Said = typing.List[typing.Tuple[str, str]]
@@ -59,11 +59,7 @@ class WorkRequestUseCase:
         self._now = now
 
     @decides(
-        rule("RUN-REQUEST-4", "a request is worked", "a request changes only what a person owns, and commits only that",
-             ok="settled without a tool where it can be (accept, release, an option), else its skill runs headless; the "
-                "paths it wrote — backlog, description, docs — are committed if they were clean before",
-             fail="it no longer holds, the tool failed, or the commit was refused",
-             ask="the skill opened a record — the request waits (exit 3)"),
+        "RUN-REQUEST-4",
     )
     def execute(self, command: WorkRequestCommand) -> RequestWorked:
         said: Said = []

@@ -503,7 +503,7 @@ function ruleDetail(r, story) {
       + (r.outcomes || []).map(o => `<div class="outcome"><b>${esc(o.state)}</b>${inline(o.said)}${(o.goes || []).length ? ` <span class="back">→ ${esc(o.goes.join(", "))}</span>` : ""}</div>`).join("");
   return `<div id="rule-detail">` + card(esc(r.id), `${esc(r.enforcement)} · ${esc(r.part)} · ${esc(where)} · ${esc(kinds)}`,
     body + (got ? `<p class="rec">this story: ${esc(got)}${story.refused[r.id] ? ` · refused ${story.refused[r.id]}×` : ""}</p>` : "")
-    + `<p class="hint">${esc(r.source)}${(r.reports || []).length ? " · reports as " + esc(r.reports.join(", ")) : ""}</p>`) + `</div>`;
+    + `<p class="hint">${esc(r.source)}${r.bound ? " · bound in " + esc(r.bound) : ""}${(r.reports || []).length ? " · reports as " + esc(r.reports.join(", ")) : ""}</p>`) + `</div>`;
 }
 
 function rulesTab(st) {

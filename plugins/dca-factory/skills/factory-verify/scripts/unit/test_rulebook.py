@@ -15,7 +15,10 @@ import support  # noqa: F401 — puts the package on the path
 
 from dca_factory.delivery.api.rules import pipeline_rules
 from dca_factory.delivery.application.delivery.check_stage import CHECKS, check
-from dca_factory.delivery.application.delivery.pipeline_rules import rule
+from dca_factory.delivery.adapter.outgoing.workflow.rule_files import RuleFiles
+from dca_factory.delivery.application.delivery import pipeline_rules as bound_rules
+from dca_factory.delivery.domain.model.jump import RuleId, Target
+from dca_factory.delivery.domain.model.workflow_rule import Outcome, OutcomeState, RulePart, RuleText, WorkflowRule
 from dca_factory.infrastructure.rulebook import show_rulebook
 from dca_factory.rulebook.adapter.outgoing.skills.skill_files import SkillFiles
 from dca_factory.rulebook.application.show_rulebook import ShowRulebookQuery, ShowRulebookUseCase
@@ -62,30 +65,69 @@ class RegisteredTest(unittest.TestCase):
             for name in files:
                 if name.endswith(".py"):
                     with open(os.path.join(top, name), encoding="utf-8") as handle:
-                        written |= set(re.findall(r'rule\(\s*"((?:GATE|RUN)(?:-[A-Z0-9]+)+)"', handle.read()))
-        published = {r["id"] for r in pipeline_rules()}
-        self.assertEqual([], sorted(written - published), "a module that registers rules is not imported by api/rules.py")
+                        written |= set(re.findall(r'"((?:GATE|RUN)(?:-[A-Z0-9]+)+)"', handle.read()))
+        published = {r["id"] for r in pipeline_rules() if r["bound"]}
+        self.assertEqual([], sorted(written - published), "a module that binds rules is not imported by api/rules.py")
+        self.assertEqual([], bound_rules.unbound(), "a rule's file that no code binds")
 
     def test_every_name_the_gate_reports_under_has_a_rule(self):
         covered = {name for r in pipeline_rules() for name in r["reports"]}
         missing = sorted((reported_names() | BUILT) - covered)
         self.assertEqual([], missing)
 
-    def test_every_rule_says_when_why_and_an_outcome_and_where_it_is_written(self):
+    def test_every_rule_says_when_why_and_an_outcome_where_it_is_written_and_where_it_is_bound(self):
         for found in pipeline_rules():
             self.assertTrue(found["when"] and found["why"] and found["outcomes"], found["id"])
-            path, _, line = found["source"].rpartition(":")
-            self.assertTrue(os.path.isfile(os.path.join(PACKAGE, "..", path)) and line.isdigit(), found["source"])
+            self.assertTrue(os.path.isfile(os.path.join(support.SCRIPTS, found["source"])), found["source"])
+            self.assertTrue(found["source"].endswith(f"/{found['id']}.md"), found["source"])
+            path, _, line = found["bound"].rpartition(":")
+            self.assertTrue(os.path.isfile(os.path.join(PACKAGE, "..", path)) and line.isdigit(), found["bound"])
 
     def test_a_check_without_a_rule_and_a_stage_id_in_code_are_refused(self):
         with self.assertRaises(TypeError):
             check("story")   # type: ignore[call-arg]
         with self.assertRaises(ValueError):
-            check("story", rule=rule("RUN-X-1", "w", "y", ok="o"))
+            check("story", rule="RUN-X-1")
         with self.assertRaises(ValueError):
-            rule("STAGE-PLAN-1", "w", "y", ok="o")
+            RuleId("STAGE-PLAN-1")
         with self.assertRaises(ValueError):
-            rule("GATE-X", "w", "y")
+            WorkflowRule(RuleId("GATE-X"), RulePart.CHECK, RuleText("w"), RuleText("y"))
+        with self.assertRaises(ValueError):
+            Outcome(OutcomeState.FAIL, RuleText("f"), (Target("nowhere"),))
+
+
+class RuleFilesTest(unittest.TestCase):
+    """The rules' repository over Markdown files: what is saved reads back the same, a file is named after its id,
+    and a rule the code binds but no file holds stops the process that loads them."""
+
+    def test_a_saved_rule_reads_back_the_same(self):
+        rule = WorkflowRule(RuleId("RUN-X-1"), RulePart.DECISION, RuleText("w"), RuleText("y"),
+                            [Outcome(OutcomeState.FAIL, RuleText('"quoted" both "ends"'),
+                                     (Target("test"), Target("stop")))])
+        with tempfile.TemporaryDirectory() as root:
+            files = RuleFiles(os.path.join(root, "workflow", "rules"))
+            back = files.save(rule)
+            self.assertEqual((back.when, back.why, back.outcomes), (rule.when, rule.why, rule.outcomes))
+            self.assertEqual("workflow/rules/run/RUN-X-1.md", back.written.value)
+            self.assertEqual([back.id], [r.id for r in files.all()])
+            files.delete_by_id(rule.id)
+            self.assertIsNone(files.find_by_id(rule.id))
+
+    def test_a_file_named_other_than_its_id_is_refused(self):
+        with tempfile.TemporaryDirectory() as root:
+            plant(root, {"run/RUN-X-1.md": "---\nid: RUN-X-2\nfail: f\n---\n"})
+            with self.assertRaises(ValueError):
+                RuleFiles(root).all()
+
+    def test_a_bound_rule_without_its_file_stops_the_load(self):
+        saved = dict(bound_rules.RULES)
+        try:
+            with tempfile.TemporaryDirectory() as root:
+                with self.assertRaises(ValueError):
+                    bound_rules.load(RuleFiles(root))
+        finally:
+            bound_rules.RULES.clear()
+            bound_rules.RULES.update(saved)
 
 
 class SkillsTest(unittest.TestCase):
@@ -140,8 +182,10 @@ class FlowTest(unittest.TestCase):
         self.assertIn(("judge", "build", "RUN-VERDICT-1"), edges)
         self.assertIn(("document", "plan", "GATE-ACCEPTANCE"), edges)
         self.assertIn(("integrate", "integrate", "GATE-MOVED"), edges)        # `again`: the stage itself
-        with self.assertRaises(ValueError):
-            rule("RUN-X-1", "w", "y", ok="o", goes={"fail": "test"})          # goes on an outcome it does not say
+        with tempfile.TemporaryDirectory() as root:                           # goes on an outcome it does not say
+            plant(root, {"run/RUN-X-1.md": "---\nid: RUN-X-1\npass: o\ngoes.fail: test\n---\n"})
+            with self.assertRaises(ValueError):
+                RuleFiles(root).all()
 
     def test_a_story_marks_the_rules_its_last_gate_runs_reported_and_counts_its_refusals(self):
         with tempfile.TemporaryDirectory() as root:

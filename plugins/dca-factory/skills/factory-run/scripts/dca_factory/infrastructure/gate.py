@@ -33,6 +33,11 @@ from ..delivery.application.delivery.check_stage import run_checks, run_passed, 
 from ..delivery.domain.model.verdict import Findings
 from ..delivery.domain.service.profile_checks import ProfileChecks
 from ..sharedkernel.adapter.outgoing.markdown.front_matter import GateError, read_front_matter
+from ..delivery.adapter.outgoing.workflow.rule_files import RuleFiles
+from ..delivery.application.delivery.pipeline_rules import load as load_rules
+
+# the rules the code binds, from their repository — once per process, held against every binding
+load_rules(RuleFiles())
 from .description import check_description
 
 Profile = typing.Mapping[str, typing.Any]

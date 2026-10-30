@@ -3,18 +3,24 @@ was at once more, or the end of the run — the run jumps where the rules say, n
 
 from __future__ import annotations
 
+import re
 import typing
 
-from ....building_blocks import Value
+from ....building_blocks import Id, Value
 from .stage import StageName
 
 AGAIN, STOP = "again", "stop"
+RULE_ID = re.compile(r"^(GATE|RUN)(-[A-Z0-9]+)+$")
 
 
-class RuleName(Value):
-    """A rule's id as the rulebook knows it — `GATE-RED-PROOF`, `RUN-BACK-1`."""
+class RuleId(Id):
+    """A rule's id — `GATE-RED-PROOF`, `RUN-BACK-1`."""
 
     value: str
+
+    def __post_init__(self) -> None:
+        if not RULE_ID.fullmatch(self.value):
+            raise ValueError(f"{self.value!r} is no rule id — GATE-<CHECK> or RUN-<AREA>-<n>")
 
 
 class Target(Value):
@@ -31,7 +37,7 @@ class Jump(Value):
     """What one rule says for the outcome it came to: its targets, in the order it names them — none where it says
     nothing about where the story goes, which is `again`."""
 
-    rule: RuleName
+    rule: RuleId
     targets: typing.Tuple[Target, ...] = ()
 
 
@@ -40,4 +46,4 @@ class Next(Value):
     rule that sent it there."""
 
     stage: typing.Optional[StageName]
-    rule: RuleName
+    rule: RuleId

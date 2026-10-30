@@ -82,7 +82,7 @@ from ....application.backlog.check_backlog import CheckBacklogCommand
 from ....application.delivery.check_change import CheckChangeCommand
 from ....application.delivery.check_parity import CheckParityCommand
 from ....application.delivery.check_stage import Verdict
-from ....application.delivery.pipeline_rules import decides, rule
+from ....application.delivery.pipeline_rules import decides
 from ....application.description.check_description import CheckDescriptionCommand
 from ....domain.model.stage import PIPELINE, Trait
 from ....domain.model.story import StoryId
@@ -211,18 +211,10 @@ def hand_over_to_cli(argv: typing.Sequence[str]) -> int:
 
 
 @decides(
-    rule("GATE-LAYOUT", "every gate and the commit hook", "a profile or a story the gate does not read would leave "
-         "every check skipped — a green run that covers nothing", fail="the project's layout is one the gate does "
-         "not read — the hint names the migration", note="with `--project`: the same, as a hint"),
-    rule("GATE-ENVIRONMENT", "every gate that runs a command", "a tool missing from the gate's PATH is no stage's "
-         "fault — no round is spent on it", goes={"fail": "stop"},
-         fail="the shell running the gate lacks a tool — put it on the PATH"),
-    rule("GATE-READABLE", "every gate", "a file the gate cannot read refuses, it never passes",
-         fail="the story, the profile or a record could not be read — the reader's sentence",
-         reports=("gate", "project")),
-    rule("GATE-DISCOVERY", "`story-gate.py --check-discovery <topic>`, after a discovery",
-         "a report proposes epics with an outcome, and its sources are there",
-         ok="the report holds", fail="the report's shape or a source it cites does not", stages=("discover",)),
+    "GATE-LAYOUT",
+    "GATE-ENVIRONMENT",
+    "GATE-READABLE",
+    "GATE-DISCOVERY",
 )
 def main(argv: typing.Sequence[str]) -> int:
     # `--brief` is the gate's own beside `--stage` (a stage's compact report); alone it is the status's, moved.

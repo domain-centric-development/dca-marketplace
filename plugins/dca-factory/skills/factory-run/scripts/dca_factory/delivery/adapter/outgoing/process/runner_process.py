@@ -59,7 +59,7 @@ from ....application.requests.request_queue import RequestQueue
 from ....application.requests.work_request import RequestWorked
 from ....application.shared.requests import Request
 from ....application.shared.story_integration import Lost
-from ....application.delivery.pipeline_rules import decides, rule
+from ....application.delivery.pipeline_rules import decides
 
 
 # --- the run: what `factory.sh run` starts once its checks before the first stage passed -------------------------
@@ -647,9 +647,7 @@ class Run:
         return 0
 
     # --- the shared processes ----------------------------------------------------------------------------------
-    @decides(rule(
-        "RUN-LIMIT-3", "`--max-stages` or `--story-budget` is reached", "a person sets how much a run may spend",
-        goes={"fail": "stop"}, fail="nothing more is dispatched (exit 4); the work stays"))
+    @decides("RUN-LIMIT-3")
     def budget_note(self, story: str, what: str) -> int:
         err(f"factory: story {story} has reached its --story-budget {self.story_budget} — {what} are not dispatched.")
         return 4
@@ -1212,17 +1210,18 @@ class ChildProcess:
 # --- the run's start ---------------------------------------------------------------------------------------------
 STAMP = ".agents/factory/gate.installed"
 #: The files the install puts into .agents/factory/, in the stamp's order; a name ending in `/` is the package.
-PIPELINE_FILES = ("story-gate.py", "factory-cli.py", "observe.py", "factory.sh", "dca_factory/")
+PIPELINE_FILES = ("story-gate.py", "factory-cli.py", "observe.py", "factory.sh", "dca_factory/", "workflow/")
 
 
 def package_modules(folder: str) -> typing.List[str]:
-    """Every module of the package under <folder>, its subpackages' too, by its path below the folder with `/` —
-    in the order the install's hash lists them (the C locale's, as Python sorts)."""
+    """Every module of the package under <folder>, its subpackages' too — and every file of the workflow beside it —
+    by its path below the folder with `/`, in the order the install's hash lists them (the C locale's, as Python
+    sorts)."""
     found: typing.List[str] = []
     for top, dirs, files in os.walk(folder):
         dirs[:] = [d for d in dirs if d != "__pycache__"]
         below = os.path.relpath(top, folder).replace(os.sep, "/")
-        found += [name if below == "." else f"{below}/{name}" for name in files if name.endswith(".py")]
+        found += [name if below == "." else f"{below}/{name}" for name in files if name.endswith((".py", ".md"))]
     return sorted(found)
 
 

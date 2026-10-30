@@ -9,7 +9,7 @@ from ....building_blocks import UseCase
 from ...domain.model.verdict import Findings
 from ...domain.service.change_checks import ChangeChecks
 from ..shared.parity_reports import ParityReports
-from .pipeline_rules import decides, rule
+from .pipeline_rules import decides
 
 
 @dataclasses.dataclass(frozen=True)
@@ -29,10 +29,6 @@ class CheckParityUseCase:
     def __init__(self, reports: ParityReports) -> None:
         self._reports = reports
 
-    @decides(rule(
-        "GATE-IMPLEMENTATIONS", "`factory.sh check --parity <config>` over several implementations' reports",
-        "two implementations of the same spec prove the same scenarios", ok="every implementation reports every "
-        "scenario the config names, green", fail="an implementation lacks a scenario or reports it red",
-        stages=("commit",), reports=("implementations", "contract")))
+    @decides("GATE-IMPLEMENTATIONS")
     def execute(self, command: CheckParityCommand) -> Findings:
         return ChangeChecks.parity(self._reports.facts(command.config))

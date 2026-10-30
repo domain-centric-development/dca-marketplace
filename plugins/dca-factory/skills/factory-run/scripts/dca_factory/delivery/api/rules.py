@@ -2,7 +2,7 @@
 in delivery's published terms, plain data a reader translates into its own model.
 
     rule   {id, part: check | pass | decision, when, why, outcomes: [{state, said, goes: [stage | again | stop]}],
-            reports: [...], stages: [...], kinds: [...], source, retired}
+            reports: [...], stages: [...], kinds: [...], source (its file), bound (the code that binds it), retired}
     stage  {name, kinds: [...], window, gate: before | after | none, in_order, pass_action}
     order  {kind: [stage, ...]}
     story  {stages: {stage: [{state, check}]}, refused: {check: n}} — what the gate found over one story
@@ -22,40 +22,42 @@ from ..application.backlog import run_backlog  # noqa: F401
 from ..application.delivery import (  # noqa: F401
     check_change, check_parity, claim_story, confirm_owned, integrate_story, pass_actions, process_checks, run_story,
     stage_checks)
+from ..adapter.outgoing.workflow.rule_files import RuleFiles
 from ..application.delivery.check_stage import CHECKS, PASS_RULES
-from ..application.delivery.pipeline_rules import DECIDED, PipelineRule, RETIRED
+from ..application.delivery.pipeline_rules import Bound, DECIDED, load, RULES
 from ..application.profile import profile_rules  # noqa: F401
 from ..application.requests import request_queue, work_request  # noqa: F401
 from ..application.schedule import schedule_backlog, stand_story  # noqa: F401
-from ..domain.model.stage import ALL_KINDS, Pipeline, PIPELINE, StoryKind, Trait
+from ..domain.model.stage import Pipeline, PIPELINE, StoryKind, Trait
+from ..domain.model.workflow_rule import WorkflowRule
 from ...sharedkernel.adapter.outgoing.profile.profile_files import place, read_profile, resolve_profile, set_places
 
 Published = typing.Dict[str, typing.Any]
 KIND_ORDER = tuple(kind.value for kind in StoryKind)
 
 
-def published(found: PipelineRule, part: str, stages: typing.Tuple[str, ...],
-              kinds: typing.Iterable[StoryKind]) -> Published:
-    """One rule as delivery publishes it: a gate rule's own stages and kinds where it narrows its check's."""
-    chosen = set(found.kinds) if found.kinds else {kind.value for kind in kinds}
-    return dict(id=found.id, part=part, when=found.when, why=found.why,
-                outcomes=[dict(state=state, said=said, goes=list(dict(found.goes).get(state, ())))
-                          for state, said in found.outcomes],
-                reports=list(found.reports), stages=list(found.stages or stages),
-                kinds=[kind for kind in KIND_ORDER if kind in chosen], source=found.source, retired="")
+def published(bound: typing.Optional[Bound], found: WorkflowRule) -> Published:
+    """One rule as delivery publishes it: its own stages and kinds where it narrows the code that binds it."""
+    stages = [s.value for s in found.stages] or list(bound.stages if bound else ())
+    chosen = {k.value for k in found.kinds} or {k.value for k in (bound.kinds if bound else ())}
+    return dict(id=found.id.value, part=found.part.value, when=found.when.value, why=found.why.value,
+                outcomes=[dict(state=o.state.value, said=o.said.value, goes=[t.value for t in o.goes])
+                          for o in found.outcomes],
+                reports=[r.value for r in found.reports], stages=stages,
+                kinds=[kind for kind in KIND_ORDER if kind in chosen],
+                source=found.written.value if found.written else "", bound=bound.place if bound else "",
+                retired=found.retired.value if found.retired else "")
 
 
 def pipeline_rules() -> typing.List[Published]:
     """Every rule of the gate and the runner, each once: the checks in their order, the pass actions per stage, the
-    rest as their modules register them, the retired ones last."""
-    found: typing.List[Published] = []
-    for check in CHECKS:
-        found += [published(r, "check", check.stages, check.kinds) for r in check.rules]
-    for stage, rules in PASS_RULES.items():
-        found += [published(r, "pass", (stage,), ALL_KINDS) for r in rules]
-    found += [published(r, "decision", (), ALL_KINDS) for r in DECIDED]
-    found += [dict(id=rule_id, part="decision", when="", why=why, outcomes=[], reports=[], stages=[], kinds=[], source="",
-                   retired=why) for rule_id, why in RETIRED.items()]
+    decisions as their modules bind them, then what the rules hold that no code binds — retired, or a problem."""
+    if not RULES:
+        load(RuleFiles())
+    order = [b for check in CHECKS for b in check.rules] + [b for bs in PASS_RULES.values() for b in bs] + DECIDED
+    found = [published(b, RULES[b.rule]) for b in order if b.rule in RULES]
+    seen = {b.rule for b in order}
+    found += [published(None, r) for rule_id, r in sorted(RULES.items()) if rule_id not in seen]
     return found
 
 

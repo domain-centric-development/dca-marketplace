@@ -21,7 +21,6 @@ from ...domain.service.suite_checks import SuiteChecks
 from ...domain.service.test_verdicts import BreakProof, TestVerdicts
 from ..shared.stage_runs import Located, Mapping, StageRuns, WholeRuns
 from .check_stage import check, Run, Verdict
-from .pipeline_rules import rule
 from .stage_checks import read_table, table_tests
 
 COMPILES = CheckName("compiles")
@@ -312,16 +311,9 @@ def commanded(stage: Stage) -> bool:
 
 
 @check("adopt", stages=("adopt",), rule=(
-    rule("GATE-ADOPT", "the adopt gate", "an adopted story proves what holds with green tests, never builds",
-         ok="the story is `status: adopted` and its tests are green", fail="the story is not adopted, or a test is "
-         "red", reports=("adopt", "tests-green")),
-    rule("GATE-ADOPT-JUDGED", "the adopt gate", "an adoption is judged like a delivery",
-         ok="judge.md says `verdict: pass`", fail="it does not"),
-    rule("GATE-BREAK-PROOF", "the adopt gate for the tests the adoption wrote (all with `adopt.breakProof: all`), "
-                             "and the test, build and tidy gates for a test changed after it was seen red",
-         "a test that was never red proves something only if a break of the code turns it red",
-         ok="the test turns red under its break patch", fail="no break patch, it does not apply, or the test stays "
-         "green under it", skip="the adoption wrote no test of its own", stages=("test", "build", "tidy", "adopt")),
+    "GATE-ADOPT",
+    "GATE-ADOPT-JUDGED",
+    "GATE-BREAK-PROOF",
 ))
 def _adopt(run: Run) -> None:
     adopt(run.result, run)
@@ -329,24 +321,10 @@ def _adopt(run: Run) -> None:
 
 @check("tests", stages=tested, needs_process=True,
        unrun=lambda run: ["compiles", f"tests-{run.expected}"] + (["suite"] if run.stage.suite else []), rule=(
-    rule("GATE-COMPILES", "every gate that runs tests, and the adopt gate", "nothing is judged on code that does "
-         "not build", ok="the profile's `compile:` succeeds", fail="it fails — its output quoted",
-         skip="no `compile:` in the profile", stages=("test", "build", "tidy", "integrate", "adopt")),
-    rule("GATE-TESTS-RED", "the test gate of a story", "a test green before the code exists proves nothing",
-         ok="every mapped test is red, by its assertion", fail="a test is green before the code, cannot be run "
-         "alone, or no report shows it ran", note="a test red by a timeout only", skip="no test command",
-         stages=("test",), kinds=("story",)),
-    rule("GATE-TESTS-GREEN", "the build, tidy and integrate gates; the test gate of a journey or adoption",
-         "a criterion is met when its test, seen red before, is green",
-         ok="every mapped test is green and was seen red (a journey's or adoption's needs no red)",
-         fail="a test is red, or green without ever having been red", skip="green, but nothing proves it ever failed",
-         kinds=("story", "journey", "adopt")),
-    rule("GATE-SUITE", "the build, tidy and integrate gates, for the suites `required:` names; every test command "
-                       "for a task", "a change keeps the whole suite green, not just its own tests",
-         ok="every required suite ran tests and none was red", fail="a suite red, a required key without a command, "
-         "or a run no report shows", skip="`required:` names no test command",
-         note="a red test outside the story, green alone — flaky", stages=("build", "tidy", "integrate"),
-         reports=("suite", "flaky", "test")),
+    "GATE-COMPILES",
+    "GATE-TESTS-RED",
+    "GATE-TESTS-GREEN",
+    "GATE-SUITE",
 ))
 def _tests(run: Run) -> None:
     runs: StageRuns = run.runs_port
@@ -360,31 +338,19 @@ def _tests(run: Run) -> None:
         required_suites(run.result, runs, run.profile, run.story_id, run.mapping, run.whole_runs)
 
 
-@check("invariant-breaks", stages=("test",), needs_process=True, kinds=frozenset((StoryKind.STORY,)), rule=rule(
-    "GATE-INVARIANT-BREAKS", "the test gate of a story with rules in `gate:invariants` (contract 25 on)",
-    "a rule's test that is green already must still notice a break of the rule",
-    ok="each rule test is red before the build, or turns red under its break patch",
-    fail="a rule test stays green under its break, or has no patch that applies"))
+@check("invariant-breaks", stages=("test",), needs_process=True, kinds=frozenset((StoryKind.STORY,)), rule="GATE-INVARIANT-BREAKS")
 def _invariant_breaks(run: Run) -> None:
     if run.contract.value >= INVARIANT_BREAKS_CONTRACT.value:
         invariant_breaks(run.result, run.runs_port, run.profile, run.story_id, run.mapping)
 
 
-@check("red-reproof", stages=("tidy",), needs_process=True, kinds=frozenset((StoryKind.STORY,)), rule=rule(
-    "GATE-RED-REPROOF", "the tidy gate of a story whose tidy moved a mapped test",
-    "a refactoring keeps what a test asserts — the moved test is red again on the code before the story",
-    ok="each moved test is red on the red tree, by its assertion",
-    fail="the red tree does not compile with it, or the test is green there or red by a timeout"))
+@check("red-reproof", stages=("tidy",), needs_process=True, kinds=frozenset((StoryKind.STORY,)), rule="GATE-RED-REPROOF")
 def _red_reproof(run: Run) -> None:
     reproof(run.result, run.runs_port, run.profile, run.story_id, run.mapping, run.located)
 
 
 @check("commands", stages=commanded, needs_process=True,
-       unrun=lambda run: [key for key in run.stage.commands if run.profile.get(key)], rule=rule(
-    "GATE-COMMANDS", "the gates whose stage names profile commands (build, tidy, integrate: architecture and format; "
-                     "document: architecture)", "the architecture suite and the formatter hold every change",
-    ok="the command exits 0", fail="it fails — its output quoted", skip="the profile declares no such command",
-    reports=("architecture", "format")))
+       unrun=lambda run: [key for key in run.stage.commands if run.profile.get(key)], rule="GATE-COMMANDS")
 def _commands(run: Run) -> None:
     """The gate must not *know* its checks, it looks them up: adding a capability is one line in the profile."""
     for key in run.stage.commands:

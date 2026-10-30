@@ -189,6 +189,9 @@ class Rulebook(Value):
             if unknown:
                 found.append(Problem(Words(f"{rule.id.value} names no stage {', '.join(unknown)} — "
                                            f"{rule.source.value}")))
+            if rule.part is not Part.INSTRUCTION and not rule.bound.value:
+                found.append(Problem(Words(f"{rule.id.value} is written but no code binds it — it decides nothing; "
+                                           f"bind it or retire it — {rule.source.value}")))
             nowhere = [t.value for o in rule.outcomes for t in o.goes if t not in places and t.value not in (AGAIN, STOP)]
             if nowhere:
                 found.append(Problem(Words(f"{rule.id.value} goes to no stage {', '.join(nowhere)} — "

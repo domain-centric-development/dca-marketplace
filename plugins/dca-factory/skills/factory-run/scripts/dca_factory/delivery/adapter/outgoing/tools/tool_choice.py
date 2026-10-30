@@ -15,7 +15,7 @@ import typing
 
 from ....application.profile.profile_rules import command_heads, effort_for, first_word, model_for, tool_for
 from .agents import isolation_args, TOOL
-from ....application.delivery.pipeline_rules import decides, rule
+from ....application.delivery.pipeline_rules import decides
 
 Profile = typing.Mapping[str, typing.Any]
 
@@ -50,11 +50,8 @@ class ToolChoice:
         self.allowed_override: typing.Optional[str] = None
 
     @decides(
-        rule("RUN-LIMIT-1", "a stage runs longer than `FACTORY_STAGE_TIMEOUT` or `stageTimeout:`",
-             "a stage that hangs costs no night", goes={"fail": "stop"},
-             fail="its process group is stopped (124) — the stage failed"),
-        rule("RUN-LIMIT-2", "a tool reports its usage limit", "a limit is waited out, never counted against the story",
-             goes={"ok": "again"}, ok="the run waits for the reset and runs the same stage again — no round"),
+        "RUN-LIMIT-1",
+        "RUN-LIMIT-2",
     )
     def stage_timeout(self, gate_installed: bool) -> int:
         given = os.environ.get("FACTORY_STAGE_TIMEOUT")

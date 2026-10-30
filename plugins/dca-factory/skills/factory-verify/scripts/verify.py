@@ -158,6 +158,7 @@ def cli_in(root):
 
 
 PACKAGE = "dca_factory"
+WORKFLOW = "workflow"
 MODULES = ("contract",)
 #: The gate's command line, an incoming adapter: what decides, with the version stamp; the runner and the cli show and
 #: start.
@@ -177,7 +178,7 @@ def package_modules(folder):
     for top, dirs, files in os.walk(folder):
         dirs[:] = [d for d in dirs if d != "__pycache__"]
         below = os.path.relpath(top, folder).replace(os.sep, "/")
-        found += [name if below == "." else f"{below}/{name}" for name in files if name.endswith(".py")]
+        found += [name if below == "." else f"{below}/{name}" for name in files if name.endswith((".py", ".md"))]
     return sorted(found)
 
 
@@ -225,12 +226,13 @@ def pipeline_sha(root):
         path = os.path.join(folder, name)
         listing += (f"{hashlib.sha256(open(path, 'rb').read()).hexdigest()}  {name}\n" if os.path.isfile(path)
                     else f"missing  {name}\n")
-    package = os.path.join(folder, PACKAGE)
-    if os.path.isdir(package):
-        for name in package_modules(package):
-            listing += f"{hashlib.sha256(open(os.path.join(package, name), 'rb').read()).hexdigest()}  {PACKAGE}/{name}\n"
-    else:
-        listing += f"missing  {PACKAGE}/\n"
+    for below in (PACKAGE, WORKFLOW):
+        package = os.path.join(folder, below)
+        if os.path.isdir(package):
+            for name in package_modules(package):
+                listing += f"{hashlib.sha256(open(os.path.join(package, name), 'rb').read()).hexdigest()}  {below}/{name}\n"
+        else:
+            listing += f"missing  {below}/\n"
     return hashlib.sha256(listing.encode("utf-8")).hexdigest()
 
 
@@ -244,10 +246,12 @@ def copy_scripts(beside, root):
 
 
 def copy_package(folder, into):
-    """The package beside a gate, into another folder — its modules, no __pycache__."""
-    target = os.path.join(into, PACKAGE)
-    shutil.rmtree(target, ignore_errors=True)
-    shutil.copytree(os.path.join(folder, PACKAGE), target, ignore=shutil.ignore_patterns("__pycache__"))
+    """The package beside a gate, into another folder — its modules, no __pycache__ — and the workflow's files
+    beside it, which the package loads at start."""
+    for name in (PACKAGE, WORKFLOW):
+        target = os.path.join(into, name)
+        shutil.rmtree(target, ignore_errors=True)
+        shutil.copytree(os.path.join(folder, name), target, ignore=shutil.ignore_patterns("__pycache__"))
 DEFAULT_RUNNER = os.path.normpath(os.path.join(HERE, "..", "..", "factory-run", "scripts", "factory.sh"))
 
 EPIC = """---

@@ -16,27 +16,19 @@ from ..shared.backlog_facts import BacklogFacts
 from ..status.texts import parse_time
 from .stand_story import stand_story
 from ...domain.model.story_state import ENDED
-from ..delivery.pipeline_rules import decides, rule
+from ..delivery.pipeline_rules import decides
 
 Model = typing.Dict[str, typing.Any]
 
 
 @decides(
-    rule("RUN-SCHEDULE-1", "the backlog is scheduled", "stories run in the order their epics and dependencies give",
-         ok="by epic rank, then id, then `depends_on:` — a cycle last"),
-    rule("RUN-SCHEDULE-2", "a story depends on another story or epic", "nothing is built on what is not delivered",
-         fail="blocked while a dependency is unknown, in a cycle or not delivered"),
-    rule("RUN-SCHEDULE-3", "two stories share an id", "an id names one story", fail="both stop"),
-    rule("RUN-SCHEDULE-4", "a runnable story is not committed", "a worktree starts from the committed story",
-         fail="blocked until it is committed (with slots); a note without"),
-    rule("RUN-SCHEDULE-5", "a stage is open in a story's journal", "a story runs in one place at a time",
-         ok="running while the stage is younger than `FACTORY_STALE_AFTER`",
-         note="older — possibly interrupted, and resumable"),
-    rule("RUN-SCHEDULE-6", "the runner fills its slots (`--parallel`, `FACTORY_PARALLEL`, `parallel:`, else 1)",
-         "stories run side by side where they do not meet", ok="worktrees first, then the order; among peers the one "
-         "whose context no running story changes"),
-    rule("RUN-SCHEDULE-7", "a story began in the checkout without a worktree",
-         "unfinished code in the checkout belongs to one story", fail="it runs alone; no other story starts"),
+    "RUN-SCHEDULE-1",
+    "RUN-SCHEDULE-2",
+    "RUN-SCHEDULE-3",
+    "RUN-SCHEDULE-4",
+    "RUN-SCHEDULE-5",
+    "RUN-SCHEDULE-6",
+    "RUN-SCHEDULE-7",
 )
 def schedule_backlog(backlog: BacklogFacts, now: datetime.datetime, slots: typing.Optional[int] = None,
                      busy: typing.Iterable[str] = (), skip: typing.Iterable[str] = ()) -> Model:

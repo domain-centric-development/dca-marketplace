@@ -16,6 +16,10 @@ if SCRIPTS not in sys.path:
 os.environ.pop("FACTORY_HOME", None)                        # a case runs in no story's worktree
 
 from dca_factory.infrastructure import schedule  # noqa: E402,F401
+from dca_factory.delivery.adapter.outgoing.workflow.rule_files import RuleFiles  # noqa: E402
+from dca_factory.delivery.application.delivery.pipeline_rules import load as load_rules  # noqa: E402
+
+load_rules(RuleFiles())                                     # the rules, as every composition root loads them
 from dca_factory.delivery.adapter.outgoing.pipeline.stage_rows import STAGE_FILES  # noqa: E402
 from dca_factory.delivery.adapter.outgoing.files import journal_files as journal
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles

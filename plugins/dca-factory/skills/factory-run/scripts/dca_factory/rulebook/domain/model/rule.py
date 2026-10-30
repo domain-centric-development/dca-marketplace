@@ -85,7 +85,7 @@ class KindName(Value):
 
 
 class Source(Value):
-    """Where a rule is written: `<path>:<line>`."""
+    """Where a rule is written, or where code binds it: a file, or `<path>:<line>`."""
 
     value: str
 
@@ -117,6 +117,8 @@ class Rule(Value):
     reports: typing.Tuple[Words, ...]
     source: Source
     state: RuleState = RuleState.ACTIVE
+    #: the code that checks or decides it — a gate's or the runner's rule; none for an instructed one
+    bound: Source = Source("")
 
     @property
     def enforcement(self) -> Enforcement:

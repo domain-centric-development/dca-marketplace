@@ -221,16 +221,17 @@ STAMP=".agents/factory/gate.installed"
 # what was installed, so a runner can tell the pipeline it is about to trust from one a stage, a hand or a merge
 # changed since. The package's runner (the same digest) takes it at its start and compares before every
 # gate it runs; a stage that rewrote the gate through a link is stopped at the next gate, whatever tool it ran in.
-# A name ending in `/` is the package: every module in it and in its subpackages, by its path below the folder in
+# A name ending in `/` is a folder — the package, the workflow's files: every module (`.py`) and every rule (`.md`) in
+# it and below, by its path below the folder in
 # the C locale's order, as Python sorts them — so a module added, moved or removed changes the hash too.
-PIPELINE_FILES="story-gate.py factory-cli.py observe.py factory.sh dca_factory/"
+PIPELINE_FILES="story-gate.py factory-cli.py observe.py factory.sh dca_factory/ workflow/"
 pipeline_hash() {                           # pipeline_hash [<folder>] — one SHA-256 over PIPELINE_FILES
   local dir=${1:-$HOME_DIR/.agents/factory} hash file module LC_ALL=C
   hash=$(hasher); [ "$hash" = none ] && return 1
   for file in $PIPELINE_FILES; do
     case $file in
       */) if [ -d "$dir/$file" ]; then
-            ( cd "$dir" && find "$file" -name '*.py' -type f ) | LC_ALL=C sort | while IFS= read -r module; do
+            ( cd "$dir" && find "$file" -type f \( -name '*.py' -o -name '*.md' \) ) | LC_ALL=C sort | while IFS= read -r module; do
               printf '%s  %s\n' "$($hash "$dir/$module" | cut -d" " -f1)" "$module"
             done
           else printf 'missing  %s\n' "$file"; fi ;;
@@ -1028,6 +1029,12 @@ install_project() {                         # install_project <tool> <skill fold
     .agents/factory/.dca_factory.new
   rm -rf .agents/factory/dca_factory
   must "put the package in place" mv .agents/factory/.dca_factory.new .agents/factory/dca_factory
+  # The workflow's elements beside it — the rules the gate and the runner load at start —, swapped in the same way.
+  rm -rf .agents/factory/.workflow.new
+  must "copy the workflow to .agents/factory/workflow" copy_tree "$from/factory-run/scripts/workflow/." \
+    .agents/factory/.workflow.new
+  rm -rf .agents/factory/workflow
+  must "put the workflow in place" mv .agents/factory/.workflow.new .agents/factory/workflow
   must "copy the gate to $GATE" cp "$from/factory-run/scripts/story-gate.py" "$GATE"
   # What shows and coordinates, beside the gate that decides — the same release, checked before a run.
   must "copy the cli to .agents/factory/factory-cli.py" \
