@@ -203,12 +203,15 @@ def statements(text: str) -> typing.List[typing.List[str]]:
     return [TOKEN.findall(statement) for statement in out if statement.strip()]
 
 
-def assertions_kept(before: str, now: str) -> bool:
+def assertions_kept(before: str, now: str, renames: typing.Optional[typing.Mapping[str, str]] = None) -> bool:
     """Whether every assertion the old test made is still made: each old assertion statement's tokens appear, in
     order, in a statement of the new version that is an assertion too — more arguments, never fewer, never another
     expected value. A changed arrangement (a constructor that gained a field, a renamed local) passes; a changed
-    expectation, a removed assertion or a weaker matcher does not."""
-    old = [tokens for tokens in statements(before) if ASSERTION_STATEMENT.search(" ".join(tokens))]
+    expectation, a removed assertion or a weaker matcher does not. `renames` rewrites the old statements' names
+    first — a type or a method the story renamed, never a literal."""
+    renames = renames or {}
+    old = [[renames.get(token, token) for token in tokens] for tokens in statements(before)
+           if ASSERTION_STATEMENT.search(" ".join(tokens))]
     new = [tokens for tokens in statements(now) if ASSERTION_STATEMENT.search(" ".join(tokens))]
     if not old:
         return False
@@ -222,6 +225,85 @@ def assertions_kept(before: str, now: str) -> bool:
             return False
         used.add(match)
     return True
+
+
+IDENTIFIER = re.compile(r"[A-Za-z_]\w*")
+#: Words that stand before a call without declaring it: `return name(…)`, `new Name(…)`.
+NOT_A_TYPE = frozenset(("return", "new", "await", "yield", "throw", "else", "case", "in", "is", "as", "not", "and",
+                        "or", "typeof", "nameof", "sizeof", "then", "do", "assert"))
+
+
+def rename_candidates(before: str, now: str) -> typing.List[typing.Tuple[str, str]]:
+    """The name pairs (old, new) an old assertion statement and a new one of the same length differ by — every
+    differing token a name on both sides. A statement that also differs in a literal or a matcher yields none."""
+    def asserting(text: str) -> typing.List[typing.List[str]]:
+        return [tokens for tokens in statements(text) if ASSERTION_STATEMENT.search(" ".join(tokens))]
+    pairs: typing.Set[typing.Tuple[str, str]] = set()
+    news = asserting(now)
+    for old in asserting(before):
+        if old in news:
+            continue
+        for new in news:
+            if len(new) != len(old):
+                continue
+            differ = [(a, b) for a, b in zip(old, new) if a != b]
+            if differ and all(IDENTIFIER.fullmatch(a) and IDENTIFIER.fullmatch(b) for a, b in differ):
+                pairs.update(differ)
+    return sorted(pairs)
+
+
+def declares(lines: typing.Iterable[str], name: str, types_only: bool = False) -> bool:
+    """Whether a source line declares `name` as a type (`class|record|enum|interface|struct|object|trait <name>`)
+    or as a method (a type or a keyword word before `<name>(`, not a call after `return`, `new` and the like)."""
+    as_type = re.compile(rf"\b(?:class|record|enum|interface|struct|object|trait)\s+{re.escape(name)}\b")
+    as_method = re.compile(rf"(?:^|[\s(])([A-Za-z_][\w<>\[\],.?]*)\s+{re.escape(name)}\s*(?:<[^>()]*>)?\s*\(")
+    for line in lines:
+        text = line.strip()
+        if text.startswith(("//", "*", "/*", "#")):
+            continue
+        if as_type.search(text):
+            return True
+        found = as_method.search(text)
+        if found and not types_only and found.group(1) not in NOT_A_TYPE:
+            return True
+    return False
+
+
+def declared_in(cwd: str, name: str, suffix: str, tree: typing.Optional[str] = None,
+                types_only: bool = False) -> bool:
+    """Whether a source with the test's suffix declares `name` — in the tree object `tree` (the story's base), or in
+    the working tree as it is, untracked files included."""
+    flags, trees = (["--untracked"], []) if not tree else ([], [tree])
+    code, out = git(cwd, "grep", "-h", "-w", "-I", *flags, "-e", name, *trees, "--", f"*{suffix}")
+    return not code and declares(out.splitlines(), name, types_only)
+
+
+def renames_in(cwd: str, base: typing.Optional[str], before: str, now: str,
+               suffix: str) -> typing.Dict[str, str]:
+    """The renames a test follows, read from the tree, never from a claim: the old name declared before the story
+    (in its base tree) and nowhere now, the new one declared now. Without a base tree only a type counts — its old
+    declaration gone, its new one present. An old name that would map to two new ones is no rename."""
+    found: typing.Dict[str, typing.Set[str]] = {}
+    for old, new in rename_candidates(before, now):
+        if declared_in(cwd, old, suffix) or not declared_in(cwd, new, suffix):
+            continue
+        if base:
+            if not declared_in(cwd, old, suffix, base):
+                continue
+        elif not declared_in(cwd, new, suffix, types_only=True):
+            continue
+        found.setdefault(old, set()).add(new)
+    return {old: next(iter(news)) for old, news in found.items() if len(news) == 1}
+
+
+def glossary_names(cwd: str, name: str) -> bool:
+    """Whether a context's glossary under `product/spec/` names `name` — as a term (`### Name`, `### Term (Name)`) or
+    anywhere in a term's text."""
+    word = re.compile(rf"\b{re.escape(name)}\b")
+    for folder, _dirs, files in os.walk(os.path.join(cwd, "product", "spec")):
+        if "glossary.md" in files and word.search(read_text(os.path.join(folder, "glossary.md"))):
+            return True
+    return False
 
 
 def switched_off(before: typing.List[str], now: typing.List[str]) -> bool:

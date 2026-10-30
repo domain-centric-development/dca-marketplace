@@ -455,13 +455,37 @@ class ChangedTest(Value):
     how: TestChange
 
 
+class SymbolName(Value):
+    """A type or a method as the source names it — `OrderChangedSinceReviewException`, `openFindings`."""
+
+    value: str
+
+
+class Rename(Value):
+    """A name the story gave a type or a method: its old declaration gone from the sources, its new one present."""
+
+    was: SymbolName
+    now: SymbolName
+    #: whether a context's glossary names the new name — the ubiquitous language's, or only the code's
+    in_glossary: Presence
+
+
+class RenamedTest(Value):
+    """A test that holds every assertion it had once the names the story renamed are read under their new names."""
+
+    place: Place
+    renames: typing.Tuple[Rename, ...]
+
+
 class KeptTests(Value):
     """The tests that existed before the story, against their baseline: the ones that no longer expect what they
-    did, the ones whose baseline git lost, the ones changed only around their assertions."""
+    did, the ones whose baseline git lost, the ones changed only around their assertions, the ones that follow a
+    rename."""
 
     changed: typing.Tuple[ChangedTest, ...]
     lost: typing.Tuple[Place, ...]
     arranged: typing.Tuple[Place, ...]
+    renamed: typing.Tuple[RenamedTest, ...] = ()
 
 
 class DecidedRecord(Value):

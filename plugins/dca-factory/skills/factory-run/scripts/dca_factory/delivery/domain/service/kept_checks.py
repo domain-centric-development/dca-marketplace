@@ -86,6 +86,13 @@ class KeptChecks(DomainService):
             found.append(TESTS_KEPT.note(Said(
                 f"{', '.join(p.value for p in kept.arranged)} changed only around its assertions — every assertion it "
                 f"had is still there, at most with more arguments (a type the test builds gained a field)")))
+        for test in kept.renamed:
+            names = ", ".join(f"{r.was.value} → {r.now.value} ("
+                              + ("named in a glossary" if r.in_glossary is Presence.PRESENT else "in no glossary")
+                              + ")" for r in test.renames)
+            found.append(TESTS_KEPT.note(Said(
+                f"{test.place.value} follows a rename the story made — {names}; every assertion it had holds under "
+                f"the new name")))
         if not kept.changed:
             found.append(TESTS_KEPT.ok(Said("no test that existed before this story changed what it expects")))
             return tuple(found)

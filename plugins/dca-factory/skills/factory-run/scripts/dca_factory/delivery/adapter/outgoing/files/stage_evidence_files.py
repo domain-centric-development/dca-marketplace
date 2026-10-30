@@ -24,7 +24,7 @@ from ....domain.model.epic import EpicId
 from ....domain.model.schedule import ContextName
 from ....domain.model.stage import StageName, StoryKind
 from ....domain.model.stage_story import (
-    AssertionAt, ChangedTest, DocumentFacts, Integration, MainTestLines, MainTests, MappedTest, OutcomeEvent, OutcomeFacts, PassGap,
+    AssertionAt, ChangedTest, Rename, RenamedTest, SymbolName, DocumentFacts, Integration, MainTestLines, MainTests, MappedTest, OutcomeEvent, OutcomeFacts, PassGap,
     PipelineFacts, PlannedDigest, ProposalFacts, ReviewFacts, StoryPass, SpecDelta, SpecTests, StoryCommit, DecidedRecord, KeptTests, PlannedTestChange, RedProof, StageChanges,
     TestChange, TestEdit, Unobserved, AssertionFact, ByteSize, Clause, ClauseRow, CommandKey, Count,
     ElementName, ElementRules, FileChange, InvariantFacts, InvariantRow, PlannedFile, PortName, Presence, Rule,
@@ -62,7 +62,7 @@ from ....domain.service.test_checks import TestChecks
 from ..git.repository import git, git_blob
 from .decision_record_files import answered_decisions, records_of
 from .kept_files import (
-    assertions_kept, changed_tests_in_plan, committed_by_a_stage, human_line, meaningful_lines, read_red_digests,
+    assertions_kept, glossary_names, renames_in, changed_tests_in_plan, committed_by_a_stage, human_line, meaningful_lines, read_red_digests,
     red_tree, switched_off, TESTS_BASELINE, tidy_moves, unproven_tests)
 from .run_marks import last_ended, stage_open, window_open
 from .snapshots import git_tree, listed_files, snapshot_reason, tree_changes
@@ -479,6 +479,10 @@ class StageEvidenceFiles:
         changed: typing.List[ChangedTest] = []
         lost: typing.List[Place] = []
         arranged: typing.List[Place] = []
+        renamed: typing.List[RenamedTest] = []
+        base_file = os.path.join(evidence_dir(runs, story_id), "base-tree")
+        base = read_text(base_file).strip() if os.path.isfile(base_file) else ""
+        base = base if base and base != "none" else None
         for line in read_text(path).splitlines():
             if "  " not in line:
                 continue
@@ -508,14 +512,24 @@ class StageEvidenceFiles:
             off = switched_off(was, now)
             kept = not off and all(any(old == new for new in remaining) for old in was)
             held = not off and not kept and assertions_kept("\n".join(was), "\n".join(now))
+            renames: typing.Dict[str, str] = {}
+            if not off and not kept and not held:
+                # A name the story renamed, read from the tree: the test holds its assertions under the new name.
+                renames = renames_in(cwd, base, "\n".join(was), "\n".join(now), os.path.splitext(rel)[1])
+                held = bool(renames) and assertions_kept("\n".join(was), "\n".join(now), renames)
             edit = TestEdit.of(*(Presence.PRESENT if fact else Presence.ABSENT for fact in (off, kept, held)))
             if edit is TestEdit.SWITCHED_OFF:
                 changed.append(ChangedTest(Place(rel), TestChange.SWITCHED_OFF))
+            elif edit is TestEdit.ARRANGED and renames:
+                renamed.append(RenamedTest(Place(rel), tuple(
+                    Rename(SymbolName(old), SymbolName(new),
+                           Presence.PRESENT if glossary_names(cwd, new) else Presence.ABSENT)
+                    for old, new in sorted(renames.items()))))
             elif edit is TestEdit.ARRANGED:
                 arranged.append(Place(rel))
             elif edit is TestEdit.CHANGED:
                 changed.append(ChangedTest(Place(rel), TestChange.CHANGED))
-        return KeptTests(tuple(changed), tuple(lost), tuple(arranged))
+        return KeptTests(tuple(changed), tuple(lost), tuple(arranged), tuple(renamed))
 
     def decided_tests(self, story: StoryId) -> typing.Tuple[DecidedRecord, ...]:
         ids = answered_decisions(self._cwd, story.value, "test")

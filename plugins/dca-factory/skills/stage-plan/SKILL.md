@@ -130,8 +130,8 @@ Output: `.dca-factory/runs/<story>/plan.md`, and nothing else. You write no test
    expectation each holds today and what the story would need instead, and stop. Once answered,
    plan again and cite the id in each row. A test the story does not contradict is not listed; the
    gate lets the later stages change only what is listed and backed. A test that only has to follow a
-   changed shape — a type it builds gains a field, its assertions and expected values stay — is not
-   contradicted: it is neither listed nor asked about.
+   changed shape — a type it builds gains a field, or a type or a method it names is renamed, its assertions and
+   expected values stay — is not contradicted: it is neither listed nor asked about.
 9a. **Find what the system already shows.** A scenario whose `Then` holds on today's code cannot get a red
    test, and the test gate refuses a green one. Look for it the same way — the test sources, and the
    scenarios of the delivered and adopted stories under the epics. Where any holds already, write **one**
@@ -191,7 +191,9 @@ Output: `.dca-factory/runs/<story>/plan.md`, and nothing else. You write no test
 A `kind: task` changes nothing an actor sees, and has no criterion. The plan says what changes in the code and why
 no behaviour does: `## Context`, `## Changes`, `## Files` (with `changes: new` and `changes: removed` where a file
 comes or goes) and `## Invariants` only where a domain type changes; no `## Acceptance criteria`, no levels, no
-`## Spec delta`, no `## Changed tests` — a test that existed before stays as it is. Name the finding rows the story's
+`## Spec delta`, no `## Changed tests` — a test that existed before stays as it is, except that it follows a type or
+a method the task renames: that is no question and no `## needs-human`, the plan lists the file under `## Files` with
+`changes: follows the renamed <old> → <new>`, and the gate reads the rename from the tree. Name the finding rows the story's
 `closes:` settles and where each one sits. Where the change would alter behaviour after all — an answer, a page, a
 stored value — stop with a `## needs-human`: it is a story, not a task.
 
