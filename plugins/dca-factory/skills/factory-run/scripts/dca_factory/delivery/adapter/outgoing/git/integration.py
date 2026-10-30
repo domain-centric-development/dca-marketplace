@@ -16,7 +16,8 @@ from ..files.decision_record_files import records_of
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_text
 from ..claims.remote_claims import claim_config_here, remote_main
 from ..files.run_marks import write_mark
-from ..files.kept_files import meaningful_lines, TESTS_BASELINE
+from ..files.design_files import ASSERTION_STATEMENT
+from ..files.kept_files import assertions_kept, meaningful_lines, TESTS_BASELINE
 from ..files.delivery_files import SKIP_DIRS, TEST_FILE
 from ....domain.model.decision_record import ANSWERED_WORDS
 
@@ -177,7 +178,7 @@ def _main_tests_lost(cwd: str, runs: str, story_id: str,
                      ) -> typing.List[typing.Tuple[str, typing.List[str]]]:
     """The main line's added test lines the story's tree lacks. A missing line that calls a name the story's own
     production change re-signed or removed is the merge adapting another story's helper to it — collected in
-    `adapted`, not lost; a test case's own lines (its head, its attributes) name no such name and stay asked for."""
+    `adapted`, not lost, where an assertion among them still asserts what it did; a test case's own lines (its head, its attributes) name no such name and stay asked for."""
     path = os.path.join(evidence_dir(runs, story_id), MAIN_TESTS)
     if not os.path.isfile(path):
         return []
@@ -215,7 +216,9 @@ def _main_tests_lost(cwd: str, runs: str, story_id: str,
             if resigned is None:
                 target = merge_target(runs, story_id, cwd)
                 resigned = resigned_names(cwd, target) if target else set()
-            kept = [line for line in missing if called_names(line) & resigned and rewritten(line, now)]
+            # an adapted assertion keeps what it asserted: its words and literals, at most with more arguments
+            kept = [line for line in missing if called_names(line) & resigned and rewritten(line, now)
+                    and (not ASSERTION_STATEMENT.search(line) or assertions_kept(line, "\n".join(now)))]
             if kept and adapted is not None:
                 adapted.append((rel, kept))
             missing = [line for line in missing if line not in kept]

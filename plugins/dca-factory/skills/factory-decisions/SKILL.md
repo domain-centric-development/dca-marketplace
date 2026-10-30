@@ -60,6 +60,13 @@ verbatim> (<record id>)` under `## Assumptions`; write neither yourself.
    confirmation — show that line beside the block. The status is the person's to write, never a stage's: left
    for a stage, the story would run its plan again for nothing. A superseded story runs no further; the runner
    removes its worktree when it next starts, and nothing of it reaches the main line.
+5c. **An answer that changes the story's scenarios is written into the story too.** Where the chosen option moves a
+   scenario out of the story, drops one, rewords one or a rule, or marks another scenario the happy path, write that
+   change into its `story.md` in the same breath, on the same confirmation — show the changed lines beside the block,
+   as for 5b. The story is the person's file; a stage that finds it out of line with an answer can only ask again,
+   so the answer and the story move together. A scenario that moves to another story goes there through the backlog
+   skill, on the same confirmation. Not while a stage of the story runs (`/factory-status` shows it): then write the
+   answer alone and say that the story change waits until the stage has stopped.
 6. **`by:` is the person, `at:` is now.** Ask whose decision it is if it is not obvious from the
    session; the git `user.name` is a suggestion to confirm, not an answer. `at:` is the current
    time in UTC, ISO 8601. You are not the decider and your name goes nowhere in the record.

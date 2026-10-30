@@ -166,6 +166,11 @@ class ResignedHelpers(unittest.TestCase):
         self.assertEqual([rel for rel, _ in lost], [TEST])
         self.assertIn("@Test void sideShop() {", lost[0][1])
 
+    def test_an_adapted_assertion_that_asserts_another_thing_is_lost(self):
+        self.resolve(R_STORY.replace("\n}\n", "\n  @Test void sideShop() {\n    assertFalse(side.open(9));\n  }\n}\n"))
+        lost = integration.main_tests_lost(self.root, self.runs, "STORY-1")
+        self.assertEqual(lost, [(TEST, ["assertTrue(side.open());"])])
+
     def test_a_line_calling_what_the_story_left_alone_is_lost(self):
         write(os.path.join(self.root, SHOP), "class Shop {\n  public boolean open() { return true; }\n}\n")
         self.resolve(R_STORY.replace("\n}\n", "\n  @Test void sideShop() {\n    assertTrue(side.open(9));\n  }\n}\n"))
