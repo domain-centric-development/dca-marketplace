@@ -38,6 +38,8 @@ class Tool(typing.NamedTuple):
     isolation_env: typing.Tuple[typing.Tuple[str, str], ...] = ()  #: environment variables that do the same where the tool has no flag: (name, value),
                               #: `{empty}` an empty folder of the pipeline's own
     effort: typing.Tuple[str, ...] = ()  #: how the tool takes a reasoning effort, `{level}` the value: flag words; () — none
+    default_model: str = ""   #: the model a stage runs on where the profile names none; "" — the tool's own default,
+                              #: which follows whatever the person last chose and so is no default at all
     plugins: bool = False     #: it loads the method skills from its plugins, so its skill folder holds the pipeline's
 
 
@@ -53,7 +55,8 @@ TOOLS = (
          isolation=(("--setting-sources", "project"), ("--strict-mcp-config",), ("--tools", "{stage_tools}"),
                     ("--exclude-dynamic-system-prompt-sections",)),
          usage="claude-json", skills=".claude/skills", model_flag="--model", args_env="FACTORY_CLAUDE_ARGS",
-         add_dirs="all", deny=True, allow_list=True, effort=("--effort", "{level}"), plugins=True),
+         add_dirs="all", deny=True, allow_list=True, effort=("--effort", "{level}"), default_model="opus",
+         plugins=True),
     # The user's config.toml (MCP servers, profiles, a model) stays out; the login does not. stdin is closed by the
     # runner: `codex exec` also reads a prompt from stdin, and an unattended run has none.
     Tool("codex", ("codex", "exec", "--json", "-s", "workspace-write", "-c",

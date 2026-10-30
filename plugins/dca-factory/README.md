@@ -386,7 +386,9 @@ runner passes the value as the tool's model flag (`--model`, `-m`); a `--model` 
 `FACTORY_<TOOL>_ARGS` overrides it for one person, and the run says so. A custom `FACTORY_TOOL_CMD`
 gets it as `FACTORY_MODEL`. In a session, a subagent can run on it; the session's own context cannot.
 `factory.sh status --story <story>` names the model the stages ran on — per stage where they differ — and marks a
-request that did not reach a stage. The pipeline names no model: which stages can run cheaper is the project's to measure.
+request that did not reach a stage. Without a key, Claude stages run on `opus`, never on whatever model the
+person last chose in a session; Codex and OpenCode take their own default. Which stages can run cheaper is the
+project's to measure.
 
 ## Two contexts per story: one builds, one checks
 

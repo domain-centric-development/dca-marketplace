@@ -78,7 +78,12 @@ class ToolChoice:
         return ",".join(heads)
 
     def model_key(self, tool: str, stage: typing.Optional[str]) -> str:
-        return model_for(self._profile(), tool, (stage or "").split(":")[0])
+        """The profile's model for the tool and stage, else the tool's default model; a custom command gets the
+        profile's alone, since the default is a name of the tool's binary."""
+        named = model_for(self._profile(), tool, (stage or "").split(":")[0])
+        if named or os.environ.get("FACTORY_TOOL_CMD"):
+            return named
+        return TOOL[tool].default_model if tool in TOOL else ""
 
     @staticmethod
     def tool_args(tool: str) -> str:
@@ -124,7 +129,7 @@ class ToolChoice:
     def model_choice(self, tool: str, stage: typing.Optional[str]) -> typing.Tuple[str, str]:
         """The model flag for one stage, and why a request does not become one: (flag words, note). The model is
         the project's choice, stated in the profile per tool and stage (`model.<tool>.<stage>`, falling back to
-        `model.<tool>`); the pipeline names none. A `--model`/`-m` in FACTORY_<TOOL>_ARGS wins — the person's local
+        `model.<tool>`), else the tool's `default_model`. A `--model`/`-m` in FACTORY_<TOOL>_ARGS wins — the person's local
         override — and the run says so. Exactly one model flag is ever passed."""
         requested = self.model_key(tool, stage)
         if not requested:

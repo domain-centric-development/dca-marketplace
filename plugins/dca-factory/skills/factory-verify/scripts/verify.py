@@ -1425,8 +1425,9 @@ def verify_runner(runner, verbose=False):
         copy_scripts(runner, root)
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run")
         rows = models_of(output)
-        check("model: `model.claude.tidy` becomes exactly one --model on the tidy stage, and no other stage gets one",
-              rows.get("tidy") == "--model model-a" and all(rows.get(s) == "" for s in
+        check("model: `model.claude.tidy` becomes exactly one --model on the tidy stage, every other stage gets "
+              "the pipeline's default",
+              rows.get("tidy") == "--model model-a" and all(rows.get(s) == "--model opus" for s in
                                                               ("plan", "test", "build", "judge", "document")), rows)
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "codex", "--dry-run")
         rows = models_of(output)
@@ -1439,6 +1440,12 @@ def verify_runner(runner, verbose=False):
                                   env=dict(os.environ, FACTORY_CLAUDE_ARGS="--model model-z"))
         check("model: a --model in FACTORY_CLAUDE_ARGS wins over the profile, and the run says so",
               "overridden by FACTORY_CLAUDE_ARGS (model-z)" in models_of(output).get("tidy", ""), models_of(output))
+    for root in throwaway():
+        build_project(root, profile=PROFILE)
+        copy_scripts(runner, root)
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run")
+        check("model: without a key every Claude stage runs on the pipeline's default, never on the person's last choice",
+              set(models_of(output).values()) == {"--model opus"} and len(models_of(output)) == 6, models_of(output))
     for root in throwaway():
         build_project(root, profile=PROFILE + "model.claude: model-b\n")
         copy_scripts(runner, root)
@@ -1453,16 +1460,18 @@ def verify_runner(runner, verbose=False):
                                   "--dry-run")
         check("contract: a profile newer than the gate stops the run before the first stage, also --from a later one",
               code == 2 and "── stage" not in output and "contract" in output, output[-300:])
-    # no model name lives in the pipeline itself
+    # no model name lives in the pipeline itself, but for a tool's default model in its record
     pipeline_dir = os.path.dirname(os.path.dirname(runner))
     named = []
     for folder, _, names in os.walk(os.path.dirname(pipeline_dir)):
         for name in names:
-            if name.endswith(("SKILL.md", ".sh", ".py", ".tmpl")) and "factory-verify" not in folder:
+            if name.endswith(("SKILL.md", ".sh", ".py", ".tmpl")) and "factory-verify" not in folder \
+                    and name != "agents.py":
                 with open(os.path.join(folder, name), encoding="utf-8", errors="replace") as handle:
                     if re.search(r"\b(opus|sonnet|haiku|gpt-\d|qwen|gemma)\b", handle.read(), re.I):
                         named.append(name)
-    check("model: no model name in the runner, the gate, a template or a skill", not named, named)
+    check("model: no model name in the runner, the gate, a template or a skill, but the tool records' defaults",
+          not named, named)
 
     # an OpenCode invocation's usage, from the events `opencode run --format json` writes
     for root in throwaway():

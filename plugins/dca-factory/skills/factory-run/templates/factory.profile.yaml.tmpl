@@ -81,7 +81,8 @@
 #              the factory works headless); model.<tool> is that tool's default for every stage
 #              without a key of its own. Values are the tool's own model names or aliases. Always
 #              bound to a tool: a profile is shared, and a model name means nothing to another tool —
-#              the gate refuses an unqualified model key. Unset: the tool's default. A --model/-m
+#              the gate refuses an unqualified model key. Unset: claude runs the pipeline's
+#              default model, codex and opencode their own. A --model/-m
 #              in FACTORY_<TOOL>_ARGS overrides it for one person, and the run says so
 # tool         the tool a run starts its units with where `factory.sh run --tool` names none;
 #              tool.<unit> per unit — tool.builder, tool.verifier, tool.review.<perspective> (tool.review for
