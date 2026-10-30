@@ -5,58 +5,77 @@ The stage skills (`stage-plan`, `stage-test`, `stage-build`, `stage-tidy`, `stag
 builder that carries four stages reads it once, not four times. The stage-specific part — which
 profile key names the carrier, which `stage:` a decision record carries — stays in the skill.
 
+A line `<!-- rule: <id> -->` names the paragraph below it for the factory's rulebook (`factory.sh rules`); it
+changes nothing a stage does.
+
 The runner's prompt names the skill, the story and where things are — the paths, the commands, the
 reports of an earlier round — and nothing else. What a session does with them is said here.
 
 ## A session the runner started
 
+<!-- rule: STAGE-COMMON-1 -->
 A prompt that begins with *Apply the stage-… skill*, *Carry out these stages* or *Review the change*
 comes from the pipeline's runner. Then:
 
+<!-- rule: STAGE-COMMON-2 -->
 - The runner holds the checkout for this session: the worker named at session start is the one that
   started you, not a second writer.
+<!-- rule: STAGE-COMMON-3 -->
 - The run folder the prompt names is where every hand-over goes. The evidence folder it names — the
   journal, the diff, the gate's reports — is written by the gate and the runner and only read by you, as
   the pipeline and the skills are.
+<!-- rule: STAGE-COMMON-4 -->
 - What the gate checks in a stage's file, in a page, is `factory-cli.py --contract <stage>`, the command
   the prompt names. Read that, never the gate's source.
+<!-- rule: STAGE-COMMON-5 -->
 - Where the prompt names a knowledge skill's catalog, open its `index.md` first. Where it names nodes to
   read once before you write code, read them before the first line: they hold what you would otherwise
   look up in a dependency's sources or a package cache, which is never the place.
+<!-- rule: STAGE-COMMON-6 -->
 - Where the prompt names this story's own worktree and the main checkout, you work in the worktree, on
   its branch: change the code there, never in the main checkout. The story with its decisions, the run
   folder, the pipeline and the skills are linked from the main checkout; write a decision record or a
   hand-over at the path you are given.
+<!-- rule: STAGE-COMMON-7 -->
 - A guard the prompt names is the profile's `carrier.guard` (*The guard beside the carrier*, below).
 
 ## A stage on its own
 
+<!-- rule: STAGE-COMMON-8 -->
 A prompt that names one skill — *Apply the stage-<stage> skill* — asks for that one stage (or step).
 Do it yourself in this session; do not delegate it. Do not run other stages. Read only the story and
 the files the skill names as its input, and write its output file in the run folder.
 
 ## One session, several stages
 
+<!-- rule: STAGE-COMMON-9 -->
 A prompt that says *Carry out these stages* names them in order. Apply each stage's skill in turn, in
 this one session, reading only the story and the files that stage's skill names as its input, and
 writing its output file in the run folder. Run only the stages the prompt names.
 
+<!-- rule: STAGE-COMMON-10 -->
 - After the test, build and tidy stages run that stage's gate — the command the prompt names, with
   `--stage <stage> --brief` — and fix exactly what it names before the next stage, at most three
   attempts per stage.
+<!-- rule: STAGE-COMMON-11 -->
 - Before you write `plan.md`, run the plan skeleton the prompt names: it writes the plan's headings and
   one line per criterion key — give each its level, never retype the story's text.
+<!-- rule: STAGE-COMMON-12 -->
 - Before you write `tests.md`, `build.md` or `tidy.md`, run the files skeleton the prompt names: it
   writes the file's list of changed files from the tree (or adds the missing ones to a file you wrote).
   Fill in the rest, never the list, and run the stage's gate only when the file is filled — never on
   the bare skeleton.
+<!-- rule: STAGE-COMMON-13 -->
 - Each hand-over says what the next stage needs and nothing a reader has elsewhere;
   `--contract <stage>` names its measure.
+<!-- rule: STAGE-COMMON-14 -->
 - Stop at once when a stage ends in a `## needs-human` section.
+<!-- rule: STAGE-COMMON-15 -->
 - Where the stages include build: if a test cannot pass for a reason in its own code (a helper, a
   locator), not in what it asserts, write `build.md` with the finding first, then go back to the test
   stage in this session — repair the test without changing what it asserts, write its break, run the
   test gate — and build again. A change to what a test asserts stays a needs-human question.
+<!-- rule: STAGE-COMMON-16 -->
 - Where the stages are judge and document: apply the stage-judge skill first and write `judge.md` with
   its verdict. Then — only when it says `verdict: pass` — run the document skeleton the prompt names and
   apply the stage-document skill: fill the skeleton's tables, cite paths from its `## Paths` section in
@@ -65,26 +84,34 @@ writing its output file in the run folder. Run only the stages the prompt names.
 
 ## A repeat round
 
+<!-- rule: STAGE-COMMON-17 -->
 The prompt names what an earlier round left; each is an input of this one.
 
+<!-- rule: STAGE-COMMON-18 -->
 - *The gate refused this stage before* (or *stage <stage>*): its report — read it and fix exactly what
   it names in that stage, nothing else.
+<!-- rule: STAGE-COMMON-19 -->
 - *The <gate> gate refused the story and sent it back to* this stage (or *stage <stage>*): fix in that
   stage exactly what its report names, nothing else.
+<!-- rule: STAGE-COMMON-20 -->
 - *The build stage sent the story back*: `build.md` names a defect in a test's own code — the test
   stage repairs exactly that, without changing what the test asserts, and writes the test's break
   (see the contract).
+<!-- rule: STAGE-COMMON-21 -->
 - *The story's tests changed after the test stage saw them fail* (the main line was merged into the story's
   branch): the test stage records each named test as it now is — red where the code before the story fails it,
   else its break (see the contract) — and changes nothing it asserts. A stale red proof is never a question.
+<!-- rule: STAGE-COMMON-22 -->
 - *The judge asked for changes*: each stage fixes exactly the confirmed defects in `judge.md` that are
   its own — a test that asserts too little is the test stage's, with its break (see the contract); the
   code is the build's — nothing else.
+<!-- rule: STAGE-COMMON-23 -->
 - *The previous verdict*: the judge accounts for each defect it confirmed under `## Previous round` —
   fixed (with the evidence) or withdrawn (with the reason) — before judging anew.
 
 ## A review the runner started
 
+<!-- rule: STAGE-COMMON-24 -->
 A prompt that says *Review the change … from the <perspective> perspective* names the review skill, the
 diff, its inputs and the report's path. Apply the skill to the diff — open a whole file only where the
 diff's context does not carry the question. Write the report in the skill's own format: `## Findings`
@@ -94,6 +121,7 @@ reviewers, a judge reads the reports.
 
 ## Ask, do not recall — but only a source the project named
 
+<!-- rule: STAGE-COMMON-25 -->
 Where the stack profile names a **knowledge skill** — `knowledge: <skill>`, one that answers
 architecture questions from a catalog and cites the node it read — use it instead of your own
 recollection whenever the answer would decide something: which pattern applies, why a rule exists,
@@ -101,6 +129,7 @@ whether a construct is a pitfall, what a recipe prescribes. Name the node you re
 file, the way you name a file and line for a claim about the code: by its path inside the catalog
 (`recipe/add-an-aggregate.md`), never by a path into a skill folder.
 
+<!-- rule: STAGE-COMMON-26 -->
 **Never adopt a knowledge source the profile did not name.** A catalog that happens to be installed
 may be a vendored copy of an older release: its rule ids, marker names and recipes can describe a
 version the project does not use, and a citation makes that wrongness look verified. If you notice
@@ -108,18 +137,21 @@ such a skill, say so in your file — "`<skill>` is available but not named in t
 not used" — and decide from the project's own rules, markers and documents instead. Those are the
 source of truth; a catalog is a convenience the project has to vouch for.
 
+<!-- rule: STAGE-COMMON-27 -->
 Without a `knowledge:` entry, work from what the project itself carries: its rule catalog and the
 report its architecture suite prints, its building blocks, its glossary, its documents. Nothing
 here fails for the absence of a knowledge skill.
 
 ## Who carries a stage
 
+<!-- rule: STAGE-COMMON-28 -->
 The stack profile may name a carrier for a stage — `carrier.<stage>: <name>` — the skill or agent
 that holds this project's craft for it. A **skill** works in every tool; an **agent** only where the
 tool has agents. Use the named carrier when this tool offers it; otherwise do the stage as its skill
 describes and say in your file which it was ("in-session; `<carrier>` not available here"). A
 missing carrier is a missing preference, never a reason to skip the stage.
 
+<!-- rule: STAGE-COMMON-29 -->
 **The guard beside the carrier.** For the stages that write production code — build and tidy — the
 profile may also name `carrier.guard: <name>`: the skill that holds the architecture's invariants
 while code is edited (in a DCA project `dca-discipline`). Apply it for every file you write, the same
@@ -128,6 +160,7 @@ describes them and say so in your file. An absent key is skipped and named like 
 
 ## A question is a decision record
 
+<!-- rule: STAGE-COMMON-30 -->
 A stage that cannot go on writes its file anyway, with a `## needs-human` section naming a
 **decision record**: `decision: <story>-<nn>`, the record at `<story>/decisions/<nn>.md` in the
 story (`nn` — the next two-digit number among this story's records) with the question, the options
@@ -155,11 +188,13 @@ asked: <now, UTC, ISO 8601>
 <a — why, in one or two sentences>
 ```
 
+<!-- rule: STAGE-COMMON-31 -->
 Write every option as one list item `- <label>: <text>` — the label a lowercase letter (`a`, `b`, `c`), a colon,
 then plain text; no bold around the label, no dash after it, a longer option continued on indented lines below.
 The views offer the options as choices and an answer `b` turns into option b's first line in the story, so the
 first line says the option in a sentence of its own. The recommendation opens with the label it recommends.
 
+<!-- rule: STAGE-COMMON-32 -->
 The gate refuses a `## needs-human` that names no record. When you run again on a story whose
 record is answered — asked by your stage, or answered `applies: <your stage>` — read the answer,
 apply it, and cite the id in your file where it landed (`Decision <id> answered <option>: …`); the
@@ -167,6 +202,7 @@ gate stamps the record applied only then, and refuses a file that does not cite 
 
 ## The gate is your test run
 
+<!-- rule: STAGE-COMMON-33 -->
 For the stages that write code — test, build, tidy: run a single test while you work, as often as
 you like; when you believe the stage is done, run the stage's gate (`story-gate.py --story <id>
 --stage <stage> --brief`). It compiles the sources and runs every mapped test and the required
@@ -181,6 +217,7 @@ to edit your file after the gate ran, and never a reason to run the gate again.
 
 ## The shell a stage has
 
+<!-- rule: STAGE-COMMON-34 -->
 The runner lets a stage run, without asking, the gate, the cli, the commands the stack profile declares,
 and the ordinary reading tools — `cd`, `ls`, `cat`, `head`, `tail`, `wc`, `sort`, `grep`, `diff`, `pwd`, and
 `git status`, `git diff`, `git log`, `git ls-files`, `git apply --check` (how a break patch is tried), and
@@ -189,6 +226,7 @@ the call is refused and the turn is lost. A file is changed with the editor tool
 fed on stdin (`python3 -` and a heredoc) — that is the one habit the bench saw refused three times per
 story. In a session the same tools are the ones a person answers "yes" to without looking twice.
 
+<!-- rule: STAGE-COMMON-35 -->
 Every command is checked part by part before it runs, and nobody is there to grant one: a loop, a
 variable or `$(…)`, a part outside that list and a path outside the project are refused, each a turn
 spent. Run one plain command per call from the project root, never a `cd` to an absolute path; read
@@ -198,6 +236,7 @@ read, the searches you run, the files you write that do not depend on one anothe
 
 ## The formatter runs last
 
+<!-- rule: STAGE-COMMON-36 -->
 Where the stack profile declares `formatFix:`, run it last, before you finish: it corrects the
 formatting of what you wrote, so the stages after you find their own files as the formatter wants
 them. The gate and the commit hook only check `format:` and change no file. A file the formatter

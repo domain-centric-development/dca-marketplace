@@ -89,7 +89,8 @@ class SkillsTest(unittest.TestCase):
                 "factory-run/reference/stage-common.md": "# Common\n\n<!-- rule: STAGE-COMMON-1 -->\nEvery stage "
                                                          "reads the story.\n",
                 "stage-plan/SKILL.md": "## Do\n\n<!-- rule: STAGE-PLAN-9A -->\n9a. **Find what shows.** A scenario\n"
-                                       "that holds stays.\n\nNext paragraph.\n"})
+                                       "that holds stays.\n\nNext paragraph.\n\n## Task mode\n\n"
+                                       "<!-- rule: STAGE-PLAN-TASK -->\nA task plans no test.\n"})
             view = self.book(root)
             told = {r["id"]: r for r in view["rules"] if r["part"] == "instruction"}
             self.assertEqual("Find what shows. A scenario that holds stays.", told["STAGE-PLAN-9A"]["text"])
@@ -98,6 +99,8 @@ class SkillsTest(unittest.TestCase):
             plan = next(s for s in view["flow"]["story"]["steps"] if s["stage"] == "plan")
             self.assertEqual(["STAGE-PLAN-9A"], plan["told"])
             self.assertIn("STAGE-COMMON-1", view["outside"])
+            self.assertEqual(["task"], told["STAGE-PLAN-TASK"]["kinds"])
+            self.assertNotIn("STAGE-PLAN-TASK", plan["told"])
             self.assertEqual([], view["problems"])
 
     def test_an_id_used_twice_a_cited_unknown_id_and_an_unknown_stage_are_problems(self):

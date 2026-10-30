@@ -18,13 +18,16 @@ Output: the production code, plus `.dca-factory/runs/<story>/build.md`.
 
 ## Do
 
+<!-- rule: STAGE-BUILD-1 -->
 1. Read the plan and the failing tests. Implement the **smallest** change that makes them pass —
    the smallest that also meets the product description's `## Look and feel` and `## Qualities`, where
    the change has a surface. A page built to no stated look is correct only where the product
    description states none.
+<!-- rule: STAGE-BUILD-1A -->
 1a. **A refusal shown on a page is bound to its field** where the product description's `## Qualities` names
    accessibility: the message beside the field and tied to it (`aria-describedby`, `aria-invalid`, or the
    stack's equivalent), the entered value kept where the product says so.
+<!-- rule: STAGE-BUILD-2 -->
 2. Follow the plan's change list. An element the plan did not name is a sign the plan was wrong:
    note it in the build file rather than quietly extending the design. The same holds for a **guard in a
    domain type** — a null check, a trim, a range, a uniqueness rule — that the plan's `## Invariants`
@@ -35,25 +38,32 @@ Output: the production code, plus `.dca-factory/runs/<story>/build.md`.
    says `new` is written; the build gate refuses either left undone (`plan-files`), whatever the build file
    explains. Where a removal or a new file turns out wrong, that is the plan's error: say so under
    `## needs-human` rather than leaving the plan's line unmet.
+<!-- rule: STAGE-BUILD-3 -->
 3. Keep the architecture intact — the same rules the plan worked under: no framework types in the
    domain, ports declared inward and implemented in adapters, no raw cross-context imports, one
    aggregate per transaction, domain events published and cleared where the plan says so.
+<!-- rule: STAGE-BUILD-4 -->
 4. Use the project's own building blocks and conventions: its markers, its base types, its
    package layout, its error handling. Where the project ships an architecture rule suite, run it
    and take it as binding.
+<!-- rule: STAGE-BUILD-4A -->
 4a. **A comment the change made wrong is rewritten in this story.** A comment or doc comment in a file
    you touch that your change made wrong or too narrow — it names the one case where there are two now,
    a mechanism the code no longer uses — says what holds after the change. A comment says what holds
    in this file, not what a source the reader cannot see says (the plan, the story, another document).
+<!-- rule: STAGE-BUILD-5 -->
 5. The gate is your test run (`factory-run/reference/stage-common.md`): the single test you are
    making green as often as you like, then the build gate, never the whole suite before it. Do not
    finish while the gate names something red — and write nothing about the gate into your file: its
    report is the record.
+<!-- rule: STAGE-BUILD-6 -->
 6. In a repeat round, work only on what the gate or the judge confirmed. Do not take the
    opportunity to refactor elsewhere. Where `judge.md` in the run folder says
    `verdict: changes-requested`, fix exactly the confirmed defects that are this stage's — the code;
    a test that asserts too little is the test stage's — nothing else.
+<!-- rule: STAGE-BUILD-7 -->
 7. `formatFix:` runs last, before you finish (`factory-run/reference/stage-common.md`).
+<!-- rule: STAGE-BUILD-8 -->
 8. **A task** (`kind: task`) has no test written for it: the existing suite is the measure, and the build gate runs
    every test command whole. Change what the plan names and nothing an actor sees; change no test that existed
    before (the gate refuses it), add one where it pins down what the change keeps. A test that goes red is a
@@ -98,17 +108,21 @@ no hand-over after the gate ran.
 
 ## Do not
 
+<!-- rule: STAGE-BUILD-NOT1 -->
 - Do not change a test to make it pass. **A test that cannot pass because of its own code** — a
   helper, a locator, a fixture, a page object that can never find what the page renders — while what
   it asserts stays exactly as it is, is not yours to repair and not a human's to decide: write the
   finding in `build.md` (the test, the line, why it cannot pass, and how you showed that the code
   meets the scenario) and a line `back: test` on its own; the round goes to the test stage, which
   repairs the test and proves with a break that it still bites.
+<!-- rule: STAGE-BUILD-NOT2 -->
 - **A test whose expectation cannot hold** — two assertions that exclude each other, a substring
   that also matches what must be there — is a question about what the story expects, not a
   deviation: write `## needs-human` naming a decision record with `stage: build` that names the
   test, the line and why it cannot hold, and stop (`factory-run/reference/stage-common.md`). Once a human has answered — and repaired
   the test where the answer says so — the build runs again and cites the id in `build.md`.
+<!-- rule: STAGE-BUILD-NOT3 -->
 - Do not write a criterion key into code, documentation or a comment.
+<!-- rule: STAGE-BUILD-NOT4 -->
 - Do not leave commented-out code, a `TODO` for the criterion you were asked to deliver, or a
   disabled test behind.

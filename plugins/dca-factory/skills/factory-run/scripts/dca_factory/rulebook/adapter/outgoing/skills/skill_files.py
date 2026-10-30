@@ -9,7 +9,7 @@ import re
 import typing
 
 from ....domain.model.rule import (
-    Citation, Part, Rule, RuleId, Source, StageName, Words)
+    Citation, KindName, Part, Rule, RuleId, Source, StageName, Words)
 
 MARKER = re.compile(r"^\s*<!--\s*rule:\s*(\S+)\s*-->\s*$")
 CITED = re.compile(r"(?<![\w-])(?:GATE|RUN|STAGE)(?:-[A-Z0-9]+)+(?![\w-])")
@@ -17,6 +17,8 @@ HEADING = re.compile(r"^(#{1,4})\s+(.*)$")
 NUMBERED = re.compile(r"^\s*(?:\d+[a-z]?\.|[-*])\s+")
 #: The areas of a STAGE- id that are no stage: what every stage is told, the files they hand over, the backlog.
 EVERY_STAGE = ("common", "files", "backlog")
+#: The last part of an id that names the story kind a paragraph holds for: a skill's `## Task mode`, `## Adopt mode`.
+MODES = ("task", "adopt")
 #: How much of a paragraph the rulebook keeps as what the rule says.
 TEXT_LIMIT = 600
 #: The skills folder of the plugin beside the package, then the project's tool folders — the first that has the
@@ -32,6 +34,10 @@ def skills_folder(cwd: str, package: str) -> typing.Optional[str]:
         if os.path.isfile(os.path.join(folder, REFERENCE)):
             return folder
     return None
+
+
+def indent(line: str) -> int:
+    return len(line) - len(line.lstrip())
 
 
 def plain(lines: typing.Sequence[str]) -> str:
@@ -81,7 +87,7 @@ class SkillFiles:
     def _read_file(self, path: str) -> typing.Tuple[typing.List[Rule], typing.List[Citation]]:
         assert self._folder is not None
         shown = os.path.relpath(path, self._folder).replace(os.sep, "/")
-        skill = shown.split("/")[0]
+        skill = os.path.basename(shown) if "/reference/" in shown else shown.split("/")[0]
         with open(path, encoding="utf-8") as handle:
             lines = handle.read().splitlines()
         rules: typing.List[Rule] = []
@@ -97,10 +103,12 @@ class SkillFiles:
             if marked is None:
                 citations += [Citation(Words(cited), Source(f"{shown}:{index + 1}")) for cited in CITED.findall(line)]
                 continue
-            paragraph = []
+            paragraph: typing.List[str] = []
             for following in lines[index + 1:]:
                 if not following.strip() or MARKER.match(following) or HEADING.match(following):
                     break
+                if paragraph and NUMBERED.match(following) and indent(following) <= indent(paragraph[0]):
+                    break      # the next item of the same list is a paragraph of its own
                 paragraph.append(following)
             rule_id = marked.group(1)
             try:
@@ -109,8 +117,10 @@ class SkillFiles:
                 citations.append(Citation(Words(rule_id), Source(f"{shown}:{index + 1}")))
                 continue
             area = checked.area().value.lower()
+            mode = checked.value.rsplit("-", 1)[-1].lower()
             rules.append(Rule(
-                checked, Part.INSTRUCTION, () if area in EVERY_STAGE else (StageName(area),), (),
+                checked, Part.INSTRUCTION, () if area in EVERY_STAGE else (StageName(area),),
+                (KindName(mode),) if mode in MODES else (),
                 Words(f"{skill} — {heading}" if heading else skill), (), Words(""), Words(plain(paragraph)), (),
                 Source(f"{shown}:{index + 2}")))
         return rules, citations

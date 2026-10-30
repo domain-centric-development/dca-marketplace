@@ -9362,7 +9362,7 @@ def run_groups(args):
                          not hits, ", ".join(hits[:5])))
     # the skills call only the runner's verbs, which mirror them (WP-62 item 11)
     verbs = {"setup", "backlog", "run", "status", "decisions", "discover", "follow", "help", "update", "verify", "check",
-             "up", "down", "serve", "request", "requests"}
+             "up", "down", "serve", "request", "requests", "rules"}
     called = []
     for folder, _, names in os.walk(skills_root):
         for name in names:

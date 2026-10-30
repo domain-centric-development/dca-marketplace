@@ -23,9 +23,11 @@ yesterday. This stage closes that gap — and it closes it with **checkable** st
 
 ## Do
 
+<!-- rule: STAGE-DOCUMENT-0 -->
 0. A feature the plan's `## Spec delta` brings (`adds feature <name>`) gets its glossary entry: the term as its
    people say it with the folder's name in parentheses, `**Type:** Feature`, what it groups — the delivery refuses the
    story without it.
+<!-- rule: STAGE-DOCUMENT-1 -->
 1. Read the plan's glossary proposals and the diff's new names. Every **domain** identifier the
    story introduced — an aggregate, a value object, an event, a use case, a domain term in a result
    — needs an entry in the bounded context's glossary (`product/spec/<context>/glossary.md`, the one file under
@@ -42,6 +44,7 @@ yesterday. This stage closes that gap — and it closes it with **checkable** st
    gate finds a term by any of those words, case aside, anywhere in a glossary file; a term you leave
    out goes under `## Not documented` with what it waits for, and nowhere else (`factory-cli.py
    --contract glossary` says the rule and the entry's shape).
+<!-- rule: STAGE-DOCUMENT-2 -->
 2. Update the context maps when the story changed how contexts relate — a new upstream, a new
    translation site, a relationship that changed kind. The designed map (`domain:` in the profile,
    `product/domain.md` by default) through the skill the profile names as `carrier.domain:`, where
@@ -50,12 +53,14 @@ yesterday. This stage closes that gap — and it closes it with **checkable** st
    relationship should never have reached this stage; if you find one, write `## needs-human`
    naming a decision record with `stage: document` (the shape, and the citation of an answered
    record: `factory-run/reference/stage-common.md`).
+<!-- rule: STAGE-DOCUMENT-3 -->
 3. Update the documents the project keeps for readers, and only where the story made them wrong:
    the package or namespace layout when it changed, a described flow that now works differently, a
    list of contexts or capabilities that is now incomplete. Where the project declares its
    documentation targets (in the stack profile or its own instructions), follow that declaration
    instead of guessing which file matters. An addition to an architecture decision record names the
    mechanism that holds today — not one a later record replaced; check the code, not the older record.
+<!-- rule: STAGE-DOCUMENT-4 -->
 4. **Write only what you can verify.** Every path, file, class, method and command you put in a
    document must exist — check it, do not remember it. A documented path that does not resolve is
    worse than no documentation: it survives, gets cited, and sends the next reader nowhere.
@@ -64,6 +69,7 @@ yesterday. This stage closes that gap — and it closes it with **checkable** st
    is not a path: it reads like one, it cannot be opened, and it is indistinguishable from a typo.
    Add the line or the section separately (`file.md:149`, `Book.cs:28-31`) — the location is
    allowed and is not part of the file name.
+<!-- rule: STAGE-DOCUMENT-5 -->
 5. Record what you did *not* document and why — one line each: a decision that belongs in an
    architecture decision record rather than a README, a term the domain contact has to define first,
    an open assumption the story never resolved. A document you read and left as it was is one line
@@ -112,10 +118,14 @@ gate reads `—` as "no file", never as a path.
 
 ## Do not
 
+<!-- rule: STAGE-DOCUMENT-NOT1 -->
 - Do not write production code or tests; the story is already green and judged.
+<!-- rule: STAGE-DOCUMENT-NOT2 -->
 - Do not restate the story in prose. A document repeats a fact only where a reader needs it in that
   place; otherwise it points at where the fact lives.
+<!-- rule: STAGE-DOCUMENT-NOT3 -->
 - Do not describe history — no "changed in this story", no "previously". A document says what is
   true now; the story, the diff and the run's files carry the history.
+<!-- rule: STAGE-DOCUMENT-NOT4 -->
 - Do not add a term to the glossary that the code does not use, and do not rename a term in the
   code from here. Renaming is a story of its own.

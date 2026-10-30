@@ -22,12 +22,14 @@ freedom is that it may not change what the code *does*.
 
 ## Do
 
+<!-- rule: STAGE-TIDY-1 -->
 1. Read the plan and the build file, then the code they name. Work **only inside this story's
    footprint**: the files the build stage changed, and what it made demonstrably redundant — a
    helper nothing calls any more, a duplicate the new code introduced, and what the plan's `## Files`
    lists beyond the story's own code — an old wording, a last caller's target, a twin check. The
    story's test files and the test support they use are footprint too. A smell elsewhere is a note in
    your file, never an edit.
+<!-- rule: STAGE-TIDY-2 -->
 2. Keep every test green, and **change no test's claim**. The story's tests and the shared test support
    take moves that keep what each test asserts: a copy lifted into the shared support — the earlier
    copies too, at the third one —, a page object called instead of a raw locator, a test method named
@@ -39,9 +41,11 @@ freedom is that it may not change what the code *does*.
    it must be red there as it was, so a move that renamed production code a test calls, or let a test
    pass without the code, is refused. A test that existed before the story keeps what it expects, as
    at every stage.
+<!-- rule: STAGE-TIDY-3 -->
 3. Change no behaviour. Nothing removed that a criterion needs, nothing added that meets a
    criterion the build stage did not meet, no error message a caller can see reworded unless a
    criterion names it. If a change would be visible to a caller, it is not tidying.
+<!-- rule: STAGE-TIDY-4 -->
 4. Take the ordinary moves and nothing exotic: a name that says what the thing is in the project's
    own vocabulary — in doc comments too, and a word the glossary lists under `Synonyms (avoid)` is
    always a move, replaced by its term — a function split where two levels of abstraction sit in one,
@@ -50,15 +54,19 @@ freedom is that it may not change what the code *does*.
    where a primitive was carrying meaning. A comment says what holds in this file, not what a source
    the reader cannot see says. Each move is small and each leaves the tests green — between moves run the
    tests the move touches (one test or one class, as `stage-common.md` says); the whole suite runs once, in the gate.
+<!-- rule: STAGE-TIDY-5 -->
 5. Respect the architecture as the build stage did: the domain free of framework types, ports
    declared inward, no raw cross-context imports. A tidy-up that moves a type across a layer is a
    design change and belongs in a plan, not here.
+<!-- rule: STAGE-TIDY-6 -->
 6. Stop early. Two or three moves that make the story's code plainly better is a good stage; a
    rewrite is a plan nobody approved. When you find yourself wanting one, write it down as a
    finding and leave the code alone.
+<!-- rule: STAGE-TIDY-7 -->
 7. The gate is your test run (`factory-run/reference/stage-common.md`): a single test while you move
    things, then the tidy gate, never the whole suite before it. Write nothing about the gate into
    your file: its report is the record.
+<!-- rule: STAGE-TIDY-8 -->
 8. `formatFix:` runs last, before you finish (`factory-run/reference/stage-common.md`).
 
 ## Who carries this stage
@@ -92,8 +100,11 @@ to have made one.
 
 ## Do not
 
+<!-- rule: STAGE-TIDY-NOT1 -->
 - Do not change what a test asserts, delete a test, or weaken an assertion; move only how it says it.
+<!-- rule: STAGE-TIDY-NOT2 -->
 - Do not rename anything a criterion, a glossary entry or a document names — the story's words are
   the domain contact's. A better name for a domain term is a glossary question.
+<!-- rule: STAGE-TIDY-NOT3 -->
 - Do not reformat files the story never touched; a formatter run across the repository buries this
   story's change in noise and makes the judge's diff unreadable.

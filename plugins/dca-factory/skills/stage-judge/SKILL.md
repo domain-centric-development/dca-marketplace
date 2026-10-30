@@ -25,6 +25,7 @@ Output: `.dca-factory/runs/<story>/judge.md`. You change no code.
 
 ## Do
 
+<!-- rule: STAGE-JUDGE-1 -->
 The change is reviewed from **ddd**, **hexagonal** and **clean-code**, one pass each, kept apart in the
 report. These three are part of the method, not project configuration: they always run and no
 profile switches them off. The passes are not yours where a review file exists: the pipeline starts
@@ -45,6 +46,7 @@ What the project configures is what it *adds* and *who runs it*:
 | `reviews: dca, security` | **additional** perspectives, on top of the three. Default: none |
 | `review.ddd: <carrier>` | the reviewer that should carry a perspective — for the three built-ins too (`review.hexagonal:`, `review.clean-code:`, `review.<added>:`) |
 
+<!-- rule: STAGE-JUDGE-2 -->
 A **carrier** is whatever this tool can actually run under that name: a review skill (portable —
 every tool reads skills) or, in a tool that has separate review agents, such an agent. Resolve each
 perspective in this order:
@@ -63,6 +65,7 @@ missing *preference*, not a missing review: the built-in pass still runs, and th
 built-in description, so if its carrier is unavailable it is reported as **not covered** and nothing
 silently stands in for it.
 
+<!-- rule: STAGE-JUDGE-3 -->
 1. **ddd** — is the model right? (`review-ddd`: aggregates and invariants, entity against value
    object, events, the language, repository against store.)
 2. **hexagonal** — do the dependencies point inward? (`review-hexagonal`: framework-free domain,
@@ -106,27 +109,34 @@ line plus the skill that carries it — never an edit to this file.
 
 Then converge:
 
+<!-- rule: STAGE-JUDGE-4 -->
 4. Deduplicate findings that describe the same defect and drop anything the project's own rule
    suite already enforces — a rule catches it every run, a review comment does not.
+<!-- rule: STAGE-JUDGE-4A -->
 4a. A rule the suite carries but does not run here — an **experimental** rule the project did not opt in to
    (its architecture test or the suite's configuration says whether it did; check before you cite one) —
    binds nothing: it is never a finding's ground nor its fix. Mention it in the summary as information at most.
+<!-- rule: STAGE-JUDGE-5 -->
 5. Discard style preferences, speculative concerns and anything you cannot point at in the code.
    Every remaining finding names a file, a line and the fix.
+<!-- rule: STAGE-JUDGE-5C -->
 5c. A state the plan names under `## Open assumptions` as one the project had before this story — a gap the
    story rests on and does not close — is no defect of this story and blocks nothing. Where you confirm it in the
    code, keep it as a `minor` with its Defect cell starting `deferred by the plan:`, so it lands in the findings
    and a clean-up story sees it; a deferral never lowers a rank. What the story's own change brings stays a
    finding, whatever the plan says about it.
+<!-- rule: STAGE-JUDGE-5A -->
 5a. An **unplanned invariant** the build file names — a guard it found necessary and left out, since the plan
    did not name it — is a confirmed `minor` against the plan (`plan` perspective), with the rule as its fix; a
    guard in a changed domain type that the plan's `## Invariants` does not name and no unit test covers is
    the same finding, whoever wrote it.
+<!-- rule: STAGE-JUDGE-5B -->
 5b. A **planned change left undone** — a file the plan's `## Files` removes still there, a change it lists not
    made, a step the build file says it could not take — is a confirmed `major` against the plan (`plan`
    perspective), never a `minor`: `changes-requested`, whatever reason the build file gives. Where the reason is
    real, the plan was wrong, and that is a `story-conflict` — not a pass. The build gate refuses a `new` or
    `removed` line that did not happen (`plan-files`); the rest is yours.
+<!-- rule: STAGE-JUDGE-6 -->
 6. Check the story once more against the criteria: is each one actually met by behaviour, not just
    by a green test? A test that asserts too little is a **test** defect and belongs in the report. Before a
    criterion counts as met, ask of its test's assertion: **could it fail?** With the behaviour absent — the
@@ -143,6 +153,7 @@ beside this skill.
 
 ## The verdict has three values, not two
 
+<!-- rule: STAGE-JUDGE-VERDICT -->
 Which value you choose decides where the run goes back to, and that is the point of this stage:
 
 | Verdict | Means | The run goes back to |
@@ -235,6 +246,7 @@ names the file and line it stands on — a finding without that is a suspicion a
 
 ## Task mode
 
+<!-- rule: STAGE-JUDGE-TASK -->
 A `kind: task` claims that nothing an actor sees has changed. Check that claim first: does the diff change an
 answer, a page, a stored value, a published event, a refusal? Then it is a story — `story-conflict`, with the
 behaviour named. Otherwise judge the change as any other — the perspectives, the plan's `## Files` — and check that
@@ -243,6 +255,7 @@ every finding row the task `closes:` is settled by the diff (file and line); a r
 
 ## Adopt mode
 
+<!-- rule: STAGE-JUDGE-ADOPT -->
 For a story with `status: adopted`, the change is not code but a claim: each mapped test proves its
 scenario. Read every test against its scenario — does it arrange the `Given`, perform the `When` and
 assert every `Then` and `And` with the scenario's values? A test that passes without asserting the outcome,
@@ -252,7 +265,10 @@ too. Each row of the `gate:invariants` table is read the same way: a test that d
 
 ## Do not
 
+<!-- rule: STAGE-JUDGE-NOT1 -->
 - Do not edit code or tests.
+<!-- rule: STAGE-JUDGE-NOT2 -->
 - Do not report what the architecture rule suite already fails on — the gate runs it in the build
   stage, so a finding it catches is already blocking; repeating it double-counts one defect.
+<!-- rule: STAGE-JUDGE-NOT3 -->
 - Do not rate style, formatting or personal preference.

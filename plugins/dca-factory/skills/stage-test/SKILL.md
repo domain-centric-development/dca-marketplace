@@ -18,8 +18,10 @@ files written. You write **no** production behaviour.
 
 ## Do
 
+<!-- rule: STAGE-TEST-1 -->
 1. Read the plan's criteria and the level it gave each: `e2e` for the happy path, `integration` for
    the others, `browser-only (<why>)` where only a browser observes the `Then`.
+<!-- rule: STAGE-TEST-2 -->
 2. Write **one test per criterion, at the level the plan gave it** — for a scenario, the test follows its steps: `Given`
    is the arrangement, `When` the one action, `Then` and each `And` after it an assertion, with the
    scenario's own values — the `Given` arranged with them even where the outcome seems not to depend on
@@ -37,6 +39,7 @@ files written. You write **no** production behaviour.
    application started by the test, the fake clock for anything that counts or expires, a stand-in for
    a permission the user answers. Never read the page's script or markup as text to infer what the
    browser would do.
+<!-- rule: STAGE-TEST-2A -->
 2a. **An integration test** has the shape the plan wrote after its level, in the source set a
    `test.<name>:` key declares. `integration (port)`: the use case through its input port in the wired
    application, with real outgoing adapters and persistence as the project runs it in tests — the
@@ -60,13 +63,16 @@ files written. You write **no** production behaviour.
    An outgoing adapter that keeps state of its own beside what it stores — an index, a lookup by a second
    key — gets an adapter test that saves, changes and saves again, and asserts the lookup after the
    second save.
+<!-- rule: STAGE-TEST-2B -->
 2b. **A journey item** (`kind: journey`) is a guard over delivered stories: one test that walks the
    epic's `## Journey` to its outcome event, in the source set `test.journey:` declares. It is
    **green** when you finish — every step exists already — and it asserts the outcome event, not
    only a page. It gets no stub for the production code and writes no production code.
+<!-- rule: STAGE-TEST-2C -->
 2c. **An end-user test's display name is its scenario's title, verbatim** — the `Title:` line under the
    scenario's heading, else its key in words ("Shows empty state"). Two implementations of one story then
    name the test alike; the test gate refuses an end-user test without it.
+<!-- rule: STAGE-TEST-2D -->
 2d. **Every test starts from a state it sets itself, and asserts an element.** A suite that shares one application
    and one store empties what its tests write before each test — the base class does it, through the reset the
    profile's `reset:` names, the end-user suite included; a scenario that begins "the list is empty" is then
@@ -74,6 +80,7 @@ files written. You write **no** production behaviour.
    text: `contains("disabled")` is true whenever any element is disabled. A test of a criterion above the unit
    level runs through the real input port, except at the plan's `integration (adapter: …)` level; the test gate
    refuses the double (`tests-real`).
+<!-- rule: STAGE-TEST-2E -->
 2e. **Every assertion could fail.** Ask of each one: with the behaviour absent, would it turn red? An assertion on
    a mechanism the code does not use (a flash attribute count where the page renders its message from the
    model), a count of something nothing writes, an absence that holds before the feature exists — each is green
@@ -91,6 +98,7 @@ files written. You write **no** production behaviour.
    **Test data a swap would turn red.** Where a test passes several numbers or strings of the same type,
    each differs from the others — two quantities, two prices, two names alike let the code mix them up and
    stay green. Cases that can fail apart are tests of their own, not one test looping over them.
+<!-- rule: STAGE-TEST-3 -->
 3. **A unit test for every invariant the plan's `## Invariants` names** — each rule, the guards
    included: a required value refused when absent, a trimmed one refused untrimmed, a range at both
    bounds. The test drives the domain type alone, no framework, and is its own — never a criterion's
@@ -106,6 +114,7 @@ files written. You write **no** production behaviour.
    that survives a rewrite of the adapters. A use case gets no unit test of its own from this stage: its
    port test runs it in the wired application, and a second test of the same path with doubles proves
    the doubles.
+<!-- rule: STAGE-TEST-4 -->
 4. Place tests where this project places tests. Look at the existing layout and follow it —
    source set, folder, naming, base classes, test data builders. Do not introduce a second
    convention next to the project's own. **Before you write a helper, a page-object call or a
@@ -113,12 +122,14 @@ files written. You write **no** production behaviour.
    the same level — and call it. Where the same code stands in two places already, the third use
    extracts it into the shared test support (a base class, a builder, a page object) and calls it from
    there; the test support is yours to change, the tests that existed before keep what they assert.
+<!-- rule: STAGE-TEST-5 -->
 5. Name the test after the behaviour: `showsEmptyStateWhenNothingIsRecorded`. **Never** write a
    criterion key or number into a test name, display name, comment or documentation. The link
    between criterion and test lives in the table below and nowhere else — one place the gate reads,
    one place two implementations of the same story share; a key in a name is a second link that
    drifts when the story is renumbered, and the display name is the scenario's title (step 2), which
    already says which scenario a report is about.
+<!-- rule: STAGE-TEST-6 -->
 6. Write the types the tests need to compile — and draw the line at **behaviour**. A type with nothing a
    criterion observes is structure, and structure is written whole here: a record with its fields and a
    null guard, an enum with its values, an interface with its methods, an exception type with its
@@ -129,6 +140,7 @@ files written. You write **no** production behaviour.
    *is* the empty case, a stub returning empty makes the test green before any code exists, and a green
    test at this stage proves nothing. The gate refuses it, and rightly: the criterion would ship
    uncovered. The line in one sentence: whatever a criterion observes, throws.
+<!-- rule: STAGE-TEST-7 -->
 7. The gate is your test run (`factory-run/reference/stage-common.md`): a single test while you
    write it — that is where you see the assertion it fails on — then the test gate, never the whole
    suite before it. Confirm two things from its report: the test sources compile, and every new test
@@ -138,8 +150,10 @@ files written. You write **no** production behaviour.
    click or the fill, so a form that does not exist yet fails on the expectation and names what is
    missing. A raw `TimeoutError` from an action is red on the harness — the gate accepts the red and
    notes it, and the build stage learns nothing from it.
+<!-- rule: STAGE-TEST-8 -->
 8. Delete every spike, scratch or exploration test before you finish. A passing spike trips no
    gate, so nothing else will catch it.
+<!-- rule: STAGE-TEST-9 -->
 9. `formatFix:` runs last, before you finish (`factory-run/reference/stage-common.md`).
 
 ## Ask, do not recall
@@ -207,6 +221,7 @@ test covers.
 
 ## A round sent back to this stage
 
+<!-- rule: STAGE-TEST-ROUND -->
 Where `judge.md` in the run folder says `verdict: changes-requested`, fix exactly the confirmed defects
 that are this stage's — a test that asserts too little, with its break (see the contract) — nothing else.
 When the judge's verdict says `back: test` (`.dca-factory/runs/<story>/judge.md`), fix exactly the test
@@ -227,6 +242,7 @@ red, the gate records the red run. Ask nobody about it.
 
 ## Adopt mode
 
+<!-- rule: STAGE-TEST-ADOPT -->
 For a story with `status: adopted`: map every scenario in the `gate:tests` table to the existing test the
 plan names, green as it is. For a scenario without one, write a **characterization test** — green on
 today's code, asserting the scenario's `Then` with its values — list it under `## Characterization` in
@@ -240,8 +256,11 @@ gate runs every rule's test green beside the scenarios' tests.
 
 ## Do not
 
+<!-- rule: STAGE-TEST-NOT1 -->
 - Do not implement production behaviour to make a test pass.
+<!-- rule: STAGE-TEST-NOT2 -->
 - Do not weaken an assertion to get a test to run.
+<!-- rule: STAGE-TEST-NOT3 -->
 - Do not change what a test that existed before this story expects — unless the plan lists it
   under `## Changed tests`. Change those to the story's new expectation; everywhere else add a
   case and leave the old lines as they are. The gate compares every test file against the state
@@ -250,5 +269,7 @@ gate runs every rule's test green beside the scenarios' tests.
   new argument and keep every assertion, its expected values and matchers as they were. That is
   no changed expectation and needs no question.
   A contradicting test the plan missed is a question (a decision record with `stage: test`).
+<!-- rule: STAGE-TEST-NOT4 -->
 - Do not add architecture or rule tests unless the plan introduces a new structural rule.
+<!-- rule: STAGE-TEST-NOT5 -->
 - Do not touch a build file, a dependency list or a test-runner configuration.

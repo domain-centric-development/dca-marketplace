@@ -20,7 +20,9 @@ Output: `.dca-factory/runs/<story>/plan.md`, and nothing else. You write no test
 
 ## Do
 
+<!-- rule: STAGE-PLAN-1 -->
 1. Read the story: its context, its acceptance criteria, its open assumptions.
+<!-- rule: STAGE-PLAN-2 -->
 2. Locate that bounded context — on the designed map first, then in the code. A context that is
    designed but not built yet is planned as new; say so. If the story's `context` is on neither map,
    stop: write the plan file with a `## needs-human` section stating that the story needs a new
@@ -28,6 +30,7 @@ Output: `.dca-factory/runs/<story>/plan.md`, and nothing else. You write no test
    designed map and the generated one disagree about the story's context or its relationships, say
    so in the plan — a difference is a finding, not something to settle in passing. A project
    without a map is not blocked by this — note the absence and go on.
+<!-- rule: STAGE-PLAN-3 -->
 3. **Take the decisions from the project description.** The product description's `## Surfaces`,
    `## How it works` and `## Look and feel` answer where state lives, which surfaces the product
    has and how a page looks — including the named sizes a page is designed for (`s`, `m`, `l`, `xl`,
@@ -39,6 +42,7 @@ Output: `.dca-factory/runs/<story>/plan.md`, and nothing else. You write no test
    a question for the human; one they leave open, or a story that contradicts them, is — through
    `## needs-human`, like any other. Without a description, say so in the plan and plan from the
    story alone.
+<!-- rule: STAGE-PLAN-4 -->
 4. **Check that the story's actor can already reach the behaviour.** The criteria name someone —
    a customer, an operator, an administrator — and a way in: a page, an endpoint, a message, a
    command line. If the context has no such way in today, the plan does **not** invent one. A new
@@ -48,16 +52,19 @@ Output: `.dca-factory/runs/<story>/plan.md`, and nothing else. You write no test
    specified, and a rule about who may call it that nobody reviewed.
    The exception is a story whose criteria name the surface themselves — then it is specified, and
    it belongs in the change list like any other element.
+<!-- rule: STAGE-PLAN-5 -->
 5. Name the elements that change, in the project's own vocabulary: aggregates, value objects,
    domain events, use cases with their ports, adapters, read models. Say for each whether it is
    new or changed, and where it belongs — layer and package/namespace as this project lays them
    out, not as any sample does. A name carries the suffix `dca.profile.yaml` declares for its
    kind (a use case, its input port, a repository, a controller): the architecture suite refuses
    any other, and a plan the build has to rename is a plan that was not read.
+<!-- rule: STAGE-PLAN-6 -->
 6. Respect the architecture the project has adopted: the domain free of framework types, ports
    declared inward and implemented in adapters, no raw cross-context imports, one aggregate
    changed per transaction. Ask the project's knowledge skill where one is
    installed (see below) rather than deciding a pattern question from memory.
+<!-- rule: STAGE-PLAN-7 -->
 7. List the acceptance criteria by **key** — the story's keys verbatim, the later stages and the
    gate join on them — and give each its level (step 8). The criterion's text stays in the story;
    a plan that retypes it says nothing the reader does not have. The pipeline writes these lines:
@@ -75,6 +82,7 @@ Output: `.dca-factory/runs/<story>/plan.md`, and nothing else. You write no test
    half to even part; a limit on both sides of it. Where the story's example is one both rules answer
    alike, the rule's line under `## Invariants` names the value that tells them apart, so its unit test
    uses it.
+<!-- rule: STAGE-PLAN-8 -->
 8. **Give every scenario its level, the lowest that observes its `Then` from outside.** Choose from
    what the project **already has**: read the stack profile and look at the existing tests.
    - **The happy path** — the one scenario the story marks `(happy path)` — gets `e2e`: a browser
@@ -110,6 +118,7 @@ Output: `.dca-factory/runs/<story>/plan.md`, and nothing else. You write no test
    A **journey** item (`kind: journey`) has no happy path and builds nothing: plan one journey test
    that walks the steps its epic's `## Journey` names through the delivered stories and asserts the
    epic's outcome event, in the source set `test.journey:` declares.
+<!-- rule: STAGE-PLAN-8A -->
 8a. **Name the invariants of every domain type you change.** For each aggregate, entity, value object and
    domain service in `## Changes`: the rules it must never break — what the criteria imply and the guards
    its type implies (a value that is required, trimmed, within a range, unique in its aggregate). One line
@@ -117,10 +126,12 @@ Output: `.dca-factory/runs/<story>/plan.md`, and nothing else. You write no test
    is one thing the type refuses or keeps; a type without rules of its own says `none — <why>`. The test stage writes a
    unit test for every rule named here, and the build writes no guard that is not named: a check nobody
    planned is code no test asked for. The test gate refuses a changed domain type without its line.
+<!-- rule: STAGE-PLAN-8B -->
 8b. **A story that publishes the epic's outcome event** (`publishes:` in its front matter) plans the event
    in `## Changes` under that exact name — no synonym, no translation — and the domain type or use case that
    raises it. The document gate refuses the story while the code declares no such type, or nothing the story
    changed refers to it.
+<!-- rule: STAGE-PLAN-9 -->
 9. **Find the existing tests the story contradicts** — every test in the project, whoever wrote it:
    the ones that assert the behaviour the criteria change. Read the test sources, not the backlog;
    a test need not belong to any story. List each under `## Changed tests` with what backs the
@@ -132,6 +143,7 @@ Output: `.dca-factory/runs/<story>/plan.md`, and nothing else. You write no test
    gate lets the later stages change only what is listed and backed. A test that only has to follow a
    changed shape — a type it builds gains a field, or a type or a method it names is renamed, its assertions and
    expected values stay — is not contradicted: it is neither listed nor asked about.
+<!-- rule: STAGE-PLAN-9A -->
 9a. **Find what the system already shows.** A scenario whose `Then` holds on today's code cannot get a red
    test, and the test gate refuses a green one. Look for it the same way — the test sources, and the
    scenarios of the delivered and adopted stories under the epics. Who carries it decides what you do:
@@ -147,6 +159,7 @@ Output: `.dca-factory/runs/<story>/plan.md`, and nothing else. You write no test
    - where the story reads as asking for more than what holds — its wording names behaviour the code lacks — ask
      too, with the option to change the story so it asks for what the page does not do yet.
    A scenario the story changes is step 9's, not this one.
+<!-- rule: STAGE-PLAN-9B -->
 9b. **Derive the spec delta.** Read the story's context's spec — `product/spec/<context>/scenarios.md` and every
    `<feature>/scenarios.md` below it, the context lowercase and hyphenated; a context without one holds nothing yet.
    The story's `feature:` says which file its criteria go to (none: the context's own). A feature the context does
@@ -165,6 +178,7 @@ Output: `.dca-factory/runs/<story>/plan.md`, and nothing else. You write no test
    `## Changed expectations` that alters a criterion the spec holds, while the story does not carry that key
    with its new text, would leave the spec's old text standing — one decision record naming the keys and
    the text each would need, and stop.
+<!-- rule: STAGE-PLAN-9C -->
 9c. **Search what lies outside the story's own files**, and list each hit under `## Files` (`changes:` with what
    follows), so the tidy stage's footprint covers it:
    - a rule whose statement changes → its old wording in doc comments, messages and the other documents;
@@ -173,12 +187,14 @@ Output: `.dca-factory/runs/<story>/plan.md`, and nothing else. You write no test
    - a check, a literal or a mapping the story adds → the same one elsewhere: a second copy is named, a third is
      lifted into one place.
    Nothing found is no line. A search the plan skipped is a finding the judge ranks against the plan.
+<!-- rule: STAGE-PLAN-10 -->
 10. Name business terms **and operations** in the criteria that are not in the glossary yet, as
    proposals with a one-line definition — an operation as `<domain word> (<code word>): <what it does
    to which term>`. Name use cases, commands and events from the operation's code word. The code word
    comes from the glossary, the description's `## Glossary` or the story's answered assumptions; where
    none of them gives it and the word could name more than one operation (e.g. creating a thing or
    adding it, deleting it or cancelling it), it is a `## needs-human`, not a choice. Do not silently invent domain language.
+<!-- rule: STAGE-PLAN-11 -->
 11. Back every **decision** with evidence — a level chosen, a pattern picked, an element placed, a test
    named as contradicted: the file, and the line or symbol you read it from, in the same row or line.
    A row that names the file it changes is its own evidence; do not restate what the file says. A
@@ -186,12 +202,14 @@ Output: `.dca-factory/runs/<story>/plan.md`, and nothing else. You write no test
    inside the catalog, as the knowledge skill cites it (`recipe/add-an-aggregate.md`,
    `marker/port-out/repository.md`) — never by a path into a skill folder, and never rewritten after
    the fact.
+<!-- rule: STAGE-PLAN-12 -->
 12. **Keep the plan a page.** Tables and one-line items, no paragraphs: the plan is read by every later
    stage and by the judge, so every sentence here is read four times. What the story already says is
    not repeated; what a later stage can read in the code is pointed at, not copied.
 
 ## Task mode
 
+<!-- rule: STAGE-PLAN-TASK -->
 A `kind: task` changes nothing an actor sees, and has no criterion. The plan says what changes in the code and why
 no behaviour does: `## Context`, `## Changes`, `## Files` (with `changes: new` and `changes: removed` where a file
 comes or goes) and `## Invariants` only where a domain type changes; no `## Acceptance criteria`, no levels, no
@@ -203,6 +221,7 @@ stored value — stop with a `## needs-human`: it is a story, not a task.
 
 ## Adopt mode
 
+<!-- rule: STAGE-PLAN-ADOPT -->
 A story with `status: adopted` describes behaviour the project already has; nothing is built. The plan
 restates its scenarios with their keys and, for each, names **where the behaviour lives** (file and line)
 and **which existing test covers it** (file, class, method) — or that none does. It plans no change to
@@ -275,10 +294,14 @@ record is cited when you plan again, in `factory-run/reference/stage-common.md`.
 
 ## Do not
 
+<!-- rule: STAGE-PLAN-NOT1 -->
 - Do not write code or tests, and do not run the build.
+<!-- rule: STAGE-PLAN-NOT2 -->
 - Do not widen the story. A change you consider necessary but that no criterion asks for goes
   into `## Open assumptions`, not into the plan's change list.
+<!-- rule: STAGE-PLAN-NOT3 -->
 - Do not add an incoming adapter — a page, an endpoint, a consumer, a tool — that no criterion
   names. That is step 4's `needs-human`, and it stays one whether or not the project has an
   obvious precedent for such an adapter.
+<!-- rule: STAGE-PLAN-NOT4 -->
 - Do not renumber or rename the criterion keys; they are committed identifiers.

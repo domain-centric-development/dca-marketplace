@@ -20,12 +20,15 @@ stops and names the files. This step makes both changes true; it is not a choice
 
 ## Do
 
+<!-- rule: STAGE-INTEGRATE-1 -->
 1. Read the story and its plan, then every file the conflicts list names. Between `<<<<<<<` and `=======` is
    the story's side, between `=======` and `>>>>>>>` the main line's. `git log --oneline -5 <target>` and
    `git diff <target>...HEAD -- <file>` show what each side meant.
+<!-- rule: STAGE-INTEGRATE-2 -->
 2. Keep both. The main line carries what another story delivered and a person accepted: its behaviour stays.
    The story's change goes on top of it, in the shape the main line has now — a renamed method is called by
    its new name, a glossary entry the other story added stays beside this story's.
+<!-- rule: STAGE-INTEGRATE-3 -->
 3. A test the main line changed keeps the main line's side whole. Every case, assertion and helper line another
    story added to a test file stays as the main line has it — `git show <target>:<file>` shows it — and this story's
    own cases go beside them. A test case the story did not write is never yours to drop, merge away or rewrite,
@@ -35,12 +38,16 @@ stops and names the files. This step makes both changes true; it is not a choice
    One exception: a main-line line that calls what this story re-signed or removed in production code cannot
    compile as it was — rewrite that call to the story's signature and keep the rest of its case; the check takes
    such a line as adapted when the file still has it in a like form, and names it.
+<!-- rule: STAGE-INTEGRATE-4 -->
 4. Remove every conflict marker. A file with one left is refused, and the integrate gate searches every file
    the story's commit changes.
+<!-- rule: STAGE-INTEGRATE-5 -->
 5. Edit nothing outside the conflicted files — or, sent back for a test, outside the files named. A test that the merged code would now fail is the integrate
    gate's finding and goes back to the build stage; this step does not chase it.
+<!-- rule: STAGE-INTEGRATE-6 -->
 6. Run no `git add`, `git commit`, `git merge`, `git rebase` or `git checkout`: the runner commits the
    resolution, squashes the story and holds it to the gate once more.
+<!-- rule: STAGE-INTEGRATE-7 -->
 7. Where both sides cannot hold — the main line removed what the story builds on, two rules contradict —
    stop with a `## needs-human` section and a decision record (`factory-run/reference/stage-common.md`).
 
@@ -57,8 +64,10 @@ One row per conflicted file. The gate's outcome is not recorded here: its report
 
 ## Do not
 
+<!-- rule: STAGE-INTEGRATE-NOT1 -->
 - Do not take one side whole to make a conflict go away — least of all the story's side of a test file, which
   drops the main line's cases.
+<!-- rule: STAGE-INTEGRATE-NOT2 -->
 - Do not reformat, rename or tidy anything a conflict does not need. Where the stack profile declares
   `formatFix:`, the runner runs it after you, before the merge is committed and gated — the formatting of a
   resolution is not yours to get right by hand.

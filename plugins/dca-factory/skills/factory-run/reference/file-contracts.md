@@ -29,6 +29,7 @@ document). Every stage still writes its own file; the gate reads a window as the
 
 ## What changed — `.dca-factory/evidence/<story>/changed-<stage>.txt`, `changed.txt`, `story.diff`
 
+<!-- rule: STAGE-FILES-1 -->
 The pipeline records what a story changes; no stage reconstructs it. Around every stage the
 runner — or `--stage-start`/`--stage-end` in a session — snapshots the working tree (every file git
 reports as differing from HEAD, untracked ones included, with its sha256; a tracked file that is gone
@@ -111,6 +112,7 @@ so instead of guessing.
 
 ## The journal — `.dca-factory/evidence/<story>/journal.tsv`
 
+<!-- rule: STAGE-FILES-2 -->
 One line per event, tab-separated: `<UTC time>\t<kind>\t<name>\t<field>=<value>…\tseq=<n>`. The sequence
 number orders the events, never the clock (after a union merge repeated a number, the time decides between the two): two events in one second are told apart by it, and which hand-over
 belongs to the story's current pass is read from it alone — no file time is compared. Every line is appended
@@ -169,6 +171,7 @@ self-checks, and each refusal as *form* when every check it names is one about h
 
 ## One owner per place — the story carries its state, the run folder is protocol
 
+<!-- rule: STAGE-FILES-3 -->
 `.dca-factory/runs/<story>/` holds what the stages hand over: the hand-overs, their skeletons, a gate's
 refusal. What proves a stage's work lies beside it, in `.dca-factory/evidence/<story>/`: the marks
 (`.story-digest`, `.tests-red`, `.tests-baseline`, `.rounds`), the journal, the snapshots, the changed-files
@@ -218,6 +221,7 @@ backlog check, the plan gate and the schedule, naming both files.
 
 ## The `gate:tests` table
 
+<!-- rule: STAGE-FILES-4 -->
 `.dca-factory/runs/<story>/tests.md` carries one machine-readable table. The gate reads nothing else from
 the file:
 
@@ -258,6 +262,7 @@ the file:
 
 ## A story's worktree — `.dca-factory/worktrees/<story>/`
 
+<!-- rule: STAGE-FILES-5 -->
 The runner gives every story a git worktree of its own, on a branch `story/<id>` made from the main
 checkout's branch, which `.dca-factory/evidence/<story>/target` records. Every stage runs there and
 changes code there alone. What is state stays in the main checkout, and the worktree sees it through links
@@ -308,6 +313,7 @@ has any more, loses both when the runner next starts; nothing of it reaches the 
 
 ## Review files — `.dca-factory/runs/<story>/reviews/<perspective>.md`
 
+<!-- rule: STAGE-FILES-6 -->
 One file per perspective the judge covers: `ddd`, `hexagonal`, `clean-code` and whatever the profile's
 `reviews:` adds, each written by the review skill `review.<perspective>:` names (`review-<perspective>`
 where the profile names none), in that skill's report format — `## Findings` with `### must-fix`,
@@ -321,6 +327,7 @@ A repeat round writes new files; the old ones are not kept. `--contract review` 
 
 ## Findings — `<story>/findings.md`, in the story's folder
 
+<!-- rule: STAGE-FILES-7 -->
 The judge's confirmed defects that did not block the story — its minors — written by the document gate when it
 delivers the story, from `judge.md`'s `## Confirmed defects` table (`| Perspective | File:line | Severity | In plain
 words | Defect | Fix |`): one row per finding, `| # | Perspective | File:line | Severity | In plain words | Defect |
@@ -333,6 +340,7 @@ brief. `factory-cli.py --findings` lists the open rows, and the status brief cou
 
 ## Project findings — `product/findings/<name>.md`, beside the epics
 
+<!-- rule: STAGE-FILES-8 -->
 A finding that belongs to no one story, in the same table and with the same `Status`, in a file of the project's own
 beside the epics (`findings/` next to the epics' folder). One kind today: `flaky.md` — a test the build, tidy or
 integrate gate ran again alone and saw green (`flaky=` on the journal's gate line, WP-113) in two stories becomes one
@@ -343,6 +351,7 @@ id wins where a story is named like such a file. The folder is linked into a sto
 
 ## Escalation
 
+<!-- rule: STAGE-FILES-9 -->
 A stage that cannot finish writes its file anyway, with a `## needs-human` section, and the
 orchestrator stops the run at that point. Two situations always escalate rather than being solved:
 
@@ -354,6 +363,7 @@ line. A `## needs-human` without one has asked nobody, and the next gate refuses
 
 ## Decision records — `<story>/decisions/<nn>.md`, in the story's folder
 
+<!-- rule: STAGE-FILES-10 -->
 The question a stage may not answer, kept as a file of its own so the answer has a place to land
 and a second session — or the same one tomorrow, or another tool — finds it without any
 transcript. It lives in the folder of the story it belongs to, `product/epics/<epic>/<story>/decisions/<nn>.md`
@@ -438,6 +448,7 @@ process guarantees, not security ones.
 
 ## Project decision records — `product/decisions/<name>.md`, beside the epics
 
+<!-- rule: STAGE-FILES-11 -->
 A question that belongs to no story yet — the description, a discovery, an epic not written — asked by a skill the
 factory runs for a request (`reference/requests.md`). The shape of a story's record without `story:`: `id:` is the
 file's name (`<stamp>-<topic>`), `stage: request`, and `request: <request id>` names the request that waits on it.
@@ -451,6 +462,7 @@ the story like any open record and is stamped applied by the request's next run.
 
 ## Requests — `.dca-factory/requests/<stamp>-<kind>.md`
 
+<!-- rule: STAGE-FILES-12 -->
 What a person asks the factory to do from a page, a terminal or a view: front matter (`kind`, what it is about,
 `option`, `from`, `by`, `asked`, `state`) and the person's words as its body; protocol, deleted once done, with a
 journal (`journal.tsv`) and each process's output (`out/<id>.out`) beside it. The kinds, the states, when the
@@ -458,6 +470,7 @@ factory works a request, what it commits and what a skill does when it runs head
 
 ## Tests that existed before the story — `.dca-factory/evidence/<story>/.tests-baseline`
 
+<!-- rule: STAGE-FILES-13 -->
 The plan gate runs before any stage of a story touches a test. In a git repository it records every
 test file — found by name: `test_*.py`, `*Test.java`, `*Tests.cs`, `*IT.java`, `*.spec.ts`,
 `*_spec.rb` and the like — as a git blob, once per story. The test, build and tidy gates compare
@@ -492,6 +505,7 @@ wrote and later rewrote, and a test file named against the conventions.
 
 ## The change policy — `required:` in the stack profile
 
+<!-- rule: STAGE-FILES-14 -->
 `story-gate.py --change` checks a change outside a story; `--staged` checks the Git index and refuses
 when the working tree differs from it. The profile's `required:` line lists the checks that must
 hold: `compile`, `architecture`, `format`, and each test command by its own profile key (`test`,
@@ -516,6 +530,7 @@ the key would pass what the project declared mandatory, which is why the key nee
 
 ## Scenario contract — for `--parity`
 
+<!-- rule: STAGE-FILES-15 -->
 Markdown, one scenario per `## <id>` heading, with two lines under it:
 
 ```markdown
