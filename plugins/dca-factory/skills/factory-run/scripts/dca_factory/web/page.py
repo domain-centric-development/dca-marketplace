@@ -163,6 +163,26 @@ pre.out { font: 12.5px/1.5 var(--mono); background: var(--code); border-radius: 
 pre.out:empty { display: none; }
 .step b { font: 600 14px var(--display); color: var(--accent); margin-right: 6px; }
 
+/* the rules: a column per stage, the gates as barriers across it, a rule a chip */
+.flow { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(128px, 1fr); gap: 10px; margin-top: 14px; overflow-x: auto; padding-bottom: 6px; }
+.col { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.col > h3 { margin: 0; font: 700 15px var(--display); } .col .win { font: 400 11.5px var(--mono); color: var(--muted); }
+.slot { border-radius: 8px; padding: 6px; background: var(--soft); }
+.slot.gate { background: var(--code); border-top: 3px solid var(--deep); }
+.slot .lbl { font: 500 10.5px var(--mono); letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip { font: 400 11px var(--mono); padding: 2px 6px; border-radius: 5px; border: 1px solid var(--line); background: var(--panel);
+  color: var(--ink); cursor: pointer; max-width: 100%; overflow-wrap: anywhere; text-align: left; }
+.slot details summary { cursor: pointer; list-style: none; } .slot details summary::-webkit-details-marker { display: none; }
+.chip:hover, .chip[aria-pressed="true"] { border-color: var(--teal); color: var(--accent); }
+.chip.e-gate { border-left: 3px solid var(--deep); } .chip.e-runner { border-left: 3px solid var(--run); } .chip.e-instructed { border-left: 3px solid var(--wait); }
+.chip.f-pass { background: color-mix(in srgb, var(--done) 18%, var(--panel)); } .chip.f-fail { background: color-mix(in srgb, var(--stop) 22%, var(--panel)); }
+.chip.f-skip, .chip.f-note { background: color-mix(in srgb, var(--wait) 16%, var(--panel)); } .chip.f-wait { background: color-mix(in srgb, var(--wait) 30%, var(--panel)); }
+.chip .x { font-weight: 700; color: var(--stop); margin-left: 3px; }
+.back { font: 400 11.5px var(--mono); color: var(--muted); }
+.pick { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+.pick select { font: 400 13px var(--mono); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px; }
+.outcome { margin: 4px 0; } .outcome b { font: 600 13px var(--mono); margin-right: 6px; }
 .banner { display: none; background: var(--stop); color: #fff; font: 500 14px var(--display); padding: 8px 0; }
 #toasts { position: fixed; right: 16px; bottom: 16px; z-index: 40; display: flex; flex-direction: column; gap: 8px; max-width: min(440px, calc(100% - 32px)); }
 .toast { background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-left: 4px solid var(--teal); border-radius: 8px;
@@ -214,14 +234,21 @@ const TABS = [
   ["backlog", "2 backlog", "Cycle", "Backlog", "Epics and their stories, newest first. A story runs once released."],
   ["run", "3 run", "Cycle", "The factory at work", "Your requests first, then the stories — one stage after the other, a gate between them."],
   ["decide", "4 decide", "Cycle", "Waiting for you", "A question a stage may not decide alone, or a result to look at."],
-  ["delivered", "5 delivered", "Cycle", "Delivered", "What the factory delivered, the newest first."]];
+  ["delivered", "5 delivered", "Cycle", "Delivered", "What the factory delivered, the newest first."],
+  ["rules", "rules", "Always", "The rules", "What the gate checks, what the runner decides and what each stage is told — per stage of a story, the gates between them. Pick a rule to read it; pick a story to see which fired."]];
 const MARKS = {look: "!", question: "?", stopped: "✗", running: "▶", done: "✓", none: "·", next: "→"};
 const S = {tab: "backlog", status: null, decisions: null, discover: null, requests: null, follow: null, followSource: null,
-           followLines: [], drawer: null, opener: null, drafts: {}, folded: {}};
+           followLines: [], drawer: null, opener: null, drafts: {}, folded: {},
+           rules: null, rulesFor: null, ruleKind: "story", rule: null, ruleStory: ""};
 const stored = key => { try { return localStorage.getItem(key) || ""; } catch (e) { return ""; } };
 const store = (key, value) => { try { localStorage.setItem(key, value); } catch (e) {} };
 S.tab = stored("factory.tab") || S.tab;
 if (TABS.some(([id]) => id === location.hash.slice(1))) S.tab = location.hash.slice(1);
+// `#rules:<story>[:<rule>]` opens the rules with that story's gate runs marked, and the rule read
+if (location.hash.startsWith("#rules:")) {
+  const [story, rule] = decodeURIComponent(location.hash.slice(7)).split(":");
+  [S.tab, S.ruleStory, S.rule] = ["rules", story || "", rule || null];
+}
 
 // --- helpers -------------------------------------------------------------------------------------------------------
 const $ = id => document.getElementById(id);
@@ -326,6 +353,12 @@ async function press(button) {
 document.addEventListener("input", event => {
   if (event.target.dataset && event.target.dataset.draft !== undefined) S.drafts[event.target.dataset.draft] = event.target.value;
 });
+document.addEventListener("change", event => {
+  if (!event.target.dataset || event.target.dataset.overlay === undefined) return;
+  S.ruleStory = event.target.value;
+  event.target.blur();                                   // a focused select holds the redraw back
+  loadRules();
+});
 
 // what the page itself calls: the factory up and down, a request taken back or queued again, an output followed
 const CALLS = {
@@ -346,8 +379,16 @@ const CALLS = {
 };
 
 document.addEventListener("click", async event => {
-  const target = event.target.closest("[data-press],[data-call],[data-story],[data-tab],[data-pick]");
+  const target = event.target.closest("[data-press],[data-call],[data-story],[data-tab],[data-pick],[data-rule],[data-kind]");
   if (!target) return;
+  if (target.dataset.rule) {
+    S.rule = S.rule === target.dataset.rule ? null : target.dataset.rule;
+    render();
+    const read = $("rule-detail");
+    if (read) read.scrollIntoView({block: "nearest", behavior: "smooth"});
+    return;
+  }
+  if (target.dataset.kind) { S.ruleKind = target.dataset.kind; return render(); }
   if (target.dataset.pick) return theme(target.dataset.pick);
   if (target.dataset.tab) return show(target.dataset.tab);
   if (target.dataset.story) return openStory(target.dataset.story);
@@ -421,10 +462,77 @@ function render() {
   if (editing) return;                                   // a person typing is not redrawn under their hands
   forget("m");
   const [, , eyebrow, title, lede] = TABS.find(([id]) => id === S.tab) || TABS[2];
-  const view = {describe, discover, backlog, run, decide, delivered}[S.tab] || backlog;
+  const view = {describe, discover, backlog, run, decide, delivered, rules: rulesTab}[S.tab] || backlog;
   $("main").innerHTML = `<div class="eyebrow">${esc(eyebrow)}</div><h1>${esc(title)}</h1><p class="lede">${esc(lede)}</p>`
     + (S.status ? endedLine(S.status) + view(S.status) : `<section class="card"><p class="empty">Reading the factory…</p></section>`);
   if (S.tab === "run") paintFollow();
+}
+
+// --- the rules: the factory's rulebook, drawn as it says it ------------------------------------------------------------
+async function loadRules() {
+  const want = S.ruleStory || "";
+  if (S.rules && S.rulesFor === want) return;
+  S.rulesFor = want;
+  if (await load("rules", "/api/view/rules" + (want ? `?id=${encodeURIComponent(want)}` : ""))) render();
+}
+
+function chip(id, rules, fired, refused, stage) {
+  const r = rules[id] || {enforcement: ""};
+  // in a stage's column, how it came out there; elsewhere, how it came out anywhere
+  const got = (fired[id] || []).filter(f => !stage || f.stage === stage), state = got.some(f => f.state === "fail") ? "fail" : got.length ? got[got.length - 1].state : "";
+  const n = refused[id];
+  return `<button type="button" class="chip e-${esc(r.enforcement)}${state ? " f-" + esc(state) : ""}" data-rule="${esc(id)}"
+    aria-pressed="${S.rule === id}" title="${esc(r.when || r.text || "")}">${esc(id)}${n ? `<span class="x">×${n}</span>` : ""}</button>`;
+}
+
+function slot(label, ids, cls, rules, fired, refused, folded, stage) {
+  if (!ids.length) return "";
+  const chips = `<div class="chips">${ids.map(i => chip(i, rules, fired, refused, stage)).join("")}</div>`;
+  // what a stage is told is long: folded to its count unless a rule of it is open
+  const open = !folded || ids.includes(S.rule);
+  return `<div class="slot${cls ? " " + cls : ""}">` + (folded ? `<details${open ? " open" : ""}><summary class="lbl">${esc(label)} (${ids.length}) ▾</summary>${chips}</details>`
+    : `<div class="lbl">${esc(label)}</div>${chips}`) + `</div>`;
+}
+
+function ruleDetail(r, story) {
+  if (!r) return "";
+  const where = (r.stages || []).join(", ") || "outside the stages", kinds = (r.kinds || []).join(", ") || "every kind";
+  const got = story && story.fired[r.id] ? story.fired[r.id].map(f => `${f.stage}: ${f.state}`).join(" · ") : "";
+  const body = r.text ? `<dl class="kv"><dt>where</dt><dd>${inline(r.when)}</dd></dl>${prose(r.text)}`
+    : `<dl class="kv"><dt>when</dt><dd>${inline(r.when)}</dd><dt>why</dt><dd>${inline(r.why)}</dd></dl>`
+      + (r.outcomes || []).map(o => `<div class="outcome"><b>${esc(o.state)}</b>${inline(o.said)}${(o.goes || []).length ? ` <span class="back">→ ${esc(o.goes.join(", "))}</span>` : ""}</div>`).join("");
+  return `<div id="rule-detail">` + card(esc(r.id), `${esc(r.enforcement)} · ${esc(r.part)} · ${esc(where)} · ${esc(kinds)}`,
+    body + (got ? `<p class="rec">this story: ${esc(got)}${story.refused[r.id] ? ` · refused ${story.refused[r.id]}×` : ""}</p>` : "")
+    + `<p class="hint">${esc(r.source)}${(r.reports || []).length ? " · reports as " + esc(r.reports.join(", ")) : ""}</p>`) + `</div>`;
+}
+
+function rulesTab(st) {
+  if (!S.rules) { loadRules(); return card("", "", `<p class="empty">Reading the rules…</p>`); }
+  const v = S.rules, rules = Object.fromEntries((v.rules || []).map(r => [r.id, r]));
+  const story = v.story || null, fired = story ? story.fired : {}, refused = story ? story.refused : {};
+  const kinds = Object.keys(v.flow || {}), kind = kinds.includes(S.ruleKind) ? S.ruleKind : kinds[0];
+  const flow = (v.flow || {})[kind] || {steps: [], edges: [], every_gate: []};
+  const back = {}, at = Object.fromEntries(flow.steps.map((s, i) => [s.stage, i]));
+  for (const e of flow.edges) if (e.target in at && at[e.target] < at[e.source]) (back[e.target] = back[e.target] || new Set()).add(`${e.source} (${e.rule} ${e.state})`);
+  const again = {};
+  for (const e of flow.edges) if (e.target === e.source) (again[e.source] = again[e.source] || []).push(e.rule);
+  const cols = flow.steps.map(s => `<div class="col"><h3>${esc(s.stage)}</h3><div class="win">${esc(s.window || "")}${s.gate === "none" ? " · no gate" : ""}</div>
+    ${back[s.stage] ? `<div class="back">↩ from ${esc([...back[s.stage]].join(", "))}</div>` : ""}
+    ${slot("gate before", s.gate_before, "gate", rules, fired, refused, false, s.stage)}${slot("told", s.told, "", rules, fired, refused, true)}
+    ${slot("gate after", s.gate_after, "gate", rules, fired, refused, false, s.stage)}${slot("a pass does", s.passed, "", rules, fired, refused, false, s.stage)}
+    ${slot("the runner decides", s.decided, "", rules, fired, refused)}
+    ${again[s.stage] ? `<div class="back">⟲ again: ${esc([...new Set(again[s.stage])].join(", "))}</div>` : ""}</div>`).join("");
+  const stories = (st.rows || []).map(r => r.story);
+  const picks = `<div class="pick">${kinds.map(k => `<button class="btn${k === kind ? " primary" : ""}" data-kind="${esc(k)}">${esc(k)}</button>`).join("")}
+    <select data-overlay aria-label="a story's gate runs"><option value="">no story</option>${stories.map(id => `<option${id === S.ruleStory ? " selected" : ""}>${esc(id)}</option>`).join("")}</select></div>`;
+  const outside = {};
+  for (const id of v.outside || []) { const r = rules[id]; if (r) (outside[r.enforcement] = outside[r.enforcement] || []).push(id); }
+  return card(`${esc(kind)}`, `${(v.rules || []).length} rules`, picks
+      + slot("every gate", flow.every_gate, "gate", rules, fired, refused) + `<div class="flow">${cols}</div>`)
+    + ruleDetail(rules[S.rule], story)
+    + card("Outside the stages", "the whole run, the commit hook, every stage alike",
+      Object.entries(outside).map(([e, ids]) => slot(e, ids, e === "gate" ? "gate" : "", rules, fired, refused)).join(""))
+    + ((v.problems || []).length ? card("Problems", "the rulebook itself", `<ul>${v.problems.map(p => `<li>${esc(p)}</li>`).join("")}</ul>`) : "");
 }
 
 // on every tab: the factory that ended on its own, and why

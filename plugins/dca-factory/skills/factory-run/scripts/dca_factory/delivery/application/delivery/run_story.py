@@ -59,16 +59,19 @@ class RunStoryUseCase:
              ok="story: plan, test, build, tidy, judge, document; journey: plan, test, judge, document; adopt: plan, "
                 "test, judge, then the adopt gate; task: plan, build, tidy, judge, document — the others skipped"),
         rule("RUN-ROUTE-2", "a run starts while a record of the story is open or a draft",
-             "a story waits for its person's answer, it does not guess", wait="no stage starts (exit 3)"),
+             "a story waits for its person's answer, it does not guess", goes={"wait": "stop"},
+             wait="no stage starts (exit 3)"),
         rule("RUN-ROUTE-3", "the plan stage is next", "a story that is not ready is refused before anything is spent",
+             goes={"fail": "stop"},
              ok="the plan gate passes before the stage", fail="the gate refuses — fix it before the stage runs (exit 1)",
              stages=("plan",)),
         rule("RUN-ROUTE-4", "a run resumes at a stage whose file is there",
              "a stage done is not paid for twice", ok="the gate passes on what is there — the stage is not run again"),
         rule("RUN-ROUTE-5", "a run resumes at build or tidy and a test changed since its red proof",
              "a test changed on the main line is recorded red again before anything is built on it",
-             fail="the run starts at the test stage instead — no round"),
+             goes={"fail": "test"}, fail="the run starts at the test stage instead — no round"),
         rule("RUN-ROUTE-6", "a stage's file ends in `## needs-human`", "a stage that cannot decide stops and asks",
+             goes={"ask": "stop", "fail": "stop"},
              ask="the story waits for the record it names (exit 3)", fail="it names no record (exit 1)"),
         rule("RUN-ROUTE-7", "the plan gate adopted the whole story", "what holds already runs the adopt path",
              ok="a new pass from plan, as an adoption", stages=("plan",)),
@@ -194,7 +197,8 @@ class RunStoryUseCase:
 
     @decides(rule(
         "RUN-BACK-1", "the build stage writes `back: test`", "a test that cannot pass for its own code goes back to "
-        "its stage, without a person", fail="a round, and the run goes back to the test stage", stages=("build",)))
+        "its stage, without a person", goes={"fail": "test"},
+        fail="a round, and the run goes back to the test stage", stages=("build",)))
     def _after_stage(self, story: str, stage: StageName) -> typing.Optional[Ended]:
         """After a stage's own process: the build stage found a defect in a test's own code — the round goes to the
         test stage, no person is asked —, or the stage ends with a needs-human section and has stopped."""
@@ -213,7 +217,8 @@ class RunStoryUseCase:
 
     @decides(rule(
         "RUN-WINDOW-1", "the builder stages (plan to tidy) run shared", "one process carries what one mind would, and "
-        "the runner checks what it claims", ok="one process for the window; every stage's file there, each post-gate "
+        "the runner checks what it claims", goes={"fail": "again"},
+        ok="one process for the window; every stage's file there, each post-gate "
         "re-run by the runner (\"checked, not believed\")", fail="a file missing, the red ledger empty, or a gate "
         "refusing — a round and back to that stage", stages=("plan", "test", "build", "tidy")))
     def _builder(self, command: RunStoryCommand, kind: StoryKind, start: StageName) -> typing.Optional[Ended]:
@@ -291,6 +296,7 @@ class RunStoryUseCase:
 
     @decides(rule(
         "RUN-WINDOW-2", "judge and document run shared", "the judge never shares a process with the builder",
+        goes={"fail": "again", "wait": "stop"},
         ok="one process for judge and document; the document gate re-run", fail="a file missing, or the gate refusing",
         wait="the document gate waits for the acceptance (exit 3)", stages=("judge", "document")))
     def _verifier(self, command: RunStoryCommand, kind: StoryKind) -> Ended:
@@ -328,6 +334,7 @@ class RunStoryUseCase:
 
     @decides(rule(
         "RUN-VERDICT-1", "the judge wrote its verdict", "the judge decides whether the story goes on, not how it is fixed",
+        goes={"ok": "document", "fail": ("build", "test", "stop")},
         ok="`verdict: pass` — on to document", fail="`changes-requested`: a round, back to `back:` (test) or build; "
         "`story-conflict`, a missing or another verdict: the story stops (exit 1)", stages=("judge",)))
     def _judged(self, story: str, kind: StoryKind) -> typing.Optional[Ended]:
@@ -360,7 +367,7 @@ class RunStoryUseCase:
 
     @decides(rule(
         "RUN-ADOPT-1", "an adopted story's judge passed", "an adoption ends at its own gate",
-        ok="the adopt gate passes — delivered, or integrated from its worktree",
+        goes={"fail": "test"}, ok="the adopt gate passes — delivered, or integrated from its worktree",
         fail="it refuses — a round, back to the test stage", stages=("adopt",)))
     def _adopt(self, command: RunStoryCommand) -> Ended:
         """Every scenario on a green test, the judge's pass, a break for every test the adoption wrote: passed, it
@@ -392,10 +399,12 @@ class RunStoryUseCase:
 
     @decides(
         rule("RUN-ROUNDS-1", "a gate refuses after its stage", "a story converges in a few rounds or a person looks",
+             goes={"fail": ("again", "stop")},
              fail="a round, and the run goes back to the refused stage (or an earlier one the story's files need); at "
                   "three rounds the story stops (exit 1)"),
         rule("RUN-ROUNDS-2", "a gate refuses for the environment (a tool missing from its PATH)",
-             "no stage can fix the machine", fail="the run stops without a round (exit 1)"),
+             "no stage can fix the machine", goes={"fail": "stop"},
+             fail="the run stops without a round (exit 1)"),
     )
     def _refused(self, story: str, stage: StageName, what: str) -> Ended:
         """A gate after its stage refused: no round where the machine is the cause, else a round from the refused
@@ -422,7 +431,8 @@ class RunStoryUseCase:
 
     @decides(rule(
         "RUN-ACCEPT-1", "the document gate waits for an acceptance", "a story waiting for its person keeps what it "
-        "holds", wait="the run ends with exit 3; the story keeps its worktree or the checkout", stages=("document",)))
+        "holds", goes={"wait": "stop"},
+        wait="the run ends with exit 3; the story keeps its worktree or the checkout", stages=("document",)))
     def _accepting(self, story: str) -> int:
         self._lines.err(f"factory: story {story} waits for a human's acceptance — answer it with /factory-decisions;")
         self._lines.err("factory:   the story holds the checkout until then.")

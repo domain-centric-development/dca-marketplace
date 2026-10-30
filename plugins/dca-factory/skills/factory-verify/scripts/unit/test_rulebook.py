@@ -19,7 +19,7 @@ from dca_factory.delivery.application.delivery.pipeline_rules import rule
 from dca_factory.infrastructure.rulebook import show_rulebook
 from dca_factory.rulebook.adapter.outgoing.skills.skill_files import SkillFiles
 from dca_factory.rulebook.application.show_rulebook import ShowRulebookQuery, ShowRulebookUseCase
-from dca_factory.rulebook.adapter.outgoing.delivery.delivery_rules import DeliveryRules
+from dca_factory.rulebook.adapter.outgoing.delivery.delivery_rules import DeliveryFindings, DeliveryRules
 
 PACKAGE = os.path.join(support.SCRIPTS, "dca_factory")
 SKILLS = os.path.normpath(os.path.join(support.SCRIPTS, "..", ".."))
@@ -56,6 +56,16 @@ class RegisteredTest(unittest.TestCase):
         self.assertEqual(len(ids), len(set(ids)), sorted({i for i in ids if ids.count(i) > 1}))
         self.assertTrue(all(re.fullmatch(r"(GATE|RUN)(-[A-Z0-9]+)+", i) for i in ids), ids)
 
+    def test_every_rule_written_in_the_package_is_published(self):
+        written = set()
+        for top, _dirs, files in os.walk(os.path.join(PACKAGE, "delivery")):
+            for name in files:
+                if name.endswith(".py"):
+                    with open(os.path.join(top, name), encoding="utf-8") as handle:
+                        written |= set(re.findall(r'rule\(\s*"((?:GATE|RUN)(?:-[A-Z0-9]+)+)"', handle.read()))
+        published = {r["id"] for r in pipeline_rules()}
+        self.assertEqual([], sorted(written - published), "a module that registers rules is not imported by api/rules.py")
+
     def test_every_name_the_gate_reports_under_has_a_rule(self):
         covered = {name for r in pipeline_rules() for name in r["reports"]}
         missing = sorted((reported_names() | BUILT) - covered)
@@ -81,7 +91,7 @@ class RegisteredTest(unittest.TestCase):
 class SkillsTest(unittest.TestCase):
 
     def book(self, root):
-        return ShowRulebookUseCase(DeliveryRules(), SkillFiles(root)).execute(ShowRulebookQuery())
+        return ShowRulebookUseCase(DeliveryRules(), SkillFiles(root), DeliveryFindings(".")).execute(ShowRulebookQuery())
 
     def test_a_marked_paragraph_is_a_rule_told_at_its_stage(self):
         with tempfile.TemporaryDirectory() as root:
@@ -119,6 +129,35 @@ class SkillsTest(unittest.TestCase):
         view = show_rulebook(tempfile.gettempdir()).execute(ShowRulebookQuery())
         self.assertEqual(os.path.normpath(SKILLS), os.path.normpath(view["skills"]))
         self.assertEqual([], view["problems"])
+
+
+class FlowTest(unittest.TestCase):
+
+    def test_an_outcome_says_where_the_story_goes_and_the_flow_draws_it(self):
+        flow = show_rulebook(tempfile.gettempdir()).execute(ShowRulebookQuery(kind="story"))["flow"]["story"]
+        edges = {(e["source"], e["target"], e["rule"]) for e in flow["edges"]}
+        self.assertIn(("build", "test", "RUN-BACK-1"), edges)
+        self.assertIn(("judge", "build", "RUN-VERDICT-1"), edges)
+        self.assertIn(("document", "plan", "GATE-ACCEPTANCE"), edges)
+        self.assertIn(("integrate", "integrate", "GATE-MOVED"), edges)        # `again`: the stage itself
+        with self.assertRaises(ValueError):
+            rule("RUN-X-1", "w", "y", ok="o", goes={"fail": "test"})          # goes on an outcome it does not say
+
+    def test_a_story_marks_the_rules_its_last_gate_runs_reported_and_counts_its_refusals(self):
+        with tempfile.TemporaryDirectory() as root:
+            evidence = os.path.join(root, ".dca-factory", "evidence", "s-1")
+            plant(evidence, {
+                "gate-build.101500.txt": "gate:pass 2 check(s) — story, tests-kept\ngate:fail suite — red\n"
+                                         "gate:note stage build ran without x — a green run here does not cover them\n"
+                                         "gate:fail story s-1 stage build\n",
+                "journal.tsv": "2026-10-30T10:15:00Z\tgate\tbuild\texit=1\tfail=suite,tests-kept\tseq=1\n"
+                               "2026-10-30T10:16:00Z\tgate\tbuild\texit=1\tfail=suite\tseq=2\n"})
+            story = ShowRulebookUseCase(DeliveryRules(), SkillFiles(None), DeliveryFindings(root)).execute(
+                ShowRulebookQuery(story="s-1"))["story"]
+            self.assertEqual([{"stage": "build", "state": "fail"}], story["fired"]["GATE-SUITE"])
+            self.assertEqual([{"stage": "build", "state": "pass"}], story["fired"]["GATE-TESTS-KEPT"])
+            self.assertNotIn("GATE-PLAN-FILES", story["fired"])
+            self.assertEqual({"GATE-SUITE": 2, "GATE-TESTS-KEPT": 1}, story["refused"])
 
 
 class CliTest(unittest.TestCase):

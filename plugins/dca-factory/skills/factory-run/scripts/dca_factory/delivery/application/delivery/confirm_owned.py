@@ -43,6 +43,7 @@ class ConfirmOwnedUseCase:
 
     @decides(rule(
         "RUN-OWNED-1", "a stage window ends", "the story and the answers are the person's",
+        goes={"fail": "stop"},
         ok="nothing they own changed", fail="it changed — the run stops (exit 7) and the story waits until "
         "`--owned-confirm`"))
     def execute(self, command: ConfirmOwnedCommand) -> ConfirmOwnedResult:

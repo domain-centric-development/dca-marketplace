@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, HookStream, ProcessSpawnChunk, ProcessSpawnResult, Register, RenderElement, RenderInput } from 'claude-code'
 
-import type { Action, Cockpit, DecisionRecord, Detail, EpicView, FactoryStatus, Glance, JournalEvent, Row, SpecDelta, StageOutput, StoryView, Tab, Topic, Worker } from '../types'
+import type { Action, Cockpit, DecisionRecord, Detail, EpicView, FactoryStatus, Glance, JournalEvent, Row, Rule, RulesView, SpecDelta, StageOutput, StoryView, Tab, Topic, Worker } from '../types'
 import { C, COL, MARK_COLOR, MARK_GLYPH, applyPalette, components, epicCells, fmt, outcomeCell, type Cell } from './components'
 import { appendLines, clock, createLatch, day, exitWord, factoryNote, gateBy, glanceId, glanceText, isHistory, isRefusal, isShownProcess, keepRefresh, moment, parseJournal, rowSignature, seenOf, signalFields, sinceSeen, stagesOf, touchesFactory, waitingCount, waitPress, claimNeedsPerson, type RefreshWish, type Seen } from './parse'
 
@@ -24,6 +24,9 @@ const fileText = atom({ plugin: 'dca-factory-cockpit', key: 'fileText' } as cons
 const outputLines = atom({ plugin: 'dca-factory-cockpit', key: 'outputLines' } as const, [] as string[])
 // what the spec will say once the open acceptance's story is delivered — read when the record opens
 const specDelta = atom({ plugin: 'dca-factory-cockpit', key: 'specDelta' } as const, null as SpecDelta | null)
+// the factory's rulebook, read when the tab opens — the rules change with the pipeline, not with a run
+const rulesView = atom({ plugin: 'dca-factory-cockpit', key: 'rules' } as const, null as RulesView | null)
+const ruleKind = atom({ plugin: 'dca-factory-cockpit', key: 'ruleKind' } as const, 'story')
 const told = atom({ plugin: 'dca-factory-cockpit', key: 'told' } as const, '')
 const glances = atom({ plugin: 'dca-factory-cockpit', key: 'glances' } as const, {} as Record<string, Glance>)
 
@@ -428,6 +431,11 @@ async function showDetail($: EngineInterface, next: Detail): Promise<void> {
 async function showTab($: EngineInterface, id: Tab): Promise<void> {
   await update($, detail, () => null)
   await update($, tab, () => id)
+  if (id === 'rules' && !(await read($, rulesView))) {
+    const root = await $.session.root()
+    const view = await factoryJson<RulesView>($, root, ['rules', '--format', 'json']).catch(() => null)
+    await update($, rulesView, () => (view && Array.isArray(view.rules) ? view : null))
+  }
 }
 
 async function openStory($: EngineInterface, id: string, pane?: 'story' | 'pipeline'): Promise<void> {
@@ -922,6 +930,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
             { key: 'tab-describe', label: 'Describe', hotkey: '0', isOpen: current === 'describe' && !open, onPress: () => void showTab($, 'describe') },
             { key: 'setup', label: '✦ setup', isOpen: false, onPress: () => send($, '/factory-setup') },
             { key: 'update', label: '✦ update', isOpen: false, onPress: () => send($, '/factory-update') },
+            { key: 'tab-rules', label: 'Rules', hotkey: '6', isOpen: current === 'rules' && !open, onPress: () => void showTab($, 'rules') },
           ],
           TABS.map(one => ({
             key: `tab-${one.id}`,
@@ -1365,6 +1374,86 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
     return page(
       [back(open.back), epic ? epicBody(epic, view) : <Text color={C.muted}>No such epic.</Text>],
       'b back · o open epic.md · ✦ suggest stories: Claude drafts them, you release them · Enter on a story opens it',
+    )
+  }
+
+  // ---- the rules: each kind's flow, a stage's rules, one rule — as `factory.sh rules` says them
+  const book = await read($, rulesView)
+  const byId = new Map((book?.rules ?? []).map(one => [one.id, one] as const))
+  const ruleRow = (id: string, back: Detail | null): Cell[] => {
+    const one = byId.get(id)
+    return [
+      ui.open(`rule-${id}`, id, () => void update($, detail, () => ({ kind: 'rule', id, back }) as Detail)),
+      { text: one?.enforcement ?? '', color: one?.enforcement === 'gate' ? C.text : one?.enforcement === 'runner' ? C.accent : C.wait },
+      { text: one?.part ?? '', color: C.muted },
+      { text: one?.text || one?.when || '', color: C.muted },
+    ]
+  }
+  const ruleColumns = [{ name: 'rule', width: 22 }, { name: 'held by', width: 10 }, { name: 'part', width: 11 }, { name: 'when', width: 40, isWide: true }]
+  if (open?.kind === 'rule') {
+    const one: Rule | undefined = byId.get(open.id)
+    return page(
+      [
+        back(open.back),
+        one
+          ? ui.card(
+              { title: one.id, meta: `${one.enforcement} · ${one.part} · ${one.stages.join(', ') || 'outside the stages'} · ${one.kinds.join(', ') || 'every kind'}` },
+              [],
+              [
+                { label: one.text ? 'where' : 'when', text: one.when },
+                !!one.text && { label: 'told', text: one.text },
+                !!one.why && { label: 'why', text: one.why },
+                ...one.outcomes.map(o => ({ label: o.state, text: o.said + (o.goes.length ? ` → ${o.goes.join(', ')}` : ''), color: o.state === 'fail' ? C.fail : o.state === 'pass' ? C.done : C.wait })),
+                one.reports.length > 0 && { label: 'reports', text: one.reports.join(', '), color: C.muted },
+                { label: 'source', text: one.source, color: C.muted },
+              ],
+            )
+          : <Text color={C.muted}>No such rule.</Text>,
+      ],
+      'b back',
+    )
+  }
+  if (open?.kind === 'rules-stage') {
+    const kind = await read($, ruleKind)
+    const step = book?.flow[kind]?.steps.find(one => one.stage === open.stage)
+    const slots: [string, string[]][] = open.stage === 'outside' ? [['outside the stages', book?.outside ?? []]]
+      : step ? [['gate before', step.gate_before], ['told', step.told], ['gate after', step.gate_after], ['a pass does', step.passed], ['the runner decides', step.decided]] : []
+    return page(
+      [
+        back(open.back),
+        ...slots.filter(([, ids]) => ids.length > 0).flatMap(([label, ids]) => [ui.section(label, `${ids.length}`), ui.table(ruleColumns, ids.map(id => ruleRow(id, open)))]),
+      ],
+      'b back · Enter on a rule opens it',
+    )
+  }
+  if (current === 'rules') {
+    if (!book) return page([ui.section('Rules'), <Text color={C.muted}>No rulebook — this project's pipeline is older than dca-factory 0.103.0, or factory.sh rules failed.</Text>], '')
+    const kind = await read($, ruleKind)
+    const flow = book.flow[kind] ?? { every_gate: [], steps: [], edges: [] }
+    const at = new Map(flow.steps.map((one, index) => [one.stage, index] as const))
+    const backFrom = (stage: string) =>
+      [...new Set(flow.edges.filter(e => at.has(e.target) && e.target === stage && (at.get(e.target) ?? 0) < (at.get(e.source) ?? 0)).map(e => e.source))].join(', ')
+    const count = (ids: string[]): Cell => ({ text: ids.length > 0 ? String(ids.length) : '—', color: ids.length > 0 ? C.text : C.muted })
+    return page(
+      [
+        ui.section('Rules', `${book.rules.length} rules · what the gate checks, the runner decides and each stage is told`),
+        ui.actions(Object.keys(book.flow).map(one => ui.button(`kind-${one}`, one, () => void update($, ruleKind, () => one), { isPrimary: one === kind }))),
+        <Text color={C.muted}>every gate: {flow.every_gate.join(', ')}</Text>,
+        ui.table(
+          [{ name: 'stage', width: 10 }, { name: 'gate before', width: 6, isNumber: true }, { name: 'told', width: 5, isNumber: true }, { name: 'gate after', width: 6, isNumber: true },
+           { name: 'a pass', width: 6, isNumber: true }, { name: 'runner', width: 6, isNumber: true }, { name: 'back from', width: 18, isWide: true }],
+          [
+            ...flow.steps.map((one): Cell[] => [
+              ui.open(`stage-${one.stage}`, one.stage, () => void update($, detail, () => ({ kind: 'rules-stage', stage: one.stage, back: null }) as Detail)),
+              count(one.gate_before), count(one.told), count(one.gate_after), count(one.passed), count(one.decided),
+              { text: backFrom(one.stage) || '—', color: C.wait },
+            ]),
+            [ui.open('stage-outside', 'outside', () => void update($, detail, () => ({ kind: 'rules-stage', stage: 'outside', back: null }) as Detail)), count([]), count([]), count([]), count([]), count(book.outside), { text: '' }],
+          ],
+        ),
+        ...(book.problems.length > 0 ? [ui.banner(C.fail, book.problems)] : []),
+      ],
+      'Enter on a stage opens its rules · a kind button switches the flow',
     )
   }
 

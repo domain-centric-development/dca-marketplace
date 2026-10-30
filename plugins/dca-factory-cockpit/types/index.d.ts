@@ -266,7 +266,7 @@ export type SpecDelta = {
 
 export type StageOutput = { story: string; stage: string; running: boolean; lines: string[] }
 
-export type Tab = 'describe' | 'discover' | 'backlog' | 'run' | 'decide' | 'delivered'
+export type Tab = 'describe' | 'discover' | 'backlog' | 'run' | 'decide' | 'delivered' | 'rules'
 
 // `back`: where the view returns to — a topic that opened an epic, a story that opened a hand-over.
 export type Detail =
@@ -275,6 +275,32 @@ export type Detail =
   | { kind: 'topic'; topic: string; back?: Detail | null }
   | { kind: 'file'; path: string; title: string; back: Detail | null }
   | { kind: 'output'; story: string; process: string; back: Detail | null }
+  | { kind: 'rules-stage'; stage: string; back: Detail | null }
+  | { kind: 'rule'; id: string; back: Detail | null }
+
+// The factory's rulebook as `factory.sh rules --format json` prints it (dca-factory 0.103.0): every rule, each kind's
+// flow — per stage the gate before it, what it is told, the gate after it, what a pass does, what the runner decides —
+// and where an outcome sends the story.
+export type Rule = {
+  id: string
+  enforcement: 'gate' | 'runner' | 'instructed'
+  part: string
+  stages: string[]
+  kinds: string[]
+  when: string
+  outcomes: { state: string; said: string; goes: string[] }[]
+  why: string
+  text: string
+  reports: string[]
+  source: string
+}
+export type FlowStep = { stage: string; gate: string; window: string; gate_before: string[]; told: string[]; gate_after: string[]; passed: string[]; decided: string[] }
+export type RulesView = {
+  rules: Rule[]
+  flow: Record<string, { every_gate: string[]; steps: FlowStep[]; edges: { source: string; target: string; rule: string; state: string }[] }>
+  outside: string[]
+  problems: string[]
+}
 
 export type Worker = {
   state: 'idle' | 'running' | 'ended'
@@ -300,6 +326,8 @@ declare module 'claude-code' {
       fileText: string
       outputLines: string[]
       specDelta: SpecDelta | null
+      rules: RulesView | null
+      ruleKind: string
       worker: Worker
       // the note last attached to a prompt; the next is attached only when it differs
       told: string

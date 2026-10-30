@@ -69,6 +69,20 @@ holds — the run as a whole, the commit hook, every stage alike — stands outs
 
 **Operations:** show (`show_rulebook`) — the rules, at a stage or for a kind, each kind's flow and the problems
 
+### Edge (edge)
+
+**Definition:** Where an outcome sends a story, from the stage its rule sits at: an earlier stage (back), a later one,
+the same one `again`, or `stop` — the run ends and a person looks. Written beside the rule as `goes=`.
+
+**Type:** Value
+
+### Fired (fired)
+
+**Definition:** How a rule came out at a stage of one story — read from the gate report the runner filed for its last
+gate run there; with the refusals the journal counts per name, the story's overlay on the flow.
+
+**Type:** Value
+
 ### Marker (`<!-- rule: <id> -->`)
 
 **Definition:** The line before a skill's paragraph that makes the paragraph an instructed rule.

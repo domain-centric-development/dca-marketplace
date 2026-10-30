@@ -19,6 +19,9 @@ import re
 import typing
 
 RULE_ID = re.compile(r"^(GATE|RUN|STAGE)(-[A-Z0-9]+)+$")
+#: Where an outcome sends the story beside a stage's name: the stage that was refused once more, or nowhere — the run
+#: ends and a person looks.
+AGAIN, STOP = "again", "stop"
 #: How a rule can come out, in the order a reader takes them: `ask` writes a decision record and stops.
 OUTCOME_STATES = ("pass", "fail", "skip", "note", "wait", "ask")
 
@@ -37,15 +40,19 @@ class PipelineRule(typing.NamedTuple):
     stages: typing.Tuple[str, ...] = ()
     kinds: typing.Tuple[str, ...] = ()
     source: str = ""
+    #: per outcome state, where the story goes then: stages, `again`, `stop`
+    goes: typing.Tuple[typing.Tuple[str, typing.Tuple[str, ...]], ...] = ()
 
 
 def rule(id: str, when: str, why: str, *, ok: typing.Optional[str] = None, fail: typing.Optional[str] = None,
          skip: typing.Optional[str] = None, note: typing.Optional[str] = None, wait: typing.Optional[str] = None,
          ask: typing.Optional[str] = None, reports: typing.Optional[typing.Tuple[str, ...]] = None,
-         stages: typing.Tuple[str, ...] = (), kinds: typing.Tuple[str, ...] = ()) -> PipelineRule:
+         stages: typing.Tuple[str, ...] = (), kinds: typing.Tuple[str, ...] = (),
+         goes: typing.Optional[typing.Mapping[str, typing.Union[str, typing.Tuple[str, ...]]]] = None) -> PipelineRule:
     """A rule as it is written beside its code: `ok` is the pass outcome. A gate rule reports under the name its id
     gives (`GATE-TESTS-KEPT` → `tests-kept`) unless `reports` names others; `stages` and `kinds` narrow a gate rule
-    below its check's and place a runner rule in the flow."""
+    below its check's and place a runner rule in the flow; `goes` says, per outcome (`ok` for pass), where the story
+    goes then — a stage, `again` or `stop`."""
     if not RULE_ID.fullmatch(id) or id.startswith("STAGE-"):
         raise ValueError(f"rule {id}: an id is GATE-<CHECK> or RUN-<AREA>-<n> — STAGE- ids live in the skills")
     texts = dict(zip(OUTCOME_STATES, (ok, fail, skip, note, wait, ask)))
@@ -54,7 +61,12 @@ def rule(id: str, when: str, why: str, *, ok: typing.Optional[str] = None, fail:
         raise ValueError(f"rule {id}: says no outcome")
     if reports is None:
         reports = (id[len("GATE-"):].lower(),) if id.startswith("GATE-") else ()
-    return PipelineRule(id, when, why, outcomes, reports, stages, kinds)
+    went = tuple(("pass" if state == "ok" else state, (to,) if isinstance(to, str) else tuple(to))
+                 for state, to in (goes or {}).items())
+    unsaid = [state for state, _to in went if state not in texts or not texts[state]]
+    if unsaid:
+        raise ValueError(f"rule {id}: goes somewhere on {', '.join(unsaid)} it says nothing about")
+    return PipelineRule(id, when, why, outcomes, reports, stages, kinds, "", went)
 
 
 def placed(rules: typing.Tuple[PipelineRule, ...], function: typing.Callable[..., typing.Any]) -> typing.Tuple[PipelineRule, ...]:

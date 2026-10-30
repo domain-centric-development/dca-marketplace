@@ -111,7 +111,7 @@ def _outcome_named(run: Run) -> None:
 
 @check("rounds", rule=rule(
     "GATE-ROUNDS", "every gate, once a story went round", "a story that does not converge goes to a person, not on",
-    ok="round n of at most 3", fail="three rounds without convergence — stop and escalate"))
+    goes={"fail": "stop"}, ok="round n of at most 3", fail="three rounds without convergence — stop and escalate"))
 def _rounds(run: Run) -> None:
     run.result.take(StoryChecks.rounds(run.story, run.evidence))
 
@@ -126,7 +126,7 @@ def _pipeline(run: Run) -> None:
 @check("owned", rule=rule(
     "GATE-OWNED", "every gate, once a stage window was recorded",
     "the story and every answer are the person's — a stage asks, it never answers",
-    ok="nothing a person owns changed during the stage",
+    goes={"fail": "stop"}, ok="nothing a person owns changed during the stage",
     fail="the story or an answer changed under a stage — a person looks and confirms (`--owned-confirm`)"))
 def _owned(run: Run) -> None:
     run.result.take(StoryChecks.owned(run.story, run.evidence))
@@ -270,7 +270,7 @@ def _tests_real(run: Run) -> None:
 @check("red-proof", stages=listing, kinds=TESTED_KINDS, rule=rule(
     "GATE-RED-PROOF", "the gates that expect green (build, tidy; test for a journey or adoption), with a red ledger",
     "a green test proves something only as the version that was seen red",
-    ok="no test changed since it was recorded red, or changed on an answer",
+    goes={"fail": "test"}, ok="no test changed since it was recorded red, or changed on an answer",
     fail="a test changed since its red proof — the test stage records it red again",
     skip="the ledger has no digests (an older one)"))
 def _red_proof(run: Run) -> None:
@@ -290,6 +290,7 @@ def _suites(run: Run) -> None:
 
 @check("decisions", rule=rule(
     "GATE-DECISIONS", "every gate", "a question is a record a person answers, and an answer lands where it is cited",
+    goes={"ask": "stop"},
     ok="every answered record is applied by its stage and stamped", fail="a `## needs-human` without a record, "
        "a record open or a draft, or an answer its stage did not apply or cite",
     note="no record, or an answer a later stage applies", ask="a stage writes a decision record and stops"))
@@ -346,6 +347,7 @@ def _plan(run: Run) -> None:
 
 @check("document", stages=("document",), rule=(
     rule("GATE-STORY-PASS", "the document gate", "a delivery rests on one pass through every stage of the current story",
+         goes={"fail": "plan"},
          ok="every hand-over is of this pass, the judge said pass, the story unchanged since the plan",
          fail="a hand-over missing or from an earlier pass, no `verdict: pass`, or the story changed since the plan",
          skip="no story digest from the plan gate"),
@@ -380,7 +382,7 @@ def _document(run: Run) -> None:
     rule("GATE-CONFLICTS", "the integrate gate", "a merge is finished before it is checked",
          ok="no unmerged path, no conflict marker", fail="an unmerged path, or a marker in a file the story changed"),
     rule("GATE-MOVED", "the integrate gate", "the main line moved: the step merges again",
-         fail="the target moved since the merge — merged again, no round"),
+         goes={"fail": "integrate"}, fail="the target moved since the merge — merged again, no round"),
     rule("GATE-MAIN-TESTS", "the integrate gate after a merge with conflicts",
          "the main line's tests are its own; a resolution keeps them",
          ok="no test the main line holds was changed by the resolution",

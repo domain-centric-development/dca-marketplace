@@ -8,7 +8,9 @@ import enum
 import typing
 
 from ....building_blocks import Value
-from .rule import Citation, Enforcement, KindName, Part, Rule, RuleState, StageName, Words
+from .rule import (
+    AGAIN, Citation, Count, Enforcement, Fired, KindName, OutcomeState, Part, Refused, Rule, RuleId, RuleState, StageName,
+    STOP, Words)
 
 
 class GateTime(enum.Enum):
@@ -52,6 +54,29 @@ class FlowStep(Value):
     gate_after: typing.Tuple[Rule, ...]
     passed: typing.Tuple[Rule, ...]
     decided: typing.Tuple[Rule, ...]
+
+
+class Edge(Value):
+    """Where an outcome of a rule at one stage sends the story: another stage (back, or on), the same one again, or
+    `stop`."""
+
+    source: StageName
+    target: StageName
+    rule: RuleId
+    state: OutcomeState
+
+
+class RuleFired(Value):
+    """A rule at a stage of one story, as the gate's last run there came out."""
+
+    rule: RuleId
+    stage: StageName
+    state: OutcomeState
+
+
+class RuleRefused(Value):
+    rule: RuleId
+    times: Count
 
 
 class Problem(Value):
@@ -109,6 +134,39 @@ class Rulebook(Value):
                 tuple(r for r in here if r.part is Part.DECISION)))
         return tuple(steps)
 
+    def edges(self, kind: KindName) -> typing.Tuple[Edge, ...]:
+        """Every place an outcome sends the story to, from the stage its rule sits at: `again` back to that stage."""
+        steps = self.steps(kind)
+        found = []
+        for stage in steps:
+            for rule in self.chosen(stage, kind):
+                for outcome in rule.outcomes:
+                    for target in outcome.goes:
+                        to = stage if target.value == AGAIN else target
+                        if to in steps or to.value == STOP:
+                            found.append(Edge(stage, to, rule.id, outcome.state))
+        return tuple(found)
+
+    def fired(self, found: typing.Tuple[Fired, ...]) -> typing.Tuple[RuleFired, ...]:
+        """Each rule a finding was reported under, at the stage it was reported — a name several rules report under
+        counts for each of them; a name no rule has is left out (`problems` names a rule's absence, not a story)."""
+        by_name: typing.Dict[Words, typing.List[Rule]] = {}
+        for rule in self.active():
+            for name in rule.reports:
+                by_name.setdefault(name, []).append(rule)
+        return tuple(RuleFired(rule.id, item.stage, item.state)
+                     for item in found for rule in by_name.get(item.check, ())
+                     if not rule.stages or rule.holds_at(item.stage))
+
+    def refused(self, found: typing.Tuple[Refused, ...]) -> typing.Tuple[RuleRefused, ...]:
+        """How often the gate refused for each rule's names, summed over them."""
+        times: typing.Dict[RuleId, int] = {}
+        for item in found:
+            for rule in self.active():
+                if item.check in rule.reports:
+                    times[rule.id] = times.get(rule.id, 0) + item.times.value
+        return tuple(RuleRefused(rule_id, Count(n)) for rule_id, n in times.items())
+
     def outside(self) -> typing.Tuple[Rule, ...]:
         """The active rules no stage of any flow holds: the runner's whole run, the commit hook, every stage alike."""
         staged = {row.name for row in self.rows}
@@ -130,6 +188,10 @@ class Rulebook(Value):
             unknown = [s.value for s in rule.stages if s not in places and s.value not in OUTSIDE_PLACES]
             if unknown:
                 found.append(Problem(Words(f"{rule.id.value} names no stage {', '.join(unknown)} — "
+                                           f"{rule.source.value}")))
+            nowhere = [t.value for o in rule.outcomes for t in o.goes if t not in places and t.value not in (AGAIN, STOP)]
+            if nowhere:
+                found.append(Problem(Words(f"{rule.id.value} goes to no stage {', '.join(nowhere)} — "
                                            f"{rule.source.value}")))
         known = {r.id.value: r for r in self.rules}
         for citation in citations:

@@ -35,7 +35,8 @@ class IntegrateStoryUseCase:
 
     @decides(
         rule("RUN-INTEGRATE-1", "a story's stages passed in its worktree", "a story reaches the main line only through "
-             "the integrate gate", ok="the target is merged into the story's branch and the integrate gate runs",
+             "the integrate gate", goes={"fail": ("integrate", "build")},
+             ok="the target is merged into the story's branch and the integrate gate runs",
              fail="a conflict — the integrate stage resolves it; a refusal on the main line costs a round",
              stages=("integrate",)),
     )

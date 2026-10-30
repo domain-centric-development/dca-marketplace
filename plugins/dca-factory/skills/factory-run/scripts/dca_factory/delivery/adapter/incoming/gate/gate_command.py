@@ -215,7 +215,8 @@ def hand_over_to_cli(argv: typing.Sequence[str]) -> int:
          "every check skipped — a green run that covers nothing", fail="the project's layout is one the gate does "
          "not read — the hint names the migration", note="with `--project`: the same, as a hint"),
     rule("GATE-ENVIRONMENT", "every gate that runs a command", "a tool missing from the gate's PATH is no stage's "
-         "fault — no round is spent on it", fail="the shell running the gate lacks a tool — put it on the PATH"),
+         "fault — no round is spent on it", goes={"fail": "stop"},
+         fail="the shell running the gate lacks a tool — put it on the PATH"),
     rule("GATE-READABLE", "every gate", "a file the gate cannot read refuses, it never passes",
          fail="the story, the profile or a record could not be read — the reader's sentence",
          reports=("gate", "project")),

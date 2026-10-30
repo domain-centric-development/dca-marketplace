@@ -23,7 +23,8 @@ def rule_lines(rule: Model) -> typing.List[str]:
         lines += [f"**Where:** {rule['when']}", "", rule["text"], ""]
     else:
         lines += [f"**When:** {rule['when']}", ""]
-        lines += [f"- **{o['state']}** — {o['said']}" for o in rule["outcomes"]]
+        lines += [f"- **{o['state']}** — {o['said']}" + (f" → {', '.join(o['goes'])}" if o.get("goes") else "")
+                  for o in rule["outcomes"]]
         lines += ["", f"**Why:** {rule['why']}", ""]
         if rule["reports"]:
             lines += [f"**Reports as:** {', '.join(f'`{name}`' for name in rule['reports'])}", ""]
@@ -50,6 +51,16 @@ def markdown(view: Model) -> str:
             cells = [", ".join(f"`{rule_id}`" for rule_id in step[key]) or "—" for key, _l in SLOTS]
             lines.append(f"| {step['stage']} | " + " | ".join(cells) + " |")
         lines.append("")
+        moves: typing.Dict[typing.Tuple[str, str], typing.List[str]] = {}
+        for edge in flow["edges"]:
+            if edge["target"] != "stop":
+                key = (edge["source"], edge["target"])
+                moves.setdefault(key, []).append(f"`{edge['rule']}` {edge['state']}")
+        if moves:
+            lines += ["Where an outcome sends the story (every other one goes on, or stops the run):", ""]
+            lines += [f"- {source} → {target}" + (" (again)" if source == target else "") + ": " + ", ".join(said)
+                      for (source, target), said in moves.items()]
+            lines.append("")
     if view["outside"]:
         lines += ["Outside the stages — the whole run, every stage alike, the commit hook: "
                   + ", ".join(f"`{rule_id}`" for rule_id in view["outside"]), ""]
@@ -60,6 +71,14 @@ def markdown(view: Model) -> str:
         lines += [f"## {title} ({len(chosen)})", ""]
         for rule in chosen:
             lines += rule_lines(rule)
+    story = view.get("story")
+    if story:
+        lines += [f"## Story {story['id']}", "", "What its last gate run per stage reported, by rule; refusals over all its runs.", ""]
+        for rule_id, fired in story["fired"].items():
+            said = ", ".join(f"{f['stage']} {f['state']}" for f in fired)
+            refused = story["refused"].get(rule_id)
+            lines.append(f"- `{rule_id}` — {said}" + (f" · refused {refused}×" if refused else ""))
+        lines.append("")
     if view["retired"]:
         lines += ["## Retired", ""] + [f"- `{rule['id']}` — {rule['why']}" for rule in view["retired"]] + [""]
     if view["problems"]:

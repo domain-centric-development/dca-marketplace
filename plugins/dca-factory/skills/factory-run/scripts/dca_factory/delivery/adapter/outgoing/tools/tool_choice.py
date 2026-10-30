@@ -51,9 +51,10 @@ class ToolChoice:
 
     @decides(
         rule("RUN-LIMIT-1", "a stage runs longer than `FACTORY_STAGE_TIMEOUT` or `stageTimeout:`",
-             "a stage that hangs costs no night", fail="its process group is stopped (124) — the stage failed"),
+             "a stage that hangs costs no night", goes={"fail": "stop"},
+             fail="its process group is stopped (124) — the stage failed"),
         rule("RUN-LIMIT-2", "a tool reports its usage limit", "a limit is waited out, never counted against the story",
-             ok="the run waits for the reset and runs the same stage again — no round"),
+             goes={"ok": "again"}, ok="the run waits for the reset and runs the same stage again — no round"),
     )
     def stage_timeout(self, gate_installed: bool) -> int:
         given = os.environ.get("FACTORY_STAGE_TIMEOUT")

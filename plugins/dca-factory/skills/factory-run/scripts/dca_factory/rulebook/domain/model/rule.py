@@ -90,9 +90,16 @@ class Source(Value):
     value: str
 
 
+#: Where an outcome may send the story beside a stage: the refused stage once more, or nowhere — a person looks.
+AGAIN, STOP = "again", "stop"
+
+
 class Outcome(Value):
+    """How a rule comes out, what it says then, and where the story goes — stages, `again`, `stop`; none: on."""
+
     state: OutcomeState
     said: Words
+    goes: typing.Tuple[StageName, ...] = ()
 
 
 class Rule(Value):
@@ -127,3 +134,22 @@ class Citation(Value):
 
     id: Words
     source: Source
+
+
+class Count(Value):
+    value: int
+
+
+class Fired(Value):
+    """What the gate reported under one name at one stage of a story's last run there."""
+
+    stage: StageName
+    check: Words
+    state: OutcomeState
+
+
+class Refused(Value):
+    """How often the gate refused a story for one name."""
+
+    check: Words
+    times: Count

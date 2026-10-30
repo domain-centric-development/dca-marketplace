@@ -3569,7 +3569,7 @@ def tree_digest(root):
 DOC_COMMAND = re.compile(r"(factory\.sh|story-gate\.py|factory-cli\.py)\b([^`#]*)")
 # The runner's subcommands that hand their flags on — to the cli, the gate or the fixture suite — beside its own.
 PASSED_ON = {"backlog": "cli", "decisions": "cli", "follow": "cli", "help": "cli", "discover": "cli",
-             "up": "cli", "down": "cli", "serve": "cli", "request": "cli", "requests": "cli",
+             "up": "cli", "down": "cli", "serve": "cli", "request": "cli", "requests": "cli", "rules": "cli",
              "check": "gate", "verify": "verify"}
 
 
@@ -4462,7 +4462,11 @@ def verify_setup(runner, verbose=False):
     # every flag the README shows on a command line is one its program accepts
     argparse_flags = lambda text: {flag for call in re.findall(r"add_argument\(([^)]*)", text)
                                    for flag in re.findall(r'"(--[\w-]+)"', call)}
-    accepted = {"gate": argparse_flags(modules[GATE_MODULE]), "cli": argparse_flags(modules[CLI_MODULE]),
+    # the cli is delivery's command line and the rulebook's (`--rules`), one entry point across them
+    rules_module = "rulebook/adapter/incoming/cli/rules_command"
+    rules_cli = package_text(runner, (rules_module,))[rules_module]
+    accepted = {"gate": argparse_flags(modules[GATE_MODULE]),
+                "cli": argparse_flags(modules[CLI_MODULE]) | argparse_flags(rules_cli),
                 "verify": argparse_flags(open(__file__, encoding="utf-8").read()),
                 "sh": {flag for labels in re.findall(r"^\s*((?:--[\w-]+\|?)+)\)", runner_text, re.M)
                        for flag in labels.split("|")}}

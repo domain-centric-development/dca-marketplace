@@ -54,7 +54,7 @@ def _test_passed(run: Run) -> None:
     rule("GATE-ACCEPTANCE", "the document gate passed for a story that is not a task, and the profile's "
                             "`acceptance:` takes it (`all`, or `pages` with a browser test)",
          "a person looks at what a story shows before it counts as delivered",
-         ok="the acceptance record says accepted — the delivery goes on",
+         goes={"fail": "plan", "wait": "stop"}, ok="the acceptance record says accepted — the delivery goes on",
          fail="the acceptance asks for a correction — written into the story, which runs again from plan",
          wait="no acceptance yet: a record `accept-<n>.md` is written beside the story and the story waits (exit 3)"),
     rule("GATE-DELIVER", "the document or adopt gate passed and nothing failed",

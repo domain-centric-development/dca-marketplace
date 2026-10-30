@@ -649,7 +649,7 @@ class Run:
     # --- the shared processes ----------------------------------------------------------------------------------
     @decides(rule(
         "RUN-LIMIT-3", "`--max-stages` or `--story-budget` is reached", "a person sets how much a run may spend",
-        fail="nothing more is dispatched (exit 4); the work stays"))
+        goes={"fail": "stop"}, fail="nothing more is dispatched (exit 4); the work stays"))
     def budget_note(self, story: str, what: str) -> int:
         err(f"factory: story {story} has reached its --story-budget {self.story_budget} — {what} are not dispatched.")
         return 4

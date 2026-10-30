@@ -167,7 +167,9 @@ ends as done with nothing committed, and the person reads why.
 ## The page — `factory.sh serve`
 
 One HTML file with its script inline, shipped in the package, served by Python's `http.server`: the cockpit's tabs
-(0 Describe, 1–5 Discover, Backlog, Run, Decide, Delivered), drawn from the factory's JSON views, a running stage's
+(0 Describe, 1–5 Discover, Backlog, Run, Decide, Delivered, and the rules — each kind's flow, a stage a column, its
+gates as barriers, a rule a chip that opens what it says; `#rules:<story>[:<rule>]` marks what a story's last gate
+runs reported), drawn from the factory's JSON views, a running stage's
 or request's output as server-sent events. Every press writes a request (or calls `up` / `down`, takes a request
 back, queues a failed one again — as its `operations` say). It wears the project's look — the mark, its colours, the
 website's three faces (Space Grotesk, Newsreader, JetBrains Mono, shipped in the package under the SIL Open Font

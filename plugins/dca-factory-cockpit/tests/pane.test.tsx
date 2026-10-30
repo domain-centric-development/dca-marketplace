@@ -527,3 +527,63 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await pane.find({ text: 'superseded — nobody shelves books any more' })).toBeDefined()
   })
 }
+
+// WP-166: the rules tab draws `factory.sh rules --format json` — a kind's flow, a stage's rules, one rule
+const RULE = (id: string, enforcement: string, part: string, stages: string[], more: Record<string, unknown> = {}) => ({
+  id, enforcement, part, stages, kinds: [], when: `when ${id}`, outcomes: [], why: `why ${id}`, text: '', reports: [], source: `dca_factory/x.py:1`, ...more,
+})
+const RULES = {
+  rules: [
+    RULE('GATE-STORY', 'gate', 'check', ['plan', 'build']),
+    RULE('GATE-PLAN-FILES', 'gate', 'check', ['build']),
+    RULE('RUN-BACK-1', 'runner', 'decision', ['build'], { outcomes: [{ state: 'fail', said: 'a round, and back to the test stage', goes: ['test'] }] }),
+    RULE('STAGE-BUILD-1', 'instructed', 'instruction', ['build'], { when: 'stage-build — Do', why: '', text: 'Implement the smallest change.' }),
+    RULE('RUN-SCHEDULE-1', 'runner', 'decision', []),
+  ],
+  flow: {
+    story: {
+      every_gate: ['GATE-STORY'],
+      steps: [
+        { stage: 'plan', gate: 'before', window: 'builder', gate_before: [], told: [], gate_after: [], passed: [], decided: [] },
+        { stage: 'test', gate: 'after', window: 'builder', gate_before: [], told: [], gate_after: [], passed: [], decided: [] },
+        { stage: 'build', gate: 'after', window: 'builder', gate_before: [], told: ['STAGE-BUILD-1'], gate_after: ['GATE-PLAN-FILES'], passed: [], decided: ['RUN-BACK-1'] },
+      ],
+      edges: [{ source: 'build', target: 'test', rule: 'RUN-BACK-1', state: 'fail' }],
+    },
+    task: { every_gate: [], steps: [{ stage: 'plan', gate: 'before', window: 'builder', gate_before: [], told: [], gate_after: [], passed: [], decided: [] }], edges: [] },
+  },
+  outside: ['RUN-SCHEDULE-1'],
+  problems: [],
+}
+
+test('the rules tab draws the flow, a stage opens its rules, a rule what it says and where it sends the story', async ($, on) => {
+  on('session.root', async () => ({ value: ROOT }))
+  on('fs.exists', async () => ({ value: true }))
+  on('fs.list', async () => ({ value: [] }))
+  on('fs.read', async () => ({ deny: 'missing' }))
+  on('process.run', async (_: unknown, e: { argv: readonly string[] }) => {
+    const out = e.argv.includes('rules') ? RULES : e.argv.includes('decisions') ? DECISIONS : e.argv.includes('--list') ? { topics: [] } : STATUS
+    return { value: { exitCode: 0, stdout: JSON.stringify(out), stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+  })
+  on('clock.now', async () => ({ value: Date.parse('2026-09-23T17:30:00Z') }))
+  on('clock.every', async () => ({ value: { cancel: () => {} } }) as never)
+  on('ui.open', async () => ({ value: { isPlaced: true } }) as never)
+  on('ui.status', async () => ({ value: undefined }) as never)
+  on('command.list', async () => ({ value: [] }) as never)
+
+  await $.command.run({ command: 'factory-cockpit', args: '' } as never)
+  const pane = await $.ui.mount({ plugin: 'dca-factory-cockpit', surface: 'terminal', component: 'Pane', requestId: 'factory-cockpit', props: { title: 'Factory', isFocused: true } as never })
+  await pane.press({ key: 'tab-rules' })
+  expect(await pane.find({ text: /5 rules/ })).toBeDefined()
+  expect(await pane.find({ text: /every gate: GATE-STORY/ })).toBeDefined()
+  await pane.press({ key: 'stage-build' })
+  expect(await pane.find({ text: /RUN-BACK-1/ })).toBeDefined()
+  expect(await pane.find({ text: /Implement the smallest change/ })).toBeDefined()
+  await pane.press({ key: 'rule-RUN-BACK-1' })
+  expect(await pane.find({ text: /back to the test stage → test/ })).toBeDefined()
+  expect(await pane.find({ text: /dca_factory\/x.py:1/ })).toBeDefined()
+  await pane.press({ key: 'back' })
+  await pane.press({ key: 'back' })
+  await pane.press({ key: 'kind-task' })
+  expect(await pane.find({ text: /every gate: GATE-STORY/ })).toBeUndefined()
+})
