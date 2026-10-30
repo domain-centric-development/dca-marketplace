@@ -202,7 +202,24 @@ def run(stages, start=None):
     return code, lines.said
 
 
+class AdoptedAtPlan(Stages):
+    """The plan gate turned the story into an adoption while the plan stage ran (WP-165)."""
+
+    def stage(self, story, stage):
+        if stage == "plan" and self._kind is StoryKind.STORY:
+            self._kind = StoryKind.ADOPT
+        return super().stage(story, stage)
+
+
 class Run(unittest.TestCase):
+
+    def test_a_story_the_plan_adopted_goes_on_as_an_adoption_from_its_plan(self):
+        stages = AdoptedAtPlan()
+        code, said = run(stages)
+        self.assertEqual(code, 0)
+        self.assertEqual(stages.ran[:3], ["gate plan", "plan", "gate plan"])
+        self.assertNotIn("build", stages.ran)
+        self.assertTrue(any("goes on as an adoption" in line for line in said))
 
     def test_a_story_runs_through_with_a_gate_after_each_gated_stage(self):
         stages = Stages()

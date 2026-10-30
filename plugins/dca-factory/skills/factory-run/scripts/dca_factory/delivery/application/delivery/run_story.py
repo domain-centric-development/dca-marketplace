@@ -146,6 +146,10 @@ class RunStoryUseCase:
                 if gate != 0:
                     return self._refused(story, step.stage, f"gate '{stage}' refused")
             ran.append(stage)
+            if step.stage == PLAN and not dry:
+                adopted = self._adopted(command, kind)
+                if adopted is not None:
+                    return adopted
             if Around.VERDICT in step.around and not dry:
                 judged = self._judged(story, kind)
                 if judged is not None:
@@ -157,6 +161,16 @@ class RunStoryUseCase:
         if self._stages.in_worktree() and not dry and self._stages.resumes(story) == INTEGRATE:
             return self._integrate(command)
         return 0
+
+    def _adopted(self, command: RunStoryCommand, kind: StoryKind) -> typing.Optional[Ended]:
+        """The plan gate adopted the whole story (WP-165): its kind is read once per pass, so the pass ends here and
+        the story goes on as an adoption, from its plan. A split leaves the story's kind as it was: it builds the rest."""
+        now = self._stages.kind(command.story)
+        if now is kind:
+            return None
+        self._lines.out(f"factory: the plan found every scenario of {command.story} holding today — it goes on as an "
+                        f"adoption.")
+        return self._route(command, PLAN)
 
     def _after_stage(self, story: str, stage: StageName) -> typing.Optional[Ended]:
         """After a stage's own process: the build stage found a defect in a test's own code — the round goes to the
@@ -187,6 +201,10 @@ class RunStoryUseCase:
             return code
         if command.dry:
             return None
+        if PLAN.value in stages:
+            adopted = self._adopted(command, kind)
+            if adopted is not None:
+                return adopted
         # A `back: test` the session already acted on is no round: tidy.md newer than build.md says it repaired the
         # test, built again and tidied — the re-checked gates below decide.
         repaired = TIDY.value in stages and self._stages.repaired(story)

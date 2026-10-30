@@ -17,6 +17,7 @@ from .delivery_writes import (
     acceptance_applies, ask_acceptance, deliver, integrate_into_home, publish_story, record_red_tree,
     record_tests_baseline)
 from .run_marks import STORY_DIGEST, write_mark
+from .plan_adoption_files import adopt_split, adopt_whole
 from .signals import journal_signal, plan_left_open
 from .story_layout import story_digest
 
@@ -34,6 +35,18 @@ class StageDeliveryFiles:
         record_tests_baseline(self._cwd, self._runs, story)
         plan = os.path.join(self._runs, story, "plan.md")
         journal_signal(self._runs, story, "plan", open=len(plan_left_open(read_text(plan))) if os.path.isfile(plan) else 0)
+
+    def adopt(self, result: typing.Any, story: str, story_path: str, held: typing.Sequence[typing.Tuple[str, str]],
+              whole: bool) -> None:
+        if whole:
+            adopt_whole(self._runs, story_path, held)
+            result.ok("plan-adopts", f"{story} is `status: adopted` now — the runner goes on with the adoption")
+            return
+        new_id = adopt_split(self._runs, story_path, story, held)
+        # the story as planned is the story without what moved: the digest the later gates compare takes it
+        write_mark(self._runs, story, STORY_DIGEST, story_digest(story_path))
+        result.ok("plan-adopts", f"{', '.join(k for k, _t in held)} moved into the adopted story {new_id}; {story} "
+                                 f"builds the rest")
 
     def red_tree(self, result: typing.Any, story: str) -> None:
         record_red_tree(result, self._cwd, self._runs, story)

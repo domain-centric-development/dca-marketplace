@@ -27,6 +27,12 @@ class StageDelivery(OutputPort, typing.Protocol):
         """The story's digest as planned, the baseline of the tests that existed before it, the plan's signal."""
         ...
 
+    def adopt(self, result: typing.Any, story: str, story_path: str, held: typing.Sequence[typing.Tuple[str, str]],
+              whole: bool) -> None:
+        """The scenarios the plan found holding, `(key, test)`: the whole story adopted, or those split off into an
+        adopted story beside it."""
+        ...
+
     def red_tree(self, result: typing.Any, story: str) -> None:
         """The tree as the test stage left it, where every mapped test was red in this run."""
         ...

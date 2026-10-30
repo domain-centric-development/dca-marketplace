@@ -24,7 +24,7 @@ from ....domain.model.epic import EpicId
 from ....domain.model.schedule import ContextName
 from ....domain.model.stage import StageName, StoryKind
 from ....domain.model.stage_story import (
-    AssertionAt, ChangedTest, Rename, RenamedTest, SymbolName, DocumentFacts, Integration, MainTestLines, MainTests, MappedTest, OutcomeEvent, OutcomeFacts, PassGap,
+    AssertionAt, AdoptRow, ChangedTest, PlanAdoption, Rename, RenamedTest, SymbolName, DocumentFacts, Integration, MainTestLines, MainTests, MappedTest, OutcomeEvent, OutcomeFacts, PassGap,
     PipelineFacts, PlannedDigest, ProposalFacts, ReviewFacts, StoryPass, SpecDelta, SpecTests, StoryCommit, DecidedRecord, KeptTests, PlannedTestChange, RedProof, StageChanges,
     TestChange, TestEdit, Unobserved, AssertionFact, ByteSize, Clause, ClauseRow, CommandKey, Count,
     ElementName, ElementRules, FileChange, InvariantFacts, InvariantRow, PlannedFile, PortName, Presence, Rule,
@@ -56,7 +56,7 @@ from ..git.integration import (
     merge_target)
 from .test_files import locate_tests, plan_levels, stage_bytes, unfinished_levels
 from .....spec.api import delta_problems, derived, placement_problems, read_delta, rule_problems, story_entries, touches
-from ..spec.story_spec_files import moved_tests, spec_backing, story_spec
+from ..spec.story_spec_files import adopt_rows, moved_tests, spec_backing, story_spec
 from ....domain.model.verdict import FindingState
 from ....domain.service.test_checks import TestChecks
 from ..git.repository import git, git_blob
@@ -470,6 +470,15 @@ class StageEvidenceFiles:
                              and file_digest(os.path.join(self._cwd, path)) == by_file[path])
         return StageChanges(None, Detail(""), tuple(Place(p) for p in changed), tuple(HandOverName(h) for h in handovers),
                             frozenset(Place(n) for n in listed) if listed is not None else None, restored)
+
+    def plan_adoption(self, story: StoryId) -> typing.Optional[PlanAdoption]:
+        rows = adopt_rows(self._runs, story.value)
+        if rows is None:
+            return None
+        found = locate_tests(self._cwd, {key: [selector] for key, selector in rows})[0] if rows else {}
+        return PlanAdoption(tuple(AdoptRow(ScenarioKey(key), Selector(selector),
+                                           Presence.PRESENT if selector in found else Presence.ABSENT)
+                                  for key, selector in rows))
 
     def kept_tests(self, story: StoryId) -> typing.Optional[KeptTests]:
         cwd, runs, story_id = self._cwd, self._runs, story.value

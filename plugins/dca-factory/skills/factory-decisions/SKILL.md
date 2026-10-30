@@ -172,8 +172,8 @@ options. The structural follow-ups and the correction's way into the story are t
 - Do not write `## Answer` from a recommendation, a timeout, a majority of options or your own
   judgement. The whole file exists so that a suggestion cannot be mistaken for a decision.
 - Do not edit anything but the record — not the story, not the plan, not the code — apart from the
-  project description after a structural answer, and the story after an acceptance correction
-  (both above). The stage that asked propagates the
+  project description after a structural answer, and the story after an acceptance correction or an
+  answer that sets its status or changes its scenarios (5b, 5c). The stage that asked propagates the
   answer; two writers on one plan is how an answer gets applied twice.
 - Do not invent a record. A question that reached you as a sentence and has no file is the asking
   stage's omission; the next gate refuses it, and the fix is that stage writing the record. The one

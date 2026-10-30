@@ -99,6 +99,21 @@ def spec_backing(cwd: str, story_id: str, body: str, story_path: typing.Optional
     return f"decision {', '.join(answered)}" if answered else ""
 
 
+def adopt_rows(runs: str, story_id: str) -> typing.Optional[typing.List[typing.Tuple[str, str]]]:
+    """[(key, selector)] from plan.md's `## Adopt` table — the scenarios that hold on today's code alone, each with the
+    test that shows it (WP-165); None where the plan has no such section."""
+    path = os.path.join(runs, story_id, "plan.md")
+    lines = section_of(read_text(path), "adopt") if os.path.isfile(path) else None
+    if lines is None:
+        return None
+    rows = []
+    for line in lines:
+        row = MAPPING_ROW.match(line.strip())
+        if row and row.group(1) not in ("criterion", "key", "---") and SELECTOR.match(row.group(2).strip()):
+            rows.append((row.group(1), row.group(2).strip()))
+    return rows
+
+
 def moved_tests(runs: str, story_id: str) -> typing.Dict[str, typing.List[str]]:
     """{key: [selector]} from tests.md's `## Moved tests` table — a test of the spec this story renamed or moved."""
     path = os.path.join(runs, story_id, "tests.md")

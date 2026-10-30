@@ -8,6 +8,7 @@ import typing
 from ...domain.model.stage import Stage, StageName, TESTED_KINDS, Trait
 from ...domain.model.stage_story import ContractNumber, Count, HandOverName, MappedTest, Place, ScenarioKey, Selector, TestTable
 from ...domain.model.verdict import CheckName, Said
+from ...domain.service.adopt_checks import AdoptChecks
 from ...domain.service.kept_checks import KeptChecks
 from ...domain.service.decision_checks import Applying, DecisionChecks
 from ...domain.service.integration_checks import IntegrationChecks
@@ -199,6 +200,11 @@ def _decisions(run: Run) -> None:
             run.result.take((DecisionChecks.applied(item, run.stamps.apply(run.story, item)),))
         else:
             run.result.take((item,))
+
+
+@check("plan-adopts", stages=("plan",))
+def _plan_adopts(run: Run) -> None:
+    run.result.take(AdoptChecks.found(run.story, run.evidence))
 
 
 @check("plan", stages=("plan",))

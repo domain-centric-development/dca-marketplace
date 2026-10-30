@@ -11,7 +11,7 @@ from ....building_blocks import DomainGateway
 from ..model.decision_record import RecordId
 from ..model.stage import StageName
 from ..model.stage_story import (
-    DecidedRecord, DocumentFacts, Integration, MainTests, KeptTests, OutcomeFacts, PipelineFacts, ProposalFacts, ReviewFacts, SpecDelta,
+    DecidedRecord, DocumentFacts, PlanAdoption, Integration, MainTests, KeptTests, OutcomeFacts, PipelineFacts, ProposalFacts, ReviewFacts, SpecDelta,
     StoryPass, SpecTests, StoryCommit, MappedTest, PlannedTestChange, RedProof, StageChanges,
     AssertionFact, ClauseRow, CommandKey, ContextMapFacts, Count, InvariantFacts, PlannedFile, PortName, Selector, DecisionsFacts, EpicFacts, GateRelease, HandOverName, HandOverSize,
     InstructionFile, ModelKey, OwnedFacts, Place, PlanLevels, ProfileText, RoundsRecord, RowId, RowState, StageStory, UnknownKey)
@@ -108,6 +108,10 @@ class StageEvidence(DomainGateway, typing.Protocol):
                       tests: typing.Tuple[MappedTest, ...]) -> StageChanges:
         """What the stage changed — its changed-files record, or inside a shared builder's window the tree against
         the story's base — and what its hand-overs list."""
+        ...
+
+    def plan_adoption(self, story: StoryId) -> typing.Optional[PlanAdoption]:
+        """The plan's `## Adopt` rows, each test looked up — None where the plan has no such section."""
         ...
 
     def kept_tests(self, story: StoryId) -> typing.Optional[KeptTests]:

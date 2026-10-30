@@ -455,6 +455,20 @@ class ChangedTest(Value):
     how: TestChange
 
 
+class AdoptRow(Value):
+    """A scenario the plan found holding on today's code alone, with the test that shows it."""
+
+    key: ScenarioKey
+    test: Selector
+    present: Presence
+
+
+class PlanAdoption(Value):
+    """The plan's `## Adopt`: the scenarios of the story that hold already and no delivered story carries."""
+
+    rows: typing.Tuple[AdoptRow, ...]
+
+
 class SymbolName(Value):
     """A type or a method as the source names it — `OrderChangedSinceReviewException`, `openFindings`."""
 
