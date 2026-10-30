@@ -18,10 +18,15 @@ from __future__ import annotations
 import re
 import typing
 
+from ...domain.model.jump import Jump, RuleName, Target
+from ...domain.model.stage import PIPELINE
+
 RULE_ID = re.compile(r"^(GATE|RUN|STAGE)(-[A-Z0-9]+)+$")
 #: Where an outcome sends the story beside a stage's name: the stage that was refused once more, or nowhere — the run
 #: ends and a person looks.
 AGAIN, STOP = "again", "stop"
+#: Every name a `goes` may give: a stage of the table, `again`, `stop`.
+TARGETS = frozenset([s.name.value for s in PIPELINE] + [AGAIN, STOP])
 #: How a rule can come out, in the order a reader takes them: `ask` writes a decision record and stops.
 OUTCOME_STATES = ("pass", "fail", "skip", "note", "wait", "ask")
 
@@ -66,6 +71,9 @@ def rule(id: str, when: str, why: str, *, ok: typing.Optional[str] = None, fail:
     unsaid = [state for state, _to in went if state not in texts or not texts[state]]
     if unsaid:
         raise ValueError(f"rule {id}: goes somewhere on {', '.join(unsaid)} it says nothing about")
+    unknown = sorted({to for _state, targets in went for to in targets} - TARGETS)
+    if unknown:
+        raise ValueError(f"rule {id}: goes to {', '.join(unknown)} — no stage, again or stop")
     return PipelineRule(id, when, why, outcomes, reports, stages, kinds, "", went)
 
 
@@ -82,6 +90,20 @@ DECIDED: typing.List[PipelineRule] = []
 
 #: A rule that went: its id, kept, and why — an id is never given to another rule.
 RETIRED: typing.Dict[str, str] = {}
+
+
+def jump_of(found: PipelineRule, state: str) -> Jump:
+    """What the rule says for <state>, as the domain decides by it: its targets — none where it says nothing."""
+    return Jump(RuleName(found.id), tuple(Target(to) for to in dict(found.goes).get(state, ())))
+
+
+def jump(rule_id: str, state: str = "fail") -> Jump:
+    """Where a registered runner rule sends the story on <state> — the one place a runner's decision reads its way.
+    An id nobody registered is a programming error, never a silent default."""
+    found = next((r for r in DECIDED if r.id == rule_id), None)
+    if found is None:
+        raise KeyError(f"rule {rule_id} is not registered — @decides it where it is decided")
+    return jump_of(found, state)
 
 
 def decides(*rules: PipelineRule) -> typing.Callable[[Function], Function]:

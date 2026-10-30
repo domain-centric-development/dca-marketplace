@@ -5,9 +5,10 @@ from __future__ import annotations
 
 import typing
 
+from ...domain.model.jump import Jump
 from ...domain.model.stage import ALL_KINDS, PIPELINE, Stage, StoryKind, Trait
 from ...domain.model.verdict import FindingState, Findings
-from .pipeline_rules import PipelineRule, placed
+from .pipeline_rules import DECIDED, jump_of, PipelineRule, placed
 
 Entry = typing.Tuple[str, str, str]
 Run = typing.Any
@@ -170,3 +171,16 @@ def run_passed(run: Run) -> None:
     """What a passing gate of the run's stage does."""
     for finish in PASSED.get(run.stage.name, ()):
         finish(run)
+
+
+def refusing(stage: str, names: typing.Iterable[str]) -> typing.Tuple[Jump, ...]:
+    """The ways of the rules a gate of <stage> refused under <names> (the checks its report says failed): the rules of
+    the stage's checks, of what its passing gate does, and of the gate's own frame — each once, in the report's order."""
+    if not CHECKS:
+        raise RuntimeError("no gate check is registered — the composition root imports the modules of checks")
+    rules = [r for c in CHECKS if stage in c.stages for r in c.rules] + PASS_RULES.get(stage, []) \
+        + [r for r in DECIDED if r.id.startswith("GATE-")]
+    found: typing.List[PipelineRule] = []
+    for name in names:
+        found += [r for r in rules if name in r.reports and r not in found]
+    return tuple(jump_of(r, "fail") for r in found)

@@ -13,6 +13,8 @@ from ..delivery.application.shared.requests import KIND, Request
 from ..delivery.adapter.incoming.runner.usage import book_request_usage
 from ..delivery.adapter.outgoing.process.console_lines import ConsoleLines
 from ..delivery.application.backlog.run_backlog import RunBacklogCommand, RunBacklogUseCase
+# the rules a refused gate routes by: the modules of checks register them, as in the gate's composition root
+from ..delivery.application.delivery import pass_actions, process_checks, stage_checks  # noqa: F401
 from ..delivery.application.delivery.integrate_story import IntegrateStoryCommand, IntegrateStoryUseCase
 from ..delivery.application.delivery.run_story import RunStoryCommand, RunStoryUseCase
 from ..delivery.application.requests.request_queue import RequestQueue

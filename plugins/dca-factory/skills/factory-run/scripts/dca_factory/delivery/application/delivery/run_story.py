@@ -8,13 +8,15 @@ import dataclasses
 import typing
 
 from ....building_blocks import UseCase
+from ...domain.model.jump import Next, RuleName, Target
 from ...domain.model.stage import StageName, StoryKind, Trait, Window
 from ...domain.service.story_route import Around, Judged, Move, row, StoryRoute
 from ..shared.run_lines import RunLines
 from ..shared.story_stages import StoryStages
-from .pipeline_rules import decides, rule
+from .check_stage import refusing
+from .pipeline_rules import decides, jump, rule
 
-PLAN, TEST, BUILD, TIDY = StageName("plan"), StageName("test"), StageName("build"), StageName("tidy")
+PLAN, BUILD, TIDY = StageName("plan"), StageName("build"), StageName("tidy")
 JUDGE, DOCUMENT, ADOPT, INTEGRATE = StageName("judge"), StageName("document"), StageName("adopt"), StageName("integrate")
 
 #: What one pass of the route ends with: the run's exit, or the stage a round runs the story again from.
@@ -94,9 +96,9 @@ class RunStoryUseCase:
             return self._integrate(command)
         if start == ADOPT:
             return self._adopt(command)
-        test = StoryRoute.red_check(kind, start)
-        if not dry and test is not None and self._stages.red_stale(story, start):
-            start = test
+        stale = StoryRoute.red_check(kind, start, jump("RUN-ROUTE-5"))
+        if not dry and stale is not None and stale.stage is not None and self._stages.red_stale(story, start):
+            start = stale.stage
         ran: typing.List[str] = []
         for step in StoryRoute.steps(kind, start, command.shared):
             stage = step.stage.value
@@ -158,7 +160,7 @@ class RunStoryUseCase:
                 code = self._stages.stage(story, stage)
                 if code != 0:
                     return code
-                after = self._after_stage(story, step.stage)
+                after = self._after_stage(story, kind, step.stage)
                 if after is not None:
                     return after
             if Around.GATE_AFTER in step.around:
@@ -167,7 +169,7 @@ class RunStoryUseCase:
                 if gate == 3:
                     return self._accepting(story)
                 if gate != 0:
-                    return self._refused(story, step.stage, f"gate '{stage}' refused")
+                    return self._refused(story, kind, step.stage, f"gate '{stage}' refused")
             ran.append(stage)
             if step.stage == PLAN and not dry:
                 adopted = self._adopted(command, kind)
@@ -199,18 +201,11 @@ class RunStoryUseCase:
         "RUN-BACK-1", "the build stage writes `back: test`", "a test that cannot pass for its own code goes back to "
         "its stage, without a person", goes={"fail": "test"},
         fail="a round, and the run goes back to the test stage", stages=("build",)))
-    def _after_stage(self, story: str, stage: StageName) -> typing.Optional[Ended]:
+    def _after_stage(self, story: str, kind: StoryKind, stage: StageName) -> typing.Optional[Ended]:
         """After a stage's own process: the build stage found a defect in a test's own code — the round goes to the
         test stage, no person is asked —, or the stage ends with a needs-human section and has stopped."""
         if stage == BUILD and self._stages.sent_back(story):
-            rounds = self._stages.bump(story)
-            if StoryRoute.converged(rounds):
-                self._lines.err(f"factory: the build stage sent the story back in round {rounds.value} — three rounds "
-                                "did not converge. needs-human.")
-                return 1
-            self._lines.err(f"factory: the build stage found a defect in a test's own code — round {rounds.value} "
-                            f"goes back to the {TEST.value} stage.")
-            return TEST
+            return self._sent_back(story, kind)
         if self._stages.asks_human(story, stage.value):
             return self._stages.stopped_for_human(story, stage.value)
         return None
@@ -246,14 +241,7 @@ class RunStoryUseCase:
             self._lines.out("factory: build.md names a defect in a test's own code that the shared session repaired "
                             "before tidy — the gates re-check it.")
         if sent_back and not repaired:
-            rounds = self._stages.bump(story)
-            if StoryRoute.converged(rounds):
-                self._lines.err(f"factory: the build stage sent the story back in round {rounds.value} — three rounds "
-                                "did not converge. needs-human.")
-                return 1
-            self._lines.err(f"factory: the build stage found a defect in a test's own code — round {rounds.value} "
-                            "goes back to the test stage.")
-            return TEST
+            return self._sent_back(story, kind)
         for stage in stages:
             if not self._stages.holds(story, stage):
                 self._lines.err(f"factory: the shared stages produced no {self._stages.artefact(story, stage)} — "
@@ -282,17 +270,19 @@ class RunStoryUseCase:
                 continue
             self._lines.out(f"── gate {stage}  (re-checked by the runner)")
             if self._stages.gate(stage, story) != 0:
-                if self._environment(story, stage):
-                    return 1
-                rounds = self._stages.bump(story)
-                if StoryRoute.converged(rounds):
-                    self._lines.err(f"factory: the runner's re-check of gate '{stage}' refused in round {rounds.value} "
-                                    "— three rounds did not converge. needs-human.")
-                    return 1
-                self._lines.err(f"factory: the runner's re-check of gate '{stage}' refused — round {rounds.value} runs "
-                                f"the shared stages again from '{stage}' with the gate's report.")
-                return StageName(stage)
+                return self._refused(story, kind, StageName(stage), f"the runner's re-check of gate '{stage}' refused")
         return None
+
+    def _sent_back(self, story: str, kind: StoryKind) -> Ended:
+        """The build stage found a defect in a test's own code: a round, where RUN-BACK-1 sends it."""
+        rounds = self._stages.bump(story)
+        if StoryRoute.converged(rounds):
+            self._lines.err(f"factory: the build stage sent the story back in round {rounds.value} — three rounds "
+                            "did not converge. needs-human.")
+            return 1
+        went = StoryRoute.jump(kind, BUILD, jump("RUN-BACK-1"))
+        return self._went(went, f"factory: the build stage found a defect in a test's own code ({went.rule.value}) — "
+                                f"round {rounds.value} goes back to the {{stage}} stage.")
 
     @decides(rule(
         "RUN-WINDOW-2", "judge and document run shared", "the judge never shares a process with the builder",
@@ -329,7 +319,7 @@ class RunStoryUseCase:
         if gate == 3:
             return self._accepting(story)
         if gate != 0:
-            return self._refused(story, DOCUMENT, "gate 'document' refused")
+            return self._refused(story, kind, DOCUMENT, "gate 'document' refused")
         return 0
 
     @decides(rule(
@@ -351,10 +341,10 @@ class RunStoryUseCase:
                 self._lines.err(f"factory: judge verdict 'changes-requested' in round {rounds.value} — three rounds "
                                 "did not converge. needs-human.")
                 return 1
-            back = StoryRoute.back_for(kind, self._stages.back(story) or BUILD)
-            self._lines.err(f"factory: judge verdict 'changes-requested' — round {rounds.value} goes back to the "
-                            f"{back.value} stage.")
-            return back
+            named = Target((self._stages.back(story) or BUILD).value)
+            back = StoryRoute.chosen(kind, JUDGE, jump("RUN-VERDICT-1"), named)
+            return self._went(back, f"factory: judge verdict 'changes-requested' ({back.rule.value}) — round "
+                                    f"{rounds.value} goes back to the {{stage}} stage.")
         if judged is Judged.CONFLICT:
             self._lines.err("factory: judge verdict 'story-conflict' — the story or the plan is wrong. This never goes "
                             f"back to the build stage. needs-human: read {judge}.")
@@ -388,14 +378,19 @@ class RunStoryUseCase:
             self._lines.err(f"factory: gate 'adopt' refused in round {rounds.value} — three rounds did not converge. "
                             "needs-human.")
             return 1
-        self._lines.err(f"factory: gate 'adopt' refused — round {rounds.value} runs the test stage again with the "
-                        "gate's report.")
-        return TEST
+        went = StoryRoute.jump(self._stages.kind(story), ADOPT, jump("RUN-ADOPT-1"))
+        return self._went(went, f"factory: gate 'adopt' refused ({went.rule.value}) — round {rounds.value} runs the "
+                                f"{{stage}} stage again with the gate's report.")
 
     def _integrate(self, command: RunStoryCommand) -> Ended:
         """Delivered is the integration; a refusal on the main line runs the build stage again."""
         integrated = self._stages.integrate(command.story, command.dry)
-        return BUILD if integrated is None else integrated
+        if integrated is not None:
+            return integrated
+        # a refusal on the main line, not a merge that moved: the way of RUN-INTEGRATE-1 that builds again
+        went = StoryRoute.chosen(self._stages.kind(command.story), INTEGRATE, jump("RUN-INTEGRATE-1"),
+                                 Target(BUILD.value))
+        return self._went(went, "")
 
     @decides(
         rule("RUN-ROUNDS-1", "a gate refuses after its stage", "a story converges in a few rounds or a person looks",
@@ -406,19 +401,33 @@ class RunStoryUseCase:
              "no stage can fix the machine", goes={"fail": "stop"},
              fail="the run stops without a round (exit 1)"),
     )
-    def _refused(self, story: str, stage: StageName, what: str) -> Ended:
-        """A gate after its stage refused: no round where the machine is the cause, else a round from the refused
-        stage — or the earlier one the story's state resumes at — while the rounds converge."""
+    def _refused(self, story: str, kind: StoryKind, stage: StageName, what: str) -> Ended:
+        """A gate refused: no round where the machine is the cause; else the rules that failed say where the story
+        goes (`StoryRoute.after_refusal`) — a rule that stops ends the run, else a round from the stage they name, the
+        refused one or the earlier one the story's state resumes at, while the rounds converge."""
         if self._environment(story, stage.value):
+            return 1
+        failed = StoryRoute.refused_checks(self._stages.report(story, stage.value))
+        went = StoryRoute.after_refusal(kind, stage, self._stages.resumes(story),
+                                        refusing(stage.value, [name.value for name in failed]), RuleName("RUN-ROUNDS-1"))
+        if went.stage is None:
+            self._lines.err(f"factory: {what} ({went.rule.value}) — the rule stops the run. needs-human.")
             return 1
         rounds = self._stages.bump(story)
         if StoryRoute.converged(rounds):
             self._lines.err(f"factory: {what} in round {rounds.value} — three rounds did not converge. needs-human.")
             return 1
-        again = StoryRoute.again_from(stage, self._stages.resumes(story))
-        self._lines.err(f"factory: {what} — round {rounds.value} runs stage '{again.value}' again with the gate's "
-                        "report.")
-        return again
+        return self._went(went, f"factory: {what} ({went.rule.value}) — round {rounds.value} runs stage '{{stage}}' "
+                                "again with the gate's report.")
+
+    def _went(self, went: Next, said: str) -> Ended:
+        """The stage a rule sent the story to, <said> with it; a rule that sends it nowhere stops the run."""
+        if went.stage is None:
+            self._lines.err(f"factory: {went.rule.value} sends the story nowhere from here — the run stops. needs-human.")
+            return 1
+        if said:
+            self._lines.err(said.format(stage=went.stage.value))
+        return went.stage
 
     def _environment(self, story: str, stage: str) -> bool:
         """A refusal whose cause is the machine: no stage can put a tool on the PATH, so no round is counted."""

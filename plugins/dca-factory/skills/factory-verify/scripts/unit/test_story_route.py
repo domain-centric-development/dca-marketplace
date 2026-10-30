@@ -4,7 +4,11 @@ that a round is one more pass, never a run inside a run."""
 import unittest
 
 import support  # noqa: F401 — puts the package on the path
+# the rules a refused gate routes by, registered as the runner's composition root registers them
+from dca_factory.delivery.application.delivery import pass_actions, process_checks, stage_checks  # noqa: F401
+from dca_factory.delivery.application.delivery.pipeline_rules import jump, rule
 from dca_factory.delivery.application.delivery.run_story import RunStoryCommand, RunStoryUseCase
+from dca_factory.delivery.domain.model.jump import Jump, Next, RuleName, Target
 from dca_factory.delivery.domain.model.stage import StageName, StoryKind, Window
 from dca_factory.delivery.domain.model.story_state import GateReport, HandOverText, Rounds, VerdictWord
 from dca_factory.delivery.application.delivery.integrate_story import IntegrateStoryCommand, IntegrateStoryUseCase
@@ -84,11 +88,68 @@ class Route(unittest.TestCase):
         self.assertEqual(StoryRoute.environment(report).value, "no java on the PATH")
         self.assertIsNone(StoryRoute.environment(GateReport("gate:fail tests-red")))
 
-    def test_a_stale_red_proof_sends_a_story_to_its_test_stage_from_a_listing_stage_only(self):
-        self.assertEqual(StoryRoute.red_check(StoryKind.STORY, StageName("build")), StageName("test"))
-        self.assertIsNone(StoryRoute.red_check(StoryKind.STORY, StageName("test")))
-        self.assertIsNone(StoryRoute.red_check(StoryKind.STORY, StageName("judge")))
-        self.assertIsNone(StoryRoute.red_check(StoryKind.TASK, StageName("build")))
+    def test_a_stale_red_proof_sends_a_story_where_its_rule_says_from_a_listing_stage_only(self):
+        stale = jump("RUN-ROUTE-5")
+        self.assertEqual(StoryRoute.red_check(StoryKind.STORY, StageName("build"), stale),
+                         Next(StageName("test"), RuleName("RUN-ROUTE-5")))
+        self.assertIsNone(StoryRoute.red_check(StoryKind.STORY, StageName("test"), stale))
+        self.assertIsNone(StoryRoute.red_check(StoryKind.STORY, StageName("judge"), stale))
+        self.assertIsNone(StoryRoute.red_check(StoryKind.TASK, StageName("build"), stale))
+
+
+def way(rule_id, *targets):
+    return Jump(RuleName(rule_id), tuple(Target(t) for t in targets))
+
+
+class Jumps(unittest.TestCase):
+    """Where the elements of the workflow send a story: the rules decide, the run follows."""
+
+    ROUNDS = RuleName("RUN-ROUNDS-1")
+
+    def refused(self, *jumps, stage="build", resumes=None, kind=StoryKind.STORY):
+        return StoryRoute.after_refusal(kind, StageName(stage), resumes and StageName(resumes), jumps, self.ROUNDS)
+
+    def test_a_refusal_whose_rules_name_no_way_runs_the_refused_stage_again(self):
+        self.assertEqual(self.refused(way("GATE-TESTS-GREEN")), Next(StageName("build"), RuleName("GATE-TESTS-GREEN")))
+        self.assertEqual(self.refused(), Next(StageName("build"), self.ROUNDS))
+
+    def test_a_rule_that_names_a_stage_sends_the_story_there(self):
+        self.assertEqual(self.refused(way("GATE-TESTS-GREEN"), way("GATE-RED-PROOF", "test")),
+                         Next(StageName("test"), RuleName("GATE-RED-PROOF")))
+
+    def test_the_earliest_way_wins_and_the_story_state_counts_as_one(self):
+        self.assertEqual(self.refused(way("GATE-RED-PROOF", "test"), stage="document", resumes="plan"),
+                         Next(StageName("plan"), self.ROUNDS))
+        self.assertEqual(self.refused(way("GATE-ACCEPTANCE", "plan"), way("GATE-RED-PROOF", "test"), stage="document"),
+                         Next(StageName("plan"), RuleName("GATE-ACCEPTANCE")))
+
+    def test_a_rule_that_stops_beats_every_way(self):
+        self.assertEqual(self.refused(way("GATE-ACCEPTANCE", "plan"), way("GATE-OWNED", "stop"), stage="document"),
+                         Next(None, RuleName("GATE-OWNED")))
+
+    def test_a_way_the_kind_does_not_run_goes_to_its_builder_stage_before(self):
+        self.assertEqual(self.refused(way("GATE-X", "test"), stage="tidy", kind=StoryKind.TASK),
+                         Next(StageName("plan"), RuleName("GATE-X")))
+
+    def test_a_choice_outside_the_rule_stops_the_run(self):
+        verdict = jump("RUN-VERDICT-1")
+        self.assertEqual(StoryRoute.chosen(StoryKind.STORY, StageName("judge"), verdict, Target("test")),
+                         Next(StageName("test"), RuleName("RUN-VERDICT-1")))
+        self.assertEqual(StoryRoute.chosen(StoryKind.STORY, StageName("judge"), verdict, Target("plan")),
+                         Next(None, RuleName("RUN-VERDICT-1")))
+
+    def test_the_checks_a_report_failed_once_each_without_its_closing_line(self):
+        report = GateReport("gate:pass story — ok\ngate:fail red-proof — x\ngate:fail red-proof — y\n"
+                            "gate:fail tests-green — z\ngate:fail story S-1 stage build")
+        self.assertEqual([n.value for n in StoryRoute.refused_checks(report)], ["red-proof", "tests-green"])
+
+    def test_a_rule_goes_nowhere_but_a_stage_again_or_stop(self):
+        with self.assertRaises(ValueError):
+            rule("RUN-X-1", "w", "y", fail="f", goes={"fail": "nowhere"})
+
+    def test_a_runner_rule_nobody_registered_is_an_error(self):
+        with self.assertRaises(KeyError):
+            jump("RUN-NOBODY-1")
 
 
 class IntegrationRefusals(unittest.TestCase):
@@ -118,8 +179,9 @@ class Lines:
 class Stages:
     """A story whose stages all write their files; the gates refuse as told, the judge says what it is told."""
 
-    def __init__(self, refusals=(), verdicts=("pass",), kind=StoryKind.STORY):
+    def __init__(self, refusals=(), verdicts=("pass",), kind=StoryKind.STORY, reports=None):
         self.refusals = list(refusals)          # the stages whose gate refuses, once each, in order
+        self.reports = reports or {}            # what a refusal's report says, per stage
         self.verdicts = list(verdicts)
         self._kind = kind
         self.ran, self.rounds = [], 0
@@ -146,7 +208,7 @@ class Stages:
     quiet_gate = gate
 
     def report(self, story, stage):
-        return GateReport("gate:fail tests-red")
+        return GateReport(self.reports.get(stage, "gate:fail tests-red"))
 
     def artefact(self, story, stage):
         return f"runs/{story}/{stage}.md"
@@ -234,7 +296,28 @@ class Run(unittest.TestCase):
         code, said = run(stages, "build")
         self.assertEqual(code, 0)
         self.assertEqual(stages.ran[:4], ["build", "gate build", "build", "gate build"])
-        self.assertIn("factory: gate 'build' refused — round 1 runs stage 'build' again with the gate's report.", said)
+        self.assertIn("factory: gate 'build' refused (GATE-TESTS-RED) — round 1 runs stage 'build' again with the "
+                      "gate's report.", said)
+
+    def test_a_refused_gate_goes_where_its_failed_rule_says(self):
+        stages = Stages(refusals=("build",), reports={"build": "gate:fail red-proof — a test changed"})
+        code, said = run(stages, "build")
+        self.assertEqual(code, 0)
+        self.assertEqual(stages.ran[:4], ["build", "gate build", "test", "gate test"])
+        self.assertIn("factory: gate 'build' refused (GATE-RED-PROOF) — round 1 runs stage 'test' again with the "
+                      "gate's report.", said)
+
+    def test_an_acceptance_that_asks_for_a_correction_plans_the_story_again(self):
+        stages = Stages(refusals=("document",), reports={"document": "gate:fail acceptance — a correction"})
+        code, _said = run(stages, "document")
+        self.assertEqual(code, 0)
+        self.assertEqual(stages.ran[:4], ["document", "gate document", "gate plan", "plan"])
+
+    def test_a_rule_that_stops_ends_the_run_without_a_round(self):
+        stages = Stages(refusals=("build",), reports={"build": "gate:fail owned — the story changed under a stage"})
+        code, said = run(stages, "build")
+        self.assertEqual((code, stages.rounds), (1, 0))
+        self.assertIn("factory: gate 'build' refused (GATE-OWNED) — the rule stops the run. needs-human.", said)
 
     def test_three_refusals_do_not_converge(self):
         stages = Stages(refusals=("tidy", "tidy", "tidy"))
@@ -247,7 +330,8 @@ class Run(unittest.TestCase):
         code, said = run(stages, "judge")
         self.assertEqual(code, 0)
         self.assertEqual(stages.ran[:3], ["judge", "build", "gate build"])
-        self.assertIn("factory: judge verdict 'changes-requested' — round 1 goes back to the build stage.", said)
+        self.assertIn("factory: judge verdict 'changes-requested' (RUN-VERDICT-1) — round 1 goes back to the build "
+                      "stage.", said)
 
     def test_a_story_conflict_stops_for_a_person(self):
         code, said = run(Stages(verdicts=("story-conflict",)), "judge")

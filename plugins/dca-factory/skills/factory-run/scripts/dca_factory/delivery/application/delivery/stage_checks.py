@@ -347,9 +347,10 @@ def _plan(run: Run) -> None:
 
 @check("document", stages=("document",), rule=(
     rule("GATE-STORY-PASS", "the document gate", "a delivery rests on one pass through every stage of the current story",
-         goes={"fail": "plan"},
+         goes={"fail": "again"},
          ok="every hand-over is of this pass, the judge said pass, the story unchanged since the plan",
-         fail="a hand-over missing or from an earlier pass, no `verdict: pass`, or the story changed since the plan",
+         fail="a hand-over missing or from an earlier pass, no `verdict: pass`, or the story changed since the plan — a "
+              "round from where the story's state resumes: the stage of the missing pass, plan for a changed story",
          skip="no story digest from the plan gate"),
     rule("GATE-OUTCOME-RAISED", "the document gate of a story that `publishes:` an event (contract 14 on)",
          "the epic's outcome event is raised by this story's code", ok="the event is declared and raised in what "

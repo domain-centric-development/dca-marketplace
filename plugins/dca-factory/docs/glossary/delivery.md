@@ -323,6 +323,17 @@ and `integrate_story` brings the delivered story onto the main line through `Sto
 
 **Type:** Concept
 
+### Jump (Jump) · Target (Target) · Next (Next) · Rule name (RuleName)
+
+**Definition:** Where an element of the workflow — a gate's rule, a runner's decision — sends a story: the rule
+(`RuleName`, `GATE-RED-PROOF`) and its targets for the outcome it came to, each a stage, `again` or `stop`, as its
+`goes=` says. `StoryRoute` turns jumps into the next step (`Next`: a stage, or none — the run ends): a refused gate
+by the rules of its failed checks (`after_refusal` — `stop` beats every way, else the earliest stage any of them or the
+story's state names), a runner's decision by its own rule (`jump`), a choice the run's facts make (the judge's
+`back:`) only within the rule (`chosen`). The runner names no stage it goes to; it asks the rule.
+
+**Type:** Value
+
 ### Check · Finding (Finding) · Stage evidence (StageEvidence)
 
 **Definition:** A gate is a set of checks, each a domain service over the story as the gate reads it (`StageStory`)

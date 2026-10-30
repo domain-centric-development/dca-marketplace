@@ -72,7 +72,8 @@ holds — the run as a whole, the commit hook, every stage alike — stands outs
 ### Edge (edge)
 
 **Definition:** Where an outcome sends a story, from the stage its rule sits at: an earlier stage (back), a later one,
-the same one `again`, or `stop` — the run ends and a person looks. Written beside the rule as `goes=`.
+the same one `again`, or `stop` — the run ends and a person looks. Written beside the rule as `goes=`. Delivery's run jumps by it
+(see *Jump* in delivery's glossary) — an edge is what the factory does, not a description beside it.
 
 **Type:** Value
 

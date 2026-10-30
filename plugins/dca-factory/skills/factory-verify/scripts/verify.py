@@ -4454,6 +4454,12 @@ def verify_setup(runner, verbose=False):
                       or re.search(rf'self\.cli_path,[^\]]*"{re.escape(verb)}"', run_text)})
     check("runner: reads the profile, the stage files, the records and the journal in its own process — no cli for a question",
           not spawned, spawned)
+    # a jump is the way a rule names (WP-167): the run's use case returns no stage it named itself
+    route_module = "delivery/application/delivery/run_story"
+    route_text = package_text(runner, (route_module,))[route_module]
+    named = re.findall(r"return (?:PLAN|TEST|BUILD|TIDY|JUDGE|DOCUMENT|ADOPT|INTEGRATE|StageName\()", route_text)
+    check("runner: jumps where a rule's `goes` says — the run names no stage it returns to",
+          not named and route_text.count('jump("') >= 5, named)
     duplicated = [n for n in ("CRITERION", "MAPPING_ROW", "SELECTOR") if re.search(rf"^{n} = re\.compile", observe_text, re.M)]
     check("observe: defines no reader the gate has — it imports the gate's",
           not duplicated and "def front_matter(" not in observe_text

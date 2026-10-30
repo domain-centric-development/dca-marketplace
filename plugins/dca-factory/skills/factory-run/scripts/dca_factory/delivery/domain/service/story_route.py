@@ -7,10 +7,12 @@ import enum
 import typing
 
 from ....building_blocks import DomainService, Value
+from ..model.jump import AGAIN, Jump, Next, RuleName, STOP, Target
 from ..model.stage import PIPELINE, Pipeline, Stage, StageName, StoryKind, Trait, Window
+from ..model.verdict import CheckName
 from ..model.story_state import Detail, GateReport, HandOverText, MAX_ROUNDS, Rounds, VerdictWord
 
-JUDGE, TEST = StageName("judge"), StageName("test")
+JUDGE = StageName("judge")
 
 
 class Move(enum.Enum):
@@ -140,15 +142,53 @@ class StoryRoute(DomainService):
         return tuple(carried)
 
     @staticmethod
-    def red_check(kind: StoryKind, start: StageName) -> typing.Optional[StageName]:
-        """Where a story that starts at <start> goes when its red proof went stale — the test stage, the only one that
-        records it again — or None where the start does not rest on it: a stage that lists no files, the red stage
-        itself, a kind that runs no tests."""
-        found, test = row(start), row(TEST)
-        if found is None or test is None or Trait.LISTS not in found.traits or Trait.RED in found.traits \
-                or kind not in test.kinds:
+    def red_check(kind: StoryKind, start: StageName, jump: Jump) -> typing.Optional[Next]:
+        """Where a story that starts at <start> goes when its red proof went stale — where <jump> sends it, the stage
+        that records the proof again — or None where the start does not rest on it: a stage that lists no files, the
+        red stage itself, a kind that runs no tests."""
+        found = row(start)
+        if found is None or Trait.LISTS not in found.traits or Trait.RED in found.traits:
             return None
-        return TEST
+        named = row(StageName(jump.targets[0].value)) if jump.targets else None
+        if named is not None and kind not in named.kinds:
+            return None
+        return StoryRoute.jump(kind, start, jump)
+
+    @staticmethod
+    def jump(kind: StoryKind, here: StageName, jump: Jump) -> Next:
+        """Where a rule with one way sends the story from <here>: its first target — `again` where it names none."""
+        return StoryRoute._to(kind, here, jump.targets[0] if jump.targets else Target(AGAIN), jump.rule)
+
+    @staticmethod
+    def chosen(kind: StoryKind, here: StageName, jump: Jump, chosen: Target) -> Next:
+        """A target the run's facts chose among the rule's ways (the judge's `back:`): taken where the rule names it;
+        one it does not name stops the run — the rule, not the run, says where a story may go."""
+        if chosen not in jump.targets:
+            return Next(None, jump.rule)
+        return StoryRoute._to(kind, here, chosen, jump.rule)
+
+    @staticmethod
+    def after_refusal(kind: StoryKind, refused: StageName, resumes: typing.Optional[StageName],
+                      jumps: typing.Sequence[Jump], fallback: RuleName) -> Next:
+        """Where a refused gate sends the story — by the rules that failed: a rule whose one way is `stop` ends the
+        run; else the earliest stage any of them names, or the refused stage (or the earlier one the story's state
+        resumes at, the <fallback> rule's way) — an earlier stage covers the later ones."""
+        stopping = next((j for j in jumps if j.targets == (Target(STOP),)), None)
+        if stopping is not None:
+            return Next(None, stopping.rule)
+        ways = [StoryRoute._to(kind, refused, target, j.rule)
+                for j in jumps for target in (j.targets or (Target(AGAIN),)) if target != Target(STOP)]
+        ways.append(Next(StoryRoute.again_from(refused, resumes), fallback))
+        order = Pipeline.order(kind)
+        return min(ways, key=lambda way: order.index(way.stage) if way.stage in order else len(order))
+
+    @staticmethod
+    def _to(kind: StoryKind, here: StageName, target: Target, rule: RuleName) -> Next:
+        if target == Target(STOP):
+            return Next(None, rule)
+        if target == Target(AGAIN):
+            return Next(here, rule)
+        return Next(StoryRoute.back_for(kind, StageName(target.value)), rule)
 
     @staticmethod
     def converged(rounds: Rounds) -> typing.Optional[Detail]:
@@ -219,3 +259,14 @@ class StoryRoute(DomainService):
             return frozenset((Refusal.MOVED,))
         return frozenset(refusal for refusal in (Refusal.MAIN_TESTS, Refusal.CHECKOUT)
                          if any(line.startswith(FAILED + refusal.value) for line in fails))
+
+    @staticmethod
+    def refused_checks(report: GateReport) -> typing.Tuple[CheckName, ...]:
+        """The checks a gate's report says failed, each once, in its order — not its closing `gate:fail story` line."""
+        names: typing.List[CheckName] = []
+        for line in report.value.splitlines():
+            if line.startswith(FAILED) and not line.startswith(CLOSING):
+                name = CheckName(line[len(FAILED):].split(" ", 1)[0])
+                if name not in names:
+                    names.append(name)
+        return tuple(names)
