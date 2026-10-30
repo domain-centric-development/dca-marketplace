@@ -129,7 +129,8 @@
 #              `status: draft | approved | adopted | superseded` is the person's, `status: delivered` and
 #              `delivered:` are written by the gate alone. In each story's folder, `<story>/decisions/` holds
 #              its questions and acceptances
-# runs         where a run keeps its protocol — hand-overs, marks, the journal (default: .dca-factory/runs).
+# runs         where a run keeps its hand-overs (default: .dca-factory/runs); the journal, the marks and the
+#              gate reports are its evidence, under .dca-factory/evidence/<story>/.
 #              Disposable: deleting it loses history, never what is delivered or decided
 # contextMap   the context map generated from the code, "as built" (found by convention when absent);
 #              a difference to `domain` is a finding, not a duplicate

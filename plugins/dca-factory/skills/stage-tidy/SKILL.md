@@ -48,8 +48,8 @@ freedom is that it may not change what the code *does*.
    a duplicate lifted once, a comment deleted where the code now says it, a comment or doc comment in
    a touched file that the change made wrong or too narrow rewritten to what holds now, a value object
    where a primitive was carrying meaning. A comment says what holds in this file, not what a source
-   the reader cannot see says. Each move is small and each leaves the suite green — run the profile's
-   test commands between them, not once at the end.
+   the reader cannot see says. Each move is small and each leaves the tests green — between moves run the
+   tests the move touches (one test or one class, as `stage-common.md` says); the whole suite runs once, in the gate.
 5. Respect the architecture as the build stage did: the domain free of framework types, ports
    declared inward, no raw cross-context imports. A tidy-up that moves a type across a layer is a
    design change and belongs in a plan, not here.

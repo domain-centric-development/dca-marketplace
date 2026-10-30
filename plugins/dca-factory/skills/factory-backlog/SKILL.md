@@ -6,9 +6,9 @@ description: Writes and checks the backlog a delivery run reads — an epic with
 # Write one backlog item
 
 Input: what the human tells you, plus the project description — the product, the technical
-decisions and the designed domain — and the glossaries. Output: `<backlog>/<epic>/epic.md`,
-`<backlog>/<epic>/<story>/story.md` (a folder per story, named after its id), or a correction to one of them. The places are the stack profile's
-`product:`, `tech:`, `domain:` and `backlog:`, by default `product/overview.md`, `product/tech.md`,
+decisions and the designed domain — and the glossaries. Output: `<epics>/<epic>/epic.md`,
+`<epics>/<epic>/<story>/story.md` (a folder per story, named after its id), or a correction to one of them. The places are the stack profile's
+`product:`, `tech:`, `domain:` and `epics:`, by default `product/overview.md`, `product/tech.md`,
 `product/domain.md` and `product/epics`.
 You write no plan, no test and no code. Run the pipeline separately once the item stands.
 
@@ -151,7 +151,7 @@ that smuggles the decision in.
    `python3 .agents/factory/factory-cli.py --window-start backlog --story <id>`, and when you hand the
    story over — released and committed, or stopped with open questions — first
    `python3 .agents/factory/factory-cli.py --window-end backlog --story <id>`, then commit (the journal
-   under `.dca-factory/runs/<id>/` is part of the commit). One window per session; a session that picks the story
+   under `.dca-factory/evidence/<id>/` is part of the commit). One window per session; a session that picks the story
    up again opens its own. The window claims nothing: a runner working another story is not held up.
    An epic alone opens no window.
 
