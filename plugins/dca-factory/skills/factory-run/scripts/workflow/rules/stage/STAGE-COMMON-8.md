@@ -3,6 +3,7 @@ id: STAGE-COMMON-8
 part: told
 section: A stage on its own
 marked: factory-run/reference/stage-common.md
+order: 8
 ---
 
 # STAGE-COMMON-8

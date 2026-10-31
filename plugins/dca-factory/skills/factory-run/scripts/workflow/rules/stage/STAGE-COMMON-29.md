@@ -3,6 +3,7 @@ id: STAGE-COMMON-29
 part: told
 section: Who carries a stage
 marked: factory-run/reference/stage-common.md
+order: 29
 ---
 
 # STAGE-COMMON-29

@@ -5,6 +5,7 @@ stages:
 - build
 section: Do
 marked: stage-build/SKILL.md
+order: 7
 ---
 
 # STAGE-BUILD-5

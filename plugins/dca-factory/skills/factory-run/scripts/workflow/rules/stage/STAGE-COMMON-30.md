@@ -3,6 +3,7 @@ id: STAGE-COMMON-30
 part: told
 section: A question is a decision record
 marked: factory-run/reference/stage-common.md
+order: 30
 ---
 
 # STAGE-COMMON-30

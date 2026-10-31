@@ -5,6 +5,7 @@ stages:
 - test
 section: Do not
 marked: stage-test/SKILL.md
+order: 20
 ---
 
 # STAGE-TEST-NOT4

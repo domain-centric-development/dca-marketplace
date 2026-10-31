@@ -3,6 +3,7 @@ id: STAGE-COMMON-11
 part: told
 section: One session, several stages
 marked: factory-run/reference/stage-common.md
+order: 11
 ---
 
 # STAGE-COMMON-11

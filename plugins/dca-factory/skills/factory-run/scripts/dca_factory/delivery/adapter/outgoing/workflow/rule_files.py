@@ -29,7 +29,8 @@ import typing
 from ....domain.model.jump import RuleId, Target
 from ....domain.model.stage import StageName, StoryKind
 from ....domain.model.verdict import CheckName
-from ....domain.model.workflow_rule import Outcome, OutcomeState, RulePart, RuleText, WorkflowRule, Written
+from ....domain.model.workflow_rule import (
+    Outcome, OutcomeState, RuleOrder, RulePart, RuleText, WorkflowRule, Written)
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter
 
 #: The rules beside the package: `scripts/workflow/rules` in the plugin, `.agents/factory/workflow/rules` installed.
@@ -123,12 +124,13 @@ class RuleFiles:
             raise ValueError(f"{path}: {', '.join(unsaid)} for an outcome it says nothing about")
         retired = front.get("retired")
         if str(front.get("part") or "") == RulePart.TOLD.value:
-            section, marked = front.get("section"), front.get("marked")
+            section, marked, order = front.get("section"), front.get("marked"), str(front.get("order") or "")
             return WorkflowRule(
                 rule_id, RulePart.TOLD, RuleText(""), RuleText(""), (), (),
                 [StageName(s) for s in listed(front.get("stages"))], [StoryKind(k) for k in listed(front.get("kinds"))],
                 RuleText(str(retired)) if retired else None, self._written(path), RuleText(told_of(body, rule_id)),
-                RuleText(str(section)) if section else None, Written(str(marked)) if marked else None)
+                RuleText(str(section)) if section else None, Written(str(marked)) if marked else None,
+                RuleOrder(int(order)) if order.isdigit() else None)
         return WorkflowRule(
             rule_id, RulePart(str(front.get("part") or "decision")), RuleText(paragraph(body, WHEN)),
             RuleText(paragraph(body, WHY)), outcomes, [CheckName(n) for n in listed(front.get("reports"))],
@@ -172,6 +174,8 @@ def told_text(rule: WorkflowRule) -> str:
         lines.append(f"section: {written_value(rule.section.value)}")
     if rule.marked is not None:
         lines.append(f"marked: {rule.marked.value}")
+    if rule.order is not None:
+        lines.append(f"order: {rule.order.value}")
     if rule.retired is not None:
         lines.append(f"retired: {written_value(rule.retired.value)}")
     told = rule.told.value if rule.told is not None else ""

@@ -5,6 +5,7 @@ stages:
 - judge
 section: Do not
 marked: stage-judge/SKILL.md
+order: 15
 ---
 
 # STAGE-JUDGE-NOT2

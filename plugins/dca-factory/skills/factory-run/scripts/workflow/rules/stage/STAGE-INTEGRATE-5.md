@@ -5,6 +5,7 @@ stages:
 - integrate
 section: Do
 marked: stage-integrate/SKILL.md
+order: 5
 ---
 
 # STAGE-INTEGRATE-5

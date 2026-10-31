@@ -5,6 +5,7 @@ stages:
 - plan
 section: Do not
 marked: stage-plan/SKILL.md
+order: 20
 ---
 
 # STAGE-PLAN-NOT1

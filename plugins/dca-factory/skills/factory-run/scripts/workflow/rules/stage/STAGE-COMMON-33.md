@@ -3,6 +3,7 @@ id: STAGE-COMMON-33
 part: told
 section: The gate is your test run
 marked: factory-run/reference/stage-common.md
+order: 33
 ---
 
 # STAGE-COMMON-33

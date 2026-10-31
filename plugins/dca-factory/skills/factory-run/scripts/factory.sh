@@ -37,6 +37,8 @@
 #   factory.sh spec-delta <story> [--format json]  what holds before and after the story
 #   factory.sh rules [--stage <s>] [--kind <k>] [--story <id>] [--format md|json] [--check]   every rule the gate,
 #                                            the runner and the stage skills hold a story to, in each kind's flow
+#   factory.sh brief <story> <stage> [--format json]   what the stage is told for the story: its brief, from the
+#                                                     workflow's stages and rules and the profile
 #   factory.sh release <story> [--force]     give up a story's claim on the remote (`claim_remote:`); --force: another's
 #   factory.sh integrate <story>             a published story whose merge request lost the race: delivered again
 #   factory.sh follow [--story <id>] [--process <name>] [--once [--lines <n>]] [--all] [--format text|json]
@@ -1826,6 +1828,12 @@ case "$command" in
     # The rulebook (WP-166): generated from where each rule is written — the gate's and the runner's registrations,
     # the skills' markers.
     read_command --rules "$@" ;;
+  brief)
+    # What a stage is told for a story (WP-169): the workflow's stage, its told rules for the story's kind, the gate
+    # rules it is measured by, the skills the profile names.
+    [ $# -ge 2 ] || usage
+    story_id="$1" stage_name="$2"; shift 2
+    read_command --stage-brief "$story_id" "$stage_name" "$@" ;;
   spec-delta)
     # What holds before and after a story (WP-105): what a person accepting it looks at.
     [ $# -ge 1 ] || usage

@@ -5,6 +5,7 @@ stages:
 - integrate
 section: Do not
 marked: stage-integrate/SKILL.md
+order: 8
 ---
 
 # STAGE-INTEGRATE-NOT1

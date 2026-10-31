@@ -5,6 +5,7 @@ stages:
 - build
 section: Do not
 marked: stage-build/SKILL.md
+order: 14
 ---
 
 # STAGE-BUILD-NOT4

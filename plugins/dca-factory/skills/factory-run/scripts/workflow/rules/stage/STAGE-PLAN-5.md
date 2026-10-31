@@ -5,6 +5,7 @@ stages:
 - plan
 section: Do
 marked: stage-plan/SKILL.md
+order: 5
 ---
 
 # STAGE-PLAN-5

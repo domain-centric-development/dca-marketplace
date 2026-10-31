@@ -5,6 +5,7 @@ stages:
 - test
 section: Do
 marked: stage-test/SKILL.md
+order: 3
 ---
 
 # STAGE-TEST-2A

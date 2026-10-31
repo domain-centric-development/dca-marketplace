@@ -5,6 +5,7 @@ stages:
 - plan
 section: Do
 marked: stage-plan/SKILL.md
+order: 14
 ---
 
 # STAGE-PLAN-9C

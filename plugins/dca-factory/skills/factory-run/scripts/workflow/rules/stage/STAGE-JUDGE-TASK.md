@@ -7,6 +7,7 @@ kinds:
 - task
 section: Task mode
 marked: stage-judge/SKILL.md
+order: 12
 ---
 
 # STAGE-JUDGE-TASK

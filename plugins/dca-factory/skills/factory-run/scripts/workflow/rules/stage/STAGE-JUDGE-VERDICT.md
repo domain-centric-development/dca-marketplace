@@ -5,6 +5,7 @@ stages:
 - judge
 section: The verdict has three values, not two
 marked: stage-judge/SKILL.md
+order: 11
 ---
 
 # STAGE-JUDGE-VERDICT

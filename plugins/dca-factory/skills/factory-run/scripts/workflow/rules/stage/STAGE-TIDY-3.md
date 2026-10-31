@@ -5,6 +5,7 @@ stages:
 - tidy
 section: Do
 marked: stage-tidy/SKILL.md
+order: 3
 ---
 
 # STAGE-TIDY-3

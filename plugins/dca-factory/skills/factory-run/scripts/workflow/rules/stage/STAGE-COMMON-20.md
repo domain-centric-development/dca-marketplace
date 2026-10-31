@@ -3,6 +3,7 @@ id: STAGE-COMMON-20
 part: told
 section: A repeat round
 marked: factory-run/reference/stage-common.md
+order: 20
 ---
 
 # STAGE-COMMON-20

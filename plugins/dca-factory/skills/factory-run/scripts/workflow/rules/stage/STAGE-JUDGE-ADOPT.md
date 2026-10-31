@@ -7,6 +7,7 @@ kinds:
 - adopt
 section: Adopt mode
 marked: stage-judge/SKILL.md
+order: 13
 ---
 
 # STAGE-JUDGE-ADOPT

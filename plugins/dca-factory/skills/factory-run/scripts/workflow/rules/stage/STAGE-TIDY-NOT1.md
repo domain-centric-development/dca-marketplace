@@ -5,6 +5,7 @@ stages:
 - tidy
 section: Do not
 marked: stage-tidy/SKILL.md
+order: 9
 ---
 
 # STAGE-TIDY-NOT1

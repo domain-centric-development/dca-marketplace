@@ -5,6 +5,7 @@ stages:
 - judge
 section: Do
 marked: stage-judge/SKILL.md
+order: 8
 ---
 
 # STAGE-JUDGE-5A

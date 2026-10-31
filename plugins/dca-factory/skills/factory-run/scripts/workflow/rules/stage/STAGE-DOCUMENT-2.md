@@ -5,6 +5,7 @@ stages:
 - document
 section: Do
 marked: stage-document/SKILL.md
+order: 3
 ---
 
 # STAGE-DOCUMENT-2

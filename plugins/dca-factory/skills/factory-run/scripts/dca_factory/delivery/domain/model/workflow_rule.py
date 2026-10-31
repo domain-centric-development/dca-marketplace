@@ -53,6 +53,16 @@ class Written(Value):
     value: str
 
 
+class RuleOrder(Value):
+    """Where a told rule stands among the others its skill carries — the order a stage reads them in."""
+
+    value: int
+
+    def __post_init__(self) -> None:
+        if self.value < 1:
+            raise ValueError(f"order {self.value}: a told rule's place counts from 1")
+
+
 class Outcome(Value):
     """One way the rule comes out: what it means, and where it sends the story — none: where it was. Whether a target
     is a stage is the workflow's question (`WorkflowRule.unknown_targets`)."""
@@ -72,7 +82,7 @@ class WorkflowRule(AggregateRoot[RuleId]):
                  stages: typing.Sequence[StageName] = (), kinds: typing.Sequence[StoryKind] = (),
                  retired: typing.Optional[RuleText] = None, written: typing.Optional[Written] = None,
                  told: typing.Optional[RuleText] = None, section: typing.Optional[RuleText] = None,
-                 marked: typing.Optional[Written] = None) -> None:
+                 marked: typing.Optional[Written] = None, order: typing.Optional[RuleOrder] = None) -> None:
         super().__init__()
         states = [o.state for o in outcomes]
         if part is RulePart.TOLD:
@@ -97,6 +107,7 @@ class WorkflowRule(AggregateRoot[RuleId]):
         self._told = told
         self._section = section
         self._marked = marked
+        self._order = order
 
     @property
     def id(self) -> RuleId:
@@ -155,6 +166,11 @@ class WorkflowRule(AggregateRoot[RuleId]):
     def marked(self) -> typing.Optional[Written]:
         """Where a skill still carries a told rule's words, under its `<!-- rule: <id> -->` marker."""
         return self._marked
+
+    @property
+    def order(self) -> typing.Optional[RuleOrder]:
+        """A told rule's place among its skill's — None where it has none."""
+        return self._order
 
     def unknown_targets(self, targets: typing.FrozenSet[Target]) -> typing.Tuple[Target, ...]:
         """The targets its outcomes send a story to that are none of <targets> — a workflow's stages, again, stop."""

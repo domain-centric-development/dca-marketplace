@@ -3,6 +3,7 @@ id: STAGE-COMMON-5
 part: told
 section: A session the runner started
 marked: factory-run/reference/stage-common.md
+order: 5
 ---
 
 # STAGE-COMMON-5

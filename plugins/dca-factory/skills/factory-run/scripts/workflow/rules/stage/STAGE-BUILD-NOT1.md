@@ -5,6 +5,7 @@ stages:
 - build
 section: Do not
 marked: stage-build/SKILL.md
+order: 11
 ---
 
 # STAGE-BUILD-NOT1

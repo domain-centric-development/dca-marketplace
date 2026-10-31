@@ -7,6 +7,7 @@ kinds:
 - task
 section: Task mode
 marked: stage-plan/SKILL.md
+order: 18
 ---
 
 # STAGE-PLAN-TASK

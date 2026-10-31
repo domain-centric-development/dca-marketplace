@@ -360,6 +360,18 @@ the stages — the gate's checks, its pass actions — is placed once it is load
 
 **Type:** Aggregate
 
+### Stage brief (StageBrief) · Brief (Brief) · Told (Told) · Measure (Measure) · Carrier (Carrier)
+
+**Definition:** What a stage is told for one story, decided over the workflow and the rules: the stage (what it is
+for, what it writes, the window that carries it), the told rules that hold there for the story's kind — every stage's
+first, then the stage's own, each in its skill's order, its words as written —, the gate rules its work is measured by
+(when each applies, what a refusal by it says) and the skills the profile names for its craft, its guard and the
+method's knowledge. The domain service `StageBrief` takes the workflow; the use case `show_brief` gathers the story's
+kind, the rules and the profile; `factory.sh brief <story> <stage>` prints it, Markdown or JSON. The same story and
+stage give the same brief.
+
+**Type:** Domain service
+
 ### Check · Finding (Finding) · Stage evidence (StageEvidence)
 
 **Definition:** A gate is a set of checks, each a domain service over the story as the gate reads it (`StageStory`)

@@ -29,6 +29,7 @@ from ..delivery.adapter.outgoing.files.request_files import RequestFiles
 from ..delivery.adapter.outgoing.files.status_facts import StatusFactFiles
 from .schedule import schedule_data
 from ..delivery.adapter.outgoing.files.story_files import StoryFiles
+from ..sharedkernel.adapter.outgoing.profile.profile_files import ProfileFiles, resolve_profile
 from ..delivery.adapter.outgoing.files.story_runs import StoryRunFiles
 from ..delivery.adapter.outgoing.spec.story_spec_files import StorySpecFiles
 from ..delivery.adapter.outgoing.spec.delivered_spec_files import DeliveredSpecFiles
@@ -50,6 +51,7 @@ from ..delivery.application.cost.read_tool_usage import ReadToolUsageUseCase
 from ..delivery.application.delivery.probe_tool import ProbeToolUseCase
 from ..delivery.application.delivery.show_hand_over_contract import ShowHandOverContractUseCase
 from ..delivery.application.delivery.write_skeleton import WriteSkeletonUseCase
+from ..delivery.application.delivery.show_brief import ShowBriefUseCase
 from ..delivery.application.delivery.show_story_kind import ShowStoryKindUseCase
 from ..delivery.application.session.open_work_window import OpenWorkWindowUseCase
 from ..delivery.application.session.close_work_window import CloseWorkWindowUseCase
@@ -260,6 +262,10 @@ def give_checkout_back(cwd: str, runs: str) -> GiveCheckoutBackUseCase:
 
 def mark_listening(cwd: str, runs: str) -> MarkListeningUseCase:
     return MarkListeningUseCase(CheckoutFiles(cwd, runs))
+
+
+def show_brief(cwd: str) -> ShowBriefUseCase:
+    return ShowBriefUseCase(StoryFiles(cwd), ProfileFiles(resolve_profile(None, cwd)))
 
 
 def show_story_kind(cwd: str) -> ShowStoryKindUseCase:

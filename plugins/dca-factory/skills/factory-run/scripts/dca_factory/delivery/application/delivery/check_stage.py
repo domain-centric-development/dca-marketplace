@@ -202,6 +202,15 @@ def run_passed(run: Run) -> None:
         finish(run)
 
 
+def judging(stage: str, kind: StoryKind) -> typing.Tuple[str, ...]:
+    """The rules a gate of <stage> holds a story of <kind> to, in the order its checks run — each once."""
+    found: typing.List[str] = []
+    for entry in CHECKS:
+        if stage in entry.stages and kind in entry.kinds:
+            found += [b.rule for b in entry.rules if b.rule not in found]
+    return tuple(found)
+
+
 def refusing(stage: str, names: typing.Iterable[str]) -> typing.Tuple[Jump, ...]:
     """The ways of the rules a gate of <stage> refused under <names> (the checks its report says failed): the rules of
     the stage's checks, of what its passing gate does, and of the gate's own frame — each once, in the report's order."""
