@@ -9,7 +9,7 @@ import typing
 
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from ..files.hand_over_patterns import SELECTOR
-from ..pipeline.stage_rows import STAGE_FILES
+from ..pipeline.stage_rows import stage_files
 from ....domain.model.decision_record import RecordId
 from ....domain.model.stage_story import (
     CommandKey, Count, Evidence, Place, Presence, RedLedger, RunEnd, RunState, ScenarioKey, Selector, TestOutcome,
@@ -157,7 +157,7 @@ def red_ledger(cwd: str, runs: typing.Optional[str], story: typing.Optional[str]
             changed_on += [rid for rid, _f, state, answer, _b in acceptance_records(cwd, story or "")
                            if AcceptanceRules.corrects(DecisionState(state), Given(str(answer.get("answer", ""))))
                            is Presence.PRESENT]
-    built = bool(runs and story) and os.path.isfile(os.path.join(runs or "", story or "", STAGE_FILES["build"]))
+    built = bool(runs and story) and os.path.isfile(os.path.join(runs or "", story or "", stage_files()["build"]))
     moved = frozenset(Selector(selector) for selector, recorded in digests.items()
                       if recorded and located.get(selector) and os.path.isfile(os.path.join(cwd, located[selector]))
                       and file_digest(os.path.join(cwd, located[selector])) != recorded)

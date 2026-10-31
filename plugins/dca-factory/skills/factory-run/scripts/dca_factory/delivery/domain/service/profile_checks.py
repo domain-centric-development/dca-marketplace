@@ -3,9 +3,11 @@ instructions a tool loads whole."""
 
 from __future__ import annotations
 
+import typing
+
 from ....building_blocks import DomainService
 from ..gateway.stage_evidence import StageEvidence
-from ..model.stage import Pipeline, StoryKind
+from ..model.stage import StageName
 from ..model.stage_story import ContractNumber, ProfileText
 from ..model.verdict import CheckName, Findings, Said
 
@@ -68,15 +70,16 @@ class ProfileChecks(DomainService):
         return tuple(found)
 
     @staticmethod
-    def models(evidence: StageEvidence) -> Findings:
+    def models(evidence: StageEvidence, order: typing.Sequence[StageName]) -> Findings:
         """`model.<tool>.<stage>` and `model.<tool>`: the model a tool runs a stage on. The key names the tool because
         model names are the tool's: a profile is shared, and an unqualified `model.tidy: <a model name>` would break a
         colleague's run with another tool. So the unqualified forms are refused, and so is a key whose tool or stage
-        is misspelled — an ignored key is a cost saving nobody gets while everyone believes in it."""
+        is misspelled (a stage of <order>, a story's run order) — an ignored key is a cost saving nobody gets while
+        everyone believes in it."""
         keys = evidence.model_keys()
         if not keys:
             return ()
-        stages = tuple(s.value for s in Pipeline.order(StoryKind.STORY))
+        stages = tuple(s.value for s in order)
         bad = []
         for model in keys:
             key = model.key.value

@@ -11,7 +11,7 @@ import sys
 import typing
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from .hand_over_patterns import MAPPING_ROW, SELECTOR
-from ..pipeline.stage_rows import STAGE, STAGE_FILES, STAGE_ORDER
+from ..pipeline.stage_rows import stage_named, stage_files, stage_order
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir, place, read_profile, resolve_profile
 from .....spec.api import derived, placement_lines, story_entries
@@ -38,7 +38,7 @@ def contract_text(stage: str, runs: str) -> typing.Optional[str]:
     text = contract_body(stage, runs)
     if text is None:
         return None
-    for name in (STAGE_FILES[stage],) if stage in STAGE_FILES else ():
+    for name in (stage_files()[stage],) if stage in stage_files() else ():
         base, per = HANDOVER_BUDGET[name]
         text += (f"\n- size: what {name} has to say fits in {base / 1000:.1f} kB"
                  + (f" plus {per} bytes per criterion" if per else "")
@@ -110,11 +110,11 @@ test — {folder}/tests.md (gate after the stage: tests-mapped, tests-exist, com
 - `## Notes`: `- uncovered: <key> — <why>` only when unavoidable — not what a test fails on: the red run records it
 - stubs: a type with nothing a criterion observes (a record and its fields, an enum, an interface, an exception type) is
   written whole here; a method whose outcome a criterion asserts throws — whatever a criterion observes, throws"""
-    if stage in FILES_SECTIONS and STAGE[stage].suite:
+    if stage in FILES_SECTIONS and stage_named()[stage].suite:
         table, name = ("## Changed", "build") if stage == "build" else ("## Moves", "tidy")
         return f"""{CONTRACT_HEAD}
 
-{name} — {folder}/{STAGE_FILES[stage]} (gate after the stage: tests-green, red-proof{', red-reproof' if stage == 'tidy' else ''}, files-listed, existing tests, architecture, format)
+{name} — {folder}/{stage_files()[stage]} (gate after the stage: tests-green, red-proof{', red-reproof' if stage == 'tidy' else ''}, files-listed, existing tests, architecture, format)
 - `{table}`: `| File | Why |` — the first cell is a path from the project root, in backticks or bare; the other cells
   are prose. `files-listed` refuses a file the pipeline recorded as changed that no row names; a listed file that did
   not change is a note. A stage that changed no file needs no such section (tidy) — say so and why.
@@ -224,7 +224,7 @@ def changed_for_skeleton(cwd: str, runs: str, story_id: str, stage: str) -> typi
     listed = set()
     for name in FILES_SECTIONS:
         if name != stage:
-            listed |= listed_files(os.path.join(runs, story_id, STAGE_FILES[name])) or set()
+            listed |= listed_files(os.path.join(runs, story_id, stage_files()[name])) or set()
     not_listed = lambda path: path not in listed and not any(path.endswith("/" + n) for n in listed)
     builder = os.path.join(folder, "changed-builder.txt")
     if os.path.isfile(builder) and not snapshot_reason(builder):
@@ -255,18 +255,18 @@ def _files_skeleton(runs: str, story_id: str, stage: str, cwd: str = ".") -> int
         return 1
     heading, header, row = FILES_SECTIONS[stage]
     folder = os.path.join(runs, story_id)
-    target = os.path.join(folder, STAGE_FILES[stage])
+    target = os.path.join(folder, stage_files()[stage])
     os.makedirs(folder, exist_ok=True)
     if not os.path.isfile(target):
         rows = "\n".join(row.format(path=path) for path in changed)
         with open(target, "w", encoding="utf-8") as handle:
             handle.write(FILES_SKELETONS[stage].format(story=story_id, rows=rows))
-        print(f"factory: {runs}/{story_id}/{STAGE_FILES[stage]} — the skeleton with {len(changed)} path(s) under `{heading}`")
+        print(f"factory: {runs}/{story_id}/{stage_files()[stage]} — the skeleton with {len(changed)} path(s) under `{heading}`")
         return 0
     already = listed_files(target) or set()
     missing = [path for path in changed if path not in already and not any(path.endswith("/" + n) for n in already)]
     if not missing:
-        print(f"factory: {runs}/{story_id}/{STAGE_FILES[stage]} lists every changed file already — nothing added")
+        print(f"factory: {runs}/{story_id}/{stage_files()[stage]} lists every changed file already — nothing added")
         return 0
     lines = read_text(target).splitlines()
     start = next((i for i, line in enumerate(lines) if line.strip().lower() == heading.lower()), None)
@@ -283,7 +283,7 @@ def _files_skeleton(runs: str, story_id: str, stage: str, cwd: str = ".") -> int
         lines = lines[:start + 1] + body + addition + [""] + lines[end:]
     with open(target, "w", encoding="utf-8") as handle:
         handle.write("\n".join(lines).rstrip("\n") + "\n")
-    print(f"factory: {runs}/{story_id}/{STAGE_FILES[stage]} — {len(missing)} path(s) added under `{heading}`")
+    print(f"factory: {runs}/{story_id}/{stage_files()[stage]} — {len(missing)} path(s) added under `{heading}`")
     return 0
 
 
@@ -431,10 +431,10 @@ def document_skeleton(runs: str, story_id: str, cwd: str = ".") -> int:
             parts = line.split("\t", 1)
             if len(parts) == 2 and parts[0] in ("added", "modified") and os.path.isfile(os.path.join(cwd, parts[1])):
                 paths.append(parts[1])
-    for name in STAGE_ORDER:
-        run_file = os.path.join(folder, STAGE_FILES[name])
+    for name in stage_order():
+        run_file = os.path.join(folder, stage_files()[name])
         if os.path.isfile(run_file):
-            paths.append(f"{runs}/{story_id}/{STAGE_FILES[name]}")
+            paths.append(f"{runs}/{story_id}/{stage_files()[name]}")
     # the plan's proposals as the glossary table's rows: the term as the plan wrote it — the word the gate
     # looks for — the story's context, and the plan line as the definition's source; the stage writes the
     # glossary entry from the row and never retypes the term (the refusal that cost the bench a second run)

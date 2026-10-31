@@ -22,7 +22,7 @@ import tempfile
 from .owned_files import run_owned
 from .delivery_files import TEST_DIR, TEST_FILE
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
-from ..pipeline.stage_rows import STAGES
+from ..pipeline.stage_rows import all_stages
 from .decision_record_files import answered_decisions
 from .run_marks import last_ended
 from .test_files import read_mapping
@@ -426,5 +426,5 @@ def stale_red_proof(cwd: str, runs: str, story: str, start: typing.Optional[str]
     decided = Presence.PRESENT if moved and answered_decisions(cwd, story, "test") else Presence.ABSENT
     # A tidy that runs again moved the tests itself: its gate re-proves them on the red tree (WP-151 A).
     reproof = Presence.PRESENT if start == "tidy" and red_tree(runs, story) and last_ended(
-        runs, story, tuple(s.name for s in STAGES if s.lists and not s.red)) == "tidy" else Presence.ABSENT
+        runs, story, tuple(s.name for s in all_stages() if s.lists and not s.red)) == "tidy" else Presence.ABSENT
     return [m.value for m in KeptChecks.stale(tuple(Detail(m) for m in moved), decided, reproof)]

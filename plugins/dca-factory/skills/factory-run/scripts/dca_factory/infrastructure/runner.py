@@ -31,11 +31,10 @@ from ..sharedkernel.adapter.outgoing.profile.profile_files import (
 )
 from . import delivery
 from . import requests
-from ..delivery.adapter.outgoing.workflow.rule_files import RuleFiles
-from ..delivery.application.delivery.pipeline_rules import load as load_rules
+from .workflow import load_workflow
 
-# the rules the code binds, from their repository — once per process, held against every binding
-load_rules(RuleFiles())
+# the stages and the rules, from their repositories — once per process, held against every binding
+load_workflow()
 
 
 class RunnerCases:

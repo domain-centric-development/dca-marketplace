@@ -8,6 +8,7 @@ from support import evidence, gate_story, project, write
 from dca_factory.delivery.domain.model.stage_story import Presence
 from dca_factory.delivery.domain.service.kept_checks import KeptChecks
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
+from dca_factory.delivery.application.delivery.pipeline_workflow import workflow
 
 JAVA_TEST = "src/test/java/OrderTest.java"
 CS_TEST = "tests/OrderTest.cs"
@@ -50,7 +51,7 @@ class Renamed(unittest.TestCase):
                               removed=("src/main/java/OldFailure.java",))
             self.assertEqual(kept.changed, ())
             self.assertEqual([(r.was.value, r.now.value) for r in kept.renamed[0].renames], [("OldFailure", "NewFailure")])
-            notes = " ".join(f.said.value for f in KeptChecks.tests_kept(gate_story("S-1"), evidence(p.root, p.runs)))
+            notes = " ".join(f.said.value for f in KeptChecks(workflow()).tests_kept(gate_story("S-1"), evidence(p.root, p.runs)))
             self.assertIn("follows a rename the story made — OldFailure → NewFailure (in no glossary)", notes)
 
     def test_the_note_says_when_a_glossary_names_the_new_name(self):

@@ -28,7 +28,7 @@ import typing
 from .factory_process import scripts_dir
 from ..git.worktree_steps import integrate_finish, link_places, worktree_prepare, worktree_remove
 from ..git.worktrees import has_worktree, worktree_of
-from ..pipeline.stage_rows import SHARED_WINDOWS, STAGE, STAGE_FILES, STAGE_ORDER
+from ..pipeline.stage_rows import stage_windows, stage_named, stage_files, stage_order
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from .....sharedkernel.adapter.outgoing.profile.profile_files import (
     place, PROFILE_FILE, read_profile, resolve_profile, set_places)
@@ -250,7 +250,7 @@ class Run:
         return f"{parent}/evidence"
 
     def stage_file(self, stage: str) -> str:
-        return STAGE_FILES.get(stage, "")
+        return stage_files().get(stage, "")
 
     def artefact(self, story: str, stage: str) -> str:
         return f"{self.runs}/{story}/{self.stage_file(stage)}"
@@ -413,7 +413,7 @@ class Run:
         """The stage a refusal sends the story back to: from the judge's file (`build` without one); with a stage,
         `test` where that stage found the defect in a test's own code, else nothing."""
         self.profile()
-        path = os.path.join(place("runs"), story, STAGE_FILES[stage] if stage else "judge.md")
+        path = os.path.join(place("runs"), story, stage_files()[stage] if stage else "judge.md")
         if stage:
             return "test" if os.path.isfile(path) and back_in(read_text(path)) == "test" else ""
         return back_in(read_text(path)) if os.path.isfile(path) else "build"
@@ -527,7 +527,7 @@ class Run:
     def later_refusals(self, story: str, stage: str, where: str) -> str:
         """The reports of the gates after <stage> that refused the story and sent it back."""
         found, seen = "", False
-        for later in STAGE_ORDER:
+        for later in stage_order():
             if later == stage:
                 seen = True
                 continue
@@ -557,7 +557,7 @@ class Run:
             repeat += self.red_stale_sentence(story)
         if stage == "judge" and os.path.isfile(f"{self.runs}/{story}/.judge-previous.md"):
             repeat = f" This is a repeat round; the previous verdict: {self.runs}/{story}/.judge-previous.md."
-        guard = self.guard_sentence() if stage in STAGE and STAGE[stage].guarded else ""
+        guard = self.guard_sentence() if stage in stage_named() and stage_named()[stage].guarded else ""
         return (f"Apply the stage-{stage} skill for backlog story {story}.{self.worktree_sentence()} "
                 f"{self.where_things_are(self.tool_in_flight, story)}{guard}{repeat}")
 
@@ -1123,7 +1123,7 @@ class Run:
                 + ("is" if len(missing) == 1 else "are") + " no known tool or not on the PATH (tool / tool.<unit> in "
                 "the profile) — nothing started")
             return 2
-        shared = {stage for stages in SHARED_WINDOWS.values() for stage in stages}
+        shared = {stage for stages in stage_windows().values() for stage in stages}
         for key in sorted(self.profile()):
             if key.startswith("tool.") and key[5:] in shared:
                 print(f"factory: note — `{key}` names a stage a shared process carries; the unit is the process "

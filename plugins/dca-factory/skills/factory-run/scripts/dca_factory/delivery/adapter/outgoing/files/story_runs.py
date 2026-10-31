@@ -10,7 +10,7 @@ from .kept_files import TESTS_BASELINE
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError, read_front_matter
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
-from ..pipeline.stage_rows import STAGE_FILES
+from ..pipeline.stage_rows import stage_files
 from ....application.schedule.stand_story import stand_story
 from ....domain.model.moment import Moment
 from ....domain.model.story import Delivery, StoryId
@@ -65,7 +65,7 @@ class StoryRunFiles:
             except (GateError, MarkdownError):
                 continue
             story_id = story_id_of(path, front)
-            if story_id == exclude.value or not os.path.isfile(os.path.join(self._runs, story_id, STAGE_FILES["test"])):
+            if story_id == exclude.value or not os.path.isfile(os.path.join(self._runs, story_id, stage_files()["test"])):
                 continue
             standing = stand_story(StoryFactsFiles(self._cwd, self._runs, story_id, front, path))
             if standing.state not in ENDED:

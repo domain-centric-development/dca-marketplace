@@ -1,12 +1,13 @@
-"""The pipeline's stages as the adapters read them: one flat row per stage — the domain's `PIPELINE` in words and
-flags —, the run orders by kind, the shared windows, the hand-over each stage writes."""
+"""The workflow's stages as the adapters read them: one flat row per stage — the loaded workflow's in words and flags
+—, the run orders by kind, the shared windows, the hand-over each stage writes. Functions, asked when they run: the
+workflow is loaded by the composition root, after the modules are imported."""
 
 from __future__ import annotations
 
 import typing
 
-from ....domain.model.stage import (
-    PIPELINE, Pipeline, Stage as PipelineStage, StoryKind, TESTED_KINDS as DOMAIN_TESTED_KINDS, Trait)
+from ....application.delivery.pipeline_workflow import workflow
+from ....domain.model.stage import Stage as PipelineStage, StoryKind, TESTED_KINDS as DOMAIN_TESTED_KINDS, Trait
 from ....domain.model.verdict import FORM_CHECKS as DOMAIN_FORM_CHECKS
 
 
@@ -52,7 +53,7 @@ TESTED_KINDS = tuple(kind.value for kind in StoryKind if kind in DOMAIN_TESTED_K
 
 
 def flat_row(row: PipelineStage) -> Stage:
-    """A stage of the domain's pipeline as the gate, the runner and the cli read it: words and flags."""
+    """A stage of the workflow as the gate, the runner and the cli read it: words and flags."""
     return Stage(row.name.value, row.hand_over.value if row.hand_over else "",
                  row.window.value if row.window else "", tuple(k.value for k in StoryKind if k in row.kinds),
                  Trait.GATED in row.traits, Trait.POST_GATED in row.traits, tuple(c.value for c in row.commands),
@@ -61,55 +62,51 @@ def flat_row(row: PipelineStage) -> Stage:
                  Trait.IN_ORDER in row.traits)
 
 
-#: The pipeline, one row per stage — the domain's (`delivery/domain/model/stage.py`), in the adapters' words.
-STAGES = tuple(flat_row(row) for row in PIPELINE)
+def all_stages() -> typing.Tuple[Stage, ...]:
+    """The workflow's stages, one flat row each — the loaded workflow's (`workflow/stages/`), in the adapters' words."""
+    return tuple(flat_row(row) for row in workflow().stages)
 
 
-STAGE = {stage.name: stage for stage in STAGES}
+def stage_named() -> typing.Dict[str, Stage]:
+    return {stage.name: stage for stage in all_stages()}
 
 
-#: The hand-over each stage of the run order writes.
-STAGE_FILES = {s.name: s.file for s in STAGES if s.in_order}
+def stage_files() -> typing.Dict[str, str]:
+    """The hand-over each stage of the run order writes."""
+    return {s.name: s.file for s in all_stages() if s.in_order}
 
 
-#: One process may carry several stages and mark its window under one name: the shared builder (plan to
-#: tidy) and the shared verifier (judge, then document). The journal, the changed-files record and the
-#: usage are that window's; every stage still writes its own file.
-SHARED_WINDOWS = {w: tuple(s.name for s in STAGES if s.window == w)
-                  for w in dict.fromkeys(s.window for s in STAGES if s.window)}
+def stage_windows() -> typing.Dict[str, typing.Tuple[str, ...]]:
+    """One process may carry several stages and mark its window under one name: the shared builder (plan to tidy) and
+    the shared verifier (judge, then document). The journal, the changed-files record and the usage are that window's;
+    every stage still writes its own file."""
+    stages = all_stages()
+    return {w: tuple(s.name for s in stages if s.window == w) for w in dict.fromkeys(s.window for s in stages if s.window)}
 
 
-#: Extra profile commands run per stage, in this order.
-STAGE_CHECKS = {s.name: s.commands for s in STAGES if s.gated}
+def stage_commands() -> typing.Dict[str, typing.Tuple[str, ...]]:
+    """Extra profile commands run per stage, in this order."""
+    return {s.name: s.commands for s in all_stages() if s.gated}
 
 
-#: The stages whose gate runs after their file is written, so a pass of that gate vouches for the file as it stands.
-POST_GATED = tuple(s.name for s in STAGES if s.post_gated)
-
-
-def stage_order(kind: str = "story") -> typing.Tuple[str, ...]:
-    """The run order of a story of this kind, as the domain's pipeline orders it."""
-    return tuple(name.value for name in Pipeline.order(StoryKind(kind)))
+def post_gated_stages() -> typing.Tuple[str, ...]:
+    """The stages whose gate runs after their file is written, so a pass of that gate vouches for the file as it
+    stands."""
+    return tuple(s.name for s in all_stages() if s.post_gated)
 
 
 # Several stories are a loop over one story run, and the loop needs to know what comes next without
 # anyone remembering it. So the state is read off the same files a single run leaves — stage files,
 # refusal reports, the round counter, the verdict, the decision records — and never stored.
-STAGE_ORDER = stage_order("story")
-
-
-JOURNEY_ORDER = stage_order("journey")                       # nothing to build: the steps are delivered
-
-
-ADOPT_ORDER = stage_order("adopt")                           # nothing built: the adopt gate delivers it
-
-
-TASK_ORDER = stage_order("task")                             # nothing new to test: the existing suite holds
+def stage_order(kind: str = "story") -> typing.Tuple[str, ...]:
+    """The run order of a story of this kind, as the workflow orders it — a journey builds nothing, an adopted story is
+    not built, a task has nothing new to test."""
+    return tuple(name.value for name in workflow().order(StoryKind(kind)))
 
 
 def order_for(kind: str) -> typing.Tuple[str, ...]:
-    """The run order of a story of this kind, from the stage table."""
-    return {"journey": JOURNEY_ORDER, "adopt": ADOPT_ORDER, "task": TASK_ORDER}.get(kind, STAGE_ORDER)
+    """The run order of a story of this kind — an unknown kind runs a story's."""
+    return stage_order(kind if kind in ALL_KINDS else "story")
 
 
 #: The checks about a hand-over's form — the domain's (`verdict.FORM_CHECKS`).

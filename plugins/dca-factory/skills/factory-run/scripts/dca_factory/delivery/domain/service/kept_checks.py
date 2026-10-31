@@ -7,10 +7,11 @@ import typing
 
 from ....building_blocks import DomainService
 from ..gateway.stage_evidence import StageEvidence
-from ..model.stage import PIPELINE, Pipeline, StageName, Trait
+from ..model.stage import StageName, Trait
 from ..model.stage_story import MappedTest, Presence, StageStory, TestChange, Unobserved
 from ..model.story_state import Detail
 from ..model.verdict import CheckName, Finding, Findings, Said
+from ..model.workflow import Workflow
 
 FILES_LISTED = CheckName("files-listed")
 TESTS_KEPT = CheckName("tests-kept")
@@ -18,14 +19,15 @@ RED_PROOF = CheckName("red-proof")
 
 #: How a changed test is named in a finding.
 SUFFIX = {TestChange.CHANGED: "", TestChange.REMOVED: " (removed)", TestChange.SWITCHED_OFF: " (switched off)"}
-LISTING = frozenset(s.name for s in PIPELINE if Trait.LISTS in s.traits)
 
 
 class KeptChecks(DomainService):
-    """The checks over what a stage changed."""
+    """The checks over what a stage changed, over the stages of <workflow>."""
 
-    @staticmethod
-    def files_listed(story: StageStory, stage: StageName, tests: typing.Tuple[MappedTest, ...],
+    def __init__(self, workflow: Workflow) -> None:
+        self._workflow = workflow
+
+    def files_listed(self, story: StageStory, stage: StageName, tests: typing.Tuple[MappedTest, ...],
                      evidence: StageEvidence) -> Findings:
         """The test, build and tidy hand-overs name every file the stage changed, so the next stage can read those
         instead of searching — checked against what the stage changed, never against the claim. A test file the
@@ -33,7 +35,7 @@ class KeptChecks(DomainService):
         changed."""
         facts = evidence.stage_changes(story.story, stage, tests)
         name = stage.value
-        own = Pipeline.hand_over(stage)
+        own = self._workflow.hand_over(stage)
         hand_over = own.value if own else "?"
         if facts.unobserved is Unobserved.STAGE_OPEN:
             return (FILES_LISTED.skip(Said(f"the {name} stage is still open — its changed-files record is written at "
@@ -69,8 +71,7 @@ class KeptChecks(DomainService):
                                           f"changed{put_back}")))
         return tuple(found)
 
-    @staticmethod
-    def tests_kept(story: StageStory, evidence: StageEvidence) -> Findings:
+    def tests_kept(self, story: StageStory, evidence: StageEvidence) -> Findings:
         """A test that existed before the story keeps every line it expected; it changes only where a decision is
         about it, or where the story says that behaviour changes and the plan lists the test with what backs it."""
         kept = evidence.kept_tests(story.story)
@@ -100,10 +101,11 @@ class KeptChecks(DomainService):
         # A decision changes the tests it is about, not any test: one the test or the build stage asked about a
         # test, one whose record names the file, or — for a plan's question — the tests the re-plan lists.
         decided = evidence.decided_tests(story.story)
+        listing = frozenset(s.name for s in self._workflow.having(Trait.LISTS))
         planned = {change.place.value: change.cites.value for change in evidence.planned_test_changes(story.story)}
 
         def covers(rel: str) -> bool:
-            return rel in planned or any((record.stage in LISTING) or rel.rsplit("/", 1)[-1] in record.text.value
+            return rel in planned or any((record.stage in listing) or rel.rsplit("/", 1)[-1] in record.text.value
                                          for record in decided)
 
         named = [entry for _rel, entry in entries]

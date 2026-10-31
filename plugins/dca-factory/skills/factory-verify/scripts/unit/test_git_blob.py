@@ -11,6 +11,7 @@ from dca_factory import contract
 from dca_factory.delivery.domain.service.kept_checks import KeptChecks
 from dca_factory.delivery.adapter.outgoing.git import repository
 from dca_factory.delivery.adapter.outgoing.files import delivery_writes
+from dca_factory.delivery.application.delivery.pipeline_workflow import workflow
 
 TEST = "src/test/java/com/example/ShopTest.java"
 INDENTED = "    package com.example;\nclass ShopTest {\n  @Test void opens() { assertTrue(shop.open()); }\n}\n"
@@ -40,7 +41,7 @@ class GitBlob(unittest.TestCase):
 
     def test_a_test_whose_first_line_is_indented_and_unchanged_is_kept(self):
         delivery_writes.record_tests_baseline(self.root, self.runs, "STORY-1")
-        result = verdict(KeptChecks.tests_kept(gate_story("STORY-1"), evidence(self.root, self.runs)))
+        result = verdict(KeptChecks(workflow()).tests_kept(gate_story("STORY-1"), evidence(self.root, self.runs)))
         self.assertEqual([(verdict, check) for verdict, check, _m in result.entries], [("pass", "tests-kept")])
         self.assertNotIn("arranged", result.entries[0][2])
 

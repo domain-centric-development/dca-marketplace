@@ -14,8 +14,12 @@ import unittest
 import support  # noqa: F401 — puts the package on the path
 
 from dca_factory.delivery.api.rules import pipeline_rules
-from dca_factory.delivery.application.delivery.check_stage import CHECKS, check
+from dca_factory.delivery.application.delivery.check_stage import CHECKS, check, chosen_stages
+from dca_factory.delivery.application.delivery.pipeline_workflow import load as load_stages, workflow
 from dca_factory.delivery.adapter.outgoing.workflow.rule_files import RuleFiles
+from dca_factory.delivery.adapter.outgoing.workflow.stage_files import StageFiles
+from dca_factory.delivery.domain.model.stage import HandOver, Stage, StageName
+from dca_factory.delivery.domain.model.workflow import DELIVERY, Workflow, WorkflowName
 from dca_factory.delivery.application.delivery import pipeline_rules as bound_rules
 from dca_factory.delivery.domain.model.jump import RuleId, Target
 from dca_factory.delivery.domain.model.workflow_rule import Outcome, OutcomeState, RulePart, RuleText, WorkflowRule
@@ -93,7 +97,7 @@ class RegisteredTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             WorkflowRule(RuleId("GATE-X"), RulePart.CHECK, RuleText("w"), RuleText("y"))
         with self.assertRaises(ValueError):
-            Outcome(OutcomeState.FAIL, RuleText("f"), (Target("nowhere"),))
+            chosen_stages("story", ("nowhere",), workflow())
 
 
 class RuleFilesTest(unittest.TestCase):
@@ -128,6 +132,47 @@ class RuleFilesTest(unittest.TestCase):
         finally:
             bound_rules.RULES.clear()
             bound_rules.RULES.update(saved)
+
+
+class StageFilesTest(unittest.TestCase):
+    """The workflow's repository over Markdown files: the stages read back as saved, in their order; the workflow as
+    a whole holds each name once and weighs only files its stages write."""
+
+    def test_the_workflow_reads_back_the_same(self):
+        with tempfile.TemporaryDirectory() as root:
+            files = StageFiles(os.path.join(root, "stages"))
+            back = files.save(workflow())
+            self.assertEqual(workflow().stages, back.stages)
+            self.assertEqual(sorted(s.name.value + ".md" for s in back.stages),
+                             sorted(os.listdir(os.path.join(root, "stages"))))
+            self.assertIsNone(files.find_by_id(WorkflowName("other")))
+            files.delete_by_id(DELIVERY)
+            self.assertIsNone(files.find_by_id(DELIVERY))
+
+    def test_a_file_named_other_than_its_stage_or_without_its_place_is_refused(self):
+        for text in ("---\nname: plan\norder: 1\n---\n", "---\nname: build\n---\n"):
+            with tempfile.TemporaryDirectory() as root:
+                plant(root, {"build.md": text})
+                with self.assertRaises(ValueError):
+                    StageFiles(root).find_by_id(DELIVERY)
+
+    def test_a_workflow_names_each_stage_once_and_weighs_what_its_stages_write(self):
+        plan = Stage(StageName("plan"), HandOver("plan.md"))
+        with self.assertRaises(ValueError):
+            Workflow(DELIVERY, [plan, plan])
+        with self.assertRaises(ValueError):
+            Workflow(DELIVERY, [Stage(StageName("stop"))])
+        with self.assertRaises(ValueError):
+            Workflow(DELIVERY, [Stage(StageName("test"), HandOver("plan.md")), plan])
+        with self.assertRaises(ValueError):
+            Workflow(DELIVERY, [Stage(StageName("build"), sizes=(HandOver("build.md"),))])
+        with self.assertRaises(ValueError):
+            Workflow(DELIVERY, [])
+
+    def test_no_workflow_stops_the_load(self):
+        with tempfile.TemporaryDirectory() as root:
+            with self.assertRaises(ValueError):
+                load_stages(StageFiles(root))
 
 
 class SkillsTest(unittest.TestCase):

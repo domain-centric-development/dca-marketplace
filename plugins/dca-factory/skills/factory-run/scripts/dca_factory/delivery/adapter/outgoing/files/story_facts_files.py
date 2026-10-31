@@ -7,7 +7,7 @@ import os
 import typing
 
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
-from ..pipeline.stage_rows import order_for, STAGE_FILES, STAGE_ORDER
+from ..pipeline.stage_rows import order_for, stage_files, stage_order
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_text
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir, factory_home
 from ....application.shared.front import is_acceptance
@@ -54,8 +54,8 @@ class StoryFactsFiles:
         marks = self.marks(texts, pass_marks(self.runs, self.story_id))
         acceptance = self.acceptance() if self.story_path and "document" in texts else None
         return RunFacts(hand_overs, records, unreadable, frozenset(marks), self.rounds(),
-                        tuple(StageName(s) for s in STAGE_ORDER if self.present(f".gate-{s}.txt")),
-                        frozenset(StageName(s) for s in STAGE_ORDER if self.present(STAGE_FILES[s])),
+                        tuple(StageName(s) for s in stage_order() if self.present(f".gate-{s}.txt")),
+                        frozenset(StageName(s) for s in stage_order() if self.present(stage_files()[s])),
                         self.report(".gate-integrate.txt"), self.report(".gate-document.txt"), acceptance)
 
     @staticmethod
@@ -90,7 +90,7 @@ class StoryFactsFiles:
             if refused and refused != backlog_digest(self.story_path):
                 marks.add(Mark.REPAIRED)
         if self.present(".gate-integrate.txt") \
-                and not passes.get(f"wrote:{STAGE_FILES['build']}", 0) > passes.get("fail:integrate", 0):
+                and not passes.get(f"wrote:{stage_files()['build']}", 0) > passes.get("fail:integrate", 0):
             marks.add(Mark.INTEGRATE_REFUSED)
         if has_worktree(self.story_id, factory_home() or self.cwd):
             marks.add(Mark.WORKTREE)

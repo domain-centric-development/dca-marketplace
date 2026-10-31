@@ -19,6 +19,7 @@ from ...domain.model.jump import Jump, RuleId
 from ...domain.model.stage import StoryKind
 from ...domain.model.workflow_rule import OutcomeState, RulePart, WorkflowRule
 from ..shared.rule_repository import RuleRepository
+from .pipeline_workflow import workflow
 
 Function = typing.TypeVar("Function", bound=typing.Callable[..., typing.Any])
 
@@ -64,6 +65,14 @@ def bind(ids: typing.Iterable[str], part: RulePart, function: typing.Callable[..
     return bound
 
 
+def restage(bound: typing.Tuple[Bound, ...], stages: typing.Tuple[str, ...]) -> typing.Tuple[Bound, ...]:
+    """<bound> placed at <stages> — once the workflow is loaded, the stages its code holds for."""
+    moved = tuple(b._replace(stages=stages) for b in bound)
+    for old, new in zip(bound, moved):
+        BOUND[BOUND.index(old)] = new
+    return moved
+
+
 def held(bound: typing.Iterable[Bound]) -> None:
     """Every bound rule is one the repository holds, not retired, of the part its code is."""
     missing = [b.rule for b in bound if b.rule not in RULES or RULES[b.rule].retired is not None]
@@ -77,10 +86,16 @@ def held(bound: typing.Iterable[Bound]) -> None:
 
 
 def load(repository: RuleRepository) -> None:
-    """The rules from <repository>, held against every rule bound so far — once per process, by its composition
-    root."""
+    """The rules from <repository>, held against every rule bound so far and against the loaded workflow — every
+    target a stage of it, `again` or `stop` — once per process, by its composition root, after the workflow."""
+    found = {r.id.value: r for r in repository.all()}
+    targets = workflow().targets()
+    unknown = [f"{rule_id} ({', '.join(t.value for t in r.unknown_targets(targets))})" for rule_id, r in found.items()
+               if r.unknown_targets(targets)]
+    if unknown:
+        raise ValueError(f"rule {'; '.join(unknown)} goes to no stage of the workflow, again or stop")
     RULES.clear()
-    RULES.update({r.id.value: r for r in repository.all()})
+    RULES.update(found)
     held(BOUND)
 
 

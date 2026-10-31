@@ -15,12 +15,9 @@ import enum
 import typing
 
 from ....building_blocks import AggregateRoot, Value
-from .jump import AGAIN, Jump, RuleId, STOP, Target
-from .stage import PIPELINE, StageName, StoryKind
+from .jump import Jump, RuleId, Target
+from .stage import StageName, StoryKind
 from .verdict import CheckName
-
-#: Every name a `goes` may give: a stage of the table, `again`, `stop`.
-TARGETS = frozenset([s.name.value for s in PIPELINE] + [AGAIN, STOP])
 
 
 class RulePart(enum.Enum):
@@ -55,16 +52,12 @@ class Written(Value):
 
 
 class Outcome(Value):
-    """One way the rule comes out: what it means, and where it sends the story — none: where it was."""
+    """One way the rule comes out: what it means, and where it sends the story — none: where it was. Whether a target
+    is a stage is the workflow's question (`WorkflowRule.unknown_targets`)."""
 
     state: OutcomeState
     said: RuleText
     goes: typing.Tuple[Target, ...] = ()
-
-    def __post_init__(self) -> None:
-        unknown = sorted(t.value for t in self.goes if t.value not in TARGETS)
-        if unknown:
-            raise ValueError(f"an outcome goes to {', '.join(unknown)} — no stage, again or stop")
 
 
 class WorkflowRule(AggregateRoot[RuleId]):
@@ -135,6 +128,10 @@ class WorkflowRule(AggregateRoot[RuleId]):
     @property
     def written(self) -> typing.Optional[Written]:
         return self._written
+
+    def unknown_targets(self, targets: typing.FrozenSet[Target]) -> typing.Tuple[Target, ...]:
+        """The targets its outcomes send a story to that are none of <targets> — a workflow's stages, again, stop."""
+        return tuple(sorted({t for o in self._outcomes for t in o.goes} - targets, key=lambda t: t.value))
 
     def jump(self, state: OutcomeState) -> Jump:
         """Where the rule sends the story on <state>: its targets — none where it says nothing about where."""

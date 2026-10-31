@@ -2215,14 +2215,14 @@ def verify_runner(runner, verbose=False):
             if os.path.isfile(os.path.join(root, ".dca-factory", "evidence", "STORY-1", ".rounds")) else "gone"
         check("runner: an unknown --from stage is refused (exit 2), invokes nothing and keeps the rounds",
               code == 2 and "INVOKED" not in output and rounds == "2", f"exit {code}; rounds {rounds}")
-    # 1d3''. the stages are the gate's table: the cli prints it, and the runner's stages and --from names come from it
-    #       — a row added to a copy of the gate is a stage of that copy's runner, without a line of the runner changed
+    # 1d3''. the stages are the workflow's: the cli prints them, and the runner's stages and --from names come from them
+    #       — a stage file added to a copy of the workflow is a stage of that copy's runner, without a line of code changed
     for root in throwaway():
         gated(build_project(root))
         cli = cli_of(runner)
         names = subprocess.run(
-            [sys.executable, "-c", PACKAGE_PROBE + "m = pkg; print(' '.join(r.name for r in m.STAGES)); "
-             "print(' '.join(r.name for r in m.STAGES if r.in_order))",
+            [sys.executable, "-c", PACKAGE_PROBE + "m = pkg; print(' '.join(r.name for r in m.all_stages())); "
+             "print(' '.join(r.name for r in m.all_stages() if r.in_order))",
              os.path.join(os.path.dirname(runner), "story-gate.py")],
             capture_output=True, text=True, encoding="utf-8").stdout.splitlines()
         every = subprocess.run([sys.executable, cli, "--stages", "--all"], cwd=root, capture_output=True, text=True,
@@ -2238,20 +2238,23 @@ def verify_runner(runner, verbose=False):
               f"table {names}; --all {every!r}; --stages {order!r}; shell {shell[:200]!r}")
         patched = os.path.join(root, "patched-plugin")
         shutil.copytree(os.path.normpath(os.path.join(os.path.dirname(runner), "..", "..")), patched, symlinks=True)
-        patched_gate = os.path.join(patched, "factory-run", "scripts", PACKAGE, "delivery", "domain", "model", "stage.py")
-        body = open(patched_gate, encoding="utf-8").read()
-        row = '    stage(StageName("adopt"), kinds=frozenset((StoryKind.ADOPT,)), without=(Trait.IN_ORDER,)),\n'
-        with open(patched_gate, "w", encoding="utf-8", newline="\n") as handle:
-            handle.write(body.replace(row, '    stage(StageName("probe"), HandOver("probe.md"), without=(Trait.GATED,)),\n'
-                                      + row, 1))
+        stages = os.path.join(patched, "factory-run", "scripts", WORKFLOW, "stages")
+        for name, place in (("adopt", 8), ("integrate", 9)):
+            path = os.path.join(stages, f"{name}.md")
+            body = open(path, encoding="utf-8").read()
+            with open(path, "w", encoding="utf-8", newline="\n") as handle:
+                handle.write(re.sub(r"(?m)^order: \d+$", f"order: {place}", body, count=1))
+        with open(os.path.join(stages, "probe.md"), "w", encoding="utf-8", newline="\n") as handle:
+            handle.write("---\nname: probe\norder: 7\nhand_over: probe.md\nkinds:\n- story\ntraits:\n- in_order\n---\n\n"
+                         "# probe\n")
         patched_runner = os.path.join(patched, "factory-run", "scripts", "factory.sh")
         code_bad, refused = run_runner(patched_runner, root, "run", "--story", "STORY-1", "--from", "nonsense",
                                        "--tool", "claude", "--dry-run")
         code_probe, probed = run_runner(patched_runner, root, "run", "--story", "STORY-1", "--from", "probe",
                                         "--tool", "claude", "--dry-run")
-        check("runner: a row added to the gate's table is a stage of the runner — named among --from's stages and run "
-              "from there, the runner unchanged",
-              row in body and code_bad == 2 and "document probe adopt integrate)" in refused
+        check("runner: a stage file added to the workflow is a stage of the runner — named among --from's stages and "
+              "run from there, the runner and the package unchanged",
+              code_bad == 2 and "document probe adopt integrate)" in refused
               and code_probe == 0 and "── stage probe" in probed and "names no stage" not in probed,
               f"exit {code_bad}/{code_probe}; {refused[-200:]!r}; {probed[-300:]!r}")
     # 1d4. three rounds stop a story; a person's --from starts a new count, keeps the old one, and the gate

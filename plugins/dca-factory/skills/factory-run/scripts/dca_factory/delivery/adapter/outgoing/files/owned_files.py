@@ -10,7 +10,7 @@ import os
 import sys
 import typing
 
-from ..pipeline.stage_rows import SHARED_WINDOWS, STAGE_FILES, STAGE_ORDER
+from ..pipeline.stage_rows import stage_windows, stage_files, stage_order
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError as GateError, read_text, split_front
 from .....sharedkernel.adapter.outgoing.profile.profile_files import (
     evidence_dir, evidence_rel, in_worktree, place, worktree_owned)
@@ -93,7 +93,7 @@ def record_owned(runs: str, story_id: str, story_path: typing.Optional[str] = No
     observe_writes(runs, story_id)               # what a person or an earlier window left, before this one writes
     run_folder = os.path.join(runs, story_id)
     with open(os.path.join(folder, WINDOW_DIGEST), "w", encoding="utf-8") as handle:
-        handle.writelines(f"{file_digest(os.path.join(run_folder, name))}  {name}\n" for name in STAGE_FILES.values()
+        handle.writelines(f"{file_digest(os.path.join(run_folder, name))}  {name}\n" for name in stage_files().values()
                           if os.path.isfile(os.path.join(run_folder, name)))
     with open(os.path.join(folder, OWNED_DIGEST), "w", encoding="utf-8") as handle:
         handle.writelines(f"{digest}  {part}\n" for part, digest in sorted(owned_parts(story_path).items()))
@@ -116,8 +116,8 @@ def observe_writes(runs: str, story_id: str) -> None:
     for event in journal_events(runs, story_id):
         if event["kind"] == "wrote":
             seen[event["name"]] = event["fields"].get("sha")
-    for stage in STAGE_ORDER:
-        name = STAGE_FILES[stage]
+    for stage in stage_order():
+        name = stage_files()[stage]
         path = os.path.join(folder, name)
         digest = file_digest(path) if os.path.isfile(path) else "gone"
         if seen.get(name, "gone") != digest:
@@ -186,20 +186,20 @@ def mark_window_files(runs: str, story_id: str, window: str) -> None:
             digest, _, name = line.partition("  ")
             at_start[name] = digest
         os.remove(path)
-    carried = SHARED_WINDOWS.get(window, (window,))
+    carried = stage_windows().get(window, (window,))
     for event in journal_events(runs, story_id):
         if event["kind"] == "stage-start" and event["name"] == window:
             carried = tuple(event["fields"].get("stages", "").split(",")) if event["fields"].get("stages") else carried
     marks = pass_marks(runs, story_id)
-    present = [s for s in STAGE_ORDER if STAGE_FILES.get(s) and os.path.isfile(os.path.join(run_folder, STAGE_FILES[s]))]
+    present = [s for s in stage_order() if stage_files().get(s) and os.path.isfile(os.path.join(run_folder, stage_files()[s]))]
     same = {s for s in present if s in carried
-            and at_start.get(STAGE_FILES[s]) == file_digest(os.path.join(run_folder, STAGE_FILES[s]))}
+            and at_start.get(stage_files()[s]) == file_digest(os.path.join(run_folder, stage_files()[s]))}
     anew = [s for s in present if s in carried and s not in same]
     newest, marked = 0, False
     for stage in present:
-        name = STAGE_FILES[stage]
+        name = stage_files()[stage]
         at = written_at(marks, stage)
-        later_anew = any(STAGE_ORDER.index(s) > STAGE_ORDER.index(stage) for s in anew)
+        later_anew = any(stage_order().index(s) > stage_order().index(stage) for s in anew)
         if stage in same and (marked or at is None or at < newest or not later_anew):
             journal_append(runs, story_id, "wrote", name, f"sha={at_start[name]}", "same=1")
             marked = True

@@ -1,6 +1,5 @@
-"""The pipeline's stages: what each one writes, which process may carry it, which stories run it, and what its gate
-holds it to. Everything the gate, the cli and the runner know about a stage is here; nothing else names a stage to
-decide on it."""
+"""A stage of the workflow: what it writes, which process may carry it, which stories run it, and what its gate holds it
+to. Which stages there are, in which order, is the workflow's (`workflow.py`), loaded from its repository."""
 
 from __future__ import annotations
 
@@ -8,7 +7,7 @@ import enum
 import re
 import typing
 
-from ....building_blocks import DomainService, Value
+from ....building_blocks import Value
 
 
 #: A hand-over's file name — one word or a hyphenated phrase, `.md`, no folder.
@@ -43,6 +42,12 @@ class ProfileCommand(Value):
     def __post_init__(self) -> None:
         if not PROFILE_KEY.fullmatch(self.value):
             raise ValueError(f"{self.value!r} is no key of the stack profile")
+
+
+class StageText(Value):
+    """What a stage is for, in a person's words — the workflow carries it, the factory decides nothing on it."""
+
+    value: str
 
 
 class StoryKind(enum.Enum):
@@ -103,7 +108,7 @@ TESTED_KINDS = frozenset((StoryKind.STORY, StoryKind.JOURNEY, StoryKind.ADOPT))
 
 
 class Stage(Value):
-    """One row of the pipeline."""
+    """One stage of the workflow."""
 
     name: StageName
     hand_over: typing.Optional[HandOver] = None
@@ -115,51 +120,5 @@ class Stage(Value):
     commands: typing.Tuple[ProfileCommand, ...] = ()
     #: the hand-overs whose size its gate weighs against the criteria
     sizes: typing.Tuple[HandOver, ...] = ()
-
-
-def stage(name: StageName, hand_over: typing.Optional[HandOver] = None, window: typing.Optional[Window] = None,
-          kinds: typing.FrozenSet[StoryKind] = frozenset((StoryKind.STORY,)), traits: typing.Iterable[Trait] = (),
-          without: typing.Iterable[Trait] = (), commands: typing.Tuple[ProfileCommand, ...] = (),
-          sizes: typing.Tuple[HandOver, ...] = ()) -> Stage:
-    """A row: gated and in the run order unless <without> says otherwise, with the further <traits>."""
-    held = (frozenset((Trait.GATED, Trait.IN_ORDER)) | frozenset(traits)) - frozenset(without)
-    return Stage(name, hand_over, window, kinds, held, commands, sizes)
-
-
-ARCHITECTURE, FORMAT = ProfileCommand("architecture"), ProfileCommand("format")
-
-PIPELINE: typing.Tuple[Stage, ...] = (
-    stage(StageName("plan"), HandOver("plan.md"), Window.BUILDER, ALL_KINDS),
-    stage(StageName("test"), HandOver("tests.md"), Window.BUILDER, TESTED_KINDS,
-          (Trait.LISTS, Trait.POST_GATED, Trait.TESTED, Trait.RED), sizes=(HandOver("plan.md"), HandOver("tests.md"))),
-    stage(StageName("build"), HandOver("build.md"), Window.BUILDER, frozenset((StoryKind.STORY, StoryKind.TASK)),
-          (Trait.LISTS, Trait.GUARDED, Trait.POST_GATED, Trait.TESTED, Trait.SUITE), commands=(ARCHITECTURE, FORMAT),
-          sizes=(HandOver("build.md"),)),
-    # The tidy stage changes no behaviour, so its whole claim is that everything still holds: the same commands
-    # as the build stage, run again after the refactor.
-    stage(StageName("tidy"), HandOver("tidy.md"), Window.BUILDER, frozenset((StoryKind.STORY, StoryKind.TASK)),
-          (Trait.LISTS, Trait.GUARDED, Trait.POST_GATED, Trait.TESTED, Trait.SUITE), commands=(ARCHITECTURE, FORMAT),
-          sizes=(HandOver("tidy.md"),)),
-    stage(StageName("judge"), HandOver("judge.md"), Window.VERIFIER, ALL_KINDS, without=(Trait.GATED,)),
-    stage(StageName("document"), HandOver("document.md"), Window.VERIFIER,
-          frozenset((StoryKind.STORY, StoryKind.JOURNEY, StoryKind.TASK)), (Trait.POST_GATED,),
-          commands=(ARCHITECTURE,), sizes=(HandOver("judge.md"), HandOver("document.md"))),
-    # Nothing built: the adopt gate delivers an adopted story after its judge.
-    stage(StageName("adopt"), kinds=frozenset((StoryKind.ADOPT,)), without=(Trait.IN_ORDER,)),
-    # The story on the main line as it is now: everything the tidy gate holds the story to, once more.
-    stage(StageName("integrate"), HandOver("integrate.md"), kinds=ALL_KINDS, traits=(Trait.TESTED, Trait.SUITE),
-          without=(Trait.IN_ORDER,), commands=(ARCHITECTURE, FORMAT)),
-)
-
-
-class Pipeline(DomainService):
-    """The run order of a story, by its kind."""
-
-    @staticmethod
-    def order(kind: StoryKind) -> typing.Tuple[StageName, ...]:
-        return tuple(s.name for s in PIPELINE if Trait.IN_ORDER in s.traits and kind in s.kinds)
-
-    @staticmethod
-    def hand_over(name: StageName) -> typing.Optional[HandOver]:
-        """The file the stage writes, None for a stage that writes none."""
-        return next((s.hand_over for s in PIPELINE if s.name == name), None)
+    #: what it is for, as a person reads it
+    about: typing.Optional[StageText] = None

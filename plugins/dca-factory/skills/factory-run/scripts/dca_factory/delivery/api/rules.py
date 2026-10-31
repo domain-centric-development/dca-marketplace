@@ -23,12 +23,14 @@ from ..application.delivery import (  # noqa: F401
     check_change, check_parity, claim_story, confirm_owned, integrate_story, pass_actions, process_checks, run_story,
     stage_checks)
 from ..adapter.outgoing.workflow.rule_files import RuleFiles
+from ..adapter.outgoing.workflow.stage_files import StageFiles
 from ..application.delivery.check_stage import CHECKS, PASS_RULES
 from ..application.delivery.pipeline_rules import Bound, DECIDED, load, RULES
+from ..application.delivery.pipeline_workflow import load as load_stages, loaded, workflow
 from ..application.profile import profile_rules  # noqa: F401
 from ..application.requests import request_queue, work_request  # noqa: F401
 from ..application.schedule import schedule_backlog, stand_story  # noqa: F401
-from ..domain.model.stage import Pipeline, PIPELINE, StoryKind, Trait
+from ..domain.model.stage import StoryKind, Trait
 from ..domain.model.workflow_rule import WorkflowRule
 from ...sharedkernel.adapter.outgoing.profile.profile_files import place, read_profile, resolve_profile, set_places
 
@@ -49,11 +51,18 @@ def published(bound: typing.Optional[Bound], found: WorkflowRule) -> Published:
                 retired=found.retired.value if found.retired else "")
 
 
+def held() -> None:
+    """The workflow's stages and rules, loaded where this process has not yet."""
+    if not loaded():
+        load_stages(StageFiles())
+    if not RULES:
+        load(RuleFiles())
+
+
 def pipeline_rules() -> typing.List[Published]:
     """Every rule of the gate and the runner, each once: the checks in their order, the pass actions per stage, the
     decisions as their modules bind them, then what the rules hold that no code binds — retired, or a problem."""
-    if not RULES:
-        load(RuleFiles())
+    held()
     order = [b for check in CHECKS for b in check.rules] + [b for bs in PASS_RULES.values() for b in bs] + DECIDED
     found = [published(b, RULES[b.rule]) for b in order if b.rule in RULES]
     seen = {b.rule for b in order}
@@ -63,8 +72,9 @@ def pipeline_rules() -> typing.List[Published]:
 
 def stage_rows() -> typing.List[Published]:
     """The stage table, as the rulebook places rules in it."""
+    held()
     rows = []
-    for row in PIPELINE:
+    for row in workflow().stages:
         gate = "none" if Trait.GATED not in row.traits else "after" if Trait.POST_GATED in row.traits \
             or Trait.IN_ORDER not in row.traits else "before"
         rows.append(dict(name=row.name.value, kinds=[k for k in KIND_ORDER if StoryKind(k) in row.kinds],
@@ -75,7 +85,8 @@ def stage_rows() -> typing.List[Published]:
 
 def kind_orders() -> typing.Dict[str, typing.List[str]]:
     """Each kind's run order — the stages after it (adopt, integrate) are the table's rows outside the order."""
-    return {kind.value: [name.value for name in Pipeline.order(kind)] for kind in StoryKind}
+    held()
+    return {kind.value: [name.value for name in workflow().order(kind)] for kind in StoryKind}
 
 
 def story_gate_findings(cwd: str, story_id: str) -> Published:

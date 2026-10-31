@@ -8,8 +8,9 @@ import typing
 
 from ....building_blocks import DomainService, Value
 from ..model.jump import AGAIN, Jump, Next, RuleId, STOP, Target
-from ..model.stage import PIPELINE, Pipeline, Stage, StageName, StoryKind, Trait, Window
+from ..model.stage import StageName, StoryKind, Trait, Window
 from ..model.verdict import CheckName
+from ..model.workflow import Workflow
 from ..model.story_state import Detail, GateReport, HandOverText, MAX_ROUNDS, Rounds, VerdictWord
 
 JUDGE = StageName("judge")
@@ -73,20 +74,18 @@ ENVIRONMENT = "gate:fail environment"
 FAILED, CLOSING = "gate:fail ", "gate:fail story "
 
 
-def row(name: StageName) -> typing.Optional[Stage]:
-    return next((s for s in PIPELINE if s.name == name), None)
-
-
 class StoryRoute(DomainService):
-    """The route of one story run."""
+    """The route of one story run, over the stages of <workflow>."""
 
-    @staticmethod
-    def steps(kind: StoryKind, start: StageName, shared: typing.FrozenSet[Window]) -> typing.Tuple[RouteStep, ...]:
+    def __init__(self, workflow: Workflow) -> None:
+        self._workflow = workflow
+
+    def steps(self, kind: StoryKind, start: StageName, shared: typing.FrozenSet[Window]) -> typing.Tuple[RouteStep, ...]:
         """The stages from <start> on in the run order, each with how it runs: skipped where the kind does not run it,
         the builder's stages in one process where it is shared, the verifier's likewise — the route ends with it."""
         steps: typing.List[RouteStep] = []
         started, built = False, False
-        for stage in (s for s in PIPELINE if Trait.IN_ORDER in s.traits):
+        for stage in self._workflow.having(Trait.IN_ORDER):
             started = started or stage.name == start
             if not started:
                 continue
@@ -114,61 +113,54 @@ class StoryRoute(DomainService):
             steps.append(RouteStep(stage.name, Move.STAGE, frozenset(around)))
         return tuple(steps)
 
-    @staticmethod
-    def applying(asked: StageName, applies: StageName) -> StageName:
+    def applying(self, asked: StageName, applies: StageName) -> StageName:
         """The stage that applies an answer: the one the answer names (`applies: test` — an answer that changes a
         test goes back to the test stage, whoever asked), else the stage that asked."""
-        return applies if applies in Pipeline.order(StoryKind.STORY) else asked
+        return applies if applies in self._workflow.order(StoryKind.STORY) else asked
 
-    @staticmethod
-    def resumes_at(asked: StageName, applies: StageName) -> StageName:
+    def resumes_at(self, asked: StageName, applies: StageName) -> StageName:
         """Where the story resumes for an answer: the earlier of the stage that asked and the one the answer names.
         A plan's question answered `applies: test` still re-plans — the plan lists the tests that change — and the
         test stage after it takes the changed expectation."""
-        order = Pipeline.order(StoryKind.STORY)
-        named = StoryRoute.applying(asked, applies)
+        order = self._workflow.order(StoryKind.STORY)
+        named = self.applying(asked, applies)
         if asked not in order:
             return named
         return min((asked, named), key=lambda stage: order.index(stage) if stage in order else len(order))
 
-    @staticmethod
-    def window(kind: StoryKind, window: Window, start: typing.Optional[StageName] = None) -> typing.Tuple[StageName, ...]:
+    def window(self, kind: StoryKind, window: Window, start: typing.Optional[StageName] = None) -> typing.Tuple[StageName, ...]:
         """The stages a shared window carries for the kind — from <start> on where one is named."""
         carried, on = [], start is None
-        for stage in (s for s in PIPELINE if s.window is window):
+        for stage in self._workflow.in_window(window):
             on = on or stage.name == start
             if on and kind in stage.kinds:
                 carried.append(stage.name)
         return tuple(carried)
 
-    @staticmethod
-    def red_check(kind: StoryKind, start: StageName, jump: Jump) -> typing.Optional[Next]:
+    def red_check(self, kind: StoryKind, start: StageName, jump: Jump) -> typing.Optional[Next]:
         """Where a story that starts at <start> goes when its red proof went stale — where <jump> sends it, the stage
         that records the proof again — or None where the start does not rest on it: a stage that lists no files, the
         red stage itself, a kind that runs no tests."""
-        found = row(start)
+        found = self._workflow.stage(start)
         if found is None or Trait.LISTS not in found.traits or Trait.RED in found.traits:
             return None
-        named = row(StageName(jump.targets[0].value)) if jump.targets else None
+        named = self._workflow.stage(StageName(jump.targets[0].value)) if jump.targets else None
         if named is not None and kind not in named.kinds:
             return None
-        return StoryRoute.jump(kind, start, jump)
+        return self.jump(kind, start, jump)
 
-    @staticmethod
-    def jump(kind: StoryKind, here: StageName, jump: Jump) -> Next:
+    def jump(self, kind: StoryKind, here: StageName, jump: Jump) -> Next:
         """Where a rule with one way sends the story from <here>: its first target — `again` where it names none."""
-        return StoryRoute._to(kind, here, jump.targets[0] if jump.targets else Target(AGAIN), jump.rule)
+        return self._to(kind, here, jump.targets[0] if jump.targets else Target(AGAIN), jump.rule)
 
-    @staticmethod
-    def chosen(kind: StoryKind, here: StageName, jump: Jump, chosen: Target) -> Next:
+    def chosen(self, kind: StoryKind, here: StageName, jump: Jump, chosen: Target) -> Next:
         """A target the run's facts chose among the rule's ways (the judge's `back:`): taken where the rule names it;
         one it does not name stops the run — the rule, not the run, says where a story may go."""
         if chosen not in jump.targets:
             return Next(None, jump.rule)
-        return StoryRoute._to(kind, here, chosen, jump.rule)
+        return self._to(kind, here, chosen, jump.rule)
 
-    @staticmethod
-    def after_refusal(kind: StoryKind, refused: StageName, resumes: typing.Optional[StageName],
+    def after_refusal(self, kind: StoryKind, refused: StageName, resumes: typing.Optional[StageName],
                       jumps: typing.Sequence[Jump], fallback: RuleId) -> Next:
         """Where a refused gate sends the story — by the rules that failed: a rule whose one way is `stop` ends the
         run; else the earliest stage any of them names, or the refused stage (or the earlier one the story's state
@@ -176,19 +168,18 @@ class StoryRoute(DomainService):
         stopping = next((j for j in jumps if j.targets == (Target(STOP),)), None)
         if stopping is not None:
             return Next(None, stopping.rule)
-        ways = [StoryRoute._to(kind, refused, target, j.rule)
+        ways = [self._to(kind, refused, target, j.rule)
                 for j in jumps for target in (j.targets or (Target(AGAIN),)) if target != Target(STOP)]
-        ways.append(Next(StoryRoute.again_from(refused, resumes), fallback))
-        order = Pipeline.order(kind)
+        ways.append(Next(self.again_from(refused, resumes), fallback))
+        order = self._workflow.order(kind)
         return min(ways, key=lambda way: order.index(way.stage) if way.stage in order else len(order))
 
-    @staticmethod
-    def _to(kind: StoryKind, here: StageName, target: Target, rule: RuleId) -> Next:
+    def _to(self, kind: StoryKind, here: StageName, target: Target, rule: RuleId) -> Next:
         if target == Target(STOP):
             return Next(None, rule)
         if target == Target(AGAIN):
             return Next(here, rule)
-        return Next(StoryRoute.back_for(kind, StageName(target.value)), rule)
+        return Next(self.back_for(kind, StageName(target.value)), rule)
 
     @staticmethod
     def converged(rounds: Rounds) -> typing.Optional[Detail]:
@@ -197,36 +188,33 @@ class StoryRoute(DomainService):
             return Detail(f"{MAX_ROUNDS} rounds did not converge")
         return None
 
-    @staticmethod
-    def again_from(refused: StageName, resumes: typing.Optional[StageName]) -> StageName:
+    def again_from(self, refused: StageName, resumes: typing.Optional[StageName]) -> StageName:
         """The stage a refused gate's round starts at: the refused stage, or an earlier one the story's state resumes
         at — whose file it reads as an earlier pass's."""
-        for stage in (s.name for s in PIPELINE if Trait.IN_ORDER in s.traits):
+        for stage in (s.name for s in self._workflow.having(Trait.IN_ORDER)):
             if stage == refused:
                 break
             if stage == resumes:
                 return stage
         return refused
 
-    @staticmethod
-    def judged_back(kind: StoryKind, judge: HandOverText) -> StageName:
+    def judged_back(self, kind: StoryKind, judge: HandOverText) -> StageName:
         """Where the judge's `changes-requested` sends the story: `back: test` — a confirmed defect is in a test, which
         only the test stage may change — to the test stage, anything else to the build; for a kind without that
         stage, the builder stage before it (`back_for`)."""
         for line in judge.value.splitlines():
             if line.strip().lower().startswith("back:"):
                 named = line.split(":", 1)[1].strip().strip("`\"' ").lower()
-                return StoryRoute.back_for(kind, StageName("test") if named == "test" else StageName("build"))
-        return StoryRoute.back_for(kind, StageName("build"))
+                return self.back_for(kind, StageName("test") if named == "test" else StageName("build"))
+        return self.back_for(kind, StageName("build"))
 
-    @staticmethod
-    def back_for(kind: StoryKind, stage: StageName) -> StageName:
+    def back_for(self, kind: StoryKind, stage: StageName) -> StageName:
         """Where a round goes back to: <stage>, or the last builder stage before it the kind runs."""
-        found = row(stage)
+        found = self._workflow.stage(stage)
         if found is not None and kind in found.kinds:
             return stage
         back = stage
-        for builder in (s for s in PIPELINE if s.window is Window.BUILDER):
+        for builder in self._workflow.in_window(Window.BUILDER):
             if kind in builder.kinds:
                 back = builder.name
             if builder.name == stage:

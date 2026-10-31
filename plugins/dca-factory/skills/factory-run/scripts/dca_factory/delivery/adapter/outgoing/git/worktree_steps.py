@@ -12,7 +12,7 @@ import re
 import shutil
 import sys
 import typing
-from ..pipeline.stage_rows import STAGE_FILES, STAGES
+from ..pipeline.stage_rows import stage_files, all_stages
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import Front, read_front_matter, read_text
 from .....sharedkernel.adapter.outgoing.profile.profile_files import (
     evidence_dir, place, shown, STORY_BRANCH, worktree_places)
@@ -152,7 +152,7 @@ def worktree_prepare(cwd: str, runs: str, story_id: str) -> int:
     exclude_worktrees(cwd)
     if not has_worktree(story_id, cwd):
         known = git(cwd, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}")[0] == 0
-        if not known and os.path.isfile(os.path.join(runs, story_id, STAGE_FILES["test"])) and not is_delivered(
+        if not known and os.path.isfile(os.path.join(runs, story_id, stage_files()["test"])) and not is_delivered(
                 read_front_matter(find_story(place("epics"), story_id))[0]):
             print(f"none — {story_id} began in the checkout, its tests are there; it finishes there")
             return 0
@@ -286,7 +286,7 @@ def index_story(path: str, runs: str, story_id: str) -> None:
     git(path, "add", "-u", "--", ".")
     made = os.path.join(evidence_dir(runs, story_id), STAGES_MADE)
     named = {line.strip() for line in read_text(made).splitlines() if line.strip()} if os.path.isfile(made) else set()
-    for stage in (s for s in STAGES if s.lists):
+    for stage in (s for s in all_stages() if s.lists):
         named |= listed_files(os.path.join(runs, story_id, stage.file)) or set()
     untracked = [p for p in git(path, "ls-files", "--others", "--exclude-standard", "-z")[1].split("\0") if p]
     taken = [p for p in untracked if p in named]

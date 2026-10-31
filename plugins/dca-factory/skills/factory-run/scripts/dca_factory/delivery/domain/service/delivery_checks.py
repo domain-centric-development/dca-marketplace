@@ -8,7 +8,7 @@ import typing
 
 from ....building_blocks import DomainService, Value
 from ..gateway.stage_evidence import StageEvidence
-from ..model.stage import Pipeline, StageName, StoryKind
+from ..model.stage import HandOver, StageName, StoryKind
 from ..model.stage_story import ContractNumber, PlannedDigest, Presence, StageStory
 from ..model.verdict import CheckName, Findings, Said
 
@@ -35,10 +35,10 @@ class DeliveryChecks(DomainService):
     """The document gate's checks."""
 
     @staticmethod
-    def story_pass(story: StageStory, evidence: StageEvidence) -> StoryPassChecked:
+    def story_pass(story: StageStory, evidence: StageEvidence, judge: typing.Optional[HandOver]) -> StoryPassChecked:
         """Every stage of this pass wrote its file after the one before it, the judge passed it, and the story is the
         one that was planned. A document written for an earlier pass, or over a judge who asked for changes,
-        delivers nothing."""
+        delivers nothing. <judge> is the file the judge stage writes."""
         facts = evidence.story_pass(story)
         if facts.gaps:
             gaps = ", ".join(f"{g.hand_over.value} ("
@@ -49,7 +49,6 @@ class DeliveryChecks(DomainService):
                 f"runs on from the first of them")),), Presence.ABSENT)
         verdict = facts.verdict.value
         if verdict != "pass":
-            judge = Pipeline.hand_over(JUDGE)
             return StoryPassChecked((STORY_PASS.fail(Said(
                 f"{judge.value if judge else 'judge.md'} says `verdict: {verdict or 'none'}` — only a judge's `pass` "
                 f"lets a story be delivered")),), Presence.ABSENT)

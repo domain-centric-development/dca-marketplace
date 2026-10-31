@@ -323,10 +323,10 @@ and `integrate_story` brings the delivered story onto the main line through `Sto
 
 **Type:** Concept
 
-### Jump (Jump) · Target (Target) · Next (Next) · Rule name (RuleName)
+### Jump (Jump) · Target (Target) · Next (Next)
 
 **Definition:** Where an element of the workflow — a gate's rule, a runner's decision — sends a story: the rule
-(`RuleName`, `GATE-RED-PROOF`) and its targets for the outcome it came to, each a stage, `again` or `stop`, as its
+(`RuleId`, `GATE-RED-PROOF`) and its targets for the outcome it came to, each a stage, `again` or `stop`, as its
 `goes=` says. `StoryRoute` turns jumps into the next step (`Next`: a stage, or none — the run ends): a refused gate
 by the rules of its failed checks (`after_refusal` — `stop` beats every way, else the earliest stage any of them or the
 story's state names), a runner's decision by its own rule (`jump`), a choice the run's facts make (the judge's
@@ -341,7 +341,22 @@ code that binds it (check, pass action, decision), when it applies and why, its 
 where it sends the story (`goes`) — and the stages, kinds and report names where it is narrower than its code. An
 aggregate, kept by the `RuleRepository`: Markdown files under `workflow/rules/` today, another store later. The code
 binds a rule by its id and says *how* it is checked or decided; the rule says *what* it holds and *where* the story
-goes. A rule that goes keeps its file, `retired:` with the reason.
+goes. A rule that goes keeps its file, `retired:` with the reason. Whether a target is a stage is the workflow's
+question: the rules are loaded after it, and one that sends a story to no stage of it stops the load.
+
+**Type:** Aggregate
+
+### Workflow (Workflow) · Workflow name (WorkflowName) · Workflow repository (WorkflowRepository)
+
+**Definition:** The stages a story runs through, in their order, each with what it writes, the shared window that may
+carry it, the kinds that run it, its traits (gated, gated after its file, tested, red, listing its files, guarded,
+running the suite, in the run order), the profile commands its gate runs and the hand-overs it weighs — validated as a
+whole: each stage named once, each hand-over written by one stage, each file a gate weighs written by a stage of it.
+An aggregate named `delivery`, kept by the `WorkflowRepository`: one Markdown file per stage under `workflow/stages/`
+today, another store later. Every question about a stage — a kind's run order, a stage's file, a window's stages — is
+the workflow's; the domain services take it (`StoryRoute(workflow)`, `CurrentPass`, `KeptChecks`, `StoryStanding`),
+the composition root loads it once per process (`pipeline_workflow.load`, then the rules), and what registers against
+the stages — the gate's checks, its pass actions — is placed once it is loaded.
 
 **Type:** Aggregate
 
@@ -350,7 +365,7 @@ goes. A rule that goes keeps its file, `retired:` with the reason.
 **Definition:** A gate is a set of checks, each a domain service over the story as the gate reads it (`StageStory`)
 — `StoryChecks`, `ProfileChecks`, `BacklogChecks`, `DecisionChecks`, `TestChecks`, `DesignChecks`, `KeptChecks`,
 `SpecChecks`, `DeliveryChecks`, `IntegrationChecks`, `TestVerdicts`, `SuiteChecks`, `BreakChecks`, `ChangeChecks`,
-`AcceptanceRules`. The use case `check_stage` registers them against the stage table and runs them, those that start
+`AcceptanceRules`. The use case `check_stage` registers them against the workflow's stages and runs them, those that start
 no process first; what they run or write goes through output ports (`StageTests`, `StageRuns`, `StageMarks`,
 `DecisionStamps`, `StageDelivery`). Outside a stage the same checks run as use cases of their own: `check_backlog`
 over every story not yet done (`BacklogEntries`), `check_change` over a commit or the working tree (`ChangeIndex`,

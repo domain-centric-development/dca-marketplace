@@ -6,24 +6,23 @@ import typing
 
 from ....building_blocks import DomainService
 from ..model.decision_record import ANSWERED_STATES, DecisionState, RecordId, RecordKind, WAITING
-from ..model.stage import HandOver, Pipeline, StageName, StoryKind
+from ..model.stage import HandOver, StageName, StoryKind
 from .story_route import StoryRoute
+from ..model.workflow import Workflow
 from ..model.story_state import (
     AcceptanceVerdict, Detail, Mark, MAX_ROUNDS, RunFacts, StateName, Standing, StoryFront, VerdictWord)
 
 PLAN, BUILD, TEST, JUDGE, DOCUMENT = (StageName(n) for n in ("plan", "build", "test", "judge", "document"))
 ADOPT, INTEGRATE = StageName("adopt"), StageName("integrate")
-ORDER = Pipeline.order(StoryKind.STORY)
 NO_VERDICT = VerdictWord("")
-
-
-def file_of(stage: StageName) -> HandOver:
-    return Pipeline.hand_over(stage) or HandOver("")
 
 
 class StoryStanding(DomainService):
     """A story's state and the stage it runs from: first from what the story says about itself, then — for a
-    released story — from its run."""
+    released story — from its run, over the stages of <workflow>."""
+
+    def __init__(self, workflow: Workflow) -> None:
+        self._workflow = workflow
 
     @staticmethod
     def before_run(front: StoryFront) -> typing.Optional[Standing]:
@@ -54,10 +53,10 @@ class StoryStanding(DomainService):
             return Standing(StateName.UNRELEASED, None, Detail(f"status {status} — a human releases it first"))
         return None
 
-    @staticmethod
-    def in_run(front: StoryFront, run: RunFacts) -> Standing:
+    def in_run(self, front: StoryFront, run: RunFacts) -> Standing:
         """Where a released story stands in its run."""
         texts = run.hand_overs
+        order = self._workflow.order(StoryKind.STORY)
         if run.unreadable:
             return Standing(StateName.STOPPED, None, run.unreadable)
         waiting = [r.id.value for r in run.records if r.state in WAITING]
@@ -83,7 +82,7 @@ class StoryStanding(DomainService):
             return Standing(StateName.IN_PROGRESS, PLAN, Detail(
                 "the story changed after it was planned — every stage runs again"))
         if answered:
-            stage = min(answered, key=lambda s: ORDER.index(s) if s in ORDER else 0)
+            stage = min(answered, key=lambda s: order.index(s) if s in order else 0)
             return Standing(StateName.RESUMABLE, stage, Detail(
                 f"decision {answered[stage].value} answered — its stage applies it"))
         if run.rounds.value >= MAX_ROUNDS:
@@ -99,8 +98,8 @@ class StoryStanding(DomainService):
         verdict = judge.verdict if judge else NO_VERDICT
         conflict = (judge.asks if judge else None) or ()
         if verdict.value == "story-conflict" and conflict and all(i in resolved for i in conflict):
-            applied_at = max((resolved[i] for i in conflict), key=lambda s: ORDER.index(s) if s in ORDER else 0)
-            after = ORDER[min(ORDER.index(applied_at) + 1, len(ORDER) - 1)] if applied_at in ORDER else BUILD
+            applied_at = max((resolved[i] for i in conflict), key=lambda s: order.index(s) if s in order else 0)
+            after = order[min(order.index(applied_at) + 1, len(order) - 1)] if applied_at in order else BUILD
             return Standing(StateName.IN_PROGRESS, after, Detail(f"the story conflict was answered and applied at "
                                                        f"{applied_at.value if applied_at else None} — the stages "
                                                        f"after it run again"))
@@ -109,7 +108,7 @@ class StoryStanding(DomainService):
                 continue
             if facts.asks is not None:
                 return Standing(StateName.STOPPED, None, Detail(
-                    f"{file_of(stage).value} ends in `## needs-human` without an open "
+                    f"{self._file_of(stage).value} ends in `## needs-human` without an open "
                     f"record"))
         if verdict.value == "story-conflict":
             return Standing(StateName.STOPPED, None, Detail("the judge found a story conflict"))
@@ -131,12 +130,12 @@ class StoryStanding(DomainService):
             first = run.refused[0]
             # A refusal over an earlier pass's file — the document gate's `story-pass` — runs on from that stage:
             # running the refused stage again changes nothing it could fix.
-            before = ORDER[:ORDER.index(first)] if first in ORDER else ()
+            before = order[:order.index(first)] if first in order else ()
             stale = [stage for stage in before if stage not in texts and stage in run.on_disk]
             if stale:
                 return Standing(StateName.IN_PROGRESS, stale[0], Detail(
                     f"the {first.value} gate refused over an earlier "
-                    f"pass's {file_of(stale[0]).value} — the story runs on from "
+                    f"pass's {self._file_of(stale[0]).value} — the story runs on from "
                     f"{stale[0].value}"))
             # The outcome event is code: the document stage cannot write it, the build can.
             if first == DOCUMENT and run.document_report and "gate:fail outcome" in run.document_report.value:
@@ -166,9 +165,10 @@ class StoryStanding(DomainService):
         if not texts:
             return Standing(StateName.READY, PLAN, Detail(""))
         if verdict.value == "changes-requested":
-            return Standing(StateName.IN_PROGRESS, StoryRoute.judged_back(front.kind, texts[JUDGE].text),
+            return Standing(StateName.IN_PROGRESS, StoryRoute(self._workflow).judged_back(front.kind, texts[JUDGE].text),
                             Detail("the judge requested changes"))
-        missing = next(stage for stage in Pipeline.order(front.kind) if stage not in texts)
-        return Standing(StateName.IN_PROGRESS, missing, Detail(f"{file_of(missing).value} not written yet"))
+        missing = next(stage for stage in self._workflow.order(front.kind) if stage not in texts)
+        return Standing(StateName.IN_PROGRESS, missing, Detail(f"{self._file_of(missing).value} not written yet"))
 
-
+    def _file_of(self, stage: StageName) -> HandOver:
+        return self._workflow.hand_over(stage) or HandOver("")

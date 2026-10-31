@@ -22,7 +22,7 @@ from ..delivery.adapter.outgoing.files.stage_marks_files import StageMarkFiles
 from ..delivery.adapter.outgoing.files.story_layout import find_story, story_folder, story_kind
 from ..delivery.adapter.outgoing.files.test_files import StageTestFiles
 from ..delivery.adapter.outgoing.git.change import ChangeIndexFiles, ParityReportFiles
-from ..delivery.adapter.outgoing.pipeline.stage_rows import STAGE
+from ..delivery.adapter.outgoing.pipeline.stage_rows import stage_named
 from ..delivery.application.backlog.check_backlog import CheckBacklogUseCase
 from ..delivery.application.delivery import pass_actions  # noqa: F401 — registers what a passing gate does
 from ..delivery.application.delivery import process_checks  # noqa: F401 — registers the checks that run processes
@@ -30,14 +30,15 @@ from ..delivery.application.delivery import stage_checks  # noqa: F401 — regis
 from ..delivery.application.delivery.check_change import CheckChangeUseCase
 from ..delivery.application.delivery.check_parity import CheckParityUseCase
 from ..delivery.application.delivery.check_stage import run_checks, run_passed, StageRun, Verdict
+from ..delivery.application.delivery.pipeline_workflow import workflow
+from ..delivery.domain.model.stage import StoryKind
 from ..delivery.domain.model.verdict import Findings
 from ..delivery.domain.service.profile_checks import ProfileChecks
 from ..sharedkernel.adapter.outgoing.markdown.front_matter import GateError, read_front_matter
-from ..delivery.adapter.outgoing.workflow.rule_files import RuleFiles
-from ..delivery.application.delivery.pipeline_rules import load as load_rules
+from .workflow import load_workflow
 
-# the rules the code binds, from their repository — once per process, held against every binding
-load_rules(RuleFiles())
+# the stages and the rules, from their repositories — once per process, held against every binding
+load_workflow()
 from .description import check_description
 
 Profile = typing.Mapping[str, typing.Any]
@@ -85,7 +86,7 @@ def contract_findings(profile: Profile) -> Findings:
 
 def model_findings(profile: Profile) -> Findings:
     """The profile's model keys, each bound to a tool (`ProfileChecks.models`)."""
-    return ProfileChecks.models(StageEvidenceFiles(".", "", "", profile))
+    return ProfileChecks.models(StageEvidenceFiles(".", "", "", profile), workflow().order(StoryKind.STORY))
 
 
 def layout_note(cwd: str, profile: Profile) -> typing.Optional[str]:
@@ -128,7 +129,7 @@ def gate_story(result: Verdict, args: typing.Any, cwd: str, profile: Profile, re
         story_id = str(front.get("id") or os.path.basename(story_folder(story_path)))
         observe_writes(args.runs, story_id)
         criteria = criteria_of(story_path, body, front)
-        run = stage_run(close_record, result=result, args=args, cwd=cwd, runs=args.runs, stage=STAGE[args.stage],
+        run = stage_run(close_record, result=result, args=args, cwd=cwd, runs=args.runs, stage=stage_named()[args.stage],
                         story_id=story_id, story_path=story_path, front=front, body=body, criteria=criteria,
                         profile=profile)
         run_checks(run)

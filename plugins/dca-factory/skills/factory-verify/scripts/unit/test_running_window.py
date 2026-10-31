@@ -6,7 +6,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 
 from support import project, write
-from dca_factory.delivery.adapter.outgoing.pipeline.stage_rows import SHARED_WINDOWS
+from dca_factory.delivery.adapter.outgoing.pipeline.stage_rows import stage_windows
 from dca_factory.delivery.adapter.outgoing.files.detail_files import DetailFactFiles
 from dca_factory.delivery.application.status.show_story import window_running
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
@@ -23,7 +23,7 @@ def stream(*stages):
 
 def running(entry, runs, story, moving, live):
     """The row of a shared window still running, its stream read where the factory reads it."""
-    window_running(entry, moving, SHARED_WINDOWS, lambda: DetailFactFiles("", runs).stream_now(story, moving["stage"]),
+    window_running(entry, moving, stage_windows(), lambda: DetailFactFiles("", runs).stream_now(story, moving["stage"]),
                    datetime.now(timezone.utc), live)
 
 

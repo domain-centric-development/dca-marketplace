@@ -9,7 +9,7 @@ import os
 import re
 import typing
 
-from ..pipeline.stage_rows import SHARED_WINDOWS
+from ..pipeline.stage_rows import stage_windows
 from .criteria_files import criteria_of, scenarios_of
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError, read_front_matter
 from .....sharedkernel.adapter.outgoing.markdown.sections import section_of, sections_of
@@ -56,7 +56,7 @@ def window_parts(events: typing.List[Event], window: str) -> typing.List[Facts]:
     """The parts of every run of one shared window of a story, summed per stage, in the stages' order — from the
     journal's `part` lines (WP-150): [{stage, runs, seconds, input, cache_read, cache_write, output, tokens, cost (or
     None), denied}]."""
-    order = SHARED_WINDOWS.get(window, ())
+    order = stage_windows().get(window, ())
     rows = journal_parts(events, window)
     return sorted(rows, key=lambda r: order.index(r["stage"]) if r["stage"] in order else len(order))
 
@@ -77,7 +77,7 @@ class DetailFactFiles:
 
     def story_journal(self, story_id: str, windows: typing.Iterable[str], stages: typing.Iterable[str]) -> Facts:
         events = journal_events(self._runs, story_id)
-        shared = [w for w in windows if w in SHARED_WINDOWS]
+        shared = [w for w in windows if w in stage_windows()]
         return dict(parts={w: window_parts(events, w) for w in shared},
                     incomplete={w: parts_incomplete(events, w) for w in shared},
                     denied={stage: journal_denials(events, stage) for stage in stages})

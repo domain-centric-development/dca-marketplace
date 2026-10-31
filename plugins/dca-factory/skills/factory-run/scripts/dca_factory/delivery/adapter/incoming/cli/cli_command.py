@@ -118,7 +118,7 @@ from ....application.checkout.mark_listening import MarkListeningCommand
 from ....application.status.follow_output import FollowOutputQuery
 from ....application.status.show_stage_outputs import ShowStageOutputsQuery
 from ....domain.model.run_argument import ArgumentMeaning
-from ....domain.model.stage import Pipeline, PIPELINE, StoryKind, Window
+from ....domain.model.stage import StoryKind, Window
 from . import spec_delta_view as spec_delta_text
 from ....application.delivery.check_spec import CheckSpecQuery
 from ....application.delivery.show_spec_delta import ShowSpecDeltaQuery
@@ -133,6 +133,7 @@ from .epic_view import render_epic_md, render_epic_text
 from .schedule_view import schedule_lines, start_lines
 from .help_view import render_help_md, render_help_text
 from ....domain.model.decision_record import WAITING_WORDS
+from ....application.delivery.pipeline_workflow import workflow
 
 Model = typing.Dict[str, typing.Any]
 RESULT = typing.TypeVar("RESULT")
@@ -401,7 +402,7 @@ def status_brief(cwd: str, epics: str, runs: str, session_start: bool = False) -
         # A shared builder or verifier is named by what it carries out: told it is "stage builder", a model read
         # that as the build stage alone and refused the plan, test and tidy its prompt asked for.
         stage = os.environ.get("FACTORY_STAGE") or "?"
-        covered = [s.name.value for s in PIPELINE if s.window and s.window.value == stage]
+        covered = [s.name.value for s in workflow().stages if s.window and s.window.value == stage]
         what = (f"the shared {stage} of story {os.environ.get('FACTORY_STORY') or '?'} — it carries out the stages "
                 f"{', '.join(covered)} one after another, all of them in this session" if covered else
                 f"stage {stage} of story {os.environ.get('FACTORY_STORY') or '?'}")
@@ -1040,7 +1041,7 @@ def main(argv: typing.Sequence[str]) -> int:
     parser.add_argument("--place", metavar="KEY",
                         help="where the factory reads KEY (product, tech, domain, epics, runs), from the profile or its default")
     parser.add_argument("--contract", metavar="STAGE",
-                        help=f"the exact shape the gate holds that stage's file to ({', '.join(s.value for s in Pipeline.order(StoryKind.STORY))}), or "
+                        help=f"the exact shape the gate holds that stage's file to ({', '.join(s.value for s in workflow().order(StoryKind.STORY))}), or "
                              "review or glossary, from the gate's own constants, and exit")
     parser.add_argument("--files-skeleton", nargs=2, metavar=("STORY", "STAGE"),
                         help="write the test, build or tidy hand-over's file list from what the tree changed "
@@ -1101,7 +1102,7 @@ def main(argv: typing.Sequence[str]) -> int:
     if args.contract:
         text = wiring.show_hand_over_contract(cwd, args.runs).execute(ShowHandOverContractQuery(args.contract))
         if text is None:
-            print(f"factory-cli: --contract takes one of {', '.join(s.value for s in Pipeline.order(StoryKind.STORY))}, review or glossary, not {args.contract!r}", file=sys.stderr)
+            print(f"factory-cli: --contract takes one of {', '.join(s.value for s in workflow().order(StoryKind.STORY))}, review or glossary, not {args.contract!r}", file=sys.stderr)
             return 2
         print(text)
         return 0

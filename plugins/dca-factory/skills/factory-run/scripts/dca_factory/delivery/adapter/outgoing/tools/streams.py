@@ -11,7 +11,7 @@ import re
 import typing
 from datetime import datetime, timezone
 
-from ..pipeline.stage_rows import STAGE_ORDER
+from ..pipeline.stage_rows import stage_order
 from .....sharedkernel.adapter.outgoing.profile.profile_files import read_profile, resolve_profile
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError as GateError, read_text
 from ....application.status.texts import parse_time
@@ -364,7 +364,7 @@ def next_part(current: typing.Optional[str], block: Json) -> typing.Optional[str
     stage, how = part_marker(block)
     if not stage or stage == current:
         return None
-    if how == "gate" and current in STAGE_ORDER and stage in STAGE_ORDER and STAGE_ORDER.index(stage) < STAGE_ORDER.index(current):
+    if how == "gate" and current in stage_order() and stage in stage_order() and stage_order().index(stage) < stage_order().index(current):
         return None
     return stage
 

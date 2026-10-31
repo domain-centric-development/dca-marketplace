@@ -25,6 +25,7 @@ from ....domain.model.story import StoryId
 from ....domain.service.story_route import StoryRoute
 from ....domain.model.stage_story import Presence
 from ....domain.service.acceptance_rules import AcceptanceMode, AcceptanceRules
+from ....application.delivery.pipeline_workflow import workflow
 
 GateError = MarkdownError
 
@@ -254,7 +255,7 @@ def read_decisions(store: str, story_id: str) -> Records:
 def applying_stage(front: Front, answer: typing.Mapping[str, str]) -> str:
     """The stage that applies an answer: the one the answer names (`applies: test` — an answer that changes a
     test goes back to the test stage, whoever asked), else the record's `stage:`, the stage that asked."""
-    return StoryRoute.applying(StageName(str(front.get("stage", "")).strip()),
+    return StoryRoute(workflow()).applying(StageName(str(front.get("stage", "")).strip()),
                                StageName(str((answer or {}).get("applies", "")).strip().lower())).value
 
 
@@ -262,7 +263,7 @@ def resume_stage(front: Front, answer: typing.Mapping[str, str]) -> typing.Optio
     """Where the story resumes for an answer: the earlier of the stage that asked and the one the answer
     names. A plan's question answered `applies: test` still re-plans — the plan lists the tests that change —
     and the test stage after it takes the changed expectation."""
-    return StoryRoute.resumes_at(StageName(str(front.get("stage", "")).strip()),
+    return StoryRoute(workflow()).resumes_at(StageName(str(front.get("stage", "")).strip()),
                                  StageName(str((answer or {}).get("applies", "")).strip().lower())).value
 
 

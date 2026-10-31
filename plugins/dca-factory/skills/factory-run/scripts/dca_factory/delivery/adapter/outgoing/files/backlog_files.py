@@ -8,7 +8,7 @@ import typing
 
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from .migrations import layout_hint
-from ..pipeline.stage_rows import STAGE_FILES
+from ..pipeline.stage_rows import stage_files
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter
 from .....sharedkernel.adapter.outgoing.profile.profile_files import (
     factory_home, PROFILE_FILE, read_profile, resolve_profile, shown)
@@ -67,7 +67,7 @@ class BacklogFiles:
             found.append(BacklogStory(
                 story_id, path, str(front.get("epic") or epic).strip(), front, body, title, kind,
                 tuple(depends_on(front)), str(front.get("context", "")).strip(),
-                os.path.isfile(os.path.join(self.runs, story_id, STAGE_FILES["test"])),
+                os.path.isfile(os.path.join(self.runs, story_id, stage_files()["test"])),
                 has_worktree(story_id, self.home), StoryFactsFiles(self.cwd, self.runs, story_id, front, path)))
         return found
 

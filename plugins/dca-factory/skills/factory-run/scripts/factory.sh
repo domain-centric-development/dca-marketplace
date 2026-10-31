@@ -221,7 +221,7 @@ STAMP=".agents/factory/gate.installed"
 # what was installed, so a runner can tell the pipeline it is about to trust from one a stage, a hand or a merge
 # changed since. The package's runner (the same digest) takes it at its start and compares before every
 # gate it runs; a stage that rewrote the gate through a link is stopped at the next gate, whatever tool it ran in.
-# A name ending in `/` is a folder — the package, the workflow's files: every module (`.py`) and every rule (`.md`) in
+# A name ending in `/` is a folder — the package, the workflow's files: every module (`.py`), stage and rule (`.md`) in
 # it and below, by its path below the folder in
 # the C locale's order, as Python sorts them — so a module added, moved or removed changes the hash too.
 PIPELINE_FILES="story-gate.py factory-cli.py observe.py factory.sh dca_factory/ workflow/"
@@ -1029,7 +1029,8 @@ install_project() {                         # install_project <tool> <skill fold
     .agents/factory/.dca_factory.new
   rm -rf .agents/factory/dca_factory
   must "put the package in place" mv .agents/factory/.dca_factory.new .agents/factory/dca_factory
-  # The workflow's elements beside it — the rules the gate and the runner load at start —, swapped in the same way.
+  # The workflow's elements beside it — the stages and the rules the gate and the runner load at start —, swapped in
+  # the same way.
   rm -rf .agents/factory/.workflow.new
   must "copy the workflow to .agents/factory/workflow" copy_tree "$from/factory-run/scripts/workflow/." \
     .agents/factory/.workflow.new

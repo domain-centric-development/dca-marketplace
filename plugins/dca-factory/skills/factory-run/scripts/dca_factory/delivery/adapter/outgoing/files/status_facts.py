@@ -11,7 +11,7 @@ import os
 import re
 import typing
 
-from ..pipeline.stage_rows import SHARED_WINDOWS, STAGE_ORDER
+from ..pipeline.stage_rows import stage_windows, stage_order
 from .findings_files import finding_records, FINDINGS_FILE
 from .story_layout import delivered_on, find_story, story_kind
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir, read_profile, resolve_profile, shown
@@ -176,7 +176,7 @@ def story_facts(cwd: str, runs: str, story_id: str, front: typing.Optional[Facts
                 continue
             counted.add((stage, fields["window"]))
         if kind == "stage-start":
-            if stage == STAGE_ORDER[0] or not passes:
+            if stage == stage_order()[0] or not passes:
                 passes.append(dict(start=moment, end=None, seconds=0, tokens=0, measured=0, runs=0, stages=set()))
             passes[-1]["stages"].add(stage)
             open_starts[stage] = moment
@@ -327,7 +327,7 @@ class StatusFactFiles:
         return running_stages(self._runs)
 
     def shared_windows(self) -> typing.Mapping[str, typing.Tuple[str, ...]]:
-        return SHARED_WINDOWS
+        return stage_windows()
 
     def window_part(self, story_id: str, window: str) -> str:
         return window_part_now(self._runs, story_id, window)

@@ -9,7 +9,7 @@ import typing
 from datetime import datetime, timezone
 from .hand_over_patterns import CRITERION
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
-from ..pipeline.stage_rows import SHARED_WINDOWS, STAGE_FILES
+from ..pipeline.stage_rows import stage_windows, stage_files
 from .story_layout import EPIC_FILE, epic_folder
 from ....domain.model.stage import StoryKind
 from ....domain.model.story_state import AcceptanceVerdict, HandOverText
@@ -23,6 +23,7 @@ from ....application.status.texts import parse_time
 from ....domain.model.journal_marks import JournalMarks, MarkKind, MarkName, Seq
 from ....domain.model.stage import StageName
 from ....domain.service.current_pass import CurrentPass
+from ....application.delivery.pipeline_workflow import workflow
 
 
 OWNED_CHANGED = ".owned-changed"
@@ -64,7 +65,7 @@ def stage_open(runs: str, story_id: str, stage: str) -> bool:
     for line in read_text(journal).splitlines():
         parts = line.split("\t")
         if len(parts) >= 3 and parts[1] in ("stage-start", "stage-end") and (
-                parts[2] == stage or parts[2] in SHARED_WINDOWS and stage in SHARED_WINDOWS[parts[2]]):
+                parts[2] == stage or parts[2] in stage_windows() and stage in stage_windows()[parts[2]]):
             last = parts[1]
     return last == "stage-start"
 
@@ -77,8 +78,8 @@ def verdict_in(text: str) -> str:
 
 
 def back_in(text: str) -> str:
-    """Where a `changes-requested` verdict in <text> sends a story: the domain's rule (`StoryRoute.judged_back`)."""
-    return StoryRoute.judged_back(StoryKind.STORY, HandOverText(text)).value
+    """Where a `changes-requested` verdict in <text> sends a story: the domain's rule (`StoryRoute(workflow()).judged_back`)."""
+    return StoryRoute(workflow()).judged_back(StoryKind.STORY, HandOverText(text)).value
 
 
 #: What the plan gate leaves for the schedule: the digest of the story it let through, so a story edited
@@ -164,16 +165,16 @@ def journal_marks(marks: typing.Mapping[str, int]) -> JournalMarks:
 
 
 def written_at(marks: typing.Mapping[str, int], stage: str) -> typing.Optional[int]:
-    """When the stage's file last held for the pass (`CurrentPass.written_at`)."""
-    at = CurrentPass.written_at(journal_marks(marks), StageName(stage))
+    """When the stage's file last held for the pass (`CurrentPass(workflow()).written_at`)."""
+    at = CurrentPass(workflow()).written_at(journal_marks(marks), StageName(stage))
     return None if at is None else at.value
 
 
 def gate_passed_since(runs: str, story_id: str, gate: str, stage: str) -> bool:
     """Whether the gate passed after the stage's file was last written — the runner's or a stage's own run."""
     marks = pass_marks(runs, story_id)
-    return os.path.isfile(os.path.join(runs, story_id, STAGE_FILES[stage])) \
-        and marks.get(f"pass:{gate}", 0) >= marks.get(f"wrote:{STAGE_FILES[stage]}", 0) > 0
+    return os.path.isfile(os.path.join(runs, story_id, stage_files()[stage])) \
+        and marks.get(f"pass:{gate}", 0) >= marks.get(f"wrote:{stage_files()[stage]}", 0) > 0
 
 
 def current_stage_files(runs: str, story_id: str, order: typing.Iterable[str]) -> typing.Dict[str, str]:
@@ -183,9 +184,9 @@ def current_stage_files(runs: str, story_id: str, order: typing.Iterable[str]) -
     passed after the file before it was written holds for this pass, though its own file is older: a shared session
     that went back to its test stage after the build and had the build gate pass again."""
     folder = os.path.join(runs, story_id)
-    present = {StageName(stage) for stage in order if os.path.isfile(os.path.join(folder, STAGE_FILES[stage]))}
-    holding = CurrentPass.holding(journal_marks(pass_marks(runs, story_id)), [StageName(s) for s in order], present)
-    return {stage.value: read_text(os.path.join(folder, STAGE_FILES[stage.value])) for stage in holding}
+    present = {StageName(stage) for stage in order if os.path.isfile(os.path.join(folder, stage_files()[stage]))}
+    holding = CurrentPass(workflow()).holding(journal_marks(pass_marks(runs, story_id)), [StageName(s) for s in order], present)
+    return {stage.value: read_text(os.path.join(folder, stage_files()[stage.value])) for stage in holding}
 
 
 def backlog_digest(story_path: typing.Optional[str]) -> str:

@@ -7,7 +7,7 @@ import typing
 from ....building_blocks import DomainService, Value
 from ..gateway.stage_evidence import StageEvidence
 from ..model.decision_record import DecisionState, RecordKind
-from ..model.stage import Pipeline, StageName, StoryKind
+from ..model.stage import StageName
 from ..model.stage_story import DecisionFacts, Place, StageStory
 from ..model.story_state import Detail
 from ..model.verdict import CheckName, Finding, Said
@@ -38,10 +38,12 @@ def answered(record: DecisionFacts) -> Detail:
 class DecisionChecks(DomainService):
     """Runs on every stage: an open question blocks the story wherever it stands, and a stage file that escalates
     without a record has asked nobody. `gating` is the stage this gate is for: the plan gate runs *before* its
-    stage, so there an answered plan question is the stage's input, not yet something it failed to apply."""
+    stage, so there an answered plan question is the stage's input, not yet something it failed to apply. `order` is a
+    story's run order."""
 
     @staticmethod
-    def check(story: StageStory, gating: StageName, evidence: StageEvidence) -> DecisionsChecked:
+    def check(story: StageStory, gating: StageName, evidence: StageEvidence,
+              order: typing.Sequence[StageName]) -> DecisionsChecked:
         facts = evidence.decisions(story)
         if facts.unreadable is not None:
             return DecisionsChecked((DECISIONS.fail(Said(facts.unreadable.value)),))
@@ -65,7 +67,6 @@ class DecisionChecks(DomainService):
         # 2. every record: open blocks, a draft is still open, answered must be applied by its stage. An acceptance
         # record is the document gate's own question; that gate reads it.
         texts = {hand_over.stage: hand_over for hand_over in facts.hand_overs}
-        order = Pipeline.order(StoryKind.STORY)
         for record in facts.records:
             if record.kind is RecordKind.ACCEPTANCE:
                 continue

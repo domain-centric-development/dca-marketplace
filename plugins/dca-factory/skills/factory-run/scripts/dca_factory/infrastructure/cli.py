@@ -6,6 +6,10 @@ import typing
 
 from ..delivery.adapter.incoming.cli import cli_command
 from ..rulebook.adapter.incoming.cli import rules_command
+from .workflow import load_workflow
+
+# the stages and the rules, from their repositories — once per process
+load_workflow()
 
 
 def main(argv: typing.Sequence[str]) -> int:

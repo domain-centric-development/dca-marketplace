@@ -1,11 +1,11 @@
-"""The checks a stage's gate runs over the story and its evidence alone — registered against the stage table, each
+"""The checks a stage's gate runs over the story and its evidence alone — registered against the workflow's stages, each
 a domain service's findings taken into the run's verdict."""
 
 from __future__ import annotations
 
 import typing
 
-from ...domain.model.stage import Stage, StageName, TESTED_KINDS, Trait
+from ...domain.model.stage import Stage, StageName, StoryKind, TESTED_KINDS, Trait
 from ...domain.model.stage_story import ContractNumber, Count, HandOverName, MappedTest, Place, ScenarioKey, Selector, TestTable
 from ...domain.model.verdict import CheckName, Said
 from ...domain.service.adopt_checks import AdoptChecks
@@ -22,6 +22,7 @@ from ...domain.service.spec_checks import SpecChecks
 from ...domain.service.story_checks import StoryChecks
 from ...domain.service.test_checks import TestChecks
 from .check_stage import check, Run
+from .pipeline_workflow import workflow
 
 #: The contract that holds a build to the plan's files, and the one that holds a criterion's test to the real use case.
 PLAN_FILES_CONTRACT = ContractNumber(22)
@@ -166,8 +167,8 @@ def _mapping(run: Run) -> None:
     "GATE-TESTS-KEPT",
 ))
 def _files_listed(run: Run) -> None:
-    run.result.take(KeptChecks.files_listed(run.story, StageName(run.stage.name), mapped(run), run.evidence))
-    run.result.take(KeptChecks.tests_kept(run.story, run.evidence))
+    run.result.take(KeptChecks(workflow()).files_listed(run.story, StageName(run.stage.name), mapped(run), run.evidence))
+    run.result.take(KeptChecks(workflow()).tests_kept(run.story, run.evidence))
 
 
 @check("test-design", stages=red, rule=(
@@ -209,7 +210,8 @@ def _suites(run: Run) -> None:
 @check("decisions", rule="GATE-DECISIONS")
 def _decisions(run: Run) -> None:
     """An answer applied is stamped in its record and becomes an `answered:` line of the story before it is said."""
-    checked = DecisionChecks.check(run.story, StageName(run.stage.name), run.evidence)
+    checked = DecisionChecks.check(run.story, StageName(run.stage.name), run.evidence,
+                                   workflow().order(StoryKind.STORY))
     for item in checked.items:
         if isinstance(item, Applying):
             run.result.take((DecisionChecks.applied(item, run.stamps.apply(run.story, item)),))
@@ -239,7 +241,7 @@ def _plan(run: Run) -> None:
     # its checks
     for verdict in run.describe.execute(CheckDescriptionCommand()).verdicts:
         getattr(run.result, verdict.state)(verdict.part, verdict.said)
-    run.result.take(ProfileChecks.models(run.evidence))
+    run.result.take(ProfileChecks.models(run.evidence, workflow().order(StoryKind.STORY)))
 
 
 @check("document", stages=("document",), rule=(
@@ -250,7 +252,7 @@ def _plan(run: Run) -> None:
     "GATE-REVIEWS",
 ))
 def _document(run: Run) -> None:
-    passed = DeliveryChecks.story_pass(run.story, run.evidence)
+    passed = DeliveryChecks.story_pass(run.story, run.evidence, workflow().hand_over(StageName("judge")))
     run.result.take(passed.findings)
     if passed.judge_passed is Presence.PRESENT:
         run.marks.judge_passed(run.story_id)

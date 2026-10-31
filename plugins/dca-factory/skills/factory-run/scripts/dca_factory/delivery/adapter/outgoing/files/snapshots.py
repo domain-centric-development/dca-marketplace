@@ -7,7 +7,7 @@ import os
 import re
 import subprocess
 import typing
-from ..pipeline.stage_rows import STAGE_ORDER
+from ..pipeline.stage_rows import stage_order
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir, evidence_rel
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_text
 from .owned_files import run_owned
@@ -189,7 +189,7 @@ def record_changes(cwd: str, runs: str, story_id: str, stage: str) -> None:
     story_rows = tree_changes(cwd, base, now, runs) if now else None
     if story_rows is None:
         first = next((snap for snap in (load_snapshot(os.path.join(folder, f"tree-before-{name}.txt"))
-                                        for name in STAGE_ORDER) if snap is not None), before)
+                                        for name in stage_order()) if snap is not None), before)
         story_rows = changes_between(first, after, runs, tracked)
     with open(os.path.join(folder, "changed.txt"), "w", encoding="utf-8") as handle:
         handle.writelines(f"{kind}\t{path}\n" for kind, path in story_rows)

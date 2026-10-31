@@ -216,26 +216,26 @@ class StageTable(unittest.TestCase):
         self.assertEqual(rows.stage_order("story"), ("plan", "test", "build", "tidy", "judge", "document"))
         self.assertEqual(rows.stage_order("journey"), ("plan", "test", "judge", "document"))
         self.assertEqual(rows.stage_order("adopt"), ("plan", "test", "judge"))
-        self.assertEqual(rows.STAGE_ORDER, rows.stage_order())
+        self.assertEqual(rows.stage_order(), rows.stage_order())
 
     def test_adopt_and_integrate_are_rows_outside_the_run_order(self):
-        self.assertEqual([s.name for s in rows.STAGES if not s.in_order], ["adopt", "integrate"])
-        self.assertNotIn("integrate", rows.STAGE_FILES)
-        self.assertEqual(rows.STAGE["integrate"].file, "integrate.md")
+        self.assertEqual([s.name for s in rows.all_stages() if not s.in_order], ["adopt", "integrate"])
+        self.assertNotIn("integrate", rows.stage_files())
+        self.assertEqual(rows.stage_named()["integrate"].file, "integrate.md")
 
     def test_each_stage_writes_its_own_file(self):
-        self.assertEqual(rows.STAGE_FILES, {"plan": "plan.md", "test": "tests.md", "build": "build.md",
+        self.assertEqual(rows.stage_files(), {"plan": "plan.md", "test": "tests.md", "build": "build.md",
                                                 "tidy": "tidy.md", "judge": "judge.md", "document": "document.md"})
 
     def test_the_shared_windows_carry_their_stages(self):
-        self.assertEqual(rows.SHARED_WINDOWS, {"builder": ("plan", "test", "build", "tidy"),
+        self.assertEqual(rows.stage_windows(), {"builder": ("plan", "test", "build", "tidy"),
                                                   "verifier": ("judge", "document")})
 
     def test_the_gated_stages_and_their_commands(self):
-        self.assertNotIn("judge", rows.STAGE_CHECKS)
-        self.assertEqual(rows.STAGE_CHECKS["build"], ("architecture", "format"))
-        self.assertEqual(rows.STAGE_CHECKS["document"], ("architecture",))
-        self.assertEqual(rows.POST_GATED, ("test", "build", "tidy", "document"))
+        self.assertNotIn("judge", rows.stage_commands())
+        self.assertEqual(rows.stage_commands()["build"], ("architecture", "format"))
+        self.assertEqual(rows.stage_commands()["document"], ("architecture",))
+        self.assertEqual(rows.post_gated_stages(), ("test", "build", "tidy", "document"))
 
     def test_a_hand_over_and_a_profile_command_hold_their_form(self):
         for name in ("plan.md", "tests.md", "integrate.md"):

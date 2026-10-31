@@ -9,7 +9,7 @@ flowchart LR
     delivery -- "delta: the story's criteria and the plan's delta" --> spec["spec<br/>(core)"]
     spec -. "query: is journey X there and proven?" .-> delivery
     spec -. "future: delivered, unguarded → a new discovery" .-> discovery
-    delivery -- "published: the registered rules and the stage table" --> rulebook["rulebook<br/>(supporting)"]
+    delivery -- "published: the registered rules and the workflow's stages" --> rulebook["rulebook<br/>(supporting)"]
 ```
 
 | Context | Subdomain | Language | Glossary |
@@ -34,7 +34,7 @@ whether a journey is there and proven; "delivered, unguarded" is delivery's stat
 
 **delivery → rulebook — Published Language, the rulebook Conformist, through delivery's `api/rules.py`.** Delivery registers each rule where it decides
 — a gate check with `@check(..., rule=…)`, a pass action with `@on_pass(..., rule=…)`, a runner's step with
-`@decides(…)` — and publishes them with the stage table as plain data; the rulebook takes them as delivery says them
+`@decides(…)` — and publishes them with the workflow's stages as plain data; the rulebook takes them as delivery says them
 and adds the rules the skills mark in their text. Delivery knows no rulebook. A *rule* there is the factory's; a *rule*
 in spec is a `### Rule:` that groups criteria — two words, two contexts.
 

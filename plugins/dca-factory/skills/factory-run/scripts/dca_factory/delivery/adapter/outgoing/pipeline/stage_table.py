@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import typing
 
-from .stage_rows import STAGES
+from .stage_rows import all_stages
 
 
 class ContractStages:
     """The stages of the contract's table, in its order."""
 
     def names(self) -> typing.List[str]:
-        return [str(stage.name) for stage in STAGES]
+        return [str(stage.name) for stage in all_stages()]

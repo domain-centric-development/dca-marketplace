@@ -84,9 +84,10 @@ from ....application.delivery.check_parity import CheckParityCommand
 from ....application.delivery.check_stage import Verdict
 from ....application.delivery.pipeline_rules import decides
 from ....application.description.check_description import CheckDescriptionCommand
-from ....domain.model.stage import PIPELINE, Trait
+from ....domain.model.stage import Trait
 from ....domain.model.story import StoryId
 from ....domain.model.verdict import FindingState
+from ....application.delivery.pipeline_workflow import workflow
 
 
 def check_contract(result: Verdict, profile: wiring.Profile) -> None:
@@ -229,7 +230,7 @@ def main(argv: typing.Sequence[str]) -> int:
     parser.add_argument("--story")
     parser.add_argument(
         "--stage",
-        choices=tuple(s.name.value for s in PIPELINE if Trait.GATED in s.traits),
+        choices=tuple(s.name.value for s in workflow().having(Trait.GATED)),
     )
     parser.add_argument("--change", action="store_true",
                         help="run the profile's checks outside a story and exit")
