@@ -33,7 +33,8 @@ class DeliveryRules:
 
     def rows(self) -> typing.Tuple[StageRow, ...]:
         return tuple(StageRow(StageName(row["name"]), tuple(KindName(k) for k in row["kinds"]), GateTime(row["gate"]),
-                              OrderPlace.IN_ORDER if row["in_order"] else OrderPlace.AFTER_ORDER, Words(row["window"]))
+                              OrderPlace.IN_ORDER if row["in_order"] else OrderPlace.AFTER_ORDER, Words(row["window"]),
+                              Words(row.get("about", "")), Source(row.get("source", "")))
                      for row in stage_rows())
 
     def orders(self) -> typing.Tuple[KindOrder, ...]:

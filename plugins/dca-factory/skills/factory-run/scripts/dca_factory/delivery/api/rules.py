@@ -79,7 +79,9 @@ def stage_rows() -> typing.List[Published]:
             or Trait.IN_ORDER not in row.traits else "before"
         rows.append(dict(name=row.name.value, kinds=[k for k in KIND_ORDER if StoryKind(k) in row.kinds],
                          window=row.window.value if row.window else "", gate=gate,
-                         in_order=Trait.IN_ORDER in row.traits, pass_action=row.name.value in PASS_RULES))
+                         in_order=Trait.IN_ORDER in row.traits, pass_action=row.name.value in PASS_RULES,
+                         about=row.about.value if row.about else "",
+                         source=written.value if (written := workflow().written(row.name)) else ""))
     return rows
 
 

@@ -33,6 +33,7 @@ import typing
 
 from ....domain.model.stage import HandOver, ProfileCommand, Stage, StageName, StageText, StoryKind, Trait, Window
 from ....domain.model.workflow import DELIVERY, Workflow, WorkflowName
+from ....domain.model.workflow_rule import Written
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter
 from .rule_files import listed
 
@@ -59,7 +60,8 @@ class StageFiles:
         twice = sorted({p for p in places if places.count(p) > 1})
         if twice:
             raise ValueError(f"{self._folder}: several stages at order {', '.join(map(str, twice))}")
-        return Workflow(aggregate_id, [stage for _, stage in sorted(read, key=lambda r: r[0])])
+        stages = [stage for _, stage in sorted(read, key=lambda r: r[0])]
+        return Workflow(aggregate_id, stages, {s.name: self._written(s.name) for s in stages})
 
     def save(self, aggregate: Workflow) -> Workflow:
         if aggregate.id != DELIVERY:
@@ -84,6 +86,11 @@ class StageFiles:
 
     def _path_of(self, name: StageName) -> str:
         return os.path.join(self._folder, f"{name.value}.md")
+
+    def _written(self, name: StageName) -> Written:
+        """The stage's file as a person finds it — below the folder that holds the workflow."""
+        return Written(os.path.relpath(self._path_of(name), os.path.dirname(os.path.dirname(self._folder)))
+                       .replace(os.sep, "/"))
 
     def _read(self, path: str) -> typing.Tuple[int, Stage]:
         front, body = read_front_matter(path)

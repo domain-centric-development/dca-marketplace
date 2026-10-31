@@ -1509,6 +1509,22 @@ def verify_runner(runner, verbose=False):
         check("runner: a pipeline that is not the one its stamp records starts nothing, and names the update",
               code == 7 and "is not the one .agents/factory/gate.installed records" in output
               and not os.path.isfile(os.path.join(root, "invoked.txt")), f"exit {code}; {output.strip()[-300:]}")
+    # the workflow's files are the pipeline too: a stage or a rule changed in the installed copy is caught the same way
+    for root in throwaway():
+        build_project(root)
+        copy_scripts(runner, root)
+        with open(os.path.join(root, ".agents", "factory", "gate.installed"), "w", encoding="utf-8") as handle:
+            handle.write(f"plugin: dca-factory\nsha256: {pipeline_sha(root)}\n")
+        build = os.path.join(root, ".agents", "factory", WORKFLOW, "stages", "build.md")
+        found = os.path.isfile(build)
+        with open(build, "a", encoding="utf-8") as handle:
+            handle.write("A gate that asks less.\n")
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "stand-in",
+                                  env={"FACTORY_TOOL_CMD": 'echo "$FACTORY_STAGE" >> invoked.txt'})
+        check("runner: a stage file changed in the installed workflow is a pipeline its stamp does not record — "
+              "nothing starts",
+              found and code == 7 and "is not the one .agents/factory/gate.installed records" in output
+              and not os.path.isfile(os.path.join(root, "invoked.txt")), f"exit {code}; {output.strip()[-300:]}")
     for root in throwaway():
         build_project(root)
         copy_scripts(runner, root)

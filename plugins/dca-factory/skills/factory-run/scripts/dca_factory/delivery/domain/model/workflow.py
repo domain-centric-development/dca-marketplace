@@ -10,6 +10,7 @@ import typing
 from ....building_blocks import AggregateRoot, Id
 from .jump import AGAIN, STOP, Target
 from .stage import HandOver, Stage, StageName, StoryKind, Trait, Window
+from .workflow_rule import Written
 
 WORKFLOW_NAME = re.compile(r"[a-z][a-z0-9-]*")
 
@@ -30,9 +31,10 @@ DELIVERY = WorkflowName("delivery")
 
 class Workflow(AggregateRoot[WorkflowName]):
     """The stages in their order: each name once, each hand-over written by one stage, each hand-over a gate weighs
-    written by a stage of it."""
+    written by a stage of it. Where each stage is written, as a person finds it, where the repository says."""
 
-    def __init__(self, name: WorkflowName, stages: typing.Sequence[Stage]) -> None:
+    def __init__(self, name: WorkflowName, stages: typing.Sequence[Stage],
+                 written: typing.Optional[typing.Mapping[StageName, Written]] = None) -> None:
         super().__init__()
         names = [s.name.value for s in stages]
         if not names:
@@ -52,6 +54,7 @@ class Workflow(AggregateRoot[WorkflowName]):
             raise ValueError(f"workflow {name.value}: a gate weighs {', '.join(unwritten)}, which no stage writes")
         self._id = name
         self._stages = tuple(stages)
+        self._written = dict(written or {})
 
     @property
     def id(self) -> WorkflowName:
@@ -65,6 +68,10 @@ class Workflow(AggregateRoot[WorkflowName]):
     def stage(self, name: StageName) -> typing.Optional[Stage]:
         """The stage by its name, None for a name the workflow has no stage of."""
         return next((s for s in self._stages if s.name == name), None)
+
+    def written(self, name: StageName) -> typing.Optional[Written]:
+        """Where the stage is written — `workflow/stages/plan.md` —, None where the repository says nothing."""
+        return self._written.get(name)
 
     def having(self, trait: Trait) -> typing.Tuple[Stage, ...]:
         return tuple(s for s in self._stages if trait in s.traits)

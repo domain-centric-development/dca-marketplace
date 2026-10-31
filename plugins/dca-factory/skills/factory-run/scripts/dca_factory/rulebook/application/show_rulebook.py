@@ -67,6 +67,8 @@ class ShowRulebookUseCase:
         return dict(
             skills=self._instructed.where(),
             stage=query.stage, kind=query.kind,
+            stages=[dict(name=row.name.value, about=row.about.value, source=row.source.value) for row in book.rows
+                    if stage is None or row.name == stage],
             rules=[rule_model(r) for r in chosen],
             retired=[rule_model(r) for r in book.rules if r not in book.active()],
             flow={k.value: dict(every_gate=ids(book.at_every_gate(k)),

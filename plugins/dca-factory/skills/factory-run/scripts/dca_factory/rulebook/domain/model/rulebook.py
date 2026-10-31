@@ -9,7 +9,8 @@ import typing
 
 from ....building_blocks import Value
 from .rule import (
-    AGAIN, Citation, Count, Enforcement, Fired, KindName, OutcomeState, Part, Refused, Rule, RuleId, RuleState, StageName,
+    AGAIN, Citation, Count, Enforcement, Fired, KindName, OutcomeState, Part, Refused, Rule, RuleId, RuleState, Source,
+    StageName,
     STOP, Words)
 
 
@@ -35,6 +36,9 @@ class StageRow(Value):
     gate: GateTime
     place: OrderPlace
     window: Words
+    #: what the stage is for, and the file it is written in
+    about: Words = Words("")
+    source: Source = Source("")
 
 
 class KindOrder(Value):

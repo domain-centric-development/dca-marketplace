@@ -516,7 +516,8 @@ function rulesTab(st) {
   for (const e of flow.edges) if (e.target in at && at[e.target] < at[e.source]) (back[e.target] = back[e.target] || new Set()).add(`${e.source} (${e.rule} ${e.state})`);
   const again = {};
   for (const e of flow.edges) if (e.target === e.source) (again[e.source] = again[e.source] || []).push(e.rule);
-  const cols = flow.steps.map(s => `<div class="col"><h3>${esc(s.stage)}</h3><div class="win">${esc(s.window || "")}${s.gate === "none" ? " · no gate" : ""}</div>
+  const stageOf = Object.fromEntries((v.stages || []).map(s => [s.name, s]));
+  const cols = flow.steps.map(s => `<div class="col"><h3 title="${esc([(stageOf[s.stage] || {}).about, (stageOf[s.stage] || {}).source].filter(Boolean).join(" — "))}">${esc(s.stage)}</h3><div class="win">${esc(s.window || "")}${s.gate === "none" ? " · no gate" : ""}</div>
     ${back[s.stage] ? `<div class="back">↩ from ${esc([...back[s.stage]].join(", "))}</div>` : ""}
     ${slot("gate before", s.gate_before, "gate", rules, fired, refused, false, s.stage)}${slot("told", s.told, "", rules, fired, refused, true)}
     ${slot("gate after", s.gate_after, "gate", rules, fired, refused, false, s.stage)}${slot("a pass does", s.passed, "", rules, fired, refused, false, s.stage)}

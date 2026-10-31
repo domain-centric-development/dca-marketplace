@@ -140,11 +140,12 @@ class StageFilesTest(unittest.TestCase):
 
     def test_the_workflow_reads_back_the_same(self):
         with tempfile.TemporaryDirectory() as root:
-            files = StageFiles(os.path.join(root, "stages"))
+            files = StageFiles(os.path.join(root, "workflow", "stages"))
             back = files.save(workflow())
             self.assertEqual(workflow().stages, back.stages)
             self.assertEqual(sorted(s.name.value + ".md" for s in back.stages),
-                             sorted(os.listdir(os.path.join(root, "stages"))))
+                             sorted(os.listdir(os.path.join(root, "workflow", "stages"))))
+            self.assertEqual("workflow/stages/plan.md", files.find_by_id(DELIVERY).written(StageName("plan")).value)
             self.assertIsNone(files.find_by_id(WorkflowName("other")))
             files.delete_by_id(DELIVERY)
             self.assertIsNone(files.find_by_id(DELIVERY))
@@ -168,6 +169,11 @@ class StageFilesTest(unittest.TestCase):
             Workflow(DELIVERY, [Stage(StageName("build"), sizes=(HandOver("build.md"),))])
         with self.assertRaises(ValueError):
             Workflow(DELIVERY, [])
+
+    def test_the_rulebook_names_each_stage_by_its_file(self):
+        view = show_rulebook(".").execute(ShowRulebookQuery())
+        self.assertEqual([s.name.value for s in workflow().stages], [s["name"] for s in view["stages"]])
+        self.assertTrue(all(s["source"] == f"workflow/stages/{s['name']}.md" and s["about"] for s in view["stages"]))
 
     def test_no_workflow_stops_the_load(self):
         with tempfile.TemporaryDirectory() as root:

@@ -54,14 +54,16 @@ stage writes a decision record and stops.
 
 ### Trigger · Reason · Source
 
-**Definition:** When a rule applies; why it exists; where it is written — `<path>:<line>`, the registration in the
-package or the marked paragraph in a skill.
+**Definition:** When a rule applies; why it exists; where it is written — the rule's file (`workflow/rules/…`) for a
+rule of the gate or the runner, beside the place in the package that binds it (`<path>:<line>`), or the marked
+paragraph in a skill. A stage of the flow is written too: its file (`workflow/stages/<name>.md`) and what it is for.
 
 **Type:** Value
 
 ### Flow (flow)
 
-**Definition:** A story kind's way through the pipeline: per stage the gate before it, what it is told, the gate after
+**Definition:** A story kind's way through the workflow's stages, as delivery publishes them (`StageRow`, each with
+its file and what it is for): per stage the gate before it, what it is told, the gate after
 it, what a passing gate does and what the runner decides there; the checks every gate holds said once. What no stage
 holds — the run as a whole, the commit hook, every stage alike — stands outside the flow.
 
