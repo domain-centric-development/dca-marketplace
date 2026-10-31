@@ -1,5 +1,6 @@
 """A stage's brief: what it is told for one story, decided over the workflow and the rules."""
 
+import os
 import unittest
 
 import support  # noqa: F401 — puts the package on the path
@@ -12,7 +13,11 @@ from dca_factory.delivery.adapter.incoming.cli.brief_view import brief_model, ma
 from dca_factory.delivery.domain.model.jump import RuleId
 from dca_factory.delivery.domain.model.stack_profile import SkillName
 from dca_factory.delivery.domain.model.stage import StageName, StoryKind
-from dca_factory.delivery.domain.service.stage_brief import Carrier, CarrierRole, StageBrief
+from dca_factory.delivery.domain.model.workflow_rule import RulePart
+from dca_factory.delivery.domain.service.stage_brief import Carrier, CarrierRole, expanded, StageBrief
+
+
+SKILLS = os.path.normpath(os.path.join(support.SCRIPTS, "..", ".."))
 
 
 def brief(stage, kind=StoryKind.STORY, carriers=()):
@@ -22,12 +27,12 @@ def brief(stage, kind=StoryKind.STORY, carriers=()):
 
 class StageBriefTest(unittest.TestCase):
 
-    def test_a_stage_is_told_every_stages_rules_first_then_its_own_in_its_skills_order(self):
+    def test_a_stage_is_told_every_stages_rules_first_then_its_own_then_what_no_frame_places(self):
         told = [t.rule.value for t in brief("build").told]
         own = [r for r in told if r.startswith("STAGE-BUILD-")]
         self.assertTrue(told[0].startswith("STAGE-COMMON-"), told[:3])
         self.assertLess(told.index("STAGE-COMMON-1"), told.index(own[0]))
-        self.assertLess(max(told.index(r) for r in told if r.startswith("STAGE-FILES-")), told.index(own[0]))
+        self.assertGreater(min(told.index(r) for r in told if r.startswith("STAGE-FILES-")), told.index(own[-1]))
         self.assertEqual(own[:3], ["STAGE-BUILD-1", "STAGE-BUILD-1A", "STAGE-BUILD-2"])
         self.assertFalse([r for r in told if r.startswith(("STAGE-PLAN-", "STAGE-TEST-"))])
 
@@ -60,7 +65,30 @@ class StageBriefTest(unittest.TestCase):
         self.assertEqual(text, markdown(second))
         self.assertIn("- craft: the `dca-modelling` skill", text)
         self.assertIn(RULES["STAGE-COMMON-1"].told.value, text)
+        self.assertIn("## The build file", markdown(brief("build")))      # the frame around the rules
+        self.assertNotIn("## Task mode", markdown(brief("plan")))         # a section whose rules all hold for another kind
+        self.assertIn("## Task mode", markdown(brief("plan", StoryKind.TASK)))
         self.assertEqual(brief_model(first)["told"][0]["rule"], first.told[0].rule.value)
+
+
+
+class FrameTest(unittest.TestCase):
+    """The frames and the told rules give back what the skills say, word for word — while the skills are still read,
+    neither may drift from the other."""
+
+    def test_each_skill_is_its_stages_frame_with_its_rules_in_place(self):
+        told = {r.id: r for r in RULES.values() if r.part is RulePart.TOLD and r.told is not None}
+        placed = set(told)
+        texts = [(f"stage-{s.name.value}/SKILL.md", s.frame) for s in workflow().stages if s.frame is not None]
+        texts.append(("factory-run/reference/stage-common.md", workflow().every_stage))
+        self.assertEqual(8, len(texts))
+        for skill, frame in texts:
+            with open(os.path.join(SKILLS, skill), encoding="utf-8") as handle:
+                lines = handle.read().splitlines()
+            if lines[0] == "---":
+                lines = lines[lines.index("---", 1) + 1:]
+            body = "\n".join(lines).strip("\n").split("\n", 1)[1].strip("\n")      # without the title
+            self.assertEqual(body, expanded(frame, told, placed)[0].value, skill)
 
 
 if __name__ == "__main__":

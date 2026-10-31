@@ -9,7 +9,7 @@ import typing
 
 from ....building_blocks import AggregateRoot, Id
 from .jump import AGAIN, STOP, Target
-from .stage import HandOver, Stage, StageName, StoryKind, Trait, Window
+from .stage import HandOver, Stage, StageName, StageText, StoryKind, Trait, Window
 from .workflow_rule import Written
 
 WORKFLOW_NAME = re.compile(r"[a-z][a-z0-9-]*")
@@ -34,7 +34,8 @@ class Workflow(AggregateRoot[WorkflowName]):
     written by a stage of it. Where each stage is written, as a person finds it, where the repository says."""
 
     def __init__(self, name: WorkflowName, stages: typing.Sequence[Stage],
-                 written: typing.Optional[typing.Mapping[StageName, Written]] = None) -> None:
+                 written: typing.Optional[typing.Mapping[StageName, Written]] = None,
+                 every_stage: typing.Optional[StageText] = None) -> None:
         super().__init__()
         names = [s.name.value for s in stages]
         if not names:
@@ -55,6 +56,7 @@ class Workflow(AggregateRoot[WorkflowName]):
         self._id = name
         self._stages = tuple(stages)
         self._written = dict(written or {})
+        self._every_stage = every_stage
 
     @property
     def id(self) -> WorkflowName:
@@ -68,6 +70,11 @@ class Workflow(AggregateRoot[WorkflowName]):
     def stage(self, name: StageName) -> typing.Optional[Stage]:
         """The stage by its name, None for a name the workflow has no stage of."""
         return next((s for s in self._stages if s.name == name), None)
+
+    @property
+    def every_stage(self) -> typing.Optional[StageText]:
+        """What every stage is told before its own — a frame like a stage's, its rules by marker."""
+        return self._every_stage
 
     def written(self, name: StageName) -> typing.Optional[Written]:
         """Where the stage is written — `workflow/stages/plan.md` —, None where the repository says nothing."""

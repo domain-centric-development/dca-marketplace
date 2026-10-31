@@ -34,8 +34,13 @@ import typing
 from ....domain.model.stage import HandOver, ProfileCommand, Stage, StageName, StageText, StoryKind, Trait, Window
 from ....domain.model.workflow import DELIVERY, Workflow, WorkflowName
 from ....domain.model.workflow_rule import Written
-from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter
+from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
 from .rule_files import listed
+
+#: The line in a stage's body after which its frame starts — what it is told, its rules by marker.
+FRAME = "<!-- frame: what the stage is told, each rule by its marker -->"
+#: What every stage is told, beside the stages' folder.
+EVERY_STAGE = "every-stage.md"
 
 #: The stages beside the package: `scripts/workflow/stages` in the plugin, `.agents/factory/workflow/stages` installed.
 FOLDER = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "..", "..",
@@ -61,7 +66,10 @@ class StageFiles:
         if twice:
             raise ValueError(f"{self._folder}: several stages at order {', '.join(map(str, twice))}")
         stages = [stage for _, stage in sorted(read, key=lambda r: r[0])]
-        return Workflow(aggregate_id, stages, {s.name: self._written(s.name) for s in stages})
+        every = os.path.join(os.path.dirname(self._folder), EVERY_STAGE)
+        frame = read_text(every).split(FRAME, 1)[-1].strip("\n") if os.path.isfile(every) else ""
+        return Workflow(aggregate_id, stages, {s.name: self._written(s.name) for s in stages},
+                        StageText(frame) if frame else None)
 
     def save(self, aggregate: Workflow) -> Workflow:
         if aggregate.id != DELIVERY:
@@ -74,6 +82,12 @@ class StageFiles:
         for place, stage in enumerate(aggregate.stages, 1):
             with open(self._path_of(stage.name), "w", encoding="utf-8", newline="\n") as out:
                 out.write(self.text(stage, place))
+        every = os.path.join(os.path.dirname(self._folder), EVERY_STAGE)
+        if aggregate.every_stage is not None:
+            with open(every, "w", encoding="utf-8", newline="\n") as out:
+                out.write(f"# What every stage is told\n\n{FRAME}\n\n{aggregate.every_stage.value}\n")
+        elif os.path.isfile(every):
+            os.remove(every)
         found = self.find_by_id(aggregate.id)
         assert found is not None
         return found
@@ -107,7 +121,8 @@ class StageFiles:
             frozenset(StoryKind(k) for k in listed(front.get("kinds"))),
             frozenset(Trait(t) for t in listed(front.get("traits"))),
             tuple(ProfileCommand(c) for c in listed(front.get("commands"))),
-            tuple(HandOver(h) for h in listed(front.get("sizes"))), about_of(body, name))
+            tuple(HandOver(h) for h in listed(front.get("sizes"))), about_of(body.split(FRAME, 1)[0], name),
+            frame_of(body))
 
     @staticmethod
     def text(stage: Stage, place: int) -> str:
@@ -126,6 +141,8 @@ class StageFiles:
         lines += ["---", "", f"# {stage.name.value}", ""]
         if stage.about is not None:
             lines += [stage.about.value, ""]
+        if stage.frame is not None:
+            lines += [FRAME, "", stage.frame.value, ""]
         return "\n".join(lines)
 
 
@@ -134,3 +151,11 @@ def about_of(body: str, name: str) -> typing.Optional[StageText]:
     lines = [line.strip() for line in body.splitlines()]
     said = " ".join(line for line in lines if line and line != f"# {name}")
     return StageText(said) if said else None
+
+
+def frame_of(body: str) -> typing.Optional[StageText]:
+    """The body after its frame line, as written — None where it has none."""
+    if FRAME not in body:
+        return None
+    frame = body.split(FRAME, 1)[1].strip("\n")
+    return StageText(frame) if frame else None

@@ -122,3 +122,5 @@ class Stage(Value):
     sizes: typing.Tuple[HandOver, ...] = ()
     #: what it is for, as a person reads it
     about: typing.Optional[StageText] = None
+    #: what it is told, around its told rules: the text, each rule a `<!-- rule: <id> -->` line where its words go
+    frame: typing.Optional[StageText] = None

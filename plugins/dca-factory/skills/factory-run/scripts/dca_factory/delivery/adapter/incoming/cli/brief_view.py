@@ -12,6 +12,7 @@ Model = typing.Dict[str, typing.Any]
 def brief_model(brief: Brief) -> Model:
     return dict(
         stage=brief.stage.value, kind=brief.kind.value, about=brief.about.value if brief.about else "",
+        said=brief.said.value,
         writes=brief.writes.value if brief.writes else "", window=brief.window.value if brief.window else "",
         told=[dict(rule=t.rule.value, section=t.section.value if t.section else "", words=t.words.value)
               for t in brief.told],
@@ -21,8 +22,8 @@ def brief_model(brief: Brief) -> Model:
 
 
 def markdown(brief: Brief) -> str:
-    """The brief in the order a stage works it: what the stage is, the skills it loads, what it is told — section by
-    section, each rule's words as written —, what its gate holds it to."""
+    """The brief in the order a stage works it: what the stage is, the skills it loads, what it is told — every stage's
+    frame and its own, each rule's words where its marker stands —, what its gate holds it to."""
     lines = [f"# The {brief.stage.value} stage — a {brief.kind.value}", ""]
     if brief.about:
         lines += [brief.about.value, ""]
@@ -33,14 +34,7 @@ def markdown(brief: Brief) -> str:
         lines += ["## The skills you load", ""]
         lines += [f"- {c.role.value}: the `{c.skill.value}` skill" for c in brief.carriers]
         lines.append("")
-    lines += ["## What you do", ""]
-    section = None
-    for told in brief.told:
-        here = told.section.value if told.section else ""
-        if here != section:
-            lines += [f"### {here}", ""] if here else []
-            section = here
-        lines += [f"<!-- {told.rule.value} -->", told.words.value, ""]
+    lines += ["## What you do", "", brief.said.value, ""]
     if brief.measured:
         lines += ["## What the gate holds you to", ""]
         lines += [f"- `{m.rule.value}` — when: {m.when.value}" + (f"; refused: {m.refused.value}" if m.refused else "")
