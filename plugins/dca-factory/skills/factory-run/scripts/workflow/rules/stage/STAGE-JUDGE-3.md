@@ -1,0 +1,13 @@
+---
+id: STAGE-JUDGE-3
+part: told
+stages:
+- judge
+section: Do
+marked: stage-judge/SKILL.md
+---
+
+# STAGE-JUDGE-3
+
+1. **ddd** — is the model right? (`review-ddd`: aggregates and invariants, entity against value
+   object, events, the language, repository against store.)

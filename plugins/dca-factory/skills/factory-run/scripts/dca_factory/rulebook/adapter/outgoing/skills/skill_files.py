@@ -19,8 +19,6 @@ NUMBERED = re.compile(r"^\s*(?:\d+[a-z]?\.|[-*])\s+")
 EVERY_STAGE = ("common", "files", "backlog")
 #: The last part of an id that names the story kind a paragraph holds for: a skill's `## Task mode`, `## Adopt mode`.
 MODES = ("task", "adopt")
-#: How much of a paragraph the rulebook keeps as what the rule says.
-TEXT_LIMIT = 600
 #: The skills folder of the plugin beside the package, then the project's tool folders — the first that has the
 #: factory's reference.
 TOOL_FOLDERS = (".claude/skills", ".agents/skills", ".codex/skills", ".opencode/skills")
@@ -40,12 +38,13 @@ def indent(line: str) -> int:
     return len(line) - len(line.lstrip())
 
 
-def plain(lines: typing.Sequence[str]) -> str:
-    """A paragraph as one line: the list mark, the emphasis and the line breaks taken out."""
+def plain(paragraph: str) -> str:
+    """A paragraph as one line: the list mark, the emphasis and the line breaks taken out — how the rulebook shows it
+    and compares a skill's words with its rule file."""
+    lines = paragraph.splitlines()
     text = " ".join(NUMBERED.sub("", line, count=1).strip() if i == 0 else line.strip() for i, line in enumerate(lines))
     text = re.sub(r"\*\*|__", "", text)
-    text = re.sub(r"\s+", " ", text).strip()
-    return text if len(text) <= TEXT_LIMIT else text[: TEXT_LIMIT - 1].rstrip() + "…"
+    return re.sub(r"\s+", " ", text).strip()
 
 
 class SkillFiles:
@@ -121,7 +120,7 @@ class SkillFiles:
             rules.append(Rule(
                 checked, Part.INSTRUCTION, () if area in EVERY_STAGE else (StageName(area),),
                 (KindName(mode),) if mode in MODES else (),
-                Words(f"{skill} — {heading}" if heading else skill), (), Words(""), Words(plain(paragraph)), (),
+                Words(f"{skill} — {heading}" if heading else skill), (), Words(""), Words(plain("\n".join(paragraph))), (),
                 Source(f"{shown}:{index + 2}")))
         return rules, citations
 

@@ -8,12 +8,30 @@ from .....delivery.api.rules import kind_orders, pipeline_rules, stage_rows, sto
 from ....domain.model.rule import (
     Count, Fired, KindName, Outcome, OutcomeState, Part, Refused, Rule, RuleId, RuleState, Source, StageName, Words)
 from ....domain.model.rulebook import GateTime, KindOrder, OrderPlace, StageRow
+from ..skills.skill_files import plain
 
 #: How delivery publishes where a rule sits, in the rulebook's terms.
-PARTS = {"check": Part.CHECK, "pass": Part.PASS_ACTION, "decision": Part.DECISION}
+PARTS = {"check": Part.CHECK, "pass": Part.PASS_ACTION, "decision": Part.DECISION, "told": Part.INSTRUCTION}
+
+
+def skill_of(marked: str) -> str:
+    """The skill a told rule's words stand in, as a person names it — `stage-build`, `stage-common.md`."""
+    return marked.rsplit("/", 1)[-1] if "/reference/" in marked else marked.split("/")[0]
+
+
+def told(published: typing.Mapping[str, typing.Any]) -> Rule:
+    """What a stage is told: where it stands (the skill, its section), its words as one line."""
+    where = " — ".join(w for w in (skill_of(published["marked"]), published["section"]) if w)
+    return Rule(
+        RuleId(published["id"]), Part.INSTRUCTION, tuple(StageName(s) for s in published["stages"]),
+        tuple(KindName(k) for k in published["kinds"]), Words(where), (), Words(""), Words(plain(published["told"])),
+        (), Source(published["source"]), RuleState.RETIRED if published["retired"] else RuleState.ACTIVE,
+        Source(published["marked"]))
 
 
 def translated(published: typing.Mapping[str, typing.Any]) -> Rule:
+    if published["part"] == "told":
+        return told(published)
     return Rule(
         RuleId(published["id"]), PARTS[published["part"]],
         tuple(StageName(s) for s in published["stages"]), tuple(KindName(k) for k in published["kinds"]),

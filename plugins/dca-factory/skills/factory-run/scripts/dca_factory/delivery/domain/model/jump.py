@@ -10,17 +10,17 @@ from ....building_blocks import Id, Value
 from .stage import StageName
 
 AGAIN, STOP = "again", "stop"
-RULE_ID = re.compile(r"^(GATE|RUN)(-[A-Z0-9]+)+$")
+RULE_ID = re.compile(r"^(GATE|RUN|STAGE)(-[A-Z0-9]+)+$")
 
 
 class RuleId(Id):
-    """A rule's id — `GATE-RED-PROOF`, `RUN-BACK-1`."""
+    """A rule's id — `GATE-RED-PROOF`, `RUN-BACK-1`, `STAGE-BUILD-1`."""
 
     value: str
 
     def __post_init__(self) -> None:
         if not RULE_ID.fullmatch(self.value):
-            raise ValueError(f"{self.value!r} is no rule id — GATE-<CHECK> or RUN-<AREA>-<n>")
+            raise ValueError(f"{self.value!r} is no rule id — GATE-<CHECK>, RUN-<AREA>-<n> or STAGE-<STAGE>-<n>")
 
 
 class Target(Value):

@@ -58,7 +58,7 @@ class ShowRulebookUseCase:
         self._findings = findings
 
     def execute(self, query: ShowRulebookQuery) -> Model:
-        book = Rulebook(self._decided.rules() + self._instructed.rules(), self._decided.rows(),
+        book = Rulebook(self._decided.rules(), self._decided.rows(),
                         self._decided.orders())
         stage = StageName(query.stage) if query.stage else None
         kind = KindName(query.kind) if query.kind else None
@@ -77,7 +77,7 @@ class ShowRulebookUseCase:
                                 steps=[step_model(s) for s in book.flow(k) if stage is None or s.stage == stage])
                   for k in kinds},
             outside=[r.id.value for r in book.outside() if r in chosen],
-            problems=[p.said.value for p in book.problems(self._instructed.citations())],
+            problems=[p.said.value for p in book.problems(self._instructed.citations(), self._instructed.rules())],
             story=self._story(book, query.story) if query.story else None,
         )
 

@@ -88,7 +88,10 @@ gate run there; with the refusals the journal counts per name, the story's overl
 
 ### Marker (`<!-- rule: <id> -->`)
 
-**Definition:** The line before a skill's paragraph that makes the paragraph an instructed rule.
+**Definition:** The line before a skill's paragraph that carries an instructed rule's words. The rule itself is its
+file (`workflow/rules/stage/<id>.md`, `part: told`, the section and the stages and kinds it holds for, its words); the
+skill carries a copy while a stage still reads the skill, and the rulebook names every paragraph whose words are not
+its file's, a marker without a file and a file whose skill carries no marker as problems.
 
 **Type:** Concept
 

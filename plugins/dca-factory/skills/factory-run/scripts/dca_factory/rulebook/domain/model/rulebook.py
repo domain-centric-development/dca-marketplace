@@ -176,9 +176,12 @@ class Rulebook(Value):
         staged = {row.name for row in self.rows}
         return tuple(r for r in self.active() if not any(stage in staged for stage in r.stages))
 
-    def problems(self, citations: typing.Tuple[Citation, ...]) -> typing.Tuple[Problem, ...]:
-        """An id used twice, a stage no row has, a cited id no rule has, a retired rule still written somewhere."""
-        found = []
+    def problems(self, citations: typing.Tuple[Citation, ...],
+                 marked: typing.Tuple[Rule, ...] = ()) -> typing.Tuple[Problem, ...]:
+        """An id used twice, a stage no row has, a cited id no rule has, a retired rule still written somewhere — and a
+        skill's marked paragraph (<marked>) whose words are not its rule file's, or that has no file, or a file whose
+        words a skill should carry and does not."""
+        found = list(self.drifted(marked))
         counted = collections.Counter(r.id for r in self.rules)
         for rule_id, count in counted.items():
             if count > 1:
@@ -208,6 +211,30 @@ class Rulebook(Value):
             elif cited.state is RuleState.RETIRED:
                 found.append(Problem(Words(f"{citation.source.value} cites {citation.id.value}, which is retired")))
         return tuple(found)
+
+
+    def drifted(self, marked: typing.Tuple[Rule, ...]) -> typing.Iterator[Problem]:
+        """Where a skill's words and the told rules' files part: the file is the source, the skill carries a copy."""
+        told = {r.id: r for r in self.rules if r.part is Part.INSTRUCTION}
+        seen = set()
+        for mark in marked:
+            if mark.id in seen:
+                yield Problem(Words(f"{mark.id.value} is marked twice — {mark.source.value}"))
+                continue
+            seen.add(mark.id)
+            rule = told.get(mark.id)
+            if rule is None:
+                yield Problem(Words(f"{mark.id.value} is marked in {mark.source.value} but no rule file holds it — "
+                                    f"write workflow/rules/stage/{mark.id.value}.md"))
+            elif rule.state is RuleState.RETIRED:
+                yield Problem(Words(f"{mark.id.value} is retired but still marked in {mark.source.value}"))
+            elif rule.text != mark.text:
+                yield Problem(Words(f"{mark.id.value}: the words in {mark.source.value} are not its rule file's "
+                                    f"({rule.source.value}) — the file is the source"))
+        for rule_id, rule in told.items():
+            if rule.state is RuleState.ACTIVE and rule.bound.value and rule_id not in seen and marked:
+                yield Problem(Words(f"{rule_id.value}: its file says {rule.bound.value} carries its words, and no "
+                                    f"marker there does — {rule.source.value}"))
 
 
 #: The places a rule may name beside the stage table: the commit hook and CI, a discovery's report.

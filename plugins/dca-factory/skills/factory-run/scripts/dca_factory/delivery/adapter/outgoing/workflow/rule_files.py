@@ -39,8 +39,12 @@ WHEN, WHY = "**When:** ", "**Why:** "
 QUOTES = "\"'"
 
 
+#: The folder of each kind of rule, by its id's first part.
+FOLDERS = {"GATE": "gate", "RUN": "run", "STAGE": "stage"}
+
+
 def part_folder(rule_id: RuleId) -> str:
-    return "gate" if rule_id.value.startswith("GATE-") else "run"
+    return FOLDERS[rule_id.value.split("-", 1)[0]]
 
 
 def listed(value: typing.Any) -> typing.List[str]:
@@ -79,7 +83,7 @@ class RuleFiles:
 
     def all(self) -> typing.Sequence[WorkflowRule]:
         found: typing.List[WorkflowRule] = []
-        for part in ("gate", "run"):
+        for part in FOLDERS.values():
             place = os.path.join(self._folder, part)
             if os.path.isdir(place):
                 found += [self._read(os.path.join(place, name)) for name in sorted(os.listdir(place))
@@ -118,16 +122,27 @@ class RuleFiles:
         if unsaid:
             raise ValueError(f"{path}: {', '.join(unsaid)} for an outcome it says nothing about")
         retired = front.get("retired")
+        if str(front.get("part") or "") == RulePart.TOLD.value:
+            section, marked = front.get("section"), front.get("marked")
+            return WorkflowRule(
+                rule_id, RulePart.TOLD, RuleText(""), RuleText(""), (), (),
+                [StageName(s) for s in listed(front.get("stages"))], [StoryKind(k) for k in listed(front.get("kinds"))],
+                RuleText(str(retired)) if retired else None, self._written(path), RuleText(told_of(body, rule_id)),
+                RuleText(str(section)) if section else None, Written(str(marked)) if marked else None)
         return WorkflowRule(
             rule_id, RulePart(str(front.get("part") or "decision")), RuleText(paragraph(body, WHEN)),
             RuleText(paragraph(body, WHY)), outcomes, [CheckName(n) for n in listed(front.get("reports"))],
             [StageName(s) for s in listed(front.get("stages"))], [StoryKind(k) for k in listed(front.get("kinds"))],
-            RuleText(str(retired)) if retired else None,
-            Written(os.path.relpath(path, os.path.dirname(os.path.dirname(self._folder))).replace(os.sep, "/")))
+            RuleText(str(retired)) if retired else None, self._written(path))
+
+    def _written(self, path: str) -> Written:
+        return Written(os.path.relpath(path, os.path.dirname(os.path.dirname(self._folder))).replace(os.sep, "/"))
 
     @staticmethod
     def text(rule: WorkflowRule) -> str:
         """The rule's file: the front matter the factory reads, the body a person reads."""
+        if rule.part is RulePart.TOLD:
+            return told_text(rule)
         lines = ["---", f"id: {rule.id.value}", f"part: {rule.part.value}"]
         for key, values in (("stages", [s.value for s in rule.stages]), ("kinds", [k.value for k in rule.kinds])):
             if values:
@@ -145,3 +160,26 @@ class RuleFiles:
             lines.append(f"retired: {written_value(rule.retired.value)}")
         lines += ["---", "", f"# {rule.id.value}", "", f"{WHEN}{rule.when.value}", "", f"{WHY}{rule.why.value}", ""]
         return "\n".join(lines)
+
+
+def told_text(rule: WorkflowRule) -> str:
+    """A told rule's file: where it holds in the front matter, its words — as the stage reads them — in the body."""
+    lines = ["---", f"id: {rule.id.value}", f"part: {rule.part.value}"]
+    for key, values in (("stages", [s.value for s in rule.stages]), ("kinds", [k.value for k in rule.kinds])):
+        if values:
+            lines += [f"{key}:"] + [f"- {v}" for v in values]
+    if rule.section is not None:
+        lines.append(f"section: {written_value(rule.section.value)}")
+    if rule.marked is not None:
+        lines.append(f"marked: {rule.marked.value}")
+    if rule.retired is not None:
+        lines.append(f"retired: {written_value(rule.retired.value)}")
+    told = rule.told.value if rule.told is not None else ""
+    return "\n".join(lines + ["---", "", f"# {rule.id.value}", "", told, ""])
+
+
+def told_of(body: str, rule_id: RuleId) -> str:
+    """The words under the `# <id>` heading, as written — indentation, list marks and emphasis kept."""
+    lines = body.splitlines()
+    at = next((i for i, line in enumerate(lines) if line.strip() == f"# {rule_id.value}"), -1)
+    return "\n".join(lines[at + 1:]).strip("\n")

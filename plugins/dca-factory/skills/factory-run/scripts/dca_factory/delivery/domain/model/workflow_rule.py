@@ -4,9 +4,9 @@ checks or decides it.
 
     GATE-<CHECK>        what a gate check holds — one rule per name it reports under (`GATE-HAPPY-PATH` under `plan`)
     RUN-<AREA>-<n>      what the runner decides — the route, the rounds, the schedule, the requests, the tools
+    STAGE-<STAGE>-<n>   what a stage is told — its words, the section they stand under, the stages and kinds it holds for
 
-What a stage is told (`STAGE-…`) stands in its skill, not here. An id is stable: a rule that goes stays, retired, with
-the reason, as the rule libraries keep theirs.
+An id is stable: a rule that goes stays, retired, with the reason, as the rule libraries keep theirs.
 """
 
 from __future__ import annotations
@@ -21,11 +21,13 @@ from .verdict import CheckName
 
 
 class RulePart(enum.Enum):
-    """What kind of code binds the rule: a gate check, what a passing gate does, or a decision."""
+    """What binds the rule: a gate check, what a passing gate does, a decision — or what a stage is told, which no code
+    binds: the stage reads it."""
 
     CHECK = "check"
     PASS = "pass"
     DECISION = "decision"
+    TOLD = "told"
 
 
 class OutcomeState(enum.Enum):
@@ -68,10 +70,17 @@ class WorkflowRule(AggregateRoot[RuleId]):
     def __init__(self, rule_id: RuleId, part: RulePart, when: RuleText, why: RuleText,
                  outcomes: typing.Sequence[Outcome] = (), reports: typing.Sequence[CheckName] = (),
                  stages: typing.Sequence[StageName] = (), kinds: typing.Sequence[StoryKind] = (),
-                 retired: typing.Optional[RuleText] = None, written: typing.Optional[Written] = None) -> None:
+                 retired: typing.Optional[RuleText] = None, written: typing.Optional[Written] = None,
+                 told: typing.Optional[RuleText] = None, section: typing.Optional[RuleText] = None,
+                 marked: typing.Optional[Written] = None) -> None:
         super().__init__()
         states = [o.state for o in outcomes]
-        if retired is None and not outcomes:
+        if part is RulePart.TOLD:
+            if outcomes:
+                raise ValueError(f"rule {rule_id.value}: what a stage is told has no outcome")
+            if retired is None and (told is None or not told.value.strip()):
+                raise ValueError(f"rule {rule_id.value}: tells a stage nothing")
+        elif retired is None and not outcomes:
             raise ValueError(f"rule {rule_id.value}: says no outcome")
         if len(states) != len(set(states)):
             raise ValueError(f"rule {rule_id.value}: says an outcome twice")
@@ -85,6 +94,9 @@ class WorkflowRule(AggregateRoot[RuleId]):
         self._kinds = tuple(kinds)
         self._retired = retired
         self._written = written
+        self._told = told
+        self._section = section
+        self._marked = marked
 
     @property
     def id(self) -> RuleId:
@@ -128,6 +140,21 @@ class WorkflowRule(AggregateRoot[RuleId]):
     @property
     def written(self) -> typing.Optional[Written]:
         return self._written
+
+    @property
+    def told(self) -> typing.Optional[RuleText]:
+        """What a stage is told, word for word as it reads it — a told rule's alone."""
+        return self._told
+
+    @property
+    def section(self) -> typing.Optional[RuleText]:
+        """The heading a told rule stands under."""
+        return self._section
+
+    @property
+    def marked(self) -> typing.Optional[Written]:
+        """Where a skill still carries a told rule's words, under its `<!-- rule: <id> -->` marker."""
+        return self._marked
 
     def unknown_targets(self, targets: typing.FrozenSet[Target]) -> typing.Tuple[Target, ...]:
         """The targets its outcomes send a story to that are none of <targets> — a workflow's stages, again, stop."""

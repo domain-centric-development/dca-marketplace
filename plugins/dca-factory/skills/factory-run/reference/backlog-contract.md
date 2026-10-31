@@ -41,7 +41,6 @@ a profile under `.agents/factory/`, records under `.agents/factory/decisions/`, 
 
 ## Project description
 
-<!-- rule: STAGE-BACKLOG-1 -->
 Two files are mandatory before the first story, a third is optional. They are written with the
 person who decides what is built, through the project's description skill (`/factory-setup` uses
 it), and changed only through it afterwards — no stage edits them. The headings are fixed in this
@@ -84,7 +83,6 @@ and reads all three before it writes one. An epic's intent must fit the product 
 
 ## Epic
 
-<!-- rule: STAGE-BACKLOG-2 -->
 Front matter, every field non-empty; the gate refuses an epic without `intent`, `goal`, `metric` or
 `domain_contact`:
 
@@ -121,7 +119,6 @@ stories are all delivered and that has no journey item is shown as *delivered, u
 
 ## Story
 
-<!-- rule: STAGE-BACKLOG-3 -->
 Front matter:
 
 | Field | Meaning |
@@ -203,7 +200,6 @@ Body sections:
 
 ## Journey item
 
-<!-- rule: STAGE-BACKLOG-4 -->
 `kind: journey` in a story's front matter makes it a guard over delivered stories instead of new
 behaviour: one scenario walking the epic's `## Journey` to its outcome event, `depends_on:` the stories
 that build the steps (required — it becomes ready when they are delivered), no happy-path mark. It runs
@@ -213,7 +209,6 @@ a step lists the journey test under `## Changed tests`, as any other.
 
 ## Task
 
-<!-- rule: STAGE-BACKLOG-5 -->
 `kind: task` in a story's front matter makes it a change no actor sees: a refactoring, a judge's finding that
 changes no behaviour, a dependency or build change, a unit test for an invariant that already holds. It has **no**
 acceptance criteria — a criterion is behaviour, and behaviour that changes is a story with a red test; the plan gate
@@ -226,7 +221,6 @@ what held. Taking a feature away is not a task — an actor sees it gone — but
 
 ## Adopted story
 
-<!-- rule: STAGE-BACKLOG-6 -->
 `status: adopted` describes behaviour the project already has. The factory never builds it; it adopts it:
 plan, test and judge map every scenario to a test that exists and is **green**, a test the adoption writes
 itself (a *characterization* test, listed under `## Characterization` in `tests.md`) comes with a break —
@@ -240,7 +234,6 @@ is delivered; afterwards its tests are guarded like any delivered story's.
 
 ## Delivered by hand
 
-<!-- rule: STAGE-BACKLOG-7 -->
 A story a person built — by hand, with another tool, where the factory never ran — is delivered by hand:
 `status: delivered`, `delivered:` (UTC) and `delivered_by: hand:<who>`, written by hand or by
 `factory-cli.py --deliver-by-hand <story> --by <who>`, committed with the trailer `Story: <id>`. The views
@@ -252,7 +245,6 @@ delivered behaviour is a new story with `## Changed expectations`.
 
 ## The living spec
 
-<!-- rule: STAGE-BACKLOG-8 -->
 A story is a change; `product/spec/` (the configuration's `spec:`) holds what is true today, per bounded context
 and feature: `<spec>/<context>/<feature>/scenarios.md` for each feature — a term of the context's language with a
 glossary entry of `**Type:** Feature`, named as the code's package would spell it (`productdetails`) — and
@@ -300,12 +292,10 @@ alone — `grep -l '^status: delivered' …/story.md`, `grep -h '^delivered_by:'
 
 ## Brownfield
 
-<!-- rule: STAGE-BACKLOG-9 -->
 The contract applies to **new** stories. An existing backlog is not migrated wholesale and
 existing tests are not renamed; the gate only ever looks at the story it is called with.
 
 ## Empty means green
 
-<!-- rule: STAGE-BACKLOG-10 -->
 A project with no backlog is not broken. Every stage says which file to create; nothing fails
 on the absence of an artefact. The first story is written, then the pipeline works.

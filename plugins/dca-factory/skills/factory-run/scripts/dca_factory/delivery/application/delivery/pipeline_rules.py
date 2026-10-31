@@ -110,9 +110,11 @@ def rule_of(rule_id: str) -> WorkflowRule:
 
 
 def unbound() -> typing.List[str]:
-    """The rules the repository holds that no code binds, retired ones aside — each a rule that decides nothing."""
+    """The rules the repository holds that no code binds, retired ones and what a stage is told aside — each a rule
+    that decides nothing."""
     bound = {b.rule for b in BOUND}
-    return sorted(rule_id for rule_id, r in RULES.items() if r.retired is None and rule_id not in bound)
+    return sorted(rule_id for rule_id, r in RULES.items()
+                  if r.retired is None and r.part is not RulePart.TOLD and rule_id not in bound)
 
 
 def jump(rule_id: str, state: str = "fail") -> Jump:

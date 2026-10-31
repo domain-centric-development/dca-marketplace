@@ -48,7 +48,9 @@ def published(bound: typing.Optional[Bound], found: WorkflowRule) -> Published:
                 reports=[r.value for r in found.reports], stages=stages,
                 kinds=[kind for kind in KIND_ORDER if kind in chosen],
                 source=found.written.value if found.written else "", bound=bound.place if bound else "",
-                retired=found.retired.value if found.retired else "")
+                retired=found.retired.value if found.retired else "",
+                told=found.told.value if found.told else "", section=found.section.value if found.section else "",
+                marked=found.marked.value if found.marked else "")
 
 
 def held() -> None:

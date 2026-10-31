@@ -1,0 +1,17 @@
+---
+id: STAGE-JUDGE-6
+part: told
+stages:
+- judge
+section: Do
+marked: stage-judge/SKILL.md
+---
+
+# STAGE-JUDGE-6
+
+6. Check the story once more against the criteria: is each one actually met by behaviour, not just
+   by a green test? A test that asserts too little is a **test** defect and belongs in the report. Before a
+   criterion counts as met, ask of its test's assertion: **could it fail?** With the behaviour absent — the
+   button still there, the message still shown — would it turn red? An assertion on a mechanism the code does
+   not use, a count of something never written, an absence that held before the story is green whatever the
+   code does: a test defect (`back: test`), not a proof.
