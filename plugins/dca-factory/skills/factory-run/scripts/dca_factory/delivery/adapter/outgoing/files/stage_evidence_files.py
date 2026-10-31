@@ -24,7 +24,7 @@ from ....domain.model.epic import EpicId
 from ....domain.model.schedule import ContextName
 from ....domain.model.stage import StageName, StoryKind
 from ....domain.model.stage_story import (
-    AssertionAt, AdoptRow, ChangedTest, PlanAdoption, Rename, RenamedTest, SymbolName, DocumentFacts, Integration, MainTestLines, MainTests, MappedTest, OutcomeEvent, OutcomeFacts, PassGap,
+    AssertionAt, AdoptRow, BriefFacts, ChangedTest, PlanAdoption, Rename, RenamedTest, SymbolName, DocumentFacts, Integration, MainTestLines, MainTests, MappedTest, OutcomeEvent, OutcomeFacts, PassGap,
     PipelineFacts, PlannedDigest, ProposalFacts, ReviewFacts, StoryPass, SpecDelta, SpecTests, StoryCommit, DecidedRecord, KeptTests, PlannedTestChange, RedProof, StageChanges,
     TestChange, TestEdit, Unobserved, AssertionFact, ByteSize, Clause, ClauseRow, CommandKey, Count,
     ElementName, ElementRules, FileChange, InvariantFacts, InvariantRow, PlannedFile, PortName, Presence, Rule,
@@ -35,6 +35,7 @@ from ....domain.model.story import DeliveredOn, StoryId
 from ....domain.model.story_state import Detail, HandOverText, Rounds, StatusWord
 from ....domain.service.backlog_checks import EPIC_FIELDS, normal_name
 from ....domain.service.decision_checks import Applying
+from .brief_files import given_digest, named_digest
 from .decision_record_files import (
     ANSWER_FIELDS, answer_sentence, decisions_store, needs_human_ids, read_decisions, record_path, resume_stage,
     stamp_applied)
@@ -260,6 +261,11 @@ class StageEvidenceFiles:
             return OwnedFacts(tuple(OwnedPart(p) for p in parts), None)
         changed = owned_changes(self._runs, story.story.value, story.place.value)
         return OwnedFacts((), tuple(OwnedPart(p) for p in changed) if changed is not None else None)
+
+    def brief(self, story: StoryId, stage: StageName, hand_over: HandOverName) -> BriefFacts:
+        place = os.path.join(self._runs, story.value, hand_over.value)
+        given, named = given_digest(self._runs, story.value, stage.value), named_digest(place)
+        return BriefFacts(Place(place), Detail(given) if given else None, Detail(named) if named else None)
 
     def context_map(self) -> ContextMapFacts:
         """The designed map (`domain:`) is read first, so a story for a context that is designed but not built yet

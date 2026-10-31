@@ -1191,9 +1191,53 @@ def read_snapshot(path):
         pass
     return entries
 
+#: What a model does after reading its brief, done for a stand-in after it ran: each hand-over it wrote or changed, of
+#: the stage it stands in for (every stage of a window) the runner gave a brief, begins with the line naming it
+#: (`brief: <digest>`, GATE-BRIEF) — unless it names one already. `BEFORE_BRIEF` notes the hand-overs as they were.
+BEFORE_BRIEF = r"""_r="$FACTORY_RUNS/$FACTORY_STORY"; _pre=""
+for _h in "$_r"/*.md; do [ -f "$_h" ] && _pre="$_pre $(basename "$_h"):$(cksum < "$_h" | cut -d' ' -f1)"; done"""
+NAME_BRIEF = r"""_b="$(dirname "$FACTORY_RUNS")"; [ "$_b" = "." ] && _b=.dca-factory; _b="$_b/evidence/$FACTORY_STORY/brief"
+for _d in "$_b"/*.digest; do
+  [ -f "$_d" ] || continue
+  _s=$(basename "$_d" .digest); _f="$_s.md"; [ "$_s" = test ] && _f=tests.md
+  case "$FACTORY_STAGE" in builder|verifier|"$_s") ;; *) continue ;; esac
+  _h="$_r/$_f"
+  [ -f "$_h" ] || continue
+  case " $_pre " in *" $_f:$(cksum < "$_h" | cut -d' ' -f1) "*) continue ;; esac
+  if ! grep -q '^brief:' "$_h"; then { printf 'brief: %s\n' "$(cat "$_d")"; cat "$_h"; } > "$_h.$$" && mv "$_h.$$" "$_h"; fi
+done"""
+
+
+def briefed(env):
+    """<env> with its stand-in — and the per-stage one a shared window's stand-in calls (FIXTURE_STAND_IN) — followed
+    by `NAME_BRIEF`, the stand-in's exit kept; not where FIXTURE_NO_BRIEF says the stand-in reads no brief."""
+    if not env or env.get("FIXTURE_NO_BRIEF"):
+        return env
+    return dict(env, **{key: f"{BEFORE_BRIEF}\n( {env[key]}\n); _c=$?\n{NAME_BRIEF}\nexit $_c"
+                        for key in ("FACTORY_TOOL_CMD", "FIXTURE_STAND_IN")
+                        if env.get(key) and not (key == "FIXTURE_STAND_IN" and env[key].endswith(".sh"))})
+
+
+#: words only what every stage is told says — never in a stage's own brief
+RULES_TOLD_PROBE = "## A question is a decision record"
+
+
+def told_text(runner, stage=None):
+    """What a stage is told, as the workflow's files hold it — the frames and the told rules' words, whitespace folded:
+    every stage's, or <stage>'s alone."""
+    workflow = os.path.join(os.path.dirname(runner), "workflow")
+    if stage:
+        paths = [os.path.join(workflow, "stages", f"{stage}.md")] + sorted(
+            glob.glob(os.path.join(workflow, "rules", "stage", f"STAGE-{stage.upper()}-*.md")))
+    else:
+        paths = [os.path.join(workflow, "every-stage.md")] + sorted(
+            glob.glob(os.path.join(workflow, "rules", "stage", "STAGE-COMMON-*.md")))
+    return " ".join(" ".join(open(path, encoding="utf-8").read().split()) for path in paths)
+
+
 def run_runner(runner, root, *args, env=None):
     environment = dict(os.environ)
-    environment.update(env or {})
+    environment.update(briefed(env) or {})
     result = subprocess.run(
         [BASH, runner, *args], cwd=root, capture_output=True, text=True, env=environment,
         encoding="utf-8", errors="replace",
@@ -1242,22 +1286,20 @@ def verify_runner(runner, verbose=False):
               output.count("would run (review:") == 3 and "apply the `review-ddd` skill" in output
               and ".dca-factory/runs/STORY-1/reviews/hexagonal.md" in output
               and output.index("would run (review:ddd)") < output.index("── stage judge"), [l[:120] for l in output.splitlines() if "review:" in l][:3])
-        # what a session does with those paths is in the rules every stage holds to, which the prompt names
-        common_path = os.path.normpath(os.path.join(os.path.dirname(runner), "..", "reference", "stage-common.md"))
-        common = " ".join(open(common_path, encoding="utf-8").read().split())
+        # what a session does with those paths is in what every stage is told, which the prompt names
+        common = told_text(runner)
         check("runner: every stage prompt says where things are — the profile, the run folder, the gate's contract "
-              "through the cli and the rules every stage holds to, which say never the gate's source",
+              "through the cli and what every stage is told, which says never the gate's source",
               output.count("the stack profile is dca-factory.profile.yaml") == 9
               and output.count("factory-cli.py --contract <stage>") == 9
-              and output.count("The rules every stage holds to: ") == 9 and "stage-common.md." in output
+              and output.count(".dca-factory/evidence/STORY-1/brief/every-stage.md") == 9
               and "never the gate's source" in common and "never the gate's source" not in output,
               [l[:160] for l in output.splitlines() if "would run" in l][:2])
-        document_skill = " ".join(open(os.path.join(os.path.dirname(runner), "..", "..", "stage-document", "SKILL.md"),
-                                       encoding="utf-8").read().split())
-        check("runner: the document stage's skill names the skeleton the pipeline writes, and that skill is in its prompt",
+        document_skill = told_text(runner, "document")
+        check("runner: the document stage's brief names the skeleton the pipeline writes, and that brief is in its prompt",
               "--document-skeleton <story>` (the runner runs it" in document_skill
               and "cite paths from that section in exactly that form" in document_skill
-              and "Apply the stage-document skill" in output,
+              and ".dca-factory/evidence/STORY-1/brief/document.md" in output,
               document_skill[:200])
 
     # 1c. an adoption builds nothing: plan, test, judge, then the adopt gate
@@ -1294,8 +1336,8 @@ def verify_runner(runner, verbose=False):
         copy_scripts(runner, root)
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--from", "build", "--tool", "claude",
                                   "--dry-run")
-        build_prompt = [l for l in output.splitlines() if "would run" in l and "stage-build skill" in l]
-        tidy_prompt = [l for l in output.splitlines() if "would run" in l and "stage-tidy skill" in l]
+        build_prompt = [l for l in output.splitlines() if "would run" in l and "Carry out the build stage" in l]
+        tidy_prompt = [l for l in output.splitlines() if "would run" in l and "Carry out the tidy stage" in l]
         check("runner: a build the document gate sent the story back to is handed that gate's report — the tidy "
               "stage after it is not",
               bool(build_prompt) and ".gate-document.txt" in build_prompt[0]
@@ -1349,7 +1391,7 @@ def verify_runner(runner, verbose=False):
                                 capture_output=True, text=True, env=plain_env, encoding="utf-8", errors="replace").stdout
         shared = [l for l in output.splitlines() if "would run" in l and "Carry out these stages" in l]
         check("task: the shared builder carries plan, build and tidy, and no test stage",
-              bool(shared) and "stage-plan, stage-build, stage-tidy." in shared[0] and "stage-test" not in shared[0],
+              bool(shared) and "this one session: plan, build, tidy." in shared[0] and "brief/test.md" not in shared[0],
               [l[:240] for l in shared][:1] or output[-300:])
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run",
                                   "--separate-stages")
@@ -1860,10 +1902,9 @@ def verify_runner(runner, verbose=False):
               and "goes back to the test stage" in output,
               f"exit {code}; starts {starts}; {output.strip().splitlines()[-3:]}")
         second = prompts.strip().splitlines()[-1] if prompts.strip() else ""
-        test_skill = " ".join(open(os.path.join(os.path.dirname(runner), "..", "..", "stage-test", "SKILL.md"),
-                                   encoding="utf-8").read().split())
-        check("judge sent back: the test stage runs again on its skill, which says to fix the judge's confirmed defects",
-              len(prompts.strip().splitlines()) >= 2 and "Apply the stage-test skill" in second
+        test_skill = told_text(runner, "test")
+        check("judge sent back: the test stage runs again on its brief, which says to fix the judge's confirmed defects",
+              len(prompts.strip().splitlines()) >= 2 and "Carry out the test stage" in second
               and "Where `judge.md` in the run folder says `verdict: changes-requested`, fix exactly the confirmed "
                   "defects that are this stage's" in test_skill, second[-240:] or "no test prompt recorded")
         code, output, starts, delivered, prompts = back_run(verifier=True)
@@ -1881,7 +1922,7 @@ def verify_runner(runner, verbose=False):
                    '"$FIXTURE_PY" .agents/factory/factory-cli.py --document-skeleton STORY-1 >/dev/null; '
                    'FACTORY_STAGE=document sh -c "$FIXTURE_STAND_IN"; fi; '
                    'elif [ "$FACTORY_STAGE" = builder ]; then '
-                   'for s in plan test build tidy; do case "$FACTORY_PROMPT" in *"stage-$s"*) '
+                   'for s in plan test build tidy; do case "$FACTORY_PROMPT" in *"brief/$s.md"*) '
                    'if [ "$s" = test ] && [ -f judged-once ]; then '
                    '  if [ -n "${FIXTURE_REWRITE:-}" ]; then printf "\\n" >> .dca-factory/runs/STORY-1/tests.md; '
                    '  "$FIXTURE_PY" .agents/factory/story-gate.py --story STORY-1 --stage test >/dev/null; fi; '
@@ -1933,7 +1974,7 @@ def verify_runner(runner, verbose=False):
             env = {"FACTORY_TOOL_CMD": signalled, "FIXTURE_STAND_IN": stand_in, "FIXTURE_TESTS": shell_path(tests_path),
                    "FIXTURE_PY": shell_path(sys.executable), "FIXTURE_GREEN": shell_path(os.path.join(root, "greens.txt"))}
             process = subprocess.Popen([BASH, runner, "run", "--story", "STORY-1", "--from", "plan", "--tool",
-                                        "stand-in", *([how[2]] if how[2] else [])], cwd=root, env=dict(os.environ, **env), stdout=subprocess.PIPE,
+                                        "stand-in", *([how[2]] if how[2] else [])], cwd=root, env=dict(os.environ, **briefed(env)), stdout=subprocess.PIPE,
                                        stderr=subprocess.STDOUT, start_new_session=True)
             deadline = time.time() + 30
             while not os.path.isfile(os.path.join(root, "started")) and time.time() < deadline:
@@ -1981,7 +2022,7 @@ def verify_runner(runner, verbose=False):
     # 1b-recheck. the runner's re-check of a shared builder refuses: a round with the gate's report, not a stop
     recheck_cmd = ('if [ "$FACTORY_STAGE" = builder ]; then '
                    'printf "%s\\n" "$FACTORY_PROMPT" >> \"$FIXTURE_HOME/builder-prompts.txt\"; '
-                   'for s in plan test build tidy; do case "$FACTORY_PROMPT" in *"stage-$s"*) '
+                   'for s in plan test build tidy; do case "$FACTORY_PROMPT" in *"brief/$s.md"*) '
                    'FACTORY_STAGE=$s sh -c "$FIXTURE_STAND_IN"; '
                    'if [ "$s" = test ]; then "$FIXTURE_PY" .agents/factory/story-gate.py --story STORY-1 --stage test >/dev/null; fi ;; esac; done; '
                    'if [ ! -f \"$FIXTURE_HOME/built-once\" ]; then : > \"$FIXTURE_HOME/built-once\"; mkdir -p src/main; echo "class Stray {}" > src/main/Stray.java; '
@@ -2014,7 +2055,7 @@ def verify_runner(runner, verbose=False):
         check("shared builder: a refused re-check is a round — the builder runs again from that stage with the gate's "
               "report, and the story is delivered",
               code == 0 and story_delivered(root) and starts[:2] == ["builder", "builder"]
-              and len(prompts) == 2 and ".gate-build.txt" in prompts[1] and "stage-plan" not in prompts[1]
+              and len(prompts) == 2 and ".gate-build.txt" in prompts[1] and "brief/plan.md" not in prompts[1]
               and output.count("── gate build  (re-checked by the runner)") == 2
               and output.count("ran through") == 1,
               f"exit {code}; starts {starts}; prompts {[p[-120:] for p in prompts]}; {output.strip().splitlines()[-4:]}")
@@ -2022,11 +2063,10 @@ def verify_runner(runner, verbose=False):
         named = sorted(set(re.findall(r"`\S+ (\S*(?:factory-cli|story-gate)\.py)", " ".join(prompts))))
         check("prompt: the shared builder names the cli and the gate by the path the allow-list grants, never absolutely",
               bool(named) and all(path.startswith(".agents/factory/") for path in named), named)
-        common = " ".join(open(os.path.join(os.path.dirname(runner), "..", "reference", "stage-common.md"),
-                               encoding="utf-8").read().split())
+        common = told_text(runner)
         check("prompt: a stage is asked for independent calls in one turn and for plain commands the allow-list covers "
-              "— by the rules every stage holds to, which its prompt names",
-              bool(prompts) and "The rules every stage holds to: " in prompts[0] and "stage-common.md" in prompts[0]
+              "— by what every stage is told, which its prompt names",
+              bool(prompts) and "brief/every-stage.md" in prompts[0]
               and "into one turn" in common and "one plain command per call" in common,
               [p[-400:] for p in prompts[:1]])
 
@@ -2055,7 +2095,7 @@ def verify_runner(runner, verbose=False):
                      'sh -c "$FIXTURE_STAND_IN"; printf "\\n## Back to the test stage\\nback: test\\n'
                      'The page object cannot match any entry; what the test asserts is unchanged.\\n" >> .dca-factory/runs/STORY-1/build.md; '
                      'elif [ "$FACTORY_STAGE" = builder ]; then '
-                     'for s in plan test build tidy; do case "$FACTORY_PROMPT" in *"stage-$s"*) '
+                     'for s in plan test build tidy; do case "$FACTORY_PROMPT" in *"brief/$s.md"*) '
                      'FACTORY_STAGE=$s sh -c "$FIXTURE_STAND_IN"; '
                      'if [ "$s" = test ]; then "$FIXTURE_PY" .agents/factory/story-gate.py --story STORY-1 --stage test >/dev/null; fi ;; esac; done; '
                      'if [ ! -f sent-back ]; then : > sent-back; printf "\\nback: test\\n" >> .dca-factory/runs/STORY-1/build.md; fi; '
@@ -2090,12 +2130,11 @@ def verify_runner(runner, verbose=False):
               and starts == ["plan", "test", "build", "test", "build", "tidy", "judge", "document"]
               and "goes back to the test stage" in output,
               f"exit {code}; starts {starts}; asked {asked}; {output.strip().splitlines()[-3:]}")
-        common = " ".join(open(os.path.join(os.path.dirname(runner), "..", "reference", "stage-common.md"),
-                               encoding="utf-8").read().split())
-        check("build sent back: the second test prompt names build.md, and the rules it names say not to change what "
-              "the test asserts",
+        common = told_text(runner)
+        check("build sent back: the second test prompt names build.md, and what every stage is told says not to change "
+              "what the test asserts",
               len(prompts) == 2 and "The build stage sent the story back: " in prompts[1] and "build.md" in prompts[1]
-              and "stage-common.md" in prompts[1]
+              and "brief/every-stage.md" in prompts[1]
               and "*The build stage sent the story back*: `build.md` names a defect in a test's own code — the test "
                   "stage repairs exactly that, without changing what the test asserts" in common,
               prompts[-1][-260:] if prompts else "no test prompt recorded")
@@ -2108,7 +2147,7 @@ def verify_runner(runner, verbose=False):
         # tidied — build.md still carries the finding's `back: test`, tidy.md is newer. That round converged; sending
         # the story back again would find nothing to do, three times, and end in needs-human (bench 2026-10-01).
         resolved_cmd = ('if [ "$FACTORY_STAGE" = builder ]; then '
-                        'for s in plan test build tidy; do case "$FACTORY_PROMPT" in *"stage-$s"*) '
+                        'for s in plan test build tidy; do case "$FACTORY_PROMPT" in *"brief/$s.md"*) '
                         'FACTORY_STAGE=$s sh -c "$FIXTURE_STAND_IN"; '
                         'if [ "$s" = test ]; then "$FIXTURE_PY" .agents/factory/story-gate.py --story STORY-1 --stage test >/dev/null; fi; '
                         'if [ "$s" = build ]; then printf "\\n## Back to the test stage\\nback: test\\n" >> .dca-factory/runs/STORY-1/build.md; sleep 1; fi ;; '
@@ -2128,7 +2167,7 @@ def verify_runner(runner, verbose=False):
                  'FACTORY_STAGE=document sh -c "$FIXTURE_STAND_IN"; '
                  'if [ ! -f touched ]; then : > touched; printf "\\n" >> .dca-factory/runs/STORY-1/tests.md; fi; '
                  'elif [ "$FACTORY_STAGE" = builder ]; then '
-                 'for s in plan test build tidy; do case "$FACTORY_PROMPT" in *"stage-$s"*) '
+                 'for s in plan test build tidy; do case "$FACTORY_PROMPT" in *"brief/$s.md"*) '
                  'FACTORY_STAGE=$s sh -c "$FIXTURE_STAND_IN"; '
                  'if [ "$s" = test ]; then "$FIXTURE_PY" .agents/factory/story-gate.py --story STORY-1 --stage test >/dev/null; fi ;; '
                  'esac; done; '
@@ -2164,6 +2203,32 @@ def verify_runner(runner, verbose=False):
         check("runner: a stage that produced no file stops the run",
               code != 0 and "produced no .dca-factory/runs/STORY-1/plan.md" in output,
               output.strip().splitlines()[-1] if output.strip() else "no output")
+
+    # 1c'. WP-169: the runner gives each stage its brief — what every stage is told once, the stage's own beside it with
+    # the digest its hand-over names; a hand-over that names no brief is refused at the next gate (GATE-BRIEF)
+    for root in throwaway():
+        build_project(root, extra_sources=(("tests.fixture", TESTS),))
+        copy_scripts(runner, root)
+        unnamed = ('mkdir -p .dca-factory/runs/STORY-1; if [ "$FACTORY_STAGE" = plan ]; then '
+                   'printf "# Plan\\n## Context\\n## Changes\\n## Acceptance criteria\\n" > .dca-factory/runs/STORY-1/plan.md; '
+                   'else cp tests.fixture .dca-factory/runs/STORY-1/tests.md; fi')
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--from", "plan", "--tool", "stand-in",
+                                  env={"FACTORY_TOOL_CMD": unnamed, "FIXTURE_NO_BRIEF": "1"})
+        folder = os.path.join(root, ".dca-factory", "evidence", "STORY-1", "brief")
+        own = open(os.path.join(folder, "test.md"), encoding="utf-8").read() \
+            if os.path.isfile(os.path.join(folder, "test.md")) else ""
+        digest = open(os.path.join(folder, "plan.digest"), encoding="utf-8").read().strip() \
+            if os.path.isfile(os.path.join(folder, "plan.digest")) else ""
+        check("brief: each stage's brief lies in the story's evidence folder — what every stage is told once, the "
+              "stage's own beside it naming that file and the line its hand-over begins with",
+              os.path.isfile(os.path.join(folder, "every-stage.md")) and own.startswith("# The test stage — a story")
+              and "brief/every-stage.md" in own and "`brief: " in own and bool(digest)
+              and RULES_TOLD_PROBE not in own,
+              sorted(os.listdir(folder)) if os.path.isdir(folder) else "no brief folder")
+        check("brief: a hand-over that names no brief is refused at the gate after it — the plan's at the test gate",
+              code != 0 and "gate:fail brief" in output and "plan.md names no brief" in output
+              and f"`brief: {digest}`" in output and "refused (GATE-BRIEF)" in output,
+              [l for l in output.splitlines() if "brief" in l][:3])
 
     # 1d. a stage that escalates stops the run
     for root in throwaway():
@@ -2513,7 +2578,7 @@ exit 0
     for root in throwaway():
         env = backlog_fixture(root)
         environment = dict(os.environ)
-        environment.update(env)
+        environment.update(briefed(env))
         log_path = os.path.join(root, "watch.log")
         with open(log_path, "w", encoding="utf-8") as log:
             process = subprocess.Popen([BASH, runner, "run", "--watch", "--interval", "1"],
@@ -2597,9 +2662,9 @@ exit 0
         prompts = open(os.path.join(root, "judge-prompts.log"), encoding="utf-8").read() \
             if os.path.isfile(os.path.join(root, "judge-prompts.log")) else ""
         check("runner: the judge's repeat round is handed the previous verdict",
-              code == 0 and prompts.count("Apply the stage-judge") == 2
-              and ".judge-previous.md" in prompts.split("Apply the stage-judge")[2]
-              and ".judge-previous.md" not in prompts.split("Apply the stage-judge")[1],
+              code == 0 and prompts.count("Carry out the judge stage") == 2
+              and ".judge-previous.md" in prompts.split("Carry out the judge stage")[2]
+              and ".judge-previous.md" not in prompts.split("Carry out the judge stage")[1],
               f"exit {code}; prompts: {prompts[-300:]}")
 
     # 1m. a judge's story conflict is a question: the run waits, and names the stage that applies it
@@ -9896,7 +9961,7 @@ def verify_worktrees(runner, verbose=False):
                 check("worktree: shared, the builder of a resumed story whose own mapped test the main line changed "
                       "starts at the test stage and is told which tests to record on the merged files",
                       waited and resumed[:1] == ["builder"]
-                      and "stage-test, stage-build, stage-tidy" in prompt
+                      and "this one session: test, build, tidy." in prompt
                       and "the main line was merged into the story's branch" in prompt and "WidgetPageTest.java" in prompt,
                       f"waited {waited}; resumed {resumed}; prompt {prompt[:300]!r}")
                 continue

@@ -6,7 +6,7 @@ from __future__ import annotations
 from ....building_blocks import DomainService
 from ..gateway.stage_evidence import StageEvidence
 from ..model.stage import StoryKind
-from ..model.stage_story import ContractNumber, OPEN_ROW, StageStory
+from ..model.stage_story import BriefFacts, ContractNumber, OPEN_ROW, StageStory
 from ..model.story_state import MAX_ROUNDS
 from ..model.verdict import CheckName, Findings, Said
 
@@ -17,6 +17,7 @@ TASK = CheckName("task")
 HAPPY_PATH = CheckName("happy-path")
 ROUNDS = CheckName("rounds")
 OWNED = CheckName("owned")
+BRIEF = CheckName("brief")
 
 #: The contract that marks one happy path per story.
 HAPPY_PATH_CONTRACT = ContractNumber(9)
@@ -133,3 +134,19 @@ class StoryChecks(DomainService):
         if owned.changed is not None:
             return (OWNED.ok(Said("the story and the answers are as the stage found them")),)
         return ()
+
+    @staticmethod
+    def briefed(facts: BriefFacts) -> Findings:
+        """A stage the runner gave a brief names it in its hand-over: one that worked from another brief, or names
+        none, is refused — what it was told is not what it did."""
+        if facts.given is None:
+            return ()
+        if facts.named is None:
+            return (BRIEF.fail(Said(
+                f"{facts.place.value} names no brief — end it with the line `brief: {facts.given.value}`, the digest "
+                f"the brief you were given ends with, after reading that brief")),)
+        if facts.named != facts.given:
+            return (BRIEF.fail(Said(
+                f"{facts.place.value} names the brief {facts.named.value}, but the stage was given "
+                f"{facts.given.value} — read the brief you were given and work by it")),)
+        return (BRIEF.ok(Said(f"the stage worked from the brief it was given ({facts.given.value})")),)

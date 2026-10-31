@@ -371,7 +371,10 @@ left out left out whole, a told rule no frame places after them —, the gate ru
 (when each applies, what a refusal by it says) and the skills the profile names for its craft, its guard and the
 method's knowledge. The domain service `StageBrief` takes the workflow; the use case `show_brief` gathers the story's
 kind, the rules and the profile; `factory.sh brief <story> <stage>` prints it, Markdown or JSON. The same story and
-stage give the same brief.
+stage give the same brief. It holds what every stage is told (`common`) apart from the stage's own (`own`): the runner
+writes the first once per window, each stage's own beside it, into the story's evidence folder under `brief/`, and
+names both files in the stage's prompt; `<stage>.digest` beside them is what the stage's hand-over names on its first
+line (`brief: <digest>`), and the gate after the stage compares (`GATE-BRIEF`, `Workflow.briefed_at`).
 
 **Type:** Domain service
 

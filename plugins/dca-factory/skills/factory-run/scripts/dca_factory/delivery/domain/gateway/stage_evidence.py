@@ -11,7 +11,7 @@ from ....building_blocks import DomainGateway
 from ..model.decision_record import RecordId
 from ..model.stage import StageName
 from ..model.stage_story import (
-    DecidedRecord, DocumentFacts, PlanAdoption, Integration, MainTests, KeptTests, OutcomeFacts, PipelineFacts, ProposalFacts, ReviewFacts, SpecDelta,
+    BriefFacts, DecidedRecord, DocumentFacts, PlanAdoption, Integration, MainTests, KeptTests, OutcomeFacts, PipelineFacts, ProposalFacts, ReviewFacts, SpecDelta,
     StoryPass, SpecTests, StoryCommit, MappedTest, PlannedTestChange, RedProof, StageChanges,
     AssertionFact, ClauseRow, CommandKey, ContextMapFacts, Count, InvariantFacts, PlannedFile, PortName, Selector, DecisionsFacts, EpicFacts, GateRelease, HandOverName, HandOverSize,
     InstructionFile, ModelKey, OwnedFacts, Place, PlanLevels, ProfileText, RoundsRecord, RowId, RowState, StageStory, UnknownKey)
@@ -42,6 +42,10 @@ class StageEvidence(DomainGateway, typing.Protocol):
         ...
 
     def owned(self, story: StageStory) -> OwnedFacts:
+        ...
+
+    def brief(self, story: StoryId, stage: StageName, hand_over: HandOverName) -> BriefFacts:
+        """The brief <stage> was given and the one its hand-over <hand_over> names."""
         ...
 
     def context_map(self) -> ContextMapFacts:

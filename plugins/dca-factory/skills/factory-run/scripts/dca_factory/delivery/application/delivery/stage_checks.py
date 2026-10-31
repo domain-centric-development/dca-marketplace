@@ -7,6 +7,7 @@ import typing
 
 from ...domain.model.stage import Stage, StageName, StoryKind, TESTED_KINDS, Trait
 from ...domain.model.stage_story import ContractNumber, Count, HandOverName, MappedTest, Place, ScenarioKey, Selector, TestTable
+from ...domain.model.story import StoryId
 from ...domain.model.verdict import CheckName, Said
 from ...domain.service.adopt_checks import AdoptChecks
 from ...domain.service.kept_checks import KeptChecks
@@ -106,6 +107,14 @@ def _pipeline(run: Run) -> None:
 @check("owned", rule="GATE-OWNED")
 def _owned(run: Run) -> None:
     run.result.take(StoryChecks.owned(run.story, run.evidence))
+
+
+@check("brief", stages=lambda stage: Trait.POST_GATED in stage.traits, rule="GATE-BRIEF")
+def _brief(run: Run) -> None:
+    for stage in workflow().briefed_at(StageName(run.stage.name), StoryKind(run.kind)):
+        if stage.hand_over is not None:
+            run.result.take(StoryChecks.briefed(run.evidence.brief(StoryId(run.story_id), stage.name,
+                                                                   HandOverName(stage.hand_over.value))))
 
 
 @check("spec-delta", stages=("test",), rule="GATE-SPEC-DELTA")

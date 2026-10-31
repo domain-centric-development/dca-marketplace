@@ -142,6 +142,15 @@ class OwnedFacts(Value):
     changed: typing.Optional[typing.Tuple[OwnedPart, ...]]
 
 
+class BriefFacts(Value):
+    """Which brief a stage worked from: the digest of the one the runner gave it — None where it gave none, a stage
+    run by hand —, the one its hand-over <place> names — None where it names none."""
+
+    place: Place
+    given: typing.Optional[Detail]
+    named: typing.Optional[Detail]
+
+
 class ContextMapFacts(Value):
     """The context map a story's context is looked up on: the designed map's file where the profile names one that
     is not there, the map found, and the names it gives."""

@@ -94,6 +94,23 @@ class Workflow(AggregateRoot[WorkflowName]):
         """The run order of a story of <kind>."""
         return tuple(s.name for s in self._stages if Trait.IN_ORDER in s.traits and kind in s.kinds)
 
+    def briefed_at(self, name: StageName, kind: StoryKind) -> typing.Tuple[Stage, ...]:
+        """The stages whose hand-over the gate after <name> holds to its brief, for a story of <kind>: <name> and the
+        stages before it in the run order no gate after them checks — back to the one before that a gate checks after
+        it. None where no gate runs after <name>."""
+        found = self.stage(name)
+        if found is None or Trait.POST_GATED not in found.traits:
+            return ()
+        order = [s for s in self._stages if Trait.IN_ORDER in s.traits and kind in s.kinds]
+        if found not in order:
+            return (found,) if found.hand_over else ()
+        held = [found]
+        for earlier in reversed(order[:order.index(found)]):
+            if Trait.POST_GATED in earlier.traits:
+                break
+            held.insert(0, earlier)
+        return tuple(s for s in held if s.hand_over is not None)
+
     def hand_over(self, name: StageName) -> typing.Optional[HandOver]:
         """The file the stage writes, None for a stage that writes none."""
         found = self.stage(name)

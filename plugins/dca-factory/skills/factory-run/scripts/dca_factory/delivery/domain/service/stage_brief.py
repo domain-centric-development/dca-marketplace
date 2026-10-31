@@ -12,6 +12,7 @@ from ....building_blocks import DomainService, Value
 from ..model.jump import RuleId
 from ..model.stack_profile import SkillName
 from ..model.stage import HandOver, Stage, StageName, StageText, StoryKind, Window
+from ..model.stage_story import Place
 from ..model.workflow import Workflow
 from ..model.workflow_rule import OutcomeState, RuleOrder, RulePart, RuleText, WorkflowRule
 
@@ -51,12 +52,20 @@ class Brief(Value):
     about: typing.Optional[StageText]
     writes: typing.Optional[HandOver]
     window: typing.Optional[Window]
-    #: what the stage is told, as it reads it: every stage's frame, then its own, each rule's words where its marker
-    #: stands — a rule that does not hold for the kind left out, a section left without any rule left out whole
-    said: StageText
+    #: what every stage is told, as it reads it: every stage's frame, each rule's words where its marker stands — a rule
+    #: that does not hold for the kind left out, a section left without any rule left out whole —, then the told rules
+    #: of every stage no frame places
+    common: StageText
+    #: what this stage is told beyond it, read the same way: its own frame, then its own told rules no frame places
+    own: StageText
     told: typing.Tuple[Told, ...]
     measured: typing.Tuple[Measure, ...]
     carriers: typing.Tuple[Carrier, ...]
+
+    @property
+    def said(self) -> StageText:
+        """All the stage is told: what every stage is, then its own."""
+        return StageText("\n\n".join(p.value for p in (self.common, self.own) if p.value.strip()))
 
 
 class StageBrief(DomainService):
@@ -77,23 +86,28 @@ class StageBrief(DomainService):
         held = {r.id: r for r in rules if r.part is RulePart.TOLD and r.retired is None and r.told is not None
                 and holds(r, stage, kind)}
         placed = {r.id for r in rules if r.part is RulePart.TOLD}
-        parts: typing.List[str] = []
+        framed = [expanded(frame, held, placed) if frame is not None else None
+                  for frame in (self._workflow.every_stage, found.frame)]
+        in_frames = {rule_id for done in framed if done is not None for rule_id in done[1]}
+        rest = sorted((r for r in held.values() if r.id not in in_frames and not placed_in(r, self._workflow, found)),
+                      key=lambda r: (common_place(r).value, r.marked.value if r.marked else "",
+                                     r.order.value if r.order else 0, r.id.value))
+        common: typing.List[str] = []
+        own: typing.List[str] = []
         order: typing.List[RuleId] = []
-        for frame in (self._workflow.every_stage, found.frame):
-            if frame is not None:
-                text, used = expanded(frame, held, placed)
-                parts.append(text.value)
-                order += used
-        rest = sorted((r for r in held.values() if r.id not in order and not placed_in(r, self._workflow, found)),
-                      key=lambda r: (1 if r.stages else 0, common_place(r).value,
-                                     r.marked.value if r.marked else "", r.order.value if r.order else 0, r.id.value))
-        if rest:
-            parts.append("\n\n".join(rest_text(r).value for r in rest))
-            order += [r.id for r in rest]
+        for done, parts, rules_of in ((framed[0], common, [r for r in rest if not r.stages]),
+                                      (framed[1], own, [r for r in rest if r.stages])):
+            if done is not None:
+                parts.append(done[0].value)
+                order += done[1]
+            if rules_of:
+                parts.append("\n\n".join(rest_text(r).value for r in rules_of))
+                order += [r.id for r in rules_of]
         by_id = {r.id: r for r in rules}
         measured = [by_id[rule_id] for rule_id in measured_by if rule_id in by_id]
         return Brief(stage, kind, found.about, found.hand_over, found.window,
-                     StageText("\n\n".join(p for p in parts if p.strip())),
+                     StageText("\n\n".join(p for p in common if p.strip())),
+                     StageText("\n\n".join(p for p in own if p.strip())),
                      tuple(Told(held[i].id, held[i].section, held[i].told or RuleText("")) for i in order
                            if i in held),
                      tuple(Measure(r.id, r.when, refused_by(r)) for r in measured
@@ -177,6 +191,30 @@ def common_place(rule: WorkflowRule) -> RuleOrder:
     carried = rule.marked.value if rule.marked else ""
     return RuleOrder(next((i for i, name in enumerate(EVERY_STAGE, 1) if carried.endswith(name)),
                           len(EVERY_STAGE) + 1))
+
+
+def written(brief: Brief, told: StageText, every_stage: typing.Optional[Place] = None) -> StageText:
+    """<brief> in the order a stage works it: what the stage is, the skills it loads, what it is told (<told> — all of
+    it, or its own part after a pointer to <every_stage>, what every stage is told) and what its gate holds it to."""
+    lines = [f"# The {brief.stage.value} stage — a {brief.kind.value}", ""]
+    if brief.about:
+        lines += [brief.about.value, ""]
+    if brief.writes:
+        lines += [f"It writes `{brief.writes.value}`" + (f", carried by the shared {brief.window.value}"
+                                                         if brief.window else "") + ".", ""]
+    if every_stage:
+        lines += [f"What every stage is told stands in `{every_stage.value}`: read it before this brief.", ""]
+    if brief.carriers:
+        lines += ["## The skills you load", ""]
+        lines += [f"- {c.role.value}: the `{c.skill.value}` skill" for c in brief.carriers]
+        lines.append("")
+    lines += ["## What you do", "", told.value, ""]
+    if brief.measured:
+        lines += ["## What the gate holds you to", ""]
+        lines += [f"- `{m.rule.value}` — when: {m.when.value}" + (f"; refused: {m.refused.value}" if m.refused else "")
+                  for m in brief.measured]
+        lines.append("")
+    return StageText("\n".join(lines).rstrip("\n") + "\n")
 
 
 def refused_by(rule: WorkflowRule) -> typing.Optional[RuleText]:

@@ -140,7 +140,7 @@ class RunnerRequestSkill:
                          f"{', '.join(records)}). Read the answer and go on from there — write nothing the answer and "
                          f"the request do not settle.")
         story = (request.get("story") or "").split()
-        lines.append(self._run.where_things_are(tool, story[0] if len(story) == 1 else None)
+        lines.append(self._run.where_things_are(tool, story[0] if len(story) == 1 else None, rules=True)
                      + " For a request, also `bash .agents/factory/factory.sh` backlog, status, decisions, discover, "
                      "spec-delta and help.")
         return "\n\n".join(lines)
@@ -211,7 +211,7 @@ class RunnerStages:
 
     def dry(self, story: str, stage: str) -> None:
         tool = self._announce(stage)
-        self._run.processes.dry_lines(tool, self._run.prompt_for(stage, story), stage)
+        self._run.processes.dry_lines(tool, self._run.prompt_for(stage, story, dry=True), stage)
 
     def _announce(self, stage: str) -> str:
         tool = self._run.tools.tool_for(stage, self._tool)      # the run's tool stays: every stage resolves its own
