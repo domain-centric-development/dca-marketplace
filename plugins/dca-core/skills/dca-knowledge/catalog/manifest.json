@@ -34,8 +34,7 @@
       "source_sha256": "b1a2acfc84d6dfecfef3b3f5cba0ce46a401293d1b4ea0dbe499218f9a74f82f"
     },
     "dca-guide": {
-      "dirty": true,
-      "revision": "1a175e9c98e3e22a15791e94e3543acc41ebedf8",
+      "revision": "afa09b30af74f17a28f91c9306eba18ad997812a",
       "source_sha256": "d289b39d7a1071b454ce759720d87f0258c4ff883626b47f77d1e5bac5c53cc5"
     },
     "dca-java": {
