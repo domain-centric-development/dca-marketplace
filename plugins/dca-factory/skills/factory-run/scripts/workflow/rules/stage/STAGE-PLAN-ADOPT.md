@@ -6,7 +6,6 @@ stages:
 kinds:
 - adopt
 section: Adopt mode
-marked: stage-plan/SKILL.md
 order: 19
 ---
 

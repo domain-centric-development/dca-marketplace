@@ -33,7 +33,7 @@ pipeline, say so and hand over to it. What it runs:
 3. Adding a capability later means one more line in the profile, not an edit to any stage: a
    formatter under `format:` and `formatFix:`, a rule suite under `architecture:` (both run by the
    build gate), a further review perspective under `reviews:`, the reviewer for an existing
-   perspective under `review.<perspective>:` (both read by `stage-judge`), or the skill that carries
+   perspective under `review.<perspective>:` (both read by the judge stage), or the skill that carries
    a stage's craft under `carrier.<stage>:` (read by that stage). Where the project set the
    capability up since — a browser runner, a formatter —
    `bash .agents/factory/factory.sh setup --check` names the lines detection would add, and

@@ -124,12 +124,12 @@ class RuleFiles:
             raise ValueError(f"{path}: {', '.join(unsaid)} for an outcome it says nothing about")
         retired = front.get("retired")
         if str(front.get("part") or "") == RulePart.TOLD.value:
-            section, marked, order = front.get("section"), front.get("marked"), str(front.get("order") or "")
+            section, see, order = front.get("section"), front.get("see"), str(front.get("order") or "")
             return WorkflowRule(
                 rule_id, RulePart.TOLD, RuleText(""), RuleText(""), (), (),
                 [StageName(s) for s in listed(front.get("stages"))], [StoryKind(k) for k in listed(front.get("kinds"))],
                 RuleText(str(retired)) if retired else None, self._written(path), RuleText(told_of(body, rule_id)),
-                RuleText(str(section)) if section else None, Written(str(marked)) if marked else None,
+                RuleText(str(section)) if section else None, Written(str(see)) if see else None,
                 RuleOrder(int(order)) if order.isdigit() else None)
         return WorkflowRule(
             rule_id, RulePart(str(front.get("part") or "decision")), RuleText(paragraph(body, WHEN)),
@@ -172,8 +172,8 @@ def told_text(rule: WorkflowRule) -> str:
             lines += [f"{key}:"] + [f"- {v}" for v in values]
     if rule.section is not None:
         lines.append(f"section: {written_value(rule.section.value)}")
-    if rule.marked is not None:
-        lines.append(f"marked: {rule.marked.value}")
+    if rule.see is not None:
+        lines.append(f"see: {rule.see.value}")
     if rule.order is not None:
         lines.append(f"order: {rule.order.value}")
     if rule.retired is not None:

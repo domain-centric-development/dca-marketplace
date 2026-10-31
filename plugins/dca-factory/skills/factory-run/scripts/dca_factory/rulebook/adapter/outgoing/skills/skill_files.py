@@ -1,6 +1,6 @@
-"""The instructed rules, read from the skills' text: a paragraph marked `<!-- rule: STAGE-PLAN-9A -->` on the line
-before it is the rule, the heading above it says where it applies, and every rule id the text names elsewhere is a
-citation the rulebook checks."""
+"""The skills' text as the rulebook reads it: every rule id it names is a citation the rulebook checks, and a paragraph
+still marked `<!-- rule: STAGE-PLAN-9A -->` on the line before it is a told rule's copy — a problem, since its words
+stand in its rule file, placed by its stage's frame."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ MODES = ("task", "adopt")
 #: The skills folder of the plugin beside the package, then the project's tool folders — the first that has the
 #: factory's reference.
 TOOL_FOLDERS = (".claude/skills", ".agents/skills", ".codex/skills", ".opencode/skills")
-REFERENCE = os.path.join("factory-run", "reference", "stage-common.md")
+REFERENCE = os.path.join("factory-run", "reference", "file-contracts.md")
 
 
 def skills_folder(cwd: str, package: str) -> typing.Optional[str]:

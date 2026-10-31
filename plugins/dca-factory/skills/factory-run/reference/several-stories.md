@@ -30,7 +30,7 @@ stories run past it.
 next one starts. The worktree links what is state to this checkout — the stories with their decisions, the
 run folder, the pipeline, the skills — and `FACTORY_HOME` names this checkout to the gate and the cli, so
 both read every place from here. A story is delivered when it is integrated: the integrate step merges the
-main line into its branch (the `stage-integrate` agent where git stops on a conflict, the profile's
+main line into its branch (the integrate stage where git stops on a conflict, the profile's
 `formatFix:` over its resolution), squashes it to one commit, runs the integrate gate on that tree — the tidy gate's checks once more, no conflict marker left —
 and fast-forwards this checkout's branch — merging again where the main line moved meanwhile — and commits what
 the delivery wrote (the story's folder, the merged spec) on it; then its worktree and branch go. While the runner
@@ -67,7 +67,7 @@ changed after its plan, and the story runs again from plan). `--from <stage>` cl
 left open the same way. A story the runner resumes in its worktree — after an answer, after a restart — is
 moved onto the main line as it is now before its next stage: fast-forwarded where nothing of its own is in
 the way, else merged the way the integrate step merges (one commit on top of the main line), with the
-`stage-integrate` agent where git stops on a conflict. A story that gained a `depends_on` while it waited
+the integrate stage agent where git stops on a conflict. A story that gained a `depends_on` while it waited
 is `blocked` until that dependency is delivered. A stage file a shared process left as it was still holds
 for this pass when that stage ran in the process; one the process did not run is never marked after it.
 

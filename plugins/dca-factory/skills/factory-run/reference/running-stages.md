@@ -15,18 +15,20 @@ a copy lifted into the support, a page object instead of a raw locator, what eac
 exception: its gate runs each moved test on the tree the test stage left (`red-tree`) and takes the new version
 where it is red there (`red-reproof`).
 
-**What a stage is told, so it searches for nothing.** Every stage prompt names the skill, the story and
-where things are: the stack profile, the story's run folder and evidence folder, the knowledge skill's
+**What a stage is told, so it searches for nothing.** Every stage prompt names the stage, the story, its
+brief and where things are: the stack profile, the story's run folder and evidence folder, the knowledge skill's
 catalog where the profile names one, `factory-cli.py --contract <stage>` — the exact shape the gate holds
-that stage's file to, in a page, from the gate's own constants — the reports of an earlier round, and
-the path of `reference/stage-common.md`. What a session does with them is said there, once, for every
-stage, and the stage skills say to read it first — so a stage in a session and a stage the runner
-started hold to the same text. A stage that runs its own gate runs it with `--brief`: what passed is one
+that stage's file to, in a page, from the gate's own constants — and the reports of an earlier round. What a session does with them
+is in its brief: the runner writes it into the story's evidence folder — `brief/every-stage.md`, what every
+stage is told, once per window, and `brief/<stage>.md`, the stage's own — and `factory.sh brief <story>
+<stage>` prints the same text, so a stage in a session and a stage the runner started hold to the same
+words. The hand-over's first line names the brief it worked from (`brief: <digest>`), and the gate after
+the stage refuses one that names another or none (`GATE-BRIEF`). A stage that runs its own gate runs it with `--brief`: what passed is one
 line, what did not stays verbatim. Before the document stage the runner writes the stage's file as a
 skeleton (`factory-cli.py --document-skeleton <story>`) with every changed path and run file
 root-relative under `## Paths`; in a session run it yourself before the stage, and cite from it. The
 prompt also names the shell the stage has without asking — the gate, the cli, the profile's commands
-and the ordinary reading and text tools (`reference/stage-common.md`, *The shell a stage has*, which
+and the ordinary reading and text tools (what every stage is told, *The shell a stage has*, which
 also says that a file is changed with the editor, never with a script on stdin): in an unattended run a
 refused command is a lost turn, nothing more, and the bench counted three per story before the list
 carried what a stage reaches for.

@@ -4,7 +4,6 @@ part: told
 stages:
 - integrate
 section: Do not
-marked: stage-integrate/SKILL.md
 order: 9
 ---
 

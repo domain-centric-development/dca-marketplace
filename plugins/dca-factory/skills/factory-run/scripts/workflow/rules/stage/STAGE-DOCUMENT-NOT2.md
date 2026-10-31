@@ -4,7 +4,6 @@ part: told
 stages:
 - document
 section: Do not
-marked: stage-document/SKILL.md
 order: 8
 ---
 

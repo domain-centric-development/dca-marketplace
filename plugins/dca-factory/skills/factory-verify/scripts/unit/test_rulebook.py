@@ -84,9 +84,11 @@ class RegisteredTest(unittest.TestCase):
             self.assertTrue(os.path.isfile(os.path.join(support.SCRIPTS, found["source"])), found["source"])
             self.assertTrue(found["source"].endswith(f"/{found['id']}.md"), found["source"])
             if found["part"] == "told":
-                self.assertTrue(found["told"] and (found["retired"] or found["marked"]), found["id"])
-                if found["marked"]:
-                    self.assertTrue(os.path.isfile(os.path.join(SKILLS, found["marked"])), found["marked"])
+                # a told rule's words stand where a frame places them, or the reference says the rest of it
+                self.assertTrue(found["told"] and (found["retired"] or found["placed"]), found["id"])
+                if found["placed"]:
+                    self.assertTrue(os.path.isfile(os.path.join(support.SCRIPTS, found["placed"]))
+                                    or os.path.isfile(os.path.join(SKILLS, found["placed"])), found["placed"])
                 continue
             self.assertTrue(found["when"] and found["why"] and found["outcomes"], found["id"])
             path, _, line = found["bound"].rpartition(":")
@@ -201,7 +203,9 @@ class SkillsTest(unittest.TestCase):
         told = {r["id"]: r for r in view["rules"] if r["part"] == "instruction"}
         self.assertEqual(["build"], told["STAGE-BUILD-1"]["stages"])
         self.assertEqual("workflow/rules/stage/STAGE-BUILD-1.md", told["STAGE-BUILD-1"]["source"])
-        self.assertEqual("stage-build/SKILL.md", told["STAGE-BUILD-1"]["bound"])
+        self.assertEqual("workflow/stages/build.md", told["STAGE-BUILD-1"]["bound"])
+        self.assertEqual("workflow/every-stage.md", told["STAGE-COMMON-1"]["bound"])
+        self.assertEqual("factory-run/reference/file-contracts.md", told["STAGE-FILES-9"]["bound"])
         self.assertTrue(told["STAGE-BUILD-1"]["text"].startswith("Read the plan and the failing tests. Implement the "
                                                                  "smallest change"), told["STAGE-BUILD-1"]["text"])
         plan = next(s for s in view["flow"]["story"]["steps"] if s["stage"] == "plan")
@@ -212,19 +216,16 @@ class SkillsTest(unittest.TestCase):
         self.assertIn("STAGE-BACKLOG-1", retired)
         self.assertNotIn("STAGE-FILES-9", retired)
 
-    def test_a_skills_words_apart_from_its_file_a_marker_without_file_and_a_cited_unknown_id_are_problems(self):
+    def test_a_marker_left_in_a_skill_and_a_cited_unknown_id_are_problems(self):
         with tempfile.TemporaryDirectory() as root:
             plant(root, {
-                "factory-run/reference/stage-common.md": "# Common\n\n<!-- rule: STAGE-COMMON-1 -->\nOther words.\n\n"
-                                                         "<!-- rule: STAGE-COMMON-1 -->\nTwice.\n",
-                "stage-test/SKILL.md": "See GATE-NO-SUCH and GATE-TESTS-KEPT.\n\n<!-- rule: STAGE-TESTX-1 -->\nX.\n"})
+                "factory-run/reference/file-contracts.md": "# Files\n\n<!-- rule: STAGE-COMMON-1 -->\nOther words.\n",
+                "some-skill/SKILL.md": "See GATE-NO-SUCH and GATE-TESTS-KEPT.\n"})
             problems = "\n".join(self.book(root)["problems"])
-            self.assertIn("STAGE-COMMON-1: the words in", problems)
-            self.assertIn("STAGE-COMMON-1 is marked twice", problems)
-            self.assertIn("STAGE-TESTX-1 is marked in", problems)
-            self.assertIn("stage-test/SKILL.md:1 cites GATE-NO-SUCH", problems)
+            self.assertIn("STAGE-COMMON-1 is marked in factory-run/reference/file-contracts.md", problems)
+            self.assertIn("never in a skill", problems)
+            self.assertIn("some-skill/SKILL.md:1 cites GATE-NO-SUCH", problems)
             self.assertNotIn("GATE-TESTS-KEPT", problems)
-            self.assertIn("STAGE-BUILD-1: its file says stage-build/SKILL.md carries its words", problems)
 
     def test_the_plugins_own_rulebook_holds(self):
         view = show_rulebook(tempfile.gettempdir()).execute(ShowRulebookQuery())

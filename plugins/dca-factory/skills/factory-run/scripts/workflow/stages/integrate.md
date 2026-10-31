@@ -18,13 +18,13 @@ commands:
 
 # integrate
 
-The story on the main line as it is now: everything the tidy gate holds the story to, once more. Its skill, where two stories met: `stage-integrate`.
+The story on the main line as it is now: everything the tidy gate holds the story to, once more.
 
 <!-- frame: what the stage is told, each rule by its marker -->
 
-First read `factory-run/reference/stage-common.md` — the rules every stage holds to: a session the
-runner started, one session that carries several stages, a repeat round, the shell, the gate. The
-runner's prompt names its path and repeats none of it.
+First read what every stage is told — a session the runner started, one session that carries
+several stages, a repeat round, the shell, the gate. The runner's prompt names its file and this
+brief repeats none of it.
 
 Input: the story, `.dca-factory/runs/<story>/plan.md`, `.dca-factory/evidence/<story>/conflicts` — the files git
 could not merge — and the two sides as git shows them (`git diff`, `git log`). Nothing else.

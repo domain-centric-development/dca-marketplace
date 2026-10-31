@@ -2,7 +2,7 @@
 id: STAGE-FILES-9
 part: told
 section: Escalation
-marked: factory-run/reference/file-contracts.md
+see: factory-run/reference/file-contracts.md
 order: 1
 ---
 

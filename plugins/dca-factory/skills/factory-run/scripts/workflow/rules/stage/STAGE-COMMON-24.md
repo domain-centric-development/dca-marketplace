@@ -2,7 +2,6 @@
 id: STAGE-COMMON-24
 part: told
 section: A review the runner started
-marked: factory-run/reference/stage-common.md
 order: 24
 ---
 

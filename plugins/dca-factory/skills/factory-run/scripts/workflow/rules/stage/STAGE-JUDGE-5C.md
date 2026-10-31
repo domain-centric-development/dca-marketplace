@@ -4,7 +4,6 @@ part: told
 stages:
 - judge
 section: Do
-marked: stage-judge/SKILL.md
 order: 7
 ---
 

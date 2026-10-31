@@ -4,7 +4,6 @@ part: told
 stages:
 - document
 section: Do
-marked: stage-document/SKILL.md
 order: 4
 ---
 

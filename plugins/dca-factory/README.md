@@ -2,7 +2,7 @@
 
 The **delivery pipeline** for a Domain-Centric Architecture project, in three parts: a **project
 description** (what is to be built), a **backlog** of epics and stories, and a **runner** that works
-through them — six stage skills with file hand-overs, a deterministic story gate between them and
+through them — six stages with file hand-overs, each working from the brief the factory writes for it, a deterministic story gate between them and
 one orchestrator. How it grew, version by version: [`CHANGELOG.md`](CHANGELOG.md).
 
 ```
@@ -43,7 +43,7 @@ else writes a spec's scenarios; the delivered story is history from then on. `fa
 --spec-check` holds every delivered story's criteria to the spec.
 
 `product/` holds intent, written before the code and read as a story's input; `docs/` holds what
-exists, written after the code by people and by `stage-document`. Where the two meet — the designed
+exists, written after the code by people and by the document stage. Where the two meet — the designed
 `product/domain.md` against a map generated from the code — a difference is a finding, not a
 duplicate.
 
@@ -134,7 +134,7 @@ frontend approach, the persistence, where it runs, what it talks to, how version
 designed domain, `product/domain.md`, is optional. Decisions only, no code design. It also writes a
 line into `AGENTS.md` that makes every implementation — a stage or a person in a session — read the
 three files first. `/factory-backlog` writes nothing while product or tech is missing, and reads
-all three before it writes a story; `stage-plan` plans within them and `stage-judge` reports a
+all three before it writes a story; the plan stage plans within them and the judge stage reports a
 change that contradicts them.
 
 ## Your first story
@@ -177,7 +177,7 @@ body), runs the gate once more on that tree, and fast-forwards the checkout's br
 moved meanwhile (your commit, another story), it merges again; only then is the story delivered, what the delivery
 wrote (the story's folder, the merged spec) is committed beside it, and its worktree and branch go. While the
 runner integrates, `factory.sh status` shows the story running at `integrate` with its clock. Where git stops on a conflict — two stories changed
-the same lines — the `stage-integrate` agent makes both changes hold, and the runner commits. Where the
+the same lines — the integrate stage makes both changes hold, and the runner commits. Where the
 checkout cannot take the commit (you changed the same file there, or switched branches), the story stops
 and says so; `factory.sh run --story <id> --from integrate` takes it up again. A repository without a
 commit, a detached HEAD, or a story begun in the checkout before it had a worktree run in the checkout as
@@ -434,11 +434,13 @@ heading (`── test`). A call that failed is `✗ <reason>`; one the tool deni
 
 ## What a stage is told
 
-Every stage prompt names the skill, the story and where things are — the stack profile, the story's run
+Every stage prompt names the stage, the story, its brief and where things are — the stack profile, the story's run
 folder, the knowledge skill's catalog, the reports of an earlier round — and `factory-cli.py --contract
 <stage>`: the exact shape the gate holds that stage's file to, in a page, from the gate's own constants,
 so a stage reads that and never the gate's source. Nothing else: what a session does with those paths
-is in the skills and in `factory-run/reference/stage-common.md`, which every stage skill reads first.
+is in its brief — `brief/every-stage.md` and `brief/<stage>.md` in the story's evidence folder, built from the
+workflow's frames and rule files (`factory.sh brief <story> <stage>` prints it); the hand-over's first line names
+it (`brief: <digest>`) and the gate after the stage compares (`GATE-BRIEF`).
 A stage that runs its own gate runs it with `--brief` (what passed is one line, what did not stays
 verbatim). Before the document stage the runner writes the stage's file as a skeleton
 (`factory-cli.py --document-skeleton <story>`) with every changed path and run file root-relative under
@@ -583,13 +585,13 @@ what must be true before the next one starts.
 | Skill | Does |
 |---|---|
 | `factory-run` | runs one story (an adopted story — `status: adopted`, behaviour the project already has — runs plan, test, judge and the adopt gate, which maps every scenario to a green test and applies a break to every test the adoption wrote, on a scratch copy; contract 9: the happy path end to end, every other scenario integrated, the test gate holding the levels; a `kind: journey` item runs plan, test, judge, document and is green at its test gate; a `kind: task` — a change no actor sees, no criterion — runs plan, build, tidy, judge, document on the whole existing suite, changes no test that existed before and closes the finding rows its `closes:` names): gate → plan → test → gate → build → gate → tidy → gate → reviews (one process per perspective, at once) → judge → document → gate; owns the file contracts, the escalation and the tier it runs the stages in. Several stories: `factory.sh backlog` reads every story's state off the files, and `factory.sh run` without `--story` runs them in that order. `/factory-run <your words>` takes a wish: the gate tells an id from a wish (`--resolve`), `factory-backlog` writes the story with fixed questions (`reference/questions.md`: which epic, the criteria, run now), and the run follows once it is released |
-| `stage-plan` | story → `.dca-factory/runs/<story>/plan.md`: elements that change, criteria, test shape per criterion (e2e for the happy path, the use case through its port, an adapter for its translation), the invariants of every domain type it changes |
-| `stage-test` | plan → tests plus `.dca-factory/runs/<story>/tests.md` with the criterion-to-test table, and a unit test of its own per invariant rule the plan names, in the `gate:invariants` table `--files-skeleton` writes (the test gate's `invariants`); from contract 15 one row per `Then`/`And` of every scenario with the line that asserts it and its level (`clauses`) — a clause about what is stored is asserted through the input port, never against a stub |
-| `stage-build` | red tests → production code plus `.dca-factory/runs/<story>/build.md` |
-| `stage-tidy` | a green build → the refactor half of red–green–refactor inside the story's footprint, plus `.dca-factory/runs/<story>/tidy.md`; changes no test and no behaviour |
-| `stage-judge` | the change → `.dca-factory/runs/<story>/judge.md`: ddd, hexagonal and clean-code in one verdict, plus any perspective the profile adds (`reviews:`; the method's audit, `dca-audit`, is not one — a person runs it by hand) |
-| `stage-document` | the change → `.dca-factory/runs/<story>/document.md`: glossary, context map and reader documentation follow the code |
-| `stage-integrate` | a merge conflict between a story's worktree and the main line → the conflicted files, both changes holding, and `.dca-factory/runs/<story>/integrate.md`; the runner commits, squashes and gates the result |
+| plan | story → `.dca-factory/runs/<story>/plan.md`: elements that change, criteria, test shape per criterion (e2e for the happy path, the use case through its port, an adapter for its translation), the invariants of every domain type it changes |
+| test | plan → tests plus `.dca-factory/runs/<story>/tests.md` with the criterion-to-test table, and a unit test of its own per invariant rule the plan names, in the `gate:invariants` table `--files-skeleton` writes (the test gate's `invariants`); from contract 15 one row per `Then`/`And` of every scenario with the line that asserts it and its level (`clauses`) — a clause about what is stored is asserted through the input port, never against a stub |
+| build | red tests → production code plus `.dca-factory/runs/<story>/build.md` |
+| tidy | a green build → the refactor half of red–green–refactor inside the story's footprint, plus `.dca-factory/runs/<story>/tidy.md`; changes no test and no behaviour |
+| judge | the change → `.dca-factory/runs/<story>/judge.md`: ddd, hexagonal and clean-code in one verdict, plus any perspective the profile adds (`reviews:`; the method's audit, `dca-audit`, is not one — a person runs it by hand) |
+| document | the change → `.dca-factory/runs/<story>/document.md`: glossary, context map and reader documentation follow the code |
+| integrate | a merge conflict between a story's worktree and the main line → the conflicted files, both changes holding, and `.dca-factory/runs/<story>/integrate.md`; the runner commits, squashes and gates the result |
 | `factory-setup` | sets the factory up and does only what is missing: the project description (through the description skill), git, the runner, the profile lines detection finds (`factory.sh setup [--check \| --write]`). Idempotent; never touches an installed runner |
 | `factory-discover` | before the backlog: a problem or a wished deliverable becomes `product/discovery/<topic>/discovery.md` — problem, users and evidence, options, outcome, risks, proposed epics each with its outcome event — from a fixed question catalogue, with every claim citing a source (web with the date read, a project file, an anonymised excerpt under `sources/`; the originals stay in a git-ignored `originals/`). Applies the `product-discovery` craft (`carrier.discover:`); `factory.sh discover --check <topic>` checks the report; writes an epic only once the person releases a proposal, through `factory-backlog`, linked by `discovery:` |
 | `factory-backlog` | writes and checks the backlog a run reads — also a story from a wish `/factory-run` hands it, asked from its question catalogue: an epic with its outcome event, or one story small enough for a run. Asks for the four epic fields rather than inventing them, stops while the project description is missing, and checks every story against it at creation |
@@ -699,7 +701,7 @@ flags are probed, the isolation, the usage format, the skill folder, the model f
 folders are named — and the runner starts a stage with the command line the tool's record builds (`tool_invocation`). Every
 flag is checked against the binary's help once per binary, before the first stage (`factory-cli.py --tool-probe
 <tool>`): a flag a stage needs that the binary lacks stops the run, an isolation flag it lacks is left out and named.
-Any other tool plugs in through `FACTORY_TOOL_CMD`. Run the stage skills in-session and no adapter is needed at
+Any other tool plugs in through `FACTORY_TOOL_CMD`. Run the stages in-session from their briefs and no adapter is needed at
 all — the file contracts and the gate are what make a run honest, not the runner.
 
 **What a runner stage sees.** Only the project. Each tool gets the isolation it offers:
@@ -822,9 +824,10 @@ perspectives it adds — is bound in the profile too: `carrier.<stage>:` and
 tool has agents, and a carrier this tool cannot offer falls back to the stage's own description
 with that fact in the report.
 
-See `skills/factory-run/reference/backlog-contract.md`, `.../file-contracts.md` and `.../stage-common.md` — the rules
-every stage holds to (the knowledge source, the carrier, the decision record, the gate as the test run, the
-formatter), said once; each stage skill names them in a line and points there.
+See `skills/factory-run/reference/backlog-contract.md` and `.../file-contracts.md`; the rules every stage holds
+to (the knowledge source, the carrier, the decision record, the gate as the test run, the formatter) are said
+once, in `skills/factory-run/scripts/workflow/every-stage.md` and the rule files it places, and every brief
+carries them.
 
 ## Troubleshooting
 

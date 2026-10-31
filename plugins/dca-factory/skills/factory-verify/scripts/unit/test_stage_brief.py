@@ -1,6 +1,5 @@
 """A stage's brief: what it is told for one story, decided over the workflow and the rules."""
 
-import os
 import unittest
 
 import support  # noqa: F401 — puts the package on the path
@@ -17,10 +16,8 @@ from dca_factory.delivery.domain.model.workflow_rule import RulePart
 from dca_factory.delivery.domain.model.stage_story import BriefFacts, Place
 from dca_factory.delivery.domain.model.story_state import Detail
 from dca_factory.delivery.domain.service.story_checks import StoryChecks
-from dca_factory.delivery.domain.service.stage_brief import Carrier, CarrierRole, expanded, StageBrief, written
+from dca_factory.delivery.domain.service.stage_brief import Carrier, CarrierRole, MARKER, StageBrief, written
 
-
-SKILLS = os.path.normpath(os.path.join(support.SCRIPTS, "..", ".."))
 
 
 def brief(stage, kind=StoryKind.STORY, carriers=()):
@@ -115,22 +112,17 @@ class BriefedTest(unittest.TestCase):
 
 
 class FrameTest(unittest.TestCase):
-    """The frames and the told rules give back what the skills say, word for word — while the skills are still read,
-    neither may drift from the other."""
+    """The frames place the told rules: every marker names a rule file, and every told rule stands where a frame places
+    it — or, placed by none, says where the rest of it stands."""
 
-    def test_each_skill_is_its_stages_frame_with_its_rules_in_place(self):
-        told = {r.id: r for r in RULES.values() if r.part is RulePart.TOLD and r.told is not None}
-        placed = set(told)
-        texts = [(f"stage-{s.name.value}/SKILL.md", s.frame) for s in workflow().stages if s.frame is not None]
-        texts.append(("factory-run/reference/stage-common.md", workflow().every_stage))
-        self.assertEqual(8, len(texts))
-        for skill, frame in texts:
-            with open(os.path.join(SKILLS, skill), encoding="utf-8") as handle:
-                lines = handle.read().splitlines()
-            if lines[0] == "---":
-                lines = lines[lines.index("---", 1) + 1:]
-            body = "\n".join(lines).strip("\n").split("\n", 1)[1].strip("\n")      # without the title
-            self.assertEqual(body, expanded(frame, told, placed)[0].value, skill)
+    def test_every_marker_names_a_told_rule_and_every_told_rule_is_placed(self):
+        told = {r.id: r for r in RULES.values() if r.part is RulePart.TOLD and r.retired is None}
+        frames = [s.frame for s in workflow().stages if s.frame is not None] + [workflow().every_stage]
+        marked = [RuleId(m.group(1)) for frame in frames for line in frame.value.splitlines()
+                  for m in [MARKER.match(line)] if m]
+        self.assertEqual([], [r.value for r in marked if r not in told])
+        self.assertEqual(len(marked), len(set(marked)))                     # each placed once
+        self.assertEqual([], sorted(r.value for r in told if r not in marked and told[r].see is None))
 
 
 if __name__ == "__main__":

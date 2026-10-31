@@ -23,13 +23,13 @@ sizes:
 
 # build
 
-Writes the production code that turns the story's red tests green, with the smallest change that works. Its skill: `stage-build`.
+Writes the production code that turns the story's red tests green, with the smallest change that works.
 
 <!-- frame: what the stage is told, each rule by its marker -->
 
-First read `factory-run/reference/stage-common.md` — the rules every stage holds to: a session the
-runner started, one session that carries several stages, a repeat round, the shell, the gate. The
-runner's prompt names its path and repeats none of it.
+First read what every stage is told — a session the runner started, one session that carries
+several stages, a repeat round, the shell, the gate. The runner's prompt names its file and this
+brief repeats none of it.
 
 Input: the story, `.dca-factory/runs/<story>/plan.md`, `.dca-factory/runs/<story>/tests.md`, the product
 description's `## Look and feel` and `## Qualities` (`product/overview.md`, or where the profile's
@@ -55,16 +55,14 @@ Output: the production code, plus `.dca-factory/runs/<story>/build.md`.
 
 Where the profile names `knowledge: <skill>`, ask it instead of your recollection whenever an
 answer would decide something, and cite the node by its path inside the catalog; never adopt a
-knowledge source the profile did not name. The rule in full: `factory-run/reference/stage-common.md`,
-beside this skill.
+knowledge source the profile did not name. The rule in full: in what every stage is told.
 
 ## Who carries this stage
 
 `carrier.build: <name>` in the stack profile names the skill or agent that holds this project's
 craft for it; use it where this tool offers it, otherwise do the stage as described here and say so
 in your file. `carrier.guard: <name>` names the skill that holds the architecture's invariants while
-you edit — apply it to every file you write, the same way. The rule in full: `factory-
-run/reference/stage-common.md`.
+you edit — apply it to every file you write, the same way. The rule in full: in what every stage is told.
 
 ## The build file
 

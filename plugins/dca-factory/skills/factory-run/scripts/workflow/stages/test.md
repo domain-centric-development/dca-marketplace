@@ -21,13 +21,13 @@ sizes:
 
 # test
 
-Writes a test per criterion at the level the plan gives it, plus unit tests for the invariants, and records the criterion-to-test table; the tests are red before any production code is written. Its skill: `stage-test`.
+Writes a test per criterion at the level the plan gives it, plus unit tests for the invariants, and records the criterion-to-test table; the tests are red before any production code is written.
 
 <!-- frame: what the stage is told, each rule by its marker -->
 
-First read `factory-run/reference/stage-common.md` — the rules every stage holds to: a session the
-runner started, one session that carries several stages, a repeat round, the shell, the gate. The
-runner's prompt names its path and repeats none of it.
+First read what every stage is told — a session the runner started, one session that carries
+several stages, a repeat round, the shell, the gate. The runner's prompt names its file and this
+brief repeats none of it.
 
 Input: the story, `.dca-factory/runs/<story>/plan.md`, and the `## Qualities` and `## Look and feel` of the
 product description (`product/overview.md`, or where the profile's `product:` points) where the plan
@@ -57,14 +57,13 @@ files written. You write **no** production behaviour.
 
 Where the profile names `knowledge: <skill>`, ask it instead of your recollection whenever an
 answer would decide something, and cite the node by its path inside the catalog; never adopt a
-knowledge source the profile did not name. The rule in full: `factory-run/reference/stage-common.md`,
-beside this skill.
+knowledge source the profile did not name. The rule in full: in what every stage is told.
 
 ## Who carries this stage
 
 `carrier.test: <name>` in the stack profile names the skill or agent that holds this project's craft
 for it; use it where this tool offers it, otherwise do the stage as described here and say so in
-your file. The rule in full: `factory-run/reference/stage-common.md`.
+your file. The rule in full: in what every stage is told.
 
 ## The tests file
 

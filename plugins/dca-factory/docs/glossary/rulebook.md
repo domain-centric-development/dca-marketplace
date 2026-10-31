@@ -1,9 +1,9 @@
 # Glossary — Bounded Context: rulebook
 
 Every rule the factory holds a story to, by one id, placed in the flow of a story. The gate and the runner decide by
-their rules; the stage skills tell the stages theirs. The rulebook decides nothing: it reads the rules where they are
-written — the gate's and the runner's registrations through delivery's `api`, the skills' marked paragraphs from their
-text — and shows them, so a rule can be listed, linked and drawn, and two rules that say different things about one
+their rules; each stage's brief tells it its own. The rulebook decides nothing: it reads the rules where they are
+written — every rule's file and where it is bound or placed, through delivery's `api`; the skills' text for the ids
+it cites — and shows them, so a rule can be listed, linked and drawn, and two rules that say different things about one
 trigger stand side by side.
 
 Code: `dca_factory/rulebook/` — `domain/model/` flat, `application/show_rulebook.py` the one use case,
@@ -55,8 +55,8 @@ stage writes a decision record and stops.
 ### Trigger · Reason · Source
 
 **Definition:** When a rule applies; why it exists; where it is written — the rule's file (`workflow/rules/…`) for a
-rule of the gate or the runner, beside the place in the package that binds it (`<path>:<line>`), or the marked
-paragraph in a skill. A stage of the flow is written too: its file (`workflow/stages/<name>.md`) and what it is for.
+rule of the gate or the runner, beside the place in the package that binds it (`<path>:<line>`), or — for what a stage is
+told — the frame that places it (`workflow/every-stage.md`, a stage's file). A stage of the flow is written too: its file (`workflow/stages/<name>.md`) and what it is for.
 
 **Type:** Value
 
@@ -88,10 +88,10 @@ gate run there; with the refusals the journal counts per name, the story's overl
 
 ### Marker (`<!-- rule: <id> -->`)
 
-**Definition:** The line before a skill's paragraph that carries an instructed rule's words. The rule itself is its
-file (`workflow/rules/stage/<id>.md`, `part: told`, the section and the stages and kinds it holds for, its words); the
-skill carries a copy while a stage still reads the skill, and the rulebook names every paragraph whose words are not
-its file's, a marker without a file and a file whose skill carries no marker as problems.
+**Definition:** The line in a frame — `workflow/every-stage.md` or a stage file's body — where an instructed rule's
+words go when a brief is assembled. The rule itself is its file (`workflow/rules/stage/<id>.md`, `part: told`, the
+section and the stages and kinds it holds for, its words); one no frame places says where the rest of it stands
+(`see:`). A marker in a skill is a problem: the words stand in the rule's file, never in a copy.
 
 **Type:** Concept
 

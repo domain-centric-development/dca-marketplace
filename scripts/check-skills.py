@@ -17,6 +17,7 @@ rest without saying so: an instruction past that point does not exist for them. 
 beside the skill that its SKILL.md names.
 """
 
+import glob
 import os
 import re
 import sys
@@ -208,9 +209,10 @@ def check_skill_sizes(root):
     return problems, largest
 
 
-# Paragraphs every delivery stage holds to, said once in `factory-run/reference/stage-common.md`; a stage skill
-# that carries one of them again has drifted back to saying it four times per shared builder.
-STAGE_COMMON = "plugins/dca-factory/skills/factory-run/reference/stage-common.md"
+# Paragraphs every delivery stage holds to, said once in what every stage is told — a `STAGE-COMMON-<n>` rule file the
+# frame `workflow/every-stage.md` places; a stage's frame that carries one of them again has drifted back to saying it
+# four times per shared builder.
+WORKFLOW = "plugins/dca-factory/skills/factory-run/scripts/workflow"
 STAGE_COMMON_SENTENCES = (
     "Never adopt a knowledge source the profile did not name",
     "A missing carrier is a missing preference, never a reason to skip the stage",
@@ -228,76 +230,46 @@ STAGE_COMMON_SENTENCES = (
 
 
 RULE_MARKER = re.compile(r"^\s*<!--\s*rule:\s*(\S+)\s*-->\s*$")
-STAGE_RULE_ID = re.compile(r"^STAGE(-[A-Z0-9]+){2,}$")
 
 
-def marked_paragraphs(text):
-    """[(rule id, the paragraph after its marker, as one line)] — the paragraph ends at a blank line or a marker."""
-    lines, found = text.splitlines(), []
-    for index, line in enumerate(lines):
-        marker = RULE_MARKER.match(line)
-        if not marker:
-            continue
-        paragraph = []
-        for following in lines[index + 1:]:
-            if not following.strip() or RULE_MARKER.match(following):
-                break
-            paragraph.append(following)
-        found.append((marker.group(1), " ".join(" ".join(paragraph).split())))
-    return found
+def folded(path):
+    with open(path, encoding="utf-8") as handle:
+        return " ".join(handle.read().split())      # the paragraphs wrap; a sentence is matched across the break
 
 
 def check_rule_markers(root):
-    """Every `<!-- rule: <id> -->` in the factory's skills is a STAGE- id, once, and marks a paragraph."""
-    problems, seen = [], {}
+    """No skill of the factory marks a paragraph `<!-- rule: <id> -->`: a told rule's words stand in its rule file,
+    placed by its stage's frame — a copy in a skill drifts from them."""
+    problems = []
     skills = os.path.join(root, "plugins", "dca-factory", "skills")
     for top, dirs, files in os.walk(skills):
         dirs[:] = sorted(d for d in dirs if d not in ("scripts", "templates"))
         for name in sorted(f for f in files if f.endswith(".md")):
             path = os.path.join(top, name)
-            where = os.path.relpath(path, skills)
             with open(path, encoding="utf-8") as handle:
-                for rule_id, paragraph in marked_paragraphs(handle.read()):
-                    if not STAGE_RULE_ID.match(rule_id):
-                        problems.append(f"dca-factory/skills/{where}: `{rule_id}` is no STAGE-<STAGE>-<n> id")
-                    elif rule_id in seen:
-                        problems.append(f"dca-factory/skills/{where}: `{rule_id}` is marked in {seen[rule_id]} too")
-                    if not paragraph:
-                        problems.append(f"dca-factory/skills/{where}: `{rule_id}` marks no paragraph")
-                    seen.setdefault(rule_id, where)
-    return problems, len(seen)
+                for line in handle:
+                    marker = RULE_MARKER.match(line)
+                    if marker:
+                        problems.append(f"dca-factory/skills/{os.path.relpath(path, skills)}: marks "
+                                        f"`{marker.group(1)}` — its words stand in its rule file, never in a skill")
+    return problems
 
 
-def check_stage_common(root):
+def check_every_stage(root):
+    """Each sentence every stage holds to stands in one `STAGE-COMMON-<n>` rule file, and no stage's frame repeats it."""
     problems = []
-    common = os.path.join(root, STAGE_COMMON)
-    if not os.path.isfile(common):
-        return [f"{STAGE_COMMON}: missing — the stage skills point at it"]
-    with open(common, encoding="utf-8") as handle:
-        raw = handle.read()
-    text = " ".join(raw.split())      # the paragraphs wrap; a sentence is matched across the break
-    marked = marked_paragraphs(raw)
+    workflow = os.path.join(root, WORKFLOW)
+    common = {path: folded(path) for path in sorted(glob.glob(os.path.join(workflow, "rules", "stage", "STAGE-COMMON-*.md")))}
+    if not common:
+        return [f"{WORKFLOW}/rules/stage: no STAGE-COMMON rule — what every stage is told is missing"]
     for sentence in STAGE_COMMON_SENTENCES:
-        if sentence not in text:
-            problems.append(f"{STAGE_COMMON}: no longer says `{sentence}`")
-        elif not any(sentence in paragraph and rule_id.startswith("STAGE-COMMON-")
-                     for rule_id, paragraph in marked):
-            problems.append(f"{STAGE_COMMON}: `{sentence}` stands in no paragraph marked "
-                            f"`<!-- rule: STAGE-COMMON-<n> -->` — the rulebook could not show it")
-    skills = os.path.join(root, "plugins", "dca-factory", "skills")
-    for name in sorted(os.listdir(skills)):
-        if not name.startswith("stage-"):
-            continue
-        path = os.path.join(skills, name, "SKILL.md")
-        if not os.path.isfile(path):
-            continue
-        with open(path, encoding="utf-8") as handle:
-            skill = " ".join(handle.read().split())
-        if "First read `factory-run/reference/stage-common.md`" not in skill:
-            problems.append(f"dca-factory/skills/{name}: does not say to read stage-common.md first")
+        if not any(sentence in text for text in common.values()):
+            problems.append(f"{WORKFLOW}/rules/stage: no STAGE-COMMON rule says `{sentence}`")
+    for path in sorted(glob.glob(os.path.join(workflow, "stages", "*.md"))):
+        frame = folded(path)
         for sentence in STAGE_COMMON_SENTENCES:
-            if sentence in skill:
-                problems.append(f"dca-factory/skills/{name}: repeats `{sentence}` — it is said once in stage-common.md")
+            if sentence in frame:
+                problems.append(f"{os.path.relpath(path, root)}: repeats `{sentence}` — what every stage is told says it")
     return problems
 
 
@@ -339,16 +311,16 @@ def main():
     for problem in problems:
         print(f"check-skills: {problem}", file=sys.stderr)
     print(f"check-skills: {counted - len(problems)}/{counted} skills carry a name and a description")
-    common = check_stage_common(ROOT)
+    common = check_every_stage(ROOT)
     for problem in common:
         print(f"check-skills: {problem}", file=sys.stderr)
-    print(f"check-skills: the stage skills point at stage-common.md and repeat none of its {len(STAGE_COMMON_SENTENCES)} rules"
-          if not common else f"check-skills: {len(common)} stage-common problem(s)")
+    print(f"check-skills: what every stage is told says each of its {len(STAGE_COMMON_SENTENCES)} rules once, and no "
+          f"stage's frame repeats one" if not common else f"check-skills: {len(common)} every-stage problem(s)")
     problems += common
-    markers, marked = check_rule_markers(ROOT)
+    markers = check_rule_markers(ROOT)
     for problem in markers:
         print(f"check-skills: {problem}", file=sys.stderr)
-    print(f"check-skills: {marked} paragraphs of the factory's skills carry a rule id, each once"
+    print("check-skills: no skill of the factory marks a told rule's paragraph"
           if not markers else f"check-skills: {len(markers)} rule-marker problem(s)")
     problems += markers
     sizes, (size, where) = check_skill_sizes(ROOT)

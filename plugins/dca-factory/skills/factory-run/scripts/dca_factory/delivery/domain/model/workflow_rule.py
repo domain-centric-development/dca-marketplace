@@ -82,7 +82,7 @@ class WorkflowRule(AggregateRoot[RuleId]):
                  stages: typing.Sequence[StageName] = (), kinds: typing.Sequence[StoryKind] = (),
                  retired: typing.Optional[RuleText] = None, written: typing.Optional[Written] = None,
                  told: typing.Optional[RuleText] = None, section: typing.Optional[RuleText] = None,
-                 marked: typing.Optional[Written] = None, order: typing.Optional[RuleOrder] = None) -> None:
+                 see: typing.Optional[Written] = None, order: typing.Optional[RuleOrder] = None) -> None:
         super().__init__()
         states = [o.state for o in outcomes]
         if part is RulePart.TOLD:
@@ -106,7 +106,7 @@ class WorkflowRule(AggregateRoot[RuleId]):
         self._written = written
         self._told = told
         self._section = section
-        self._marked = marked
+        self._see = see
         self._order = order
 
     @property
@@ -163,13 +163,13 @@ class WorkflowRule(AggregateRoot[RuleId]):
         return self._section
 
     @property
-    def marked(self) -> typing.Optional[Written]:
-        """Where a skill still carries a told rule's words, under its `<!-- rule: <id> -->` marker."""
-        return self._marked
+    def see(self) -> typing.Optional[Written]:
+        """Where the rest of a told rule stands that no frame places — a reference every reader reads."""
+        return self._see
 
     @property
     def order(self) -> typing.Optional[RuleOrder]:
-        """A told rule's place among its skill's — None where it has none."""
+        """A told rule's place among the told rules no frame places — None where it has none."""
         return self._order
 
     def unknown_targets(self, targets: typing.FrozenSet[Target]) -> typing.Tuple[Target, ...]:

@@ -31,10 +31,12 @@ from ..application.profile import profile_rules  # noqa: F401
 from ..application.requests import request_queue, work_request  # noqa: F401
 from ..application.schedule import schedule_backlog, stand_story  # noqa: F401
 from ..domain.model.stage import StoryKind, Trait
-from ..domain.model.workflow_rule import WorkflowRule
+from ..domain.model.workflow_rule import RulePart, WorkflowRule
 from ...sharedkernel.adapter.outgoing.profile.profile_files import place, read_profile, resolve_profile, set_places
 
 Published = typing.Dict[str, typing.Any]
+#: what every stage is told, as the rulebook names its file
+EVERY_STAGE_FILE = "workflow/every-stage.md"
 KIND_ORDER = tuple(kind.value for kind in StoryKind)
 
 
@@ -50,7 +52,21 @@ def published(bound: typing.Optional[Bound], found: WorkflowRule) -> Published:
                 source=found.written.value if found.written else "", bound=bound.place if bound else "",
                 retired=found.retired.value if found.retired else "",
                 told=found.told.value if found.told else "", section=found.section.value if found.section else "",
-                marked=found.marked.value if found.marked else "")
+                placed=placed(found) if found.part is RulePart.TOLD else "")
+
+
+def placed(found: WorkflowRule) -> str:
+    """Where a told rule's words stand: the frame whose marker places them — what every stage is told, or a stage's
+    file —, else the reference that says the rest of it."""
+    marker = f"<!-- rule: {found.id.value} -->"
+    every = workflow().every_stage
+    if every is not None and marker in every.value:
+        return EVERY_STAGE_FILE
+    for stage in workflow().stages:
+        if stage.frame is not None and marker in stage.frame.value:
+            written = workflow().written(stage.name)
+            return written.value if written else stage.name.value
+    return found.see.value if found.see else ""
 
 
 def held() -> None:

@@ -2457,15 +2457,15 @@ def verify_runner(runner, verbose=False):
             build_project(root)
             skills = os.path.join(root, ".codex", "skills")
             os.makedirs(skills)
-            elsewhere = os.path.join(root, "our-stage-plan")
+            elsewhere = os.path.join(root, "our-factory-status")
             os.makedirs(elsewhere)
             with open(os.path.join(elsewhere, "SKILL.md"), "w", encoding="utf-8") as handle:
-                handle.write("---\nname: stage-plan\ndescription: the project's own plan stage\n---\n")
-            os.symlink(elsewhere, os.path.join(skills, "stage-plan"))
+                handle.write("---\nname: factory-status\ndescription: the project's own plan stage\n---\n")
+            os.symlink(elsewhere, os.path.join(skills, "factory-status"))
             run_setup(runner, root, "--tool", "codex", "--from", source)
             check("install: a link the *project* made is not replaced either",
-                  os.path.realpath(os.path.join(skills, "stage-plan")) == os.path.realpath(elsewhere),
-                  f"stage-plan now points at {os.path.realpath(os.path.join(skills, 'stage-plan'))}")
+                  os.path.realpath(os.path.join(skills, "factory-status")) == os.path.realpath(elsewhere),
+                  f"factory-status now points at {os.path.realpath(os.path.join(skills, 'factory-status'))}")
     else:
         print("  skip  install: the two link cases — this account cannot create symlinks, so install copies")
 
@@ -2822,7 +2822,7 @@ exit 0
         # the pipeline dropped leaves the copy
         build_project(root)
         skills_dir = os.path.join(root, ".claude", "skills")
-        for own in ("our-own-skill", "stage-plan"):
+        for own in ("our-own-skill", "factory-status"):
             os.makedirs(os.path.join(skills_dir, own))
             with open(os.path.join(skills_dir, own, "SKILL.md"), "w", encoding="utf-8") as handle:
                 handle.write(f"---\nname: {own}\ndescription: the project's own\n---\nOURS\n")
@@ -2830,10 +2830,10 @@ exit 0
         manifest = open(os.path.join(skills_dir, ".dca-factory-skills"), encoding="utf-8").read().split()
         check("copies: the project's own skills stay, a same-named one is not overwritten, and the list names only "
               "what the pipeline copied",
-              "OURS" in open(os.path.join(skills_dir, "stage-plan", "SKILL.md"), encoding="utf-8").read()
+              "OURS" in open(os.path.join(skills_dir, "factory-status", "SKILL.md"), encoding="utf-8").read()
               and os.path.isdir(os.path.join(skills_dir, "our-own-skill")) and "factory-run" in manifest
-              and "stage-plan" not in manifest and "our-own-skill" not in manifest
-              and "kept the project's own .claude/skills/stage-plan" in output, output.strip().splitlines()[-3:])
+              and "factory-status" not in manifest and "our-own-skill" not in manifest
+              and "kept the project's own .claude/skills/factory-status" in output, output.strip().splitlines()[-3:])
         dropped = os.path.join(tempfile.mkdtemp(), "trimmed-plugin")   # outside the project: an update's source never lies inside it
         shutil.copytree(os.path.normpath(os.path.join(os.path.dirname(runner), "..", "..")), dropped, symlinks=True)
         shutil.rmtree(os.path.join(dropped, "factory-decisions"))
@@ -2843,7 +2843,7 @@ exit 0
         check("copies: a skill the pipeline dropped is removed on update; the project's own stay",
               code == 0 and not os.path.exists(os.path.join(skills_dir, "factory-decisions"))
               and os.path.isdir(os.path.join(skills_dir, "our-own-skill"))
-              and "OURS" in open(os.path.join(skills_dir, "stage-plan", "SKILL.md"), encoding="utf-8").read(),
+              and "OURS" in open(os.path.join(skills_dir, "factory-status", "SKILL.md"), encoding="utf-8").read(),
               [l for l in output.splitlines() if "removed" in l or "kept" in l][:3])
         cached = [d for d, subdirs, _ in os.walk(skills_dir) if os.path.basename(d) == "__pycache__"]
         check("copies: no __pycache__ a run left in the source travels into the project's skills", not cached, cached)
@@ -3328,7 +3328,7 @@ exit 0
             if plugin == "dca-factory" and version == "0.2.0":
                 shutil.copytree(pipeline, os.path.join(folder, "skills"), symlinks=True)
             else:
-                name = "dca-modelling" if plugin == "dca-core" else "stage-plan"
+                name = "dca-modelling" if plugin == "dca-core" else "factory-status"
                 write_file(folder, f"skills/{name}/SKILL.md",
                            f"---\nname: {name}\ndescription: {plugin} {version}\n---\n")
         return os.path.join(cache, "dca-factory", "0.2.0", "skills")
@@ -3541,8 +3541,7 @@ exit 0
         build_project(root)
         run_setup(runner, root, "--tool", "codex", "--from", source)
         entries = os.listdir(os.path.join(root, ".codex", "skills"))
-        pipeline = {"factory-run", "stage-plan", "stage-test", "stage-build", "stage-tidy",
-                    "stage-judge", "stage-document", "factory-backlog", "factory-setup",
+        pipeline = {"factory-run", "factory-backlog", "factory-setup",
                     "factory-decisions", "factory-status", "factory-update", "factory-help"}
         check("install: a tool without plugins also gets the craft the profile may name",
               pipeline.issubset(set(entries)) and len(entries) > len(pipeline),
@@ -4230,13 +4229,13 @@ def verify_setup(runner, verbose=False):
         for root in throwaway():
             # a folder of the project's own that carries a pipeline skill's name, beside skills of its own
             build_project(root)
-            write_file(root, ".claude/skills/stage-plan/SKILL.md", "---\nname: stage-plan\ndescription: ours\n---\n")
+            write_file(root, ".claude/skills/factory-status/SKILL.md", "---\nname: factory-status\ndescription: ours\n---\n")
             write_file(root, ".claude/skills/our-skill/SKILL.md", "---\nname: our-skill\ndescription: ours\n---\n")
             code, output = run_setup(runner, root, "--tool", "claude", "--from", source)
-            own = os.path.join(root, ".claude", "skills", "stage-plan")
+            own = os.path.join(root, ".claude", "skills", "factory-status")
             check("setup: a project's own skill folder with a pipeline skill's name is kept and named",
                   os.path.isdir(own) and not os.path.islink(own) and "ours" in open(os.path.join(own, "SKILL.md")).read()
-                  and "kept the project's own .claude/skills/stage-plan" in output, output.strip()[-300:])
+                  and "kept the project's own .claude/skills/factory-status" in output, output.strip()[-300:])
     for root, market in throwaway(2):
         # a copy install whose method skills were copied by hand (dca-new, a bench base): not the install's, so
         # never replaced unasked — an identical one is taken over, a different one is named with `--adopt`, and an
@@ -4332,11 +4331,11 @@ def verify_setup(runner, verbose=False):
             links = [n for n in os.listdir(skills) if os.path.islink(os.path.join(skills, n))]
             check("install: a project's own folder with a pipeline skill's name survives setup and update, the links stay links",
                   code == 0 and code2 == 0 and "PROJECT OWN" in open(own, encoding="utf-8").read()
-                  and "kept the project's own .claude/skills/factory-run" in output2 and len(links) >= 13
+                  and "kept the project's own .claude/skills/factory-run" in output2 and len(links) >= 6
                   and "mode: link" in manifest_of(root) and "factory-run" not in manifest_of(root),
                   f"exit {code}/{code2}; links {len(links)}; {manifest_of(root)[:3]}; {output2.strip()[-300:]}")
             check("install: .gitignore carries one line per link, none for the folder or the project's own skill",
-                  ".claude/skills/stage-plan" in ignore_lines(root) and ".claude/skills/factory-run" not in ignore_lines(root)
+                  ".claude/skills/factory-status" in ignore_lines(root) and ".claude/skills/factory-run" not in ignore_lines(root)
                   and ".claude/skills" not in ignore_lines(root) and ".claude/skills/" not in ignore_lines(root),
                   ignore_lines(root)[:5])
         # TODO #154: an update writes the protocol's own line only where it is missing — the skill lines stay where they
@@ -4359,7 +4358,7 @@ def verify_setup(runner, verbose=False):
             build_project(root)
             code, output = run_setup(runner, root, "--tool", "claude", "--from", cached, env={"HOME": home})
             skills = os.path.join(root, ".claude", "skills")
-            plan = os.path.join(skills, "stage-plan")
+            plan = os.path.join(skills, "factory-status")
             check("install: from a plugin cache the skills are copies, listed as such, and no skill is ignored",
                   code == 0 and os.path.isdir(plan) and not os.path.islink(plan) and "mode: copy" in manifest_of(root)
                   and "source: cache" in manifest_of(root) and "plugin cache" in output
@@ -4368,7 +4367,7 @@ def verify_setup(runner, verbose=False):
             code, output = run_runner(project_runner(root), root, "update", "--from", source, "--link", env={"HOME": home})
             check("update: --link switches the project's copies to links into a checkout, listed and ignored",
                   code == 0 and os.path.islink(plan) and "mode: link" in manifest_of(root)
-                  and "source: checkout" in manifest_of(root) and ".claude/skills/stage-plan" in ignore_lines(root),
+                  and "source: checkout" in manifest_of(root) and ".claude/skills/factory-status" in ignore_lines(root),
                   f"exit {code}; {manifest_of(root)[:3]}; {output.strip()[-200:]}")
             code, output = run_runner(project_runner(root), root, "update", "--from", cached, "--link", env={"HOME": home})
             check("update: a link into a checkout follows to a cache when named, and the report warns about the cache",
@@ -4377,7 +4376,7 @@ def verify_setup(runner, verbose=False):
             code, output = run_runner(project_runner(root), root, "update", "--from", cached, "--copy", env={"HOME": home})
             check("update: --copy switches back to copies and drops the ignore lines",
                   code == 0 and os.path.isdir(plan) and not os.path.islink(plan) and "mode: copy" in manifest_of(root)
-                  and ".claude/skills/stage-plan" not in ignore_lines(root), f"exit {code}; {ignore_lines(root)}")
+                  and ".claude/skills/factory-status" not in ignore_lines(root), f"exit {code}; {ignore_lines(root)}")
         for root in throwaway():
             build_project(root)
             run_setup(runner, root, "--tool", "none", "--from", source)
@@ -4395,13 +4394,13 @@ def verify_setup(runner, verbose=False):
         run_setup(runner, root, "--tool", "claude", "--from", source, "--copy")
         skills = os.path.join(root, ".claude", "skills")
         os.remove(os.path.join(skills, ".dca-factory-skills"))
-        with open(os.path.join(skills, "stage-plan", "SKILL.md"), "a", encoding="utf-8") as handle:
+        with open(os.path.join(skills, "factory-status", "SKILL.md"), "a", encoding="utf-8") as handle:
             handle.write("# edited by the project\n")
         code, output = run_runner(project_runner(root), root, "update", "--from", source)
         check("update: a copy from before the list is taken over only byte for byte; an edited one is kept and named",
-              code == 0 and "edited by the project" in open(os.path.join(skills, "stage-plan", "SKILL.md"), encoding="utf-8").read()
-              and "kept the project's own .claude/skills/stage-plan" in output and "stage-plan" not in manifest_of(root)
-              and "stage-build" in manifest_of(root), f"exit {code}; {output.strip()[-300:]}")
+              code == 0 and "edited by the project" in open(os.path.join(skills, "factory-status", "SKILL.md"), encoding="utf-8").read()
+              and "kept the project's own .claude/skills/factory-status" in output and "factory-status" not in manifest_of(root)
+              and "factory-help" in manifest_of(root), f"exit {code}; {output.strip()[-300:]}")
     for root in throwaway():
         build_project(root)
         code, output = run_setup(runner, root, "--tool", "claude", "--from", source)
@@ -9460,7 +9459,7 @@ def run_groups(args):
                          not hits, ", ".join(hits[:5])))
     # the skills call only the runner's verbs, which mirror them (WP-62 item 11)
     verbs = {"setup", "backlog", "run", "status", "decisions", "discover", "follow", "help", "update", "verify", "check",
-             "up", "down", "serve", "request", "requests", "rules"}
+             "up", "down", "serve", "request", "requests", "rules", "brief"}
     called = []
     for folder, _, names in os.walk(skills_root):
         for name in names:

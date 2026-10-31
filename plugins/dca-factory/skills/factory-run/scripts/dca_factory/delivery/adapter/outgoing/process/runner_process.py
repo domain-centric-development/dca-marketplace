@@ -51,10 +51,10 @@ from .gate_process import file_sha, GateProcess, hashing
 from ..tools.tool_choice import ToolChoice
 from ..tools.tool_processes import err, exit_field, flush, ToolProcesses, utc
 from ....application.shared.run_stop import Stopped
-from ....domain.model.stage import Window
+from ....domain.model.stage import StageText, Window
 from ....domain.model.stage_story import Place
 from ....domain.service.stage_brief import Brief, written
-from ..files.brief_files import brief_dir, EVERY_STAGE, write_brief, write_every_stage
+from ..files.brief_files import brief_dir, EVERY_STAGE, write_brief, write_every_stage, write_told_everywhere
 from ..files.request_files import default_by, REQUEST_JOURNAL, requests_dir
 from ....application.requests.list_requests import target_text
 from ..files.run_readers import needs_human_lines, open_decision_files, verdict_of_story
@@ -109,6 +109,9 @@ class RunCases(typing.Protocol):
 
     def brief(self, run: Run, story: str, stage: str) -> Brief:
         """What <stage> is told for <story> (`ShowBriefUseCase`)."""
+
+    def every_stage(self, run: Run) -> StageText:
+        """What every stage is told, for a session that works no stage (`ShowEveryStageUseCase`)."""
 
 
 class Run:
@@ -496,13 +499,8 @@ class Run:
 
     def where_things_are(self, tool: str, story: typing.Optional[str], rules: bool = False) -> str:
         """What a stage otherwise searches for — the profile, the run folder, the gate's expectations, the
-        catalog — named in its prompt; with <rules>, the rules every stage holds to, for a session without a brief."""
-        common = next((f"{d}/factory-run/reference/stage-common.md" for d in self.skill_dirs(tool)
-                       if os.path.isfile(f"{d}/factory-run/reference/stage-common.md")), "")
-        own = os.path.abspath(os.path.join(self.scripts, "..", "reference", "stage-common.md"))
-        if not common and os.path.isfile(own):
-            common = own[len(self.pwd) + 1:] if own.startswith(self.pwd + "/") else own
-        common = f" The rules every stage holds to: {common}." if common and rules else ""
+        catalog — named in its prompt; with <rules>, what every stage is told, for a session without a brief."""
+        common = f" What every stage is told: {self.told_everywhere()}." if rules else ""
         catalog = ""
         profile = self.profile()
         knowledge = first_word(profile.get("knowledge", ""))
@@ -521,6 +519,10 @@ class Run:
         return (f"Where things are: the stack profile is {PROFILE_FILE}{folders}; what the gate checks in a stage's file: "
                 f"`{self.py} {cli_path} --contract <stage>`.{common}{catalog} The shell you have without asking: "
                 f"the gate, the cli, the profile's commands, and {STAGE_SHELL}.")
+
+    def told_everywhere(self) -> str:
+        """What every stage is told, written for a session that works no stage — the file, as its prompt names it."""
+        return write_told_everywhere(self.runs, self.cases.every_stage(self).value)
 
     def cli_rel(self) -> str:
         """The cli as a stage's prompt names it: the project's copy by the path its allow-list grants
@@ -961,7 +963,7 @@ class Run:
 
     def integrate_stage(self, story: str, tool: str, conflicts: str,
                         lost: typing.Optional[Lost] = None) -> typing.Optional[int]:
-        """One stage-integrate session — the conflicts, or a repair of a resolution that lost the main line's side of a
+        """One integrate stage session — the conflicts, or a repair of a resolution that lost the main line's side of a
         test — then the profile's formatter and the merge committed and squashed. None when it is, else an exit code."""
         what = f"the resolution lost the main line's side of {', '.join(rel for rel, _ in lost)}" if lost \
             else f"the merge stopped on: {conflicts}"

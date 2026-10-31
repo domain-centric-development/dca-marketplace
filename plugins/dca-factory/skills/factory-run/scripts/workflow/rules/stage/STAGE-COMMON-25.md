@@ -2,7 +2,6 @@
 id: STAGE-COMMON-25
 part: told
 section: Ask, do not recall — but only a source the project named
-marked: factory-run/reference/stage-common.md
 order: 25
 ---
 

@@ -50,6 +50,13 @@ def write_every_stage(runs: str, story: str, text: str) -> str:
     return path
 
 
+def write_told_everywhere(runs: str, text: str) -> str:
+    """What every stage is told, for a session that works no stage — a request —, beside the stories' evidence."""
+    path = os.path.join(evidence_dir(runs), EVERY_STAGE)
+    write_file(path, text.rstrip() + "\n")
+    return path
+
+
 def given_digest(runs: str, story: str, stage: str) -> typing.Optional[str]:
     """The digest of the brief the runner gave <stage> — None where it gave none (a stage run by hand)."""
     path = os.path.join(brief_dir(runs, story), f"{stage}{DIGEST}")

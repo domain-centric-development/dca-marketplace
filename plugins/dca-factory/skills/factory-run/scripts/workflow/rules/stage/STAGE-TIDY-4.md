@@ -4,7 +4,6 @@ part: told
 stages:
 - tidy
 section: Do
-marked: stage-tidy/SKILL.md
 order: 4
 ---
 
@@ -17,4 +16,4 @@ order: 4
    a touched file that the change made wrong or too narrow rewritten to what holds now, a value object
    where a primitive was carrying meaning. A comment says what holds in this file, not what a source
    the reader cannot see says. Each move is small and each leaves the tests green — between moves run the
-   tests the move touches (one test or one class, as `stage-common.md` says); the whole suite runs once, in the gate.
+   tests the move touches (one test or one class, as what every stage is told says); the whole suite runs once, in the gate.

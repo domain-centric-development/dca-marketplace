@@ -18,7 +18,7 @@ STEP = re.compile(r"^-\s+(Given|When|Then|And|But)\b\s*(.*)$")
 
 def adapter_level_keys(runs: str, story_id: str) -> typing.Set[str]:
     """The keys the plan gave `integration (adapter: …)` — an incoming adapter's translation, tested against a stubbed
-    input port by design (stage-test)."""
+    input port by design (the test stage)."""
     text = read_text(os.path.join(runs, story_id, "plan.md")) if os.path.isfile(os.path.join(runs, story_id, "plan.md")) else ""
     return {m.group(1) for m in re.finditer(r"^\s*-\s+([a-z0-9][a-z0-9-]*)\b[^\n]*level:\s*integration\s*\(\s*adapter",
                                             text, re.M)}

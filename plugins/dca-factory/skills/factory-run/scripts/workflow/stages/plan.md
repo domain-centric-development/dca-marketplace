@@ -15,13 +15,13 @@ traits:
 
 # plan
 
-Turns the story into an implementation plan — each acceptance criterion by its key, with its test level — and names the architecture elements that change. Its skill: `stage-plan`.
+Turns the story into an implementation plan — each acceptance criterion by its key, with its test level — and names the architecture elements that change.
 
 <!-- frame: what the stage is told, each rule by its marker -->
 
-First read `factory-run/reference/stage-common.md` — the rules every stage holds to: a session the
-runner started, one session that carries several stages, a repeat round, the shell, the gate. The
-runner's prompt names its path and repeats none of it.
+First read what every stage is told — a session the runner started, one session that carries
+several stages, a repeat round, the shell, the gate. The runner's prompt names its file and this
+brief repeats none of it.
 
 Input: the story file, the project description — `product/overview.md`, `product/tech.md` and
 `product/domain.md`, or where the profile's `product:`, `tech:` and `domain:` point — the method's
@@ -64,14 +64,13 @@ Output: `.dca-factory/runs/<story>/plan.md`, and nothing else. You write no test
 
 Where the profile names `knowledge: <skill>`, ask it instead of your recollection whenever an
 answer would decide something, and cite the node by its path inside the catalog; never adopt a
-knowledge source the profile did not name. The rule in full: `factory-run/reference/stage-common.md`,
-beside this skill.
+knowledge source the profile did not name. The rule in full: in what every stage is told.
 
 ## Who carries this stage
 
 `carrier.plan: <name>` in the stack profile names the skill or agent that holds this project's craft
 for it; use it where this tool offers it, otherwise do the stage as described here and say so in
-your file. The rule in full: `factory-run/reference/stage-common.md`.
+your file. The rule in full: in what every stage is told.
 
 ## The plan file
 
@@ -118,7 +117,7 @@ decision: <story>-<nn>
 ```
 
 A `## needs-human` names a **decision record** with `stage: plan` — the shape, and how an answered
-record is cited when you plan again, in `factory-run/reference/stage-common.md`.
+record is cited when you plan again, in what every stage is told.
 
 ## Do not
 

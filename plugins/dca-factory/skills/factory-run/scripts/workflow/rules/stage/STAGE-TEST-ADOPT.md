@@ -6,7 +6,6 @@ stages:
 kinds:
 - adopt
 section: Adopt mode
-marked: stage-test/SKILL.md
 order: 16
 ---
 

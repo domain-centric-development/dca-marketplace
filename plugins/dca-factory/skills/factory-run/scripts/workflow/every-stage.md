@@ -2,16 +2,16 @@
 
 <!-- frame: what the stage is told, each rule by its marker -->
 
-The stage skills (`stage-plan`, `stage-test`, `stage-build`, `stage-tidy`, `stage-judge`,
-`stage-document`, `stage-integrate`) share these rules. Each skill says to read this file first; a shared
-builder that carries four stages reads it once, not four times. The stage-specific part — which
-profile key names the carrier, which `stage:` a decision record carries — stays in the skill.
+Every stage holds to these rules; each stage's brief says to read them first, and a shared builder
+that carries four stages reads them once, not four times. The stage-specific part — which profile key
+names the carrier, which `stage:` a decision record carries — stands in the stage's own brief.
 
 A line `<!-- rule: <id> -->` names the paragraph below it for the factory's rulebook (`factory.sh rules`); it
 changes nothing a stage does.
 
-The runner's prompt names the skill, the story and where things are — the paths, the commands, the
-reports of an earlier round — and nothing else. What a session does with them is said here.
+The runner's prompt names the stage, the story, its brief and where things are — the paths, the
+commands, the reports of an earlier round — and nothing else. What a session does with them is said
+here and in the brief.
 
 ## A session the runner started
 

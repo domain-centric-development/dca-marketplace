@@ -20,13 +20,13 @@ sizes:
 
 # document
 
-Brings the project's own documents in line with what the story changed — the glossary, the context map, the reader documentation. Its skill: `stage-document`.
+Brings the project's own documents in line with what the story changed — the glossary, the context map, the reader documentation.
 
 <!-- frame: what the stage is told, each rule by its marker -->
 
-First read `factory-run/reference/stage-common.md` — the rules every stage holds to: a session the
-runner started, one session that carries several stages, a repeat round, the shell, the gate. The
-runner's prompt names its path and repeats none of it.
+First read what every stage is told — a session the runner started, one session that carries
+several stages, a repeat round, the shell, the gate. The runner's prompt names its file and this
+brief repeats none of it.
 
 Input: the story, `.dca-factory/runs/<story>/plan.md`, `build.md`, `judge.md`, and the diff —
 `.dca-factory/evidence/<story>/story.diff`, which the pipeline writes (where it says there is no diff,
@@ -53,8 +53,7 @@ yesterday. This stage closes that gap — and it closes it with **checkable** st
 
 Where the profile names `knowledge: <skill>`, ask it instead of your recollection whenever an
 answer would decide something, and cite the node by its path inside the catalog; never adopt a
-knowledge source the profile did not name. The rule in full: `factory-run/reference/stage-common.md`,
-beside this skill.
+knowledge source the profile did not name. The rule in full: in what every stage is told.
 
 ## The document file
 
@@ -78,7 +77,7 @@ beside this skill.
 
 Run the document gate once your tables are filled and fix exactly what it refuses. A `gate:note` — the
 file's size against its measure — is information, never a reason to trim a cell or run the gate again
-(`factory-run/reference/stage-common.md`).
+(what every stage is told).
 
 `Verified by` names how you checked a statement — the file you read, the command you ran. A row
 without it is a claim, and the gate treats it as one. A file you cite is a path from the project root

@@ -19,8 +19,8 @@ from ..delivery.application.delivery.integrate_story import IntegrateStoryComman
 from ..delivery.application.delivery.run_story import RunStoryCommand, RunStoryUseCase
 from ..delivery.application.requests.request_queue import RequestQueue
 from ..delivery.application.requests.work_request import WorkRequestCommand, WorkRequestUseCase
-from ..delivery.application.delivery.show_brief import ShowBriefQuery
-from ..delivery.domain.model.stage import StageName, Window
+from ..delivery.application.delivery.show_brief import ShowBriefQuery, ShowEveryStageUseCase
+from ..delivery.domain.model.stage import StageName, StageText, Window
 from ..delivery.domain.model.story import StoryId
 from ..delivery.domain.service.stage_brief import Brief
 from ..delivery.adapter.outgoing.process.runner_ports import (
@@ -71,6 +71,9 @@ class RunnerCases:
 
     def brief(self, run: Run, story: str, stage: str) -> Brief:
         return delivery.show_brief(os.getcwd()).execute(ShowBriefQuery(StoryId(story), StageName(stage)))
+
+    def every_stage(self, run: Run) -> StageText:
+        return ShowEveryStageUseCase().execute()
 
     @staticmethod
     def _integration(run: Run, tool: str) -> IntegrateStoryUseCase:

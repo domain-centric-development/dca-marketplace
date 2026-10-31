@@ -9,12 +9,12 @@ fresh context, in a subagent or in a separate process without changing the resul
 The run folder is `.dca-factory/runs/` unless the stack profile's `runs:` names another place; the
 stories are under `product/epics/` unless `epics:` does.
 
-| `stage-plan` | the story, the project description (`overview.md`, `tech.md`, `domain.md`), the story's context's spec (`product/spec/<context>/scenarios.md`), the stack profile, the project's glossary and generated context map if present, and its existing tests (for `## Changed tests`) | `.dca-factory/runs/<story>/plan.md` — one line per criterion with its level: `- <key>: … → level: e2e \| integration (port) \| integration (adapter: <Adapter>) \| browser-only (<why>)`, and `## Invariants`, one line per domain type it changes (an adoption: per domain type its scenarios exercise, or `- none — <why>`; contract 24); the test gate reads `browser-only` and the invariants. `## Adopt` (`\| <key> \| <Class>#<method> \|`): scenarios that hold on today's code alone, each with the test that shows it — the plan gate makes the whole story `status: adopted`, or moves them into the adopted story `<story>-holds`, and cites it under the story's `## Assumptions` (`plan-adopt`) |
-| `stage-test` | the story, `plan.md`, the product description's qualities where the plan names them | `.dca-factory/runs/<story>/tests.md` (with the `gate:tests` table, the `gate:invariants` table: one row per rule of the plan's `## Invariants`, each with its own unit test, and — contract 15 — the `gate:clauses` table: one row per `Then` and each `And` after it, with the line that asserts it and its level; a clause about what is stored never at `adapter`) |
-| `stage-build` | the story, `plan.md`, `tests.md`, the product description's look and qualities | `.dca-factory/runs/<story>/build.md` |
-| `stage-tidy` | the story, `plan.md`, `build.md`, and the code as the build stage left it | `.dca-factory/runs/<story>/tidy.md` |
-| `stage-judge` | the story and its epic, `plan.md`, `tests.md`, `build.md`, the story diff, the product and the technical description, the profile's `reviews:`/`review.<perspective>:` lines, and in a repeat round `.judge-previous.md` | `.dca-factory/runs/<story>/judge.md` |
-| `stage-document` | the story, `plan.md`, `build.md`, `judge.md`, the story diff, the project's documents and glossaries, and its own file as the pipeline's skeleton | `.dca-factory/runs/<story>/document.md` — started by `factory-cli.py --document-skeleton <story>`: the headings, and under `## Paths` every changed path and run file as it resolves from the project root; the stage fills the tables and cites from that section |
+| plan | the story, the project description (`overview.md`, `tech.md`, `domain.md`), the story's context's spec (`product/spec/<context>/scenarios.md`), the stack profile, the project's glossary and generated context map if present, and its existing tests (for `## Changed tests`) | `.dca-factory/runs/<story>/plan.md` — one line per criterion with its level: `- <key>: … → level: e2e \| integration (port) \| integration (adapter: <Adapter>) \| browser-only (<why>)`, and `## Invariants`, one line per domain type it changes (an adoption: per domain type its scenarios exercise, or `- none — <why>`; contract 24); the test gate reads `browser-only` and the invariants. `## Adopt` (`\| <key> \| <Class>#<method> \|`): scenarios that hold on today's code alone, each with the test that shows it — the plan gate makes the whole story `status: adopted`, or moves them into the adopted story `<story>-holds`, and cites it under the story's `## Assumptions` (`plan-adopt`) |
+| test | the story, `plan.md`, the product description's qualities where the plan names them | `.dca-factory/runs/<story>/tests.md` (with the `gate:tests` table, the `gate:invariants` table: one row per rule of the plan's `## Invariants`, each with its own unit test, and — contract 15 — the `gate:clauses` table: one row per `Then` and each `And` after it, with the line that asserts it and its level; a clause about what is stored never at `adapter`) |
+| build | the story, `plan.md`, `tests.md`, the product description's look and qualities | `.dca-factory/runs/<story>/build.md` |
+| tidy | the story, `plan.md`, `build.md`, and the code as the build stage left it | `.dca-factory/runs/<story>/tidy.md` |
+| judge | the story and its epic, `plan.md`, `tests.md`, `build.md`, the story diff, the product and the technical description, the profile's `reviews:`/`review.<perspective>:` lines, and in a repeat round `.judge-previous.md` | `.dca-factory/runs/<story>/judge.md` |
+| document | the story, `plan.md`, `build.md`, `judge.md`, the story diff, the project's documents and glossaries, and its own file as the pipeline's skeleton | `.dca-factory/runs/<story>/document.md` — started by `factory-cli.py --document-skeleton <story>`: the headings, and under `## Paths` every changed path and run file as it resolves from the project root; the stage fills the tables and cites from that section |
 
 The tidy stage's moves reach the judge and the document stage through the story diff, not through
 `tidy.md`: what a stage reads is what it needs, not everything that exists.
@@ -278,7 +278,7 @@ target in and squashes
 the whole to one commit, `feat(<context>): <title>` (`test(…)` for an adoption or a journey) with `Story:
 <id>` in its body; factory commits carry `--no-verify`, because the integrate gate holds the tree to more than
 the hook does. Where the merge stops, the conflicted files are listed in `.dca-factory/evidence/<story>/conflicts` and the
-`stage-integrate` agent resolves them in the worktree, writing `.dca-factory/runs/<story>/integrate.md` (`| File |
+the integrate stage agent resolves them in the worktree, writing `.dca-factory/runs/<story>/integrate.md` (`| File |
 The story changed | The main line changed | How both hold |`); the runner commits the resolution. With the
 conflicts the runner records the main line's side of the tests in `.dca-factory/evidence/<story>/main-tests`
 (`<base blob | ->\t<main blob>\t<file>` for every test file the main line changed since the story began); a
@@ -343,7 +343,6 @@ id wins where a story is named like such a file. The folder is linked into a sto
 
 ## Escalation
 
-<!-- rule: STAGE-FILES-9 -->
 A stage that cannot finish writes its file anyway, with a `## needs-human` section, and the
 orchestrator stops the run at that point. Two situations always escalate rather than being solved:
 
@@ -355,7 +354,6 @@ line. A `## needs-human` without one has asked nobody, and the next gate refuses
 
 ## Decision records — `<story>/decisions/<nn>.md`, in the story's folder
 
-<!-- rule: STAGE-FILES-10 -->
 The question a stage may not answer, kept as a file of its own so the answer has a place to land
 and a second session — or the same one tomorrow, or another tool — finds it without any
 transcript. It lives in the folder of the story it belongs to, `product/epics/<epic>/<story>/decisions/<nn>.md`

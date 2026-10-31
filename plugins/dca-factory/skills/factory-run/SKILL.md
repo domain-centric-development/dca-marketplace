@@ -7,8 +7,10 @@ description: Runs one backlog story through the delivery pipeline — plan, test
 
 You are the orchestrator. You own the order of the stages, the file contracts between them, the
 gate calls and the escalation. You do **no** domain work yourself: no plan, no test, no
-production code, no review verdict. That belongs to the stage assignments below, and keeping
-them apart is what makes a run reproducible.
+production code, no review verdict. That belongs to the stages below, and keeping them apart is
+what makes a run reproducible. Each stage works from its brief — `bash .agents/factory/factory.sh brief
+<story> <stage>` prints it: what every stage is told, then the stage's own frame and rules, the gate rules
+it is measured by and the skills it loads. The runner hands a stage the same text as files.
 
 This file is the route; the detail sits in `reference/`, named at the step that needs it. Read a
 reference when its step comes, not before.
@@ -50,38 +52,38 @@ about to run, and the fix belongs to the stage that produced the artefact, not t
    map). It also reports when the project's instruction file is past the size a tool loads, since the
    rest is truncated in silence. Do not repair the backlog yourself beyond obvious typos; an epic
    without an intent is a question for the story's `domain_contact`.
-2. **`stage-plan`** → `.dca-factory/runs/<story>/plan.md`
-3. **`stage-test`** → `.dca-factory/runs/<story>/tests.md`
+2. **the plan stage** (its brief: `factory.sh brief <story> plan`) → `.dca-factory/runs/<story>/plan.md`
+3. **the test stage** (its brief: `factory.sh brief <story> test`) → `.dca-factory/runs/<story>/tests.md`
 4. **gate `test`** — every criterion mapped, test sources compile, every mapped test red. A
    mapped test that is already green means the criterion is not new behaviour or the test asserts
-   nothing; send it back to `stage-test`. It also holds the levels: a test the end-user command runs
+   nothing; send it back to the test stage. It also holds the levels: a test the end-user command runs
    must belong to the happy path or to a scenario the plan gave `browser-only`.
-5. **`stage-build`** → `.dca-factory/runs/<story>/build.md`
+5. **the build stage** (its brief: `factory.sh brief <story> build`) → `.dca-factory/runs/<story>/build.md`
 6. **gate `build`** — every mapped test green, and the profile's `architecture:` and `format:`
    commands succeed. Both run in the gate, not on a stage's word. On failure, hand the gate output
-   back to `stage-build`. Every repeat round — this one, a refused gate after any stage, a judge's
+   back to the build stage. Every repeat round — this one, a refused gate after any stage, a judge's
    `changes-requested` — increments `.dca-factory/evidence/<story>/.rounds`; at **three** the run
    stops and escalates. The counter is a file, not something you remember — an in-session run has
    no other honest way to count, and a resumed run must see the same number. Two refusals count no
    round: `gate:fail environment` — a profile command whose program the gate's shell did not find,
    which no stage can fix; stop and name it — and none at all when a person restarts the story with
    `--from`, which starts a new count (the runner keeps the old one under `.dca-factory/evidence/<story>/`).
-7. **`stage-tidy`** → `.dca-factory/runs/<story>/tidy.md`: the refactor half of red–green–refactor,
+7. **the tidy stage** (its brief: `factory.sh brief <story> tidy`) → `.dca-factory/runs/<story>/tidy.md`: the refactor half of red–green–refactor,
    inside this story's footprint, with every test green and no test changed. A stage that changes
    nothing and says why is finished, not skipped.
 8. **gate `tidy`** — the same checks as the build gate, run again: the stage's whole claim is that
    nothing it touched changed what the code does.
-9. **`stage-judge`** → `.dca-factory/runs/<story>/judge.md`. Hand it what its skill names as input —
+9. **the judge stage** (its brief: `factory.sh brief <story> judge`) → `.dca-factory/runs/<story>/judge.md`. Hand it what its brief names as input —
    the story, the plan, `tests.md`, `build.md` and `.dca-factory/evidence/<story>/story.diff`, which
    the end mark of the stage before wrote — never "the tree against HEAD": the diff is the story's,
    HEAD may hold more. The file carries one of three verdicts:
    - `pass` — done, go to the report.
-   - `changes-requested` — back to `stage-build` with the confirmed defects, then gate `build`
+   - `changes-requested` — back to the build stage with the confirmed defects, then gate `build`
      again; the round counter applies.
    - `story-conflict` — the story or the plan is wrong. **Stop.** This never goes back to
-     `stage-build`: a correction that changes an agreed criterion belongs in the story, and a
+     the build stage: a correction that changes an agreed criterion belongs in the story, and a
      human decides it. Say which criterion conflicts with what.
-10. **`stage-document`** → `.dca-factory/runs/<story>/document.md`: the glossary, the context map
+10. **the document stage** (its brief: `factory.sh brief <story> document`) → `.dca-factory/runs/<story>/document.md`: the glossary, the context map
    and the project's reader documentation follow what the story changed.
 11. **gate `document`** — every stage of this pass wrote its file after the one before it, the judge
    passed it, the story is the one that was planned, every file, path and identifier the stage claims
@@ -111,18 +113,18 @@ correctly after an interruption, in another session or in another tool:
 
 | State on disk | Next step |
 |---|---|
-| no `plan.md` | gate `plan`, then `stage-plan` |
-| `plan.md`, no `tests.md` | `stage-test` |
-| `tests.md`, gate `test` red-and-mapped | `stage-build` |
-| `build.md`, gate `build` failing | `stage-build` again (count the round) — the runner does this for every refused gate after its stage |
-| `build.md`, gate `build` passing, no `tidy.md` | `stage-tidy` |
-| `tidy.md`, gate `tidy` passing, no `judge.md` | `stage-judge` |
-| `judge.md` with `changes-requested` | `stage-build` (count the round) |
+| no `plan.md` | gate `plan`, then the plan stage |
+| `plan.md`, no `tests.md` | the test stage |
+| `tests.md`, gate `test` red-and-mapped | the build stage |
+| `build.md`, gate `build` failing | the build stage again (count the round) — the runner does this for every refused gate after its stage |
+| `build.md`, gate `build` passing, no `tidy.md` | the tidy stage |
+| `tidy.md`, gate `tidy` passing, no `judge.md` | the judge stage |
+| `judge.md` with `changes-requested` | the build stage (count the round) |
 | `judge.md` with `story-conflict` | stop, escalate to the human |
-| `judge.md` with `pass`, no `document.md` | `stage-document`, then gate `document` |
+| `judge.md` with `pass`, no `document.md` | the document stage, then gate `document` |
 | `document.md`, the story not `status: delivered` | gate `document`; it writes `status: delivered` and `delivered:` into the story when it passes, and only then is the story delivered — the gate is the one writer of that line |
 | `document.md`, gate `document` passing | report and stop |
-| `.story-digest` differs from the story file | the story changed after it was planned: `stage-plan` again, and every stage after it |
+| `.story-digest` differs from the story file | the story changed after it was planned: the plan stage again, and every stage after it |
 | a stage file journaled before the one before it | it belongs to an earlier pass — a stage ran again (a re-plan, a build after `changes-requested`); that stage file and every later one count as unwritten |
 | `.rounds` at 3 | stop, escalate to the human |
 | any stage file with a `## needs-human` section | stop; the section names a decision record under `<story>/decisions/` in the story's folder — say which file and what to write into it |
@@ -152,7 +154,7 @@ back to the test stage (`back: test`), what every stage prompt names, and the mo
 
 Rules that hold in every tier:
 
-- A single stage the human asked for (`/stage-build` on a story that already has a plan) is always
+- A single stage the human asked for (the build stage of a story that already has a plan) is always
   done here — the runner delivers whole stories.
 - Degrade rather than wait. A stage is finished when **its file exists**, not when a delegation
   reports success. If a stage you delegated has produced no file when control returns to you, do that
@@ -182,7 +184,7 @@ Stop the run and hand back to the human when:
 - a business term in the criteria is neither in the project's glossary nor marked as a proposal;
 - three rounds did not converge;
 - a stage wrote a `## needs-human` section;
-- `stage-judge` returned `story-conflict`;
+- the judge stage returned `story-conflict`;
 - a stage would have to add a test framework, a dependency or a build-file change to do its work.
 
 Name the decision, the file it belongs in, and who is asked. Do not decide it yourself. A question

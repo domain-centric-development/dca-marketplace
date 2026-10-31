@@ -4,7 +4,6 @@ part: told
 stages:
 - document
 section: Do
-marked: stage-document/SKILL.md
 order: 3
 ---
 
@@ -17,4 +16,4 @@ order: 3
    never by hand. A story that *needs* a new context or
    relationship should never have reached this stage; if you find one, write `## needs-human`
    naming a decision record with `stage: document` (the shape, and the citation of an answered
-   record: `factory-run/reference/stage-common.md`).
+   record: what every stage is told).

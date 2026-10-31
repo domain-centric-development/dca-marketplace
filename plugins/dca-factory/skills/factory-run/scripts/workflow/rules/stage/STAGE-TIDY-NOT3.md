@@ -4,7 +4,6 @@ part: told
 stages:
 - tidy
 section: Do not
-marked: stage-tidy/SKILL.md
 order: 11
 ---
 

@@ -4,7 +4,6 @@ part: told
 stages:
 - build
 section: Do not
-marked: stage-build/SKILL.md
 order: 13
 ---
 

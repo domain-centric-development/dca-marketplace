@@ -2,7 +2,6 @@
 id: STAGE-COMMON-31
 part: told
 section: A question is a decision record
-marked: factory-run/reference/stage-common.md
 order: 31
 ---
 

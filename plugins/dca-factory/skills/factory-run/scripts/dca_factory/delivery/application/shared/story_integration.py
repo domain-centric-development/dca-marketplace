@@ -31,7 +31,7 @@ class StoryIntegration(OutputPort, typing.Protocol):
         ...
 
     def session(self, story: str, conflicts: str, lost: Lost) -> typing.Optional[int]:
-        """One stage-integrate session over the conflicts, or the repair of what a resolution lost, then the merge
+        """One integrate stage session over the conflicts, or the repair of what a resolution lost, then the merge
         committed and squashed: None when it is, else the run's exit."""
         ...
 

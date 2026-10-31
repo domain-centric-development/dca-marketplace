@@ -2,7 +2,7 @@
 id: STAGE-FILES-10
 part: told
 section: Decision records — `<story>/decisions/<nn>.md`, in the story's folder
-marked: factory-run/reference/file-contracts.md
+see: factory-run/reference/file-contracts.md
 order: 2
 ---
 

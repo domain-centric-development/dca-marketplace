@@ -2,7 +2,6 @@
 id: STAGE-COMMON-35
 part: told
 section: The shell a stage has
-marked: factory-run/reference/stage-common.md
 order: 35
 ---
 

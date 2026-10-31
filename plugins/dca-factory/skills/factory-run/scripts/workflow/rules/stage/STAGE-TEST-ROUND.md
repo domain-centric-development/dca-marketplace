@@ -4,7 +4,6 @@ part: told
 stages:
 - test
 section: A round sent back to this stage
-marked: stage-test/SKILL.md
 order: 15
 ---
 

@@ -54,14 +54,14 @@ HELP_COMMANDS = (
     ("deliver again", "with `claim_remote:` — a published story whose merge request lost the race, merged again",
      "", "integrate <story>"),
     ("the profile", "what detection finds against the stack profile", "/factory-setup", "setup --check"),
-    ("the rules", "every rule the gate, the runner and the stage skills hold a story to, in each kind's flow", "",
+    ("the rules", "every rule the gate and the runner hold a story to and every stage is told, in each kind's flow", "",
      "rules"),
     ("observe a story", "what a delivered story changed, measured from its files", "/factory-verify <story>",
      "verify --story <story>"),
     ("the machinery", "the pipeline's own suite against fixtures — for whoever changes the pipeline",
      "/factory-verify --fixtures", "verify --fixtures"),
-    ("one stage by hand", "stage-plan … stage-document are the six stages the run calls; by hand only to redo one "
-                          "stage of a story that has the ones before", "/stage-<stage> <story>", ""),
+    ("one stage by hand", "what a stage is told for a story — its brief; worked by hand only to redo one stage of a "
+                          "story that has the ones before", "", "brief <story> <stage>"),
     ("update the pipeline", "the newest pipeline found, same tools", "/factory-update", "update"),
     ("this help", "the flow, the commands, the marks, the files", "/factory-help", "help"),
 )

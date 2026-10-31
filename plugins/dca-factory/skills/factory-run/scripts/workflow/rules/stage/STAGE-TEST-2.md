@@ -4,7 +4,6 @@ part: told
 stages:
 - test
 section: Do
-marked: stage-test/SKILL.md
 order: 2
 ---
 
@@ -21,7 +20,7 @@ order: 2
    is installed, write the tests file with a `## needs-human` section naming the missing runner
    and stop — do not install it, and do not silently drop to a unit test that asserts less. The
    section names a decision record with `stage: test` (the shape, and the citation of an answered
-   record: `factory-run/reference/stage-common.md`).
+   record: what every stage is told).
    Where the profile names a browser runner (`browser:` other than `none`), an end-user test of a page drives the browser: use
    the end-user testing craft (the `e2e-testing` skill, or the profile's `carrier.test`) — the
    application started by the test, the fake clock for anything that counts or expires, a stand-in for

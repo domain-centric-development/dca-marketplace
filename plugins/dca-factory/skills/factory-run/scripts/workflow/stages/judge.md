@@ -14,13 +14,13 @@ traits:
 
 # judge
 
-Reviews the story's change from the review perspectives and returns one verdict, which decides what comes after it; no gate of its own. Its skill: `stage-judge`.
+Reviews the story's change from the review perspectives and returns one verdict, which decides what comes after it; no gate of its own.
 
 <!-- frame: what the stage is told, each rule by its marker -->
 
-First read `factory-run/reference/stage-common.md` — the rules every stage holds to: a session the
-runner started, one session that carries several stages, a repeat round, the shell, the gate. The
-runner's prompt names its path and repeats none of it.
+First read what every stage is told — a session the runner started, one session that carries
+several stages, a repeat round, the shell, the gate. The runner's prompt names its file and this
+brief repeats none of it.
 
 Input: the story and its epic (`epic.md` beside it), `.dca-factory/runs/<story>/plan.md`, `tests.md`, `build.md`, the diff of the change —
 `.dca-factory/evidence/<story>/story.diff`, which the pipeline writes; open a whole file only where the
@@ -117,8 +117,7 @@ Then converge:
 
 Where the profile names `knowledge: <skill>`, ask it instead of your recollection whenever an
 answer would decide something, and cite the node by its path inside the catalog; never adopt a
-knowledge source the profile did not name. The rule in full: `factory-run/reference/stage-common.md`,
-beside this skill.
+knowledge source the profile did not name. The rule in full: in what every stage is told.
 
 ## The verdict has three values, not two
 
@@ -127,8 +126,8 @@ beside this skill.
 | Verdict | Means | The run goes back to |
 |---|---|---|
 | `pass` | no blocking defect left | nowhere — the story is deliverable |
-| `changes-requested` | the code deviates from the plan or is wrong — or a test asserts less than its criterion | `stage-build`, or `stage-test` with `back: test` |
-| `story-conflict` | the **plan or the story itself** was wrong: a criterion contradicts another, the design cannot meet it, or meeting it would need a decision nobody took | the story — a human, never `stage-build` |
+| `changes-requested` | the code deviates from the plan or is wrong — or a test asserts less than its criterion | the build stage, or the test stage with `back: test` |
+| `story-conflict` | the **plan or the story itself** was wrong: a criterion contradicts another, the design cannot meet it, or meeting it would need a decision nobody took | the story — a human, never the build stage |
 
 Only `blocker` and `major` findings prevent `pass`. A review that finds something everywhere is
 ignored and therefore worthless: rank, and let `minor` findings be recorded without blocking.
@@ -142,7 +141,7 @@ precondition the command does not check again after an earlier read — a choice
 the next, a snapshot and its reload, a remote answer and the step that confirms it (`domain-invariant:`); a result
 that encodes three or more outcomes as flags or nullables a caller must decode, an impossible combination
 representable (`domain-concept:`) — found-or-not as one nullable is two outcomes, not this.
-A `story-conflict` is a question to a human, so it is a **decision record** like any other (`factory-run/reference/stage-common.md`):
+A `story-conflict` is a question to a human, so it is a **decision record** like any other (what every stage is told):
 `## needs-human` in the judge file naming it, and the record's `stage:` is the stage that will
 **apply** the answer, not yourself — `plan` when the story or the plan has to change, `test` when an
 agreed expectation has to change. Say in `## Question` that the judge asked. The run waits for the answer and resumes at that stage; everything after it runs again.

@@ -23,13 +23,13 @@ sizes:
 
 # tidy
 
-The refactor step the build stage skips, taken with every test green and without changing behaviour — so its whole claim is that everything still holds: its gate runs the build's commands again after the refactor. Its skill: `stage-tidy`.
+The refactor step the build stage skips, taken with every test green and without changing behaviour — so its whole claim is that everything still holds: its gate runs the build's commands again after the refactor.
 
 <!-- frame: what the stage is told, each rule by its marker -->
 
-First read `factory-run/reference/stage-common.md` — the rules every stage holds to: a session the
-runner started, one session that carries several stages, a repeat round, the shell, the gate. The
-runner's prompt names its path and repeats none of it.
+First read what every stage is told — a session the runner started, one session that carries
+several stages, a repeat round, the shell, the gate. The runner's prompt names its file and this
+brief repeats none of it.
 
 Input: the story, `.dca-factory/runs/<story>/plan.md`, `.dca-factory/runs/<story>/build.md`, and the code as the build
 stage left it — green: the files `.dca-factory/evidence/<story>/changed.txt` lists, which the pipeline
@@ -58,8 +58,7 @@ freedom is that it may not change what the code *does*.
 `carrier.tidy: <name>` in the stack profile names the skill or agent that holds this project's craft
 for it; use it where this tool offers it, otherwise do the stage as described here and say so in
 your file. `carrier.guard: <name>` names the skill that holds the architecture's invariants while
-you edit — apply it to every file you write, the same way. The rule in full: `factory-
-run/reference/stage-common.md`.
+you edit — apply it to every file you write, the same way. The rule in full: in what every stage is told.
 
 ## The tidy file
 

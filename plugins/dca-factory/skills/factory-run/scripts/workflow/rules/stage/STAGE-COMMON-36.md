@@ -2,7 +2,6 @@
 id: STAGE-COMMON-36
 part: told
 section: The formatter runs last
-marked: factory-run/reference/stage-common.md
 order: 36
 ---
 

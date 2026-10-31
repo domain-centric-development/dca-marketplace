@@ -9,12 +9,11 @@ from ...domain.model.rule import Citation, Rule
 
 
 class InstructedRules(OutputPort, typing.Protocol):
-    """The skills' text: each paragraph a `<!-- rule: <id> -->` marks — the words a told rule's file holds, while a
-    skill still carries them — and every rule id the text cites."""
+    """The skills' text: every rule id it cites, and each paragraph a `<!-- rule: <id> -->` still marks — none should:
+    a told rule's words stand in its file."""
 
     def rules(self) -> typing.Tuple[Rule, ...]:
-        """Every marked paragraph as a rule — none where no skill is found; held against the rule files, never a rule
-        of its own."""
+        """Every marked paragraph as a rule — none where no skill marks one; each a problem, never a rule of its own."""
         ...
 
     def citations(self) -> typing.Tuple[Citation, ...]:

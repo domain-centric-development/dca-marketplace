@@ -14,19 +14,15 @@ from ..skills.skill_files import plain
 PARTS = {"check": Part.CHECK, "pass": Part.PASS_ACTION, "decision": Part.DECISION, "told": Part.INSTRUCTION}
 
 
-def skill_of(marked: str) -> str:
-    """The skill a told rule's words stand in, as a person names it — `stage-build`, `stage-common.md`."""
-    return marked.rsplit("/", 1)[-1] if "/reference/" in marked else marked.split("/")[0]
-
-
 def told(published: typing.Mapping[str, typing.Any]) -> Rule:
-    """What a stage is told: where it stands (the skill, its section), its words as one line."""
-    where = " — ".join(w for w in (skill_of(published["marked"]), published["section"]) if w)
+    """What a stage is told: where it stands (the stages it holds at, its section), its words as one line."""
+    stages = ", ".join(published["stages"]) or "every stage"
+    where = " — ".join(w for w in (stages, published["section"]) if w)
     return Rule(
         RuleId(published["id"]), Part.INSTRUCTION, tuple(StageName(s) for s in published["stages"]),
         tuple(KindName(k) for k in published["kinds"]), Words(where), (), Words(""), Words(plain(published["told"])),
         (), Source(published["source"]), RuleState.RETIRED if published["retired"] else RuleState.ACTIVE,
-        Source(published["marked"]))
+        Source(published["placed"]))
 
 
 def translated(published: typing.Mapping[str, typing.Any]) -> Rule:

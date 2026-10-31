@@ -4,7 +4,6 @@ part: told
 stages:
 - test
 section: Do
-marked: stage-test/SKILL.md
 order: 3
 ---
 

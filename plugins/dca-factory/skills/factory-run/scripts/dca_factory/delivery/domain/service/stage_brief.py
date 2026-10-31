@@ -14,7 +14,7 @@ from ..model.stack_profile import SkillName
 from ..model.stage import HandOver, Stage, StageName, StageText, StoryKind, Window
 from ..model.stage_story import Place
 from ..model.workflow import Workflow
-from ..model.workflow_rule import OutcomeState, RuleOrder, RulePart, RuleText, WorkflowRule
+from ..model.workflow_rule import OutcomeState, RulePart, RuleText, WorkflowRule
 
 
 class CarrierRole(enum.Enum):
@@ -90,8 +90,7 @@ class StageBrief(DomainService):
                   for frame in (self._workflow.every_stage, found.frame)]
         in_frames = {rule_id for done in framed if done is not None for rule_id in done[1]}
         rest = sorted((r for r in held.values() if r.id not in in_frames and not placed_in(r, self._workflow, found)),
-                      key=lambda r: (common_place(r).value, r.marked.value if r.marked else "",
-                                     r.order.value if r.order else 0, r.id.value))
+                      key=lambda r: (r.see.value if r.see else "", r.order.value if r.order else 0, r.id.value))
         common: typing.List[str] = []
         own: typing.List[str] = []
         order: typing.List[RuleId] = []
@@ -113,6 +112,24 @@ class StageBrief(DomainService):
                      tuple(Measure(r.id, r.when, refused_by(r)) for r in measured
                            if r.retired is None and holds(r, stage, kind)),
                      tuple(carriers))
+
+    def every_stage(self, rules: typing.Sequence[WorkflowRule]) -> StageText:
+        """What every stage is told, for a session that works no stage — a request: every stage's frame with the told
+        rules of <rules> that name no stage and no kind, then those no frame places."""
+        held = {r.id: r for r in rules if r.part is RulePart.TOLD and r.retired is None and r.told is not None
+                and not r.stages and not r.kinds}
+        placed = {r.id for r in rules if r.part is RulePart.TOLD}
+        frame = self._workflow.every_stage
+        parts: typing.List[str] = []
+        used: typing.Tuple[RuleId, ...] = ()
+        if frame is not None:
+            text, used = expanded(frame, held, placed)
+            parts.append(text.value)
+        rest = sorted((r for r in held.values() if r.id not in used),
+                      key=lambda r: (r.see.value if r.see else "", r.order.value if r.order else 0, r.id.value))
+        if rest:
+            parts.append("\n\n".join(rest_text(r).value for r in rest))
+        return StageText("\n\n".join(p for p in parts if p.strip()))
 
 
 MARKER = re.compile(r"^\s*<!--\s*rule:\s*(\S+)\s*-->\s*$")
@@ -170,7 +187,7 @@ def placed_in(rule: WorkflowRule, workflow: Workflow, stage: Stage) -> bool:
 
 def rest_text(rule: WorkflowRule) -> StageText:
     """A told rule no frame places: its words under its section, and where the rest of it stands."""
-    where = rule.marked.value if rule.marked else ""
+    where = rule.see.value if rule.see else ""
     head = f"### {rule.section.value}\n\n" if rule.section else ""
     more = f"\n\n(The rest of it: `{where}`.)" if where else ""
     return StageText(f"{head}<!-- rule: {rule.id.value} -->\n{rule.told.value if rule.told else ''}{more}")
@@ -179,18 +196,6 @@ def rest_text(rule: WorkflowRule) -> StageText:
 def holds(rule: WorkflowRule, stage: StageName, kind: StoryKind) -> bool:
     """A rule holds at <stage> for <kind> unless it names other stages or other kinds."""
     return (not rule.stages or stage in rule.stages) and (not rule.kinds or kind in rule.kinds)
-
-
-#: Where every stage's rules stand, first to last: what every stage holds to, then the files it hands over.
-EVERY_STAGE = ("stage-common.md", "file-contracts.md")
-
-
-def common_place(rule: WorkflowRule) -> RuleOrder:
-    """Every stage's rules before the stage's own; among them, what every stage holds to before the files it hands
-    over — within, the text that carries them and their place in it."""
-    carried = rule.marked.value if rule.marked else ""
-    return RuleOrder(next((i for i, name in enumerate(EVERY_STAGE, 1) if carried.endswith(name)),
-                          len(EVERY_STAGE) + 1))
 
 
 def written(brief: Brief, told: StageText, every_stage: typing.Optional[Place] = None) -> StageText:

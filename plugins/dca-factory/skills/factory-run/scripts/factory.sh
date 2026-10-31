@@ -285,7 +285,7 @@ plugin_skills() {
 # (names only) is read as a copy install.
 MANIFEST_NAME=".dca-factory-skills"
 # The pipeline's own skill names, for the one guess that remains: an install from before the list.
-PIPELINE_SKILLS="factory-backlog factory-decisions factory-help factory-run factory-setup factory-status factory-update factory-verify stage-build stage-document stage-integrate stage-judge stage-plan stage-test stage-tidy"
+PIPELINE_SKILLS="factory-backlog factory-decisions factory-help factory-run factory-setup factory-status factory-update factory-verify"
 manifest_field() {                          # manifest_field <target> <mode|source>
   sed -n "s/^$2:[[:space:]]*//p" "$1/$MANIFEST_NAME" 2>/dev/null | head -1
 }
@@ -1826,7 +1826,7 @@ case "$command" in
   decisions) read_command --list-decisions "$@" ;;
   rules)
     # The rulebook (WP-166): generated from where each rule is written — the gate's and the runner's registrations,
-    # the skills' markers.
+    # the rule files and the frames that place what a stage is told.
     read_command --rules "$@" ;;
   brief)
     # What a stage is told for a story (WP-169): the workflow's stage, its told rules for the story's kind, the gate

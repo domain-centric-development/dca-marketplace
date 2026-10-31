@@ -8,7 +8,7 @@ import typing
 from ....building_blocks import UseCase
 from ...domain.model.jump import RuleId
 from ...domain.model.stack_profile import SkillName
-from ...domain.model.stage import StageName, Trait
+from ...domain.model.stage import StageName, StageText, Trait
 from ...domain.model.story import StoryId
 from ...domain.service.stage_brief import Brief, Carrier, CarrierRole, StageBrief
 from ..shared.profile_source import ProfileSource
@@ -55,3 +55,12 @@ class ShowBriefUseCase:
             if words:
                 found.append(Carrier(role, SkillName(words[0])))
         return found
+
+
+class ShowEveryStageInputPort(UseCase[None, StageText], typing.Protocol):
+    """What every stage is told, for a session that works no stage."""
+
+
+class ShowEveryStageUseCase:
+    def execute(self, query: None = None) -> StageText:
+        return StageBrief(workflow()).every_stage(list(RULES.values()))
