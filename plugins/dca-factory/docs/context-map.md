@@ -15,7 +15,7 @@ flowchart LR
 | Context | Subdomain | Language | Glossary |
 |---|---|---|---|
 | **discovery** | supporting | problem, option, outcome, evidence, proposal, report | [glossary/discovery.md](glossary/discovery.md) |
-| **delivery** | core | epic, story, decision record, stage, gate, journal, usage — features: backlog, decisions, delivery, description, cost | [glossary/delivery.md](glossary/delivery.md) |
+| **delivery** | core | epic, story, decision record, stage, brief, gate, journal, usage — features: backlog, decisions, delivery, description, cost | [glossary/delivery.md](glossary/delivery.md) |
 | **spec** | core | criterion, rule, scenario, feature, test line, journey, delta | [glossary/spec.md](glossary/spec.md) |
 | **rulebook** | supporting | rule, rule id, enforcement, part, outcome, flow, marker, citation | [glossary/rulebook.md](glossary/rulebook.md) |
 

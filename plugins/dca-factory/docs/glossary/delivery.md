@@ -342,7 +342,10 @@ where it sends the story (`goes`) — and the stages, kinds and report names whe
 aggregate, kept by the `RuleRepository`: Markdown files under `workflow/rules/` today, another store later. The code
 binds a rule by its id and says *how* it is checked or decided; the rule says *what* it holds and *where* the story
 goes. A rule that goes keeps its file, `retired:` with the reason. Whether a target is a stage is the workflow's
-question: the rules are loaded after it, and one that sends a story to no stage of it stops the load.
+question: the rules are loaded after it, and one that sends a story to no stage of it stops the load. What a stage
+is *told* is a rule too (`STAGE-<STAGE>-<n>`, `part: told`): no outcome, its words the file's body, its section and
+the stages and kinds it holds for; a frame places it, and one no frame places says where the rest of it stands
+(`see:`).
 
 **Type:** Aggregate
 
