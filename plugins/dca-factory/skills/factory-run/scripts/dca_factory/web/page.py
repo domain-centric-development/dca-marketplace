@@ -578,8 +578,13 @@ function picked(flow, rules, story) {
       + ruleGroup("at every gate", flow.every_gate, rules, story, stage));
   }
   const edge = graph.edges.concat(graph.every_gate || [], graph.anywhere || []).find(e => `${e.source}>${e.target}>${e.way}` === p.key);
-  const title = p.way === "again" ? `${p.source} once more` : `${p.source} → ${p.target}`;
-  return card(esc(title), esc(p.way), ruleGroup("the rules that take it", edge ? ids([edge]) : [], rules, story, p.source));
+  if (p.way === "again") {
+    const step = flow.steps.find(s => s.stage === p.source) || {};
+    return card(`${esc(p.source)} once more`, step.gate === "after" ? "a refused check of its gate sends the story back into it" : "the stage runs again",
+      ruleGroup("what sends it once more", edge ? ids([edge]) : [], rules, story, p.source)
+      + (step.gate === "after" ? ruleGroup(`the checks of the gate after ${p.source} — each can refuse`, step.gate_after, rules, story, p.source) : ""));
+  }
+  return card(`${esc(p.source)} → ${esc(p.target)}`, esc(p.way), ruleGroup("the rules that take it", edge ? ids([edge]) : [], rules, story, p.source));
 }
 
 function folded(title, sub, ids, rules, story) {
