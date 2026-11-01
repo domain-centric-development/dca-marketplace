@@ -3596,6 +3596,10 @@ PRESET_FIXTURES = {
     # cargo-nextest with a junit path: the report is the evidence; plain cargo: the exit code is
     "cargo-nextest": {"Cargo.toml": "[workspace]\n", ".config/nextest.toml": '[profile.ci.junit]\npath = "junit.xml"\n'},
     "cargo": {"Cargo.toml": "[package]\n"},
+    # the DCA rule suite for Rust is the architecture governance; with nextest its tests run by name
+    "cargo-dca": {"Cargo.toml": "[workspace]\n", "crates/arch/Cargo.toml": '[dev-dependencies]\ndca-rules = "0.1"\n'},
+    "cargo-nextest-dca": {"Cargo.toml": "[workspace]\n", ".config/nextest.toml": '[profile.ci.junit]\npath = "junit.xml"\n',
+                          "crates/arch/Cargo.toml": '[dev-dependencies]\ndca-rules = "0.1"\n'},
     "empty": {},
 }
 _GRADLE = ['compile: ./gradlew testClasses', 'test: ./gradlew test --rerun', 'e2eTest: ./gradlew test --rerun',
@@ -3637,6 +3641,18 @@ PRESET_GOLDEN = {
     "cargo": ["compile: cargo build --workspace --all-targets", "test: cargo test --workspace",
               "e2eTest: cargo test --workspace", 'filterFormat: "{method}"', "format: cargo fmt --all --check",
               "formatFix: cargo fmt --all", "testEvidence: exit-code", "covers.test: **"],
+    "cargo-dca": ["compile: cargo build --workspace --all-targets", "test: cargo test --workspace",
+                  "e2eTest: cargo test --workspace", 'filterFormat: "{method}"',
+                  "architecture: cargo test --workspace dca_ && cargo clippy --workspace --all-targets -- -D clippy::disallowed_types -D clippy::disallowed_methods",
+                  "format: cargo fmt --all --check", "formatFix: cargo fmt --all", "testEvidence: exit-code",
+                  "covers.test: **"],
+    "cargo-nextest-dca": ["compile: cargo build --workspace --all-targets",
+                          "test: cargo nextest run --workspace --profile ci",
+                          "e2eTest: cargo nextest run --workspace --profile ci", "filterFlag: -E",
+                          'filterFormat: "test(/(^|::){method}$/)"',
+                          'architecture: cargo nextest run --workspace --profile ci -E "test(/^dca_[a-z]+_[0-9]+$/)" && cargo clippy --workspace --all-targets -- -D clippy::disallowed_types -D clippy::disallowed_methods',
+                          "format: cargo fmt --all --check", "formatFix: cargo fmt --all",
+                          "testReport: target/nextest/ci/junit.xml", "covers.test: **"],
     "empty": [],
 }
 

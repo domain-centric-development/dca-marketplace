@@ -1,0 +1,6 @@
+# The same check where cargo-nextest runs the tests: the rule tests by their names, `dca_<set>_<number>`.
+kind: governance
+order: 21
+detect.contains: **/Cargo.toml :: dca-rules
+detect.exists: .config/nextest.toml
+architecture: cargo nextest run --workspace --profile ci -E "test(/^dca_[a-z]+_[0-9]+$/)" && cargo clippy --workspace --all-targets -- -D clippy::disallowed_types -D clippy::disallowed_methods

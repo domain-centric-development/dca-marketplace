@@ -1,0 +1,7 @@
+# Architecture governance for Rust: a crate depends on dca-rules, the DCA rule suite, whose `dca_tests!()` names
+# each test after its rule id (`dca_tac_003`). The check runs those tests, then the two Clippy lints the crates'
+# `clippy.toml` fill (disallowed types and methods), as errors. cargo-deny's bans stay the project's own line.
+kind: governance
+order: 20
+detect.contains: **/Cargo.toml :: dca-rules
+architecture: cargo test --workspace dca_ && cargo clippy --workspace --all-targets -- -D clippy::disallowed_types -D clippy::disallowed_methods
