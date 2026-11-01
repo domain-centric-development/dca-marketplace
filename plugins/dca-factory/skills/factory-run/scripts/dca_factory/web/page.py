@@ -224,6 +224,7 @@ table.epics tr.epic-body > td { padding-top: 0; } table.epics tr.epic-body table
 .bar { height: 6px; border-radius: 3px; background: var(--line); min-width: 80px; overflow: hidden; }
 .bar i { display: block; height: 100%; background: var(--done); }
 .show-s { display: none; } @media (max-width: 760px) { .show-s { display: block; } }
+.spec-act { margin-top: 8px; } .spec-act .ask textarea { min-height: 64px; }
 .terms { display: flex; flex-wrap: wrap; gap: 4px 6px; } .term { font: 400 12.5px var(--mono); padding: 2px 7px; border: 1px solid var(--line); border-radius: 5px; cursor: help; }
 details.feature { border-top: 1px solid var(--line); padding: 6px 0; } details.feature > summary { cursor: pointer; font: 500 15px var(--display); }
 details.feature > summary .hint { font: 400 13px var(--body); margin-left: 6px; }
@@ -380,7 +381,8 @@ function act(action, scope) {
   if (r.open === "words") {
     const choices = (r.choices || []).length ? `<select aria-label="why"><option value="">why? (optional)</option>${r.choices.map(c => `<option>${esc(c)}</option>`).join("")}</select>` : "";
     // what the person typed outlives a redraw: kept by the action's command, until its request is written
-    return `<div class="ask" data-ask="${id}"><textarea data-draft="${esc(action.skill)}" placeholder="${esc(action.text)}" aria-label="${esc(action.label)}">${esc(S.drafts[action.skill] || "")}</textarea>${choices}
+    const draft = r.draft || action.skill;
+    return `<div class="ask" data-ask="${id}"><textarea data-draft="${esc(draft)}" placeholder="${esc(action.text)}" aria-label="${esc(action.label)}">${esc(S.drafts[draft] || "")}</textarea>${choices}
       <button class="${cls}" data-press="${id}">${esc(action.label)}</button></div>`;
   }
   if (r.open === "record") return `<button class="${cls}" data-tab="decide">${esc(action.label)}</button>`;
@@ -399,11 +401,12 @@ async function press(button) {
     const pick = box.querySelector("select");
     if (pick && pick.value) fields.option = pick.value;
     if (!words) { toast(`${action.label}: ${action.text}`, true); return; }
+    if (r.prefix) words = `${r.prefix}\n\n${words}`;
   }
   try {
     const data = await api("/api/request", Object.assign({kind: r.kind, words, by: by()}, fields));
     toast(data.duplicate ? `queued already: ${data.id}` : `request written: ${data.id}`);
-    if (box) { box.querySelector("textarea").value = ""; delete S.drafts[action.skill]; }
+    if (box) { box.querySelector("textarea").value = ""; delete S.drafts[r.draft || action.skill]; }
     refresh();
     if (S.drawer) openStory(S.drawer);
   } catch (e) { toast(e.message, true); }
@@ -518,7 +521,7 @@ function render() {
   const editing = document.activeElement && ["TEXTAREA", "SELECT"].includes(document.activeElement.tagName)
     && $("main").contains(document.activeElement);
   if (editing) return;                                   // a person typing is not redrawn under their hands
-  forget("m");
+  forget("m"); forget("s");
   const [, , eyebrow, title, lede] = TABS.find(([id]) => id === S.tab) || TABS[2];
   const view = {describe, discover, backlog, run, decide, delivered, spec: specTab, rules: rulesTab}[S.tab] || backlog;
   $("main").innerHTML = `<div class="eyebrow">${esc(eyebrow)}</div><h1>${esc(title)}</h1><p class="lede">${esc(lede)}</p>`
@@ -795,7 +798,8 @@ function scenario(item) {
   const heading = item.form === "line" ? item.lines[0].replace(/^-\s*[a-z0-9-]+:\s*/, "") : item.key.replace(/-/g, " ");
   const changes = item.changed_by.map(c => `<span class="pend p-${esc(c.verdict)}" title="${esc(c.title)} (${esc(c.status)})">${esc(c.verdict)} by ${esc(c.story)}</span>`).join(" ");
   const body = !open ? "" : `<div class="rbody">${item.form === "scenario" ? item.lines.slice(1).map(step).join("") : ""}
-    <p class="hint">${item.tests.length ? "test: " + item.tests.map(esc).join(", ") : "no test named"} · <code>${esc(item.key)}</code></p></div>`;
+    <p class="hint">${item.tests.length ? "test: " + item.tests.map(esc).join(", ") : "no test named"} · <code>${esc(item.key)}</code></p>
+    ${item.change ? `<div class="spec-act">${act(item.change, "s")}</div>` : ""}</div>`;
   return `<div class="rrow${open ? " open" : ""}"><button type="button" class="rhead" data-open-scenario="${esc(item.key)}" aria-expanded="${open}">
     <span class="caret" aria-hidden="true">${open ? "▾" : "▸"}</span><span class="rgist">${inline(heading)}</span><span>${changes}</span></button>${body}</div>`;
 }
@@ -809,13 +813,14 @@ function specContext(c) {
     return `<details class="fold feature" data-fold="${esc(key)}"${foldOpen(key)}><summary><b>${esc(f.feature || "the context itself")}</b>
       <span class="hint">${count} criteria${pending ? ` · ${pending} changed by open stories` : ""}</span></summary>`
       + f.rules.map(r => `<div class="rgroup">${r.rule ? `<div class="rule-head">Rule: ${inline(r.rule)}</div>` : ""}${r.criteria.map(scenario).join("")}</div>`).join("")
-      + `</details>`;
+      + (f.add ? `<div class="spec-act">${act(f.add, "s")}</div>` : "") + `</details>`;
   }).join("");
   const coming = c.coming.length ? `<div class="rgroup"><div class="lbl">coming — new criteria of open stories</div>${c.coming.map(s =>
     `<p class="said"><span class="pend p-adds">${esc(s.status)}</span> ${story(s.story)} — ${s.keys.map(k => `<code>${esc(k.key)}</code>`).join(", ")}</p>`).join("")}</div>` : "";
   return (c.purpose ? `<p class="about show-s">${esc(c.purpose)}</p>` : "")
     + `<div class="part"><div class="part-head">Domain model</div>${model || `<p class="hint">The glossary names no term of a model.</p>`}</div>`
-    + `<div class="part"><div class="part-head">Features <span class="hint">— what holds, by rule</span></div>${features || `<p class="hint">No criterion holds yet.</p>`}${coming}</div>`;
+    + `<div class="part"><div class="part-head">Features <span class="hint">— what holds, by rule</span></div>${features || `<p class="hint">No criterion holds yet.</p>`}${coming}
+      ${c.add ? `<details class="fold" data-fold="addfeature:${esc(c.context)}"${foldOpen("addfeature:" + c.context)}><summary>add a feature</summary><div class="spec-act">${act(c.add, "s")}</div></details>` : ""}</div>`;
 }
 
 function specTab(st) {

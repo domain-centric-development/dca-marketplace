@@ -94,6 +94,10 @@ class SpecViewTest(unittest.TestCase):
             data = json.loads(subprocess.run([sys.executable, cli, "--spec", "--format", "json"], cwd=root,
                                              capture_output=True, text=True, encoding="utf-8").stdout)
             self.assertEqual(["tasks"], [c["context"] for c in data["contexts"]])
+            refused = data["contexts"][0]["features"][0]["rules"][0]["criteria"][1]
+            self.assertEqual("wish", refused["change"]["request"]["kind"])        # a change is a draft story, never an edit
+            self.assertIn("criterion `an-empty-title-is-refused`", refused["change"]["request"]["prefix"])
+            self.assertIn("feature `listing`", data["contexts"][0]["features"][0]["add"]["request"]["prefix"])
 
 
 if __name__ == "__main__":
