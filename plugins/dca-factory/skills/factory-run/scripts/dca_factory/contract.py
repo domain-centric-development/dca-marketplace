@@ -14,4 +14,4 @@ files.
 CONTRACT = 26
 
 
-VERSION = "0.118.1"
+VERSION = "0.118.2"

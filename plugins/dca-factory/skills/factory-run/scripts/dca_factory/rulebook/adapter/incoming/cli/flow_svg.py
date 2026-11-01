@@ -35,7 +35,7 @@ STYLE = """
 .f .mark-waits circle { fill: #5b6472; }
 .f .done { fill: none; stroke: #1c2433; stroke-width: 2; }
 @media (prefers-color-scheme: dark) {
-  .f text { fill: #e8eaf0; } .f text.small { fill: #9aa3b2; stroke: #0d1117; } .f .on-line { stroke: #5b6472; } .f .tip-on { fill: #5b6472; }
+  .f text { fill: #e8eaf0; } .f text.small { fill: #9aa3b2; stroke: #0d1117; } .f .on-line { stroke: #8a93a3; } .f .tip-on { fill: #8a93a3; }
   .f .tip-again, .f .gate circle { fill: #3bb3b9; } .f .way-again path.vis { stroke: #3bb3b9; } .f .way-again text.small { fill: #3bb3b9; }
   .f .way-back path.vis { stroke: #e8eaf0; } .f .tip-back { fill: #e8eaf0; } .f .done { stroke: #e8eaf0; }
   .f .mark-stop circle { fill: #d9826f; } .f .mark-waits circle { fill: #9aa3b2; }

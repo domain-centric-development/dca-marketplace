@@ -167,7 +167,7 @@ pre.out:empty { display: none; }
 .flowsvg { overflow-x: auto; margin-top: 12px; }
 .flowsvg svg { display: block; width: 100%; min-width: 880px; height: auto; }
 .flowsvg .f text { fill: var(--ink); } .flowsvg .f text.small { fill: var(--muted); stroke: var(--panel); }
-.flowsvg .f .on-line { stroke: var(--line); } .flowsvg .f .tip-on { fill: var(--line); }
+.flowsvg .f .on-line { stroke: color-mix(in srgb, var(--muted) 70%, transparent); } .flowsvg .f .tip-on { fill: color-mix(in srgb, var(--muted) 70%, transparent); }
 .flowsvg .f .gate circle, .flowsvg .f .tip-again { fill: var(--teal); } .flowsvg .f .way-again path.vis { stroke: var(--teal); }
 .flowsvg .f .way-again text.small { fill: var(--teal); } .flowsvg .f .way-back path.vis { stroke: var(--ink); } .flowsvg .f .tip-back { fill: var(--ink); }
 .flowsvg .f .mark-stop circle { fill: var(--stop); } .flowsvg .f .mark-waits circle { fill: var(--muted); } .flowsvg .f .done { stroke: var(--ink); }
