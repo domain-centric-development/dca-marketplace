@@ -1,7 +1,8 @@
 ---
 id: RUN-SCHEDULE-1
+title: Stories run in the order epics and dependencies give
 part: decision
-pass: by epic rank, then id, then `depends_on:` — a cycle last
+pass: stories are ordered by epic rank, then id, then `depends_on:` — a cycle last
 ---
 
 # RUN-SCHEDULE-1

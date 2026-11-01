@@ -1,9 +1,10 @@
 ---
 id: RUN-ROUTE-6
+title: A stage that cannot decide stops and asks
 part: decision
-fail: it names no record (exit 1)
+fail: the `## needs-human` names no record — the run exits 1
 goes.fail: stop
-ask: the story waits for the record it names (exit 3)
+ask: the `## needs-human` names a record — the story waits for it (exit 3)
 goes.ask: stop
 ---
 

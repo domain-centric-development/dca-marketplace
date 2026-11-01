@@ -1,13 +1,14 @@
 ---
 id: GATE-PROFILE
+title: Every profile key is one the pipeline reads
 part: check
 reports:
 - profile
-note: the key is ignored — the nearest known one is named
+note: a profile key is unknown to the pipeline — the key is ignored and the nearest known one is named
 ---
 
 # GATE-PROFILE
 
-**When:** every gate, for each key of the stack profile
+**When:** a gate runs, for each key of the stack profile
 
 **Why:** a key the pipeline does not read is a typo nobody would notice

@@ -1,7 +1,8 @@
 ---
 id: RUN-LIMIT-3
+title: A person sets how much a run may spend
 part: decision
-fail: nothing more is dispatched (exit 4); the work stays
+fail: the limit is reached — nothing more is dispatched (exit 4) and the work stays
 goes.fail: stop
 ---
 

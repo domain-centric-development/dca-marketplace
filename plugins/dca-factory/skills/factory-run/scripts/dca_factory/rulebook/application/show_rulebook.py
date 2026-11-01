@@ -31,7 +31,7 @@ class ShowRulebookInputPort(UseCase[ShowRulebookQuery, Model], typing.Protocol):
 
 
 def rule_model(rule: Rule) -> Model:
-    return dict(id=rule.id.value, enforcement=rule.enforcement.value, part=rule.part.value,
+    return dict(id=rule.id.value, title=rule.title.value, enforcement=rule.enforcement.value, part=rule.part.value,
                 stages=[s.value for s in rule.stages], kinds=[k.value for k in rule.kinds], when=rule.trigger.value,
                 outcomes=[dict(state=o.state.value, said=o.said.value, goes=[t.value for t in o.goes])
                           for o in rule.outcomes],

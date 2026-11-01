@@ -1,5 +1,6 @@
 ---
 id: GATE-TESTS-COMMITTED
+title: Every mapped test is in the story's commit
 part: check
 reports:
 - tests-committed
@@ -9,6 +10,6 @@ fail: a test file is missing from the commit, or differs from it (an ignored one
 
 # GATE-TESTS-COMMITTED
 
-**When:** the integrate gate
+**When:** the integrate gate runs
 
 **Why:** a test that is not in the commit proves nothing on the main line

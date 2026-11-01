@@ -1,5 +1,6 @@
 ---
 id: GATE-COMPILES
+title: The code compiles before it is judged
 part: check
 stages:
 - test
@@ -10,12 +11,12 @@ stages:
 reports:
 - compiles
 pass: the profile's `compile:` succeeds
-fail: it fails — its output quoted
-skip: no `compile:` in the profile
+fail: `compile:` fails — its output is quoted
+skip: the profile has no `compile:`
 ---
 
 # GATE-COMPILES
 
-**When:** every gate that runs tests, and the adopt gate
+**When:** a gate that runs tests runs, or the adopt gate runs
 
 **Why:** nothing is judged on code that does not build

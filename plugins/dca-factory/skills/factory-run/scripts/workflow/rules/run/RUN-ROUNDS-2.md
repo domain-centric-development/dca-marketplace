@@ -1,7 +1,8 @@
 ---
 id: RUN-ROUNDS-2
+title: A missing tool costs no round
 part: decision
-fail: the run stops without a round (exit 1)
+fail: the environment is at fault — the run stops without a round (exit 1)
 goes.fail: stop
 ---
 

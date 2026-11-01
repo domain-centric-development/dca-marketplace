@@ -1,7 +1,8 @@
 ---
 id: RUN-REQUEST-2
+title: An answered question takes its request up again
 part: decision
-pass: queued again, with what was answered
+pass: the records are answered — the request is queued again, with what was answered
 ---
 
 # RUN-REQUEST-2

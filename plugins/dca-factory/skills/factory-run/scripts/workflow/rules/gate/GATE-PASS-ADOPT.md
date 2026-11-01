@@ -1,9 +1,10 @@
 ---
 id: GATE-PASS-ADOPT
+title: A story whose scenarios already hold is adopted
 part: pass
 reports:
 - plan-adopts
-pass: whole: the story becomes `status: adopted` and runs the adopt path; split: the held scenarios move to a story `<id>-holds` with `status: adopted`, this one builds the rest
+pass: the plan adopts the whole story — it becomes `status: adopted` and runs the adopt path — or splits it — the held scenarios move to a story `<id>-holds` with `status: adopted` and this one builds the rest
 ---
 
 # GATE-PASS-ADOPT

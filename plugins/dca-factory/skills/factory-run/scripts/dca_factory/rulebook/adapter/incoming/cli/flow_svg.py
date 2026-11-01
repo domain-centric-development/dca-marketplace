@@ -31,14 +31,14 @@ STYLE = """
 .f .way-back path.vis { stroke: #1c2433; stroke-width: 1.6; fill: none; }
 .f .gate circle { fill: #148f96; }
 .f .gate path, .f .mark path { stroke: #ffffff; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
-.f .mark-stop circle { fill: #b2453a; }
+.f .mark-stop circle { fill: #c96a5a; }
 .f .mark-waits circle { fill: #5b6472; }
 .f .done { fill: none; stroke: #1c2433; stroke-width: 2; }
 @media (prefers-color-scheme: dark) {
   .f text { fill: #e8eaf0; } .f text.small { fill: #9aa3b2; stroke: #0d1117; } .f .on-line { stroke: #5b6472; } .f .tip-on { fill: #5b6472; }
   .f .tip-again, .f .gate circle { fill: #3bb3b9; } .f .way-again path.vis { stroke: #3bb3b9; } .f .way-again text.small { fill: #3bb3b9; }
   .f .way-back path.vis { stroke: #e8eaf0; } .f .tip-back { fill: #e8eaf0; } .f .done { stroke: #e8eaf0; }
-  .f .mark-stop circle { fill: #d4604f; } .f .mark-waits circle { fill: #9aa3b2; }
+  .f .mark-stop circle { fill: #d9826f; } .f .mark-waits circle { fill: #9aa3b2; }
 }
 """
 

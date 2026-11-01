@@ -1,8 +1,9 @@
 ---
 id: RUN-BACKLOG-5
+title: One failing story does not hold the rest
 part: decision
-pass: it and its dependants are skipped, the others run on
-fail: never for exit 2, 5, or a reached `--max-stages`
+pass: the story fails — it and its dependants are skipped and the others run on
+fail: the failure is exit 2 or 5, or `--max-stages` is reached — it is never skipped
 ---
 
 # RUN-BACKLOG-5

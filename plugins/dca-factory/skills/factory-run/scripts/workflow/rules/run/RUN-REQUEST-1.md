@@ -1,7 +1,8 @@
 ---
 id: RUN-REQUEST-1
+title: The oldest queued request runs first
 part: decision
-pass: the oldest queued one whose stories nothing runs
+pass: a queued request has stories nothing runs — the oldest such request is taken
 ---
 
 # RUN-REQUEST-1

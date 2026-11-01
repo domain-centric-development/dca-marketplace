@@ -1,5 +1,6 @@
 ---
 id: GATE-IMPLEMENTATIONS
+title: Implementations of one spec prove the same scenarios
 part: decision
 stages:
 - commit
@@ -12,6 +13,6 @@ fail: an implementation lacks a scenario or reports it red
 
 # GATE-IMPLEMENTATIONS
 
-**When:** `factory.sh check --parity <config>` over several implementations' reports
+**When:** `factory.sh check --parity <config>` runs over several implementations' reports
 
 **Why:** two implementations of the same spec prove the same scenarios

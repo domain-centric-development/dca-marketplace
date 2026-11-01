@@ -44,7 +44,8 @@ def published(bound: typing.Optional[Bound], found: WorkflowRule) -> Published:
     """One rule as delivery publishes it: its own stages and kinds where it narrows the code that binds it."""
     stages = [s.value for s in found.stages] or list(bound.stages if bound else ())
     chosen = {k.value for k in found.kinds} or {k.value for k in (bound.kinds if bound else ())}
-    return dict(id=found.id.value, part=found.part.value, when=found.when.value, why=found.why.value,
+    return dict(id=found.id.value, title=found.title.value if found.title else "", part=found.part.value,
+                when=found.when.value, why=found.why.value,
                 outcomes=[dict(state=o.state.value, said=o.said.value, goes=[t.value for t in o.goes])
                           for o in found.outcomes],
                 reports=[r.value for r in found.reports], stages=stages,

@@ -1,7 +1,8 @@
 ---
 id: RUN-TOOL-1
+title: A unit gets the most specific tool the profile names
 part: decision
-pass: `--tool` or `FACTORY_TOOL_CMD`, else `tool.<unit>`, else `tool`, else the run's tool; every tool on the PATH before the first stage (else exit 2)
+pass: the tool comes from `--tool` or `FACTORY_TOOL_CMD`, else `tool.<unit>`, else `tool`, else the run's tool, and every tool is on the PATH before the first stage (else exit 2)
 ---
 
 # RUN-TOOL-1

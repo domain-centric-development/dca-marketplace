@@ -1,7 +1,8 @@
 ---
 id: RUN-BACKLOG-2
+title: A run that makes no progress stops
 part: decision
-fail: skipped with `--keep-going`, else exit 1
+fail: the story makes no progress — it is skipped with `--keep-going`, else the run exits 1
 ---
 
 # RUN-BACKLOG-2

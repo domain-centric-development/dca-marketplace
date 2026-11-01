@@ -1,7 +1,9 @@
 ---
 id: RUN-SCHEDULE-4
+title: A worktree starts from a committed story
 part: decision
-fail: blocked until it is committed (with slots); a note without
+fail: the run has slots — the story is blocked until it is committed
+note: the run has no slots — a note says the story is not committed
 ---
 
 # RUN-SCHEDULE-4

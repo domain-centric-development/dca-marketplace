@@ -300,6 +300,9 @@ class Rulebook(Value):
             if unknown:
                 found.append(Problem(Words(f"{rule.id.value} names no stage {', '.join(unknown)} — "
                                            f"{rule.source.value}")))
+            if rule.part is not Part.INSTRUCTION and not rule.title.value:
+                found.append(Problem(Words(f"{rule.id.value} has no `title:` — a person reads a rule by its name, "
+                                           f"a short statement of what holds — {rule.source.value}")))
             if rule.part is not Part.INSTRUCTION and not rule.bound.value:
                 found.append(Problem(Words(f"{rule.id.value} is written but no code binds it — it decides nothing; "
                                            f"bind it or retire it — {rule.source.value}")))

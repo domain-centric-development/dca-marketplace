@@ -1,5 +1,6 @@
 ---
 id: GATE-OWNED
+title: A stage leaves what a person owns unchanged
 part: check
 reports:
 - owned
@@ -10,6 +11,6 @@ goes.fail: stop
 
 # GATE-OWNED
 
-**When:** every gate, once a stage window was recorded
+**When:** a gate runs, once a stage window was recorded
 
 **Why:** the story and every answer are the person's — a stage asks, it never answers

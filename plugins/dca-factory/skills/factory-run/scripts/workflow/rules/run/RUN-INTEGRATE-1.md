@@ -1,10 +1,11 @@
 ---
 id: RUN-INTEGRATE-1
+title: A story reaches the main line through the integrate gate
 part: decision
 stages:
 - integrate
 pass: the target is merged into the story's branch and the integrate gate runs
-fail: a conflict — the integrate stage resolves it; a refusal on the main line costs a round
+fail: there is a conflict, which the integrate stage resolves, or the main line refuses, which costs a round
 goes.fail:
 - integrate
 - build

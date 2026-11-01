@@ -1,7 +1,8 @@
 ---
 id: RUN-ROUTE-2
+title: A story with an open record waits for its person
 part: decision
-wait: no stage starts (exit 3)
+wait: a record is open or a draft — no stage starts (exit 3)
 goes.wait: stop
 ---
 

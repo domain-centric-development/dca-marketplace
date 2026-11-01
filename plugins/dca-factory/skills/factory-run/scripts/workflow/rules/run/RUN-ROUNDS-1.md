@@ -1,5 +1,6 @@
 ---
 id: RUN-ROUNDS-1
+title: A story converges in three rounds or stops
 part: decision
 stages:
 - test
@@ -8,7 +9,7 @@ stages:
 - document
 - adopt
 - integrate
-fail: a round, and the run goes back to the refused stage (or an earlier one the story's files need); at three rounds the story stops (exit 1)
+fail: the gate refuses — a round is spent and the run goes back to the refused stage (or an earlier one the story's files need); at three rounds the story stops (exit 1)
 goes.fail:
 - again
 - stop

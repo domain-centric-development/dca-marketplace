@@ -1,9 +1,10 @@
 ---
 id: RUN-BACK-1
+title: A test that cannot pass goes back to the test stage
 part: decision
 stages:
 - build
-fail: a round, and the run goes back to the test stage
+fail: the build stage asks to go back — a round is spent and the run goes back to the test stage
 goes.fail: test
 ---
 

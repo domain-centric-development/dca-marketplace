@@ -1,7 +1,8 @@
 ---
 id: RUN-SCHEDULE-3
+title: An id names one story
 part: decision
-fail: both stop
+fail: the id is not unique — both stories stop
 ---
 
 # RUN-SCHEDULE-3

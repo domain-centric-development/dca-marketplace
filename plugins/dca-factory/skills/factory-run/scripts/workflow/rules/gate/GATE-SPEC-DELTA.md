@@ -1,5 +1,6 @@
 ---
 id: GATE-SPEC-DELTA
+title: What holds in the spec changes only with a person's backing
 part: check
 stages:
 - test
@@ -12,6 +13,6 @@ fail: the delta does not fit the spec, or changes what holds without `## Changed
 
 # GATE-SPEC-DELTA
 
-**When:** the test gate, where the plan targets a spec
+**When:** the test gate runs, where the plan targets a spec
 
 **Why:** what holds changes only where a person backed the change

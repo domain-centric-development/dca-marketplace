@@ -1,5 +1,6 @@
 ---
 id: GATE-ADOPT
+title: An adopted story is proved by green tests
 part: check
 reports:
 - adopt
@@ -10,6 +11,6 @@ fail: the story is not adopted, or a test is red
 
 # GATE-ADOPT
 
-**When:** the adopt gate
+**When:** the adopt gate runs
 
-**Why:** an adopted story proves what holds with green tests, never builds
+**Why:** an adopted story proves what holds with green tests and builds nothing

@@ -1,5 +1,6 @@
 ---
 id: GATE-TESTS-MAPPED
+title: Every criterion has a test
 part: check
 reports:
 - tests-mapped
@@ -9,6 +10,6 @@ fail: the table is unreadable, a criterion has no test, or a row names a criteri
 
 # GATE-TESTS-MAPPED
 
-**When:** every gate that runs tests
+**When:** a gate that runs tests runs
 
 **Why:** a criterion without a test is one no gate can fail on

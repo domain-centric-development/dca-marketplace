@@ -1,5 +1,6 @@
 ---
 id: GATE-SPEC-TESTS
+title: Every criterion that holds keeps the test the spec names
 part: check
 reports:
 - spec-tests
@@ -9,6 +10,6 @@ fail: a test the spec names is gone — it goes under tests.md's `## Moved tests
 
 # GATE-SPEC-TESTS
 
-**When:** the document, adopt and integrate gates, where the story changes a spec
+**When:** the document, adopt or integrate gate runs, where the story changes a spec
 
 **Why:** every criterion that holds keeps the test the spec names

@@ -1,5 +1,6 @@
 ---
 id: GATE-SIZE
+title: A hand-over stays within its budget per criterion
 part: check
 reports:
 - size
@@ -8,6 +9,6 @@ note: the hand-over is larger than its budget per criterion — never a reason t
 
 # GATE-SIZE
 
-**When:** the gates that weigh a hand-over (test, build, tidy, document)
+**When:** a gate that weighs a hand-over runs (test, build, tidy, document)
 
 **Why:** a hand-over every later stage reads costs every later stage

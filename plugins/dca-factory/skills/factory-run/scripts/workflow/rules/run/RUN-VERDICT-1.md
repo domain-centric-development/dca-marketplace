@@ -1,11 +1,12 @@
 ---
 id: RUN-VERDICT-1
+title: The judge decides whether a story goes on
 part: decision
 stages:
 - judge
-pass: `verdict: pass` — on to document
+pass: the judge writes `verdict: pass` — on to document
 goes.pass: document
-fail: `changes-requested`: a round, back to `back:` (test) or build; `story-conflict`, a missing or another verdict: the story stops (exit 1)
+fail: the verdict is `changes-requested` — a round, back to `back:` (test) or build; or it is `story-conflict`, missing or another one — the story stops (exit 1)
 goes.fail:
 - build
 - test

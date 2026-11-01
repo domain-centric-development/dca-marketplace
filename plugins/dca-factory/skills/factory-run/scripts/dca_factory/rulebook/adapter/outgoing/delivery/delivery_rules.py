@@ -36,7 +36,7 @@ def translated(published: typing.Mapping[str, typing.Any]) -> Rule:
               for o in published["outcomes"]),
         Words(published["why"]), Words(""), tuple(Words(r) for r in published["reports"]),
         Source(published["source"]), RuleState.RETIRED if published["retired"] else RuleState.ACTIVE,
-        Source(published.get("bound", "")))
+        Source(published.get("bound", "")), Words(published.get("title", "")))
 
 
 class DeliveryRules:

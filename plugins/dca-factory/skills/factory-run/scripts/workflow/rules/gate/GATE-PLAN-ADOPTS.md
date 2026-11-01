@@ -1,5 +1,6 @@
 ---
 id: GATE-PLAN-ADOPTS
+title: An adopted row names a criterion and its test
 part: check
 kinds:
 - story
@@ -11,6 +12,6 @@ fail: a row names no criterion or a missing test, or a split would leave the sto
 
 # GATE-PLAN-ADOPTS
 
-**When:** the plan gate of a story whose plan has `## Adopt` rows
+**When:** the plan gate runs for a story whose plan has `## Adopt` rows
 
 **Why:** what already holds is adopted with its test, never built again

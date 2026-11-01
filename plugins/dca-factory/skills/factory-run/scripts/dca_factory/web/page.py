@@ -38,7 +38,7 @@ PAGE = r"""<!doctype html>
   --teal: #148f96; --deep: #171d29; --mist: #e8eaf0;
   --bg: #f7f6f3; --panel: #ffffff; --ink: #1c2433; --muted: #5b6472; --line: #dedbd3; --soft: #eef4f4; --code: #f0eee9;
   --accent: #0d6b70; --accent-hover: #0b5b60; --on-accent: #ffffff; --fill: #0d6b70; --fill-hover: #0b5b60;
-  --done: #0d6b70; --wait: #93600f; --stop: #a33a2a; --run: #148f96;
+  --done: #0d6b70; --wait: #93600f; --stop: #c96a5a; --run: #148f96;
   --shadow: 0 6px 24px rgba(28, 36, 51, .10);
   --display: "Space Grotesk", "Avenir Next", "Trebuchet MS", sans-serif;
   --body: "Newsreader", Georgia, "Times New Roman", serif;
@@ -49,14 +49,14 @@ PAGE = r"""<!doctype html>
   :root:not([data-theme="light"]) {
     --bg: #12171f; --panel: #1a2130; --ink: #e8eaf0; --muted: #9aa3b2; --line: #2b3445; --soft: #172a30; --code: #222a39;
     --accent: #3cbcc3; --accent-hover: #5fcdd3; --on-accent: #ffffff; --fill: #0d6b70; --fill-hover: #0b5b60;
-    --done: #3cbcc3; --wait: #e2ab55; --stop: #e8806e; --run: #3cbcc3; --shadow: 0 6px 24px rgba(0, 0, 0, .35);
+    --done: #3cbcc3; --wait: #e2ab55; --stop: #d9826f; --run: #3cbcc3; --shadow: 0 6px 24px rgba(0, 0, 0, .35);
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #12171f; --panel: #1a2130; --ink: #e8eaf0; --muted: #9aa3b2; --line: #2b3445; --soft: #172a30; --code: #222a39;
   --accent: #3cbcc3; --accent-hover: #5fcdd3; --on-accent: #ffffff; --fill: #0d6b70; --fill-hover: #0b5b60;
-  --done: #3cbcc3; --wait: #e2ab55; --stop: #e8806e; --run: #3cbcc3; --shadow: 0 6px 24px rgba(0, 0, 0, .35);
+  --done: #3cbcc3; --wait: #e2ab55; --stop: #d9826f; --run: #3cbcc3; --shadow: 0 6px 24px rgba(0, 0, 0, .35);
   color-scheme: dark;
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -182,13 +182,22 @@ pre.out:empty { display: none; }
 .rgroup { margin-top: 14px; } .rgroup .lbl { font: 500 10.5px var(--mono); letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
 .rgroup .lbl .n { color: var(--ink); margin-left: 4px; }
 .rrow { border-top: 1px solid var(--line); } .rrow:last-child { border-bottom: 1px solid var(--line); }
-.rhead { display: grid; grid-template-columns: 14px minmax(150px, max-content) minmax(0, 1fr); gap: 10px; align-items: baseline; width: 100%;
+.rhead { display: grid; grid-template-columns: 14px minmax(0, 1fr) max-content; gap: 10px; align-items: baseline; width: 100%;
   background: none; border: 0; padding: 7px 2px; text-align: left; color: var(--ink); cursor: pointer; font: 400 14px var(--body); }
 .rhead:hover .rid, .rhead:focus-visible .rid { color: var(--accent); } .rhead:focus-visible { outline: 2px solid var(--teal); outline-offset: 1px; }
 .rhead .caret { color: var(--muted); font: 400 12px var(--mono); } .rhead .rid { font: 500 12.5px var(--mono); padding-left: 6px; }
 .rhead .rid.e-gate { border-left: 3px solid var(--deep); } .rhead .rid.e-runner { border-left: 3px solid var(--run); } .rhead .rid.e-instructed { border-left: 3px solid var(--wait); }
 .rhead .rid.f-pass { background: color-mix(in srgb, var(--done) 18%, transparent); } .rhead .rid.f-fail { background: color-mix(in srgb, var(--stop) 22%, transparent); }
-.rhead .rgist { color: var(--muted); min-width: 0; }
+.rhead .rgist { color: var(--ink); min-width: 0; font-size: 15px; } .rhead .rid { color: var(--muted); font-size: 11.5px; }
+.rbody .why { font: 400 15px var(--body); color: var(--muted); margin: 2px 0 8px; }
+.rbody .said { margin: 4px 0; font: 400 15px var(--body); line-height: 1.45; }
+.rbody .said .kw { font: 600 12.5px var(--mono); color: var(--ink); margin-right: 6px; white-space: nowrap; }
+.mk { width: 15px; height: 15px; vertical-align: -3px; margin-right: 2px; }
+.mk circle { stroke: none; } .mk path { fill: none; stroke: #ffffff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.mk-pass circle { fill: var(--teal); } .mk-fail circle { fill: var(--stop); } .mk-wait circle, .mk-ask circle { fill: var(--muted); }
+.mk-minor path { stroke: var(--muted); }
+.rbody .goes { font: 500 12.5px var(--mono); color: var(--accent); white-space: nowrap; }
+.rbody details.src summary { cursor: pointer; font: 400 11.5px var(--mono); color: var(--muted); margin-top: 8px; }
 .rbody { padding: 2px 4px 12px 26px; } .rbody .kv { margin-top: 0; }
 .way-link { background: none; border: 0; padding: 2px 0; font: 500 13px var(--mono); color: var(--accent); cursor: pointer; }
 details.more > summary { cursor: pointer; list-style: none; } details.more > summary::-webkit-details-marker { display: none; }
@@ -200,7 +209,7 @@ details.more > summary h2::before { content: "▸ "; color: var(--muted); } deta
 .pick { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
 .pick select { font: 400 13px var(--mono); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px; }
 .outcome { margin: 4px 0; } .outcome b { font: 600 13px var(--mono); margin-right: 6px; }
-.banner { display: none; background: var(--stop); color: #fff; font: 500 14px var(--display); padding: 8px 0; }
+.banner { display: none; background: var(--deep); color: var(--mist); border-bottom: 3px solid var(--stop); font: 500 14px var(--display); padding: 8px 0; }
 #toasts { position: fixed; right: 16px; bottom: 16px; z-index: 40; display: flex; flex-direction: column; gap: 8px; max-width: min(440px, calc(100% - 32px)); }
 .toast { background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-left: 4px solid var(--teal); border-radius: 8px;
   padding: 10px 14px; box-shadow: var(--shadow); font-size: 15px; white-space: pre-wrap; }
@@ -497,21 +506,34 @@ async function loadRules() {
 // one place for what is picked in the drawing: a step, a gate or an edge; each rule a row that opens where it stands
 const pickedRules = () => S.openRules || (S.openRules = new Set(S.rule ? [S.rule] : []));
 
+// a rule read as sentences: its title, why, when, and each outcome after its keyword, where it sends the story
+// the marks are the drawing's: a gate's check for a pass, a stop's cross for a fail, a pause where a person answers
+const MARK = {
+  pass: '<path d="M6 10.4l2.7 2.7L14.2 7.6"/>', fail: '<path d="M6.6 6.6l6.8 6.8M13.4 6.6l-6.8 6.8"/>',
+  wait: '<path d="M8 6.5v7M12 6.5v7"/>', ask: '<path d="M7.6 7.6a2.5 2.5 0 1 1 3.4 2.3c-.7.3-1 .8-1 1.5v.6M10 14.4v.1"/>'};
+const icon = state => MARK[state] ? `<svg class="mk mk-${state}" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10"/>${MARK[state]}</svg>`
+  : `<svg class="mk mk-minor" viewBox="0 0 20 20" aria-hidden="true"><path d="M6 10h8"/></svg>`;
+const SAYS = {pass: "Passes when", fail: "Fails when", skip: "Skips when", note: "Notes when", wait: "Waits when", ask: "Asks when"};
+const sentence = t => { const s = String(t || "").trim(); return s ? s[0].toUpperCase() + s.slice(1) + (/[.!?)]$/.test(s) ? "" : ".") : ""; };
+const clause = t => { const s = String(t || "").trim(); return s + (/[.!?)]$/.test(s) ? "" : "."); };
+const going = goes => (goes || []).length ? ` <span class="goes">→ ${goes.map(g => g === "stop" ? "stop" : g === "again" ? "once more" : "back to " + g).map(esc).join(" or ")}</span>` : "";
+
 function ruleRow(id, rules, story, stage) {
   const r = rules[id] || {id, enforcement: "", outcomes: []}, open = pickedRules().has(id);
   const fired = story && story.fired[id] ? story.fired[id].filter(f => !stage || f.stage === stage) : [];
   const state = fired.some(f => f.state === "fail") ? "fail" : fired.length ? fired[fired.length - 1].state : "";
   const refused = story && story.refused[id];
-  const gist = r.text ? r.text.replace(/\s+/g, " ").slice(0, 140) + (r.text.length > 140 ? "…" : "") : (r.why || r.when || "");
+  const head = r.title ? sentence(r.title).replace(/\.$/, "") : r.text ? r.text.replace(/\s+/g, " ").slice(0, 140) + (r.text.length > 140 ? "…" : "") : sentence(r.why || r.when);
   const body = !open ? "" : `<div class="rbody">` + (r.text
-      ? `<dl class="kv"><dt>where</dt><dd>${inline(r.when)}</dd></dl>${prose(r.text)}`
-      : `<dl class="kv"><dt>when</dt><dd>${inline(r.when)}</dd><dt>why</dt><dd>${inline(r.why)}</dd></dl>`
-        + (r.outcomes || []).map(o => `<div class="outcome"><b>${esc(o.state)}</b>${inline(o.said)}${(o.goes || []).length ? ` <span class="back">→ ${esc(o.goes.join(", "))}</span>` : ""}</div>`).join(""))
+      ? `<p class="said"><span class="kw">Where</span> ${inline(clause(r.when))}</p>${prose(r.text)}`
+      : (r.why ? `<p class="why">${inline(sentence(r.why))}</p>` : "")
+        + `<p class="said"><span class="kw">When</span> ${inline(clause(r.when))}</p>`
+        + (r.outcomes || []).map(o => `<p class="said s-${esc(o.state)}"><span class="kw">${icon(o.state)} ${esc(SAYS[o.state] || o.state)}</span> ${inline(clause(o.said))}${going(o.goes)}</p>`).join(""))
     + (fired.length ? `<p class="rec">this story: ${esc(fired.map(f => `${f.stage}: ${f.state}`).join(" · "))}${refused ? ` · refused ${refused}×` : ""}</p>` : "")
-    + `<p class="hint">${esc(r.source || "")}${r.bound ? (r.part === "instruction" ? " · placed in " : " · bound in ") + esc(r.bound) : ""}</p></div>`;
+    + `<details class="src"><summary>source</summary><p class="hint">${esc(r.source || "")}${r.bound ? (r.part === "instruction" ? " · placed in " : " · bound in ") + esc(r.bound) : ""}</p></details></div>`;
   return `<div class="rrow${open ? " open" : ""}"><button type="button" class="rhead" data-open-rule="${esc(id)}" aria-expanded="${open}">
-    <span class="caret" aria-hidden="true">${open ? "▾" : "▸"}</span><span class="rid e-${esc(r.enforcement)}${state ? " f-" + esc(state) : ""}">${esc(id)}${refused ? `<span class="x">×${refused}</span>` : ""}</span>
-    <span class="rgist">${inline(gist)}</span></button>${body}</div>`;
+    <span class="caret" aria-hidden="true">${open ? "▾" : "▸"}</span><span class="rgist">${inline(head)}</span>
+    <span class="rid e-${esc(r.enforcement)}${state ? " f-" + esc(state) : ""}">${esc(id)}${refused ? `<span class="x">×${refused}</span>` : ""}</span></button>${body}</div>`;
 }
 
 function ruleGroup(label, ids, rules, story, stage) {

@@ -17,19 +17,42 @@ SLOTS = (("gate_before", "gate before"), ("told", "told"), ("gate_after", "gate 
          ("decided", "the runner decides"))
 
 
+#: The keyword each outcome is read after.
+SAYS = {"pass": "Passes when", "fail": "Fails when", "skip": "Skips when", "note": "Notes when", "wait": "Waits when",
+        "ask": "Asks when"}
+
+
+def sentence(text: str) -> str:
+    text = text.strip()
+    return text[:1].upper() + text[1:] + ("" if not text or text[-1] in ".!?)" else ".")
+
+
+def clause(text: str) -> str:
+    text = text.strip()
+    return text + ("" if not text or text[-1] in ".!?)" else ".")
+
+
+def going(goes: typing.List[str]) -> str:
+    places = ["stop" if g == "stop" else "once more" if g == "again" else f"back to {g}" for g in goes]
+    return f" → {' or '.join(places)}" if places else ""
+
+
 def rule_lines(rule: Model) -> typing.List[str]:
-    lines = [f"### {rule['id']}", ""]
+    title = rule.get("title") or ""
+    lines = [f"### {rule['id']}" + (f" — {title}" if title else ""), ""]
     where = ", ".join(rule["stages"]) or "outside the stages"
     kinds = ", ".join(rule["kinds"]) or "every kind"
     lines.append(f"*{rule['part']} · {where} · {kinds}*")
     lines.append("")
     if rule["text"]:
-        lines += [f"**Where:** {rule['when']}", "", rule["text"], ""]
+        lines += [f"**Where** {clause(rule['when'])}", "", rule["text"], ""]
     else:
-        lines += [f"**When:** {rule['when']}", ""]
-        lines += [f"- **{o['state']}** — {o['said']}" + (f" → {', '.join(o['goes'])}" if o.get("goes") else "")
+        if rule["why"]:
+            lines += [sentence(rule["why"]), ""]
+        lines += [f"- **When** {clause(rule['when'])}"]
+        lines += [f"- **{SAYS.get(o['state'], o['state'])}** {clause(o['said'])}{going(o.get('goes') or [])}"
                   for o in rule["outcomes"]]
-        lines += ["", f"**Why:** {rule['why']}", ""]
+        lines.append("")
         if rule["reports"]:
             lines += [f"**Reports as:** {', '.join(f'`{name}`' for name in rule['reports'])}", ""]
     lines += [f"**Source:** `{rule['source']}`" + (f" · {'placed in' if rule['part'] == 'instruction' else 'bound in'} `{rule['bound']}`"

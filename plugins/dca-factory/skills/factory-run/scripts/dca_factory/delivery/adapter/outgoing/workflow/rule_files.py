@@ -135,7 +135,8 @@ class RuleFiles:
             rule_id, RulePart(str(front.get("part") or "decision")), RuleText(paragraph(body, WHEN)),
             RuleText(paragraph(body, WHY)), outcomes, [CheckName(n) for n in listed(front.get("reports"))],
             [StageName(s) for s in listed(front.get("stages"))], [StoryKind(k) for k in listed(front.get("kinds"))],
-            RuleText(str(retired)) if retired else None, self._written(path))
+            RuleText(str(retired)) if retired else None, self._written(path),
+            title=RuleText(str(front["title"])) if front.get("title") else None)
 
     def _written(self, path: str) -> Written:
         return Written(os.path.relpath(path, os.path.dirname(os.path.dirname(self._folder))).replace(os.sep, "/"))
@@ -145,7 +146,8 @@ class RuleFiles:
         """The rule's file: the front matter the factory reads, the body a person reads."""
         if rule.part is RulePart.TOLD:
             return told_text(rule)
-        lines = ["---", f"id: {rule.id.value}", f"part: {rule.part.value}"]
+        lines = ["---", f"id: {rule.id.value}"] + ([f"title: {written_value(rule.title.value)}"] if rule.title else []) \
+            + [f"part: {rule.part.value}"]
         for key, values in (("stages", [s.value for s in rule.stages]), ("kinds", [k.value for k in rule.kinds])):
             if values:
                 lines += [f"{key}:"] + [f"- {v}" for v in values]

@@ -82,7 +82,8 @@ class WorkflowRule(AggregateRoot[RuleId]):
                  stages: typing.Sequence[StageName] = (), kinds: typing.Sequence[StoryKind] = (),
                  retired: typing.Optional[RuleText] = None, written: typing.Optional[Written] = None,
                  told: typing.Optional[RuleText] = None, section: typing.Optional[RuleText] = None,
-                 see: typing.Optional[Written] = None, order: typing.Optional[RuleOrder] = None) -> None:
+                 see: typing.Optional[Written] = None, order: typing.Optional[RuleOrder] = None,
+                 title: typing.Optional[RuleText] = None) -> None:
         super().__init__()
         states = [o.state for o in outcomes]
         if part is RulePart.TOLD:
@@ -108,6 +109,7 @@ class WorkflowRule(AggregateRoot[RuleId]):
         self._section = section
         self._see = see
         self._order = order
+        self._title = title
 
     @property
     def id(self) -> RuleId:
@@ -124,6 +126,11 @@ class WorkflowRule(AggregateRoot[RuleId]):
     @property
     def why(self) -> RuleText:
         return self._why
+
+    @property
+    def title(self) -> typing.Optional[RuleText]:
+        """The rule's name for a person, a short statement of what holds — none where the file names none."""
+        return self._title
 
     @property
     def outcomes(self) -> typing.Tuple[Outcome, ...]:

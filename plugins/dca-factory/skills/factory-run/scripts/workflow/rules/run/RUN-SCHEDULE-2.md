@@ -1,7 +1,8 @@
 ---
 id: RUN-SCHEDULE-2
+title: Nothing is built on what is not delivered
 part: decision
-fail: blocked while a dependency is unknown, in a cycle or not delivered
+fail: a dependency is unknown, in a cycle or not delivered — the story is blocked
 ---
 
 # RUN-SCHEDULE-2

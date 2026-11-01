@@ -1,7 +1,8 @@
 ---
 id: RUN-BACKLOG-1
+title: Requests run before the next story
 part: decision
-pass: requests first, then the next story the schedule names; nothing runnable — the run ends or, with `--watch`, waits
+pass: a request or a next story the schedule names is runnable — requests go first, then the story; when nothing is runnable the run ends or, with `--watch`, waits
 ---
 
 # RUN-BACKLOG-1

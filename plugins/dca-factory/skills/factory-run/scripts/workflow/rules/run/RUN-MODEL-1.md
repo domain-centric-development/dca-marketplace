@@ -1,7 +1,8 @@
 ---
 id: RUN-MODEL-1
+title: A unit gets the most specific model the profile names
 part: decision
-pass: `model.<tool>.<stage>`, else `model.<tool>`, else the tool's default; a model in the tool's arguments wins
+pass: the model comes from `model.<tool>.<stage>`, else `model.<tool>`, else the tool's default; a model in the tool's arguments wins
 ---
 
 # RUN-MODEL-1

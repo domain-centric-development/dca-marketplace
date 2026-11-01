@@ -119,6 +119,8 @@ class Rule(Value):
     state: RuleState = RuleState.ACTIVE
     #: the code that checks or decides it — a gate's or the runner's rule; none for an instructed one
     bound: Source = Source("")
+    #: its name for a person, a short statement of what holds; empty where the file names none
+    title: Words = Words("")
 
     @property
     def enforcement(self) -> Enforcement:

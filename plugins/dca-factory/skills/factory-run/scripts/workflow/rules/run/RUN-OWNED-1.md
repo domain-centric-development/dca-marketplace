@@ -1,8 +1,9 @@
 ---
 id: RUN-OWNED-1
+title: A run stops when what a person owns changed
 part: decision
-pass: nothing they own changed
-fail: it changed — the run stops (exit 7) and the story waits until `--owned-confirm`
+pass: nothing the person owns changed
+fail: what the person owns changed — the run stops (exit 7) and the story waits until `--owned-confirm`
 goes.fail: stop
 ---
 
