@@ -14,7 +14,10 @@ order: 3
    domain type** — a null check, a trim, a range, a uniqueness rule — that the plan's `## Invariants`
    does not name: it is code no test asked for, so it stays out; name it in the build file as an
    unplanned invariant (`<Element>: <rule>`), and the judge reads it as the plan's gap it is. Every guard
-   the plan names has a unit test already — make it pass, add none beside it.
+   the plan names has a unit test already — make it pass, add none beside it. The incoming adapter does
+   not check such a rule again: it passes a missing field on as missing — no default that turns absence
+   into an empty value, no annotation repeating what the value object refuses — so the
+   value object's planned refusal is the one that answers.
    A file the plan's `## Files` says `removed` goes with `git rm <path>` — on the shell you have — and one it
    says `new` is written; the build gate refuses either left undone (`plan-files`), whatever the build file
    explains. Where a removal or a new file turns out wrong, that is the plan's error: say so under

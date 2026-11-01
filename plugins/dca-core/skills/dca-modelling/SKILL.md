@@ -92,6 +92,12 @@ Don't impose patterns the project doesn't use.
   what a compact constructor can express.
 - Validate in the compact constructor (C#: primary-constructor body or a
   static `Of(...)` factory).
+- **A value built from input carries its rule alone, null included.** Where a
+  request, a form or a message can hand it a missing value, the value object
+  refuses null with the rule's named failure (`InvalidTitleException`), the same
+  one an empty or too long value gets — never an NPE, never `requireNonNull`.
+  The incoming adapter passes the raw value on unchanged: no annotation that
+  repeats the rule, no default that turns absence into `""`.
 - Equality and hashCode by value.
 - Static factory methods (`of(...)`, `generate()`) when construction is
   non-trivial or has multiple paths.
@@ -179,10 +185,11 @@ Don't impose patterns the project doesn't use.
 - Place a domain failure beside the model that raises it; there is no
   `domain/exception/` package. Place a use-case failure with its use case, or in
   `application/shared` when several raise it or a port declares it.
-- **Do not convert an argument guard.** A null check or a range check in a value
-  object stays `IllegalArgumentException` / `ArgumentException`. The cut is the
-  name: if a domain expert has a word for the failure, it is a domain failure
-  with that word in it.
+- **Do not convert an argument guard.** A null check or a range check on a value
+  only code passes stays `IllegalArgumentException` / `ArgumentException`. The
+  cut is the origin and the name: a value built from input refuses with its
+  rule's failure; otherwise, if a domain expert has a word for the failure, it
+  is a domain failure with that word in it.
 - Never annotate a failure type, and never let it name a transport concept —
   the incoming adapter maps it, and that is what lets one use case serve a REST
   exposure and a page with different answers.

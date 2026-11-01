@@ -194,11 +194,16 @@ When writing or editing code that refuses:
   blocks. The name is the rule in the ubiquitous language:
   `InsufficientStockException`, not `OrderError`.
 - **An argument guard stays the platform's own exception.** A null check or a
-  range check in a value object is a caller contract, not a business rule:
-  `IllegalArgumentException` / `ArgumentException`,
-  `ArgumentNullException`, `ArgumentOutOfRangeException`. The cut is the name —
-  if a domain expert has a word for the failure, it is a domain exception with
-  that word in it.
+  range check on a value only code passes is a caller contract, not a business
+  rule: `IllegalArgumentException` / `ArgumentException`,
+  `ArgumentNullException`, `ArgumentOutOfRangeException`. The cut is the origin
+  and the name — a value object built from input refuses null and its bounds
+  with its rule's named failure; otherwise, if a domain expert has a word for
+  the failure, it is a domain exception with that word in it.
+- **A rule on input is checked once, in the value object.** The incoming
+  adapter checks shape (does it parse) and passes the raw value on, absent as
+  absent — no Bean Validation / DataAnnotations repeating a value object's rule,
+  no `defaultValue = ""` turning a missing field into an empty one.
 - **Domain exception or use-case exception: ask who can state the failure.**
   "Already confirmed" is something the aggregate knows; "no such order" is
   something only the repository can answer. A failure the store detects is

@@ -59,9 +59,12 @@ in Block A, rule by rule — here it asks only what that rule cannot see.
       without parsing a message
 - [ ] It lives beside the model that raises it — no `domain/exception/` package (`DCA-ERR-002`)
 - [ ] No framework metadata on the type, `@ResponseStatus` included (`DCA-ERR-004`)
-- [ ] **Argument guards stay the platform's own exception.** A null check, a range check, "must not be blank" in
-      a value object is a caller contract, not a business rule — this is the judgement no rule can make, so make
-      it here: would a domain expert have a word for this failure?
+- [ ] **Argument guards stay the platform's own exception.** A null check, a range check, "must not be blank" on
+      a value only code passes is a caller contract, not a business rule — this is the judgement no rule can make,
+      so make it here: where does the value come from, and would a domain expert have a word for this failure?
+      A value object built from input refuses null and its bounds with its rule's named failure
+- [ ] **A rule on input is checked once.** No request/form annotation repeats a value object's rule, no adapter
+      default turns a missing field into a value
 
 ---
 

@@ -67,7 +67,15 @@ Symptoms: a state transition or a cross-field invariant refuses with `IllegalSta
 Why: the adapter cannot tell the case apart from a defect of this application, and answers both the same way.
 `DCA-ERR-001` sees only the types that *are* declared, so this one is the review's: would a domain expert have
 a word for the failure? If yes, it is a `DomainException` subtype with that word in it. A null or range check
-is not — that stays an argument guard.
+on a value only code passes is not — that stays an argument guard. On a value built from input it is the rule:
+the value object refuses null with the rule's named failure.
+
+### A rule checked at the edge and again in the value object
+Symptoms: a request or form record carries `@NotBlank`/`@Size` (`[Required]`/`[MaxLength]`) for a field whose
+value object checks the same; or `@RequestParam(defaultValue = "")` turns a missing field into an empty one so
+the value object never sees null — and has no refusal for it.
+Why: two copies drift, two mechanisms answer one rule, and a change of the rule changes the adapter too. The
+adapter checks shape only; the value object refuses everything its rule refuses, null included.
 
 ### Blanket catch around a use-case call
 Symptoms: `catch (Exception)` / `catch (RuntimeException)` in an incoming adapter, or in a use case that

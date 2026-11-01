@@ -98,9 +98,12 @@ Given a path, a diff, or a list of files, evaluate them on these DDD axes:
   the rule in the ubiquitous language: `InsufficientStockException`,
   `CartAlreadyCompletedException`.
 - **An argument guard is not a domain failure.** A null check, a range check,
-  "must not be blank" in a value object states a caller contract, and the
-  platform's argument exception is correct there. This is the judgement no rule
-  can make, so make it: would a domain expert have a word for this failure?
+  "must not be blank" on a value only code passes states a caller contract, and
+  the platform's argument exception is correct there. On a value built from
+  input the same check is the rule the product names: the value object refuses
+  null and its bounds with that rule's named failure, and the edge does not
+  check it again. This is the judgement no rule can make, so make it: where does
+  the value come from, would a domain expert have a word for this failure?
 - The exception carries the facts the rule compared (requested vs. available),
   so a caller can react without parsing a message.
 - It lives beside the model that raises it. A `domain/exception/` package
