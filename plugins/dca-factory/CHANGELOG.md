@@ -291,3 +291,4 @@ instead of by the model; the table below them names every version and what it ch
 | 0.118.2 | 2026-11-01 | **The drawing's arrows read in the dark.** The way on is drawn in the muted text colour, not the line colour that nearly vanishes on the deep ground |
 | 0.118.3 | 2026-11-01 | **A round shows what its label counts.** A picked round lists what sends the story once more and, beneath, the checks of the gate after the stage, any of which can refuse — the count its label names |
 | 0.118.4 | 2026-11-01 | **A folded part stays as the person left it.** The serve page draws itself again on every refresh; an opened "Outside the stages", "At every gate", "Anywhere in a run" or a rule's source now stays open across it |
+| 0.118.5 | 2026-11-01 | **A gate and its round are one pick.** A click on the gate after a step or on its round marks both and shows one view: 1 · the gate's checks, each of which can refuse; 2 · what decides where the story goes when one does |

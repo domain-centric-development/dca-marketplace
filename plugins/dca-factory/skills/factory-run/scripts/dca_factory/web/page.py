@@ -573,9 +573,12 @@ function picked(flow, rules, story) {
   }
   if (p.type === "gate") {
     const [where, stage] = p.gate.split(":"), step = flow.steps.find(s => s.stage === stage) || {};
-    return card(`gate ${esc(where === "gate-before" ? "before" : "after")} ${esc(stage)}`, "a refused check sends the story back into its step",
-      ruleGroup("its checks", (where === "gate-before" ? step.gate_before : step.gate_after) || [], rules, story, stage)
-      + ruleGroup("at every gate", flow.every_gate, rules, story, stage));
+    const round = graph.edges.find(e => e.source === stage && e.target === stage && e.way === "again");
+    return card(`gate ${esc(where === "gate-before" ? "before" : "after")} ${esc(stage)}`,
+      where === "gate-before" ? "a refused check keeps the stage from starting" : "a refused check sends the story once more into its step",
+      ruleGroup("1 · its checks — each can refuse", (where === "gate-before" ? step.gate_before : step.gate_after) || [], rules, story, stage)
+      + (where === "gate-after" && round ? ruleGroup("2 · when one refuses — what decides where the story goes", ids([round]), rules, story, stage) : "")
+      + ruleGroup("also at every gate", flow.every_gate, rules, story, stage));
   }
   const edge = graph.edges.concat(graph.every_gate || [], graph.anywhere || []).find(e => `${e.source}>${e.target}>${e.way}` === p.key);
   if (p.way === "again") {
@@ -625,7 +628,10 @@ function rulesTab(st) {
 function showBacks(test) {
   document.querySelectorAll(".flowsvg .way-back").forEach(g => g.classList.toggle("show", test(g)));
 }
+// a gate after a step and its round are one thing: the gate, and where a refusal of it sends the story
+const gated = stage => { const f = S.rules && S.rules.flow && S.rules.flow[S.ruleKind]; const s = f && f.steps.find(x => x.stage === stage); return !!s && s.gate === "after"; };
 const flowKey = g => g.dataset.gate ? "gate:" + g.dataset.gate : g.dataset.stage && !g.dataset.way ? "stage:" + g.dataset.stage
+  : g.dataset.way === "again" && gated(g.dataset.source) ? "gate:gate-after:" + g.dataset.source
   : `${g.dataset.source}>${g.dataset.target}>${g.dataset.way}`;
 function paintFlow() {
   const backs = new Set([...document.querySelectorAll(".flowsvg .way-back")].map(g => g.dataset.source));
@@ -648,6 +654,7 @@ function pickInFlow(at) {
   const key = flowKey(at);
   if (S.flowPick && S.flowPick.key === key) S.flowPick = null;
   else if (at.dataset.gate) S.flowPick = {key, type: "gate", gate: at.dataset.gate};
+  else if (key.startsWith("gate:")) S.flowPick = {key, type: "gate", gate: key.slice(5)};
   else if (at.dataset.stage && !at.dataset.way) S.flowPick = {key, type: "stage", stage: at.dataset.stage};
   else S.flowPick = {key, type: "edge", source: at.dataset.source, target: at.dataset.target, way: at.dataset.way};
   render();
