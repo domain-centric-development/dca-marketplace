@@ -35,6 +35,8 @@
 #   factory.sh status [--all] [--story <id>] [--epic <id>] [--usage] [--refusals] [--brief]   what runs, what waits, what comes next; --all: every story and the cost; --refusals: form against substance
 #   factory.sh decisions [--story <id>]      the decision inbox
 #   factory.sh spec-delta <story> [--format json]  what holds before and after the story
+#   factory.sh spec [--context <c>] [--format md|json]   what holds: each context with its domain model, features,
+#                                            rules and criteria, and the open stories that would change them
 #   factory.sh rules [--stage <s>] [--kind <k>] [--story <id>] [--format md|json|svg|mermaid] [--check]   every rule
 #                                            the gate, the runner and the stage skills hold a story to, in each kind's
 #                                            flow; svg, mermaid: the flow of --kind drawn — steps, gates, rounds, ways back
@@ -1825,6 +1827,10 @@ case "$command" in
       *) read_command --status --part backlog "$@" ;;
     esac ;;
   decisions) read_command --list-decisions "$@" ;;
+  spec)
+    # What holds (WP-173): each context with its domain model, its features, rules and criteria, and the open stories
+    # that would change them — read from the spec, the glossaries and the designed domain.
+    read_command --spec "$@" ;;
   rules)
     # The rulebook (WP-166): generated from where each rule is written — the gate's and the runner's registrations,
     # the rule files and the frames that place what a stage is told.

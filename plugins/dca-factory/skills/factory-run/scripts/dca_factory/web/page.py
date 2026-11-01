@@ -223,6 +223,13 @@ table.epics .caret { color: var(--muted); font: 400 12px var(--mono); }
 table.epics tr.epic-body > td { padding-top: 0; } table.epics tr.epic-body table { margin-top: 4px; }
 .bar { height: 6px; border-radius: 3px; background: var(--line); min-width: 80px; overflow: hidden; }
 .bar i { display: block; height: 100%; background: var(--done); }
+.show-s { display: none; } @media (max-width: 760px) { .show-s { display: block; } }
+.terms { display: flex; flex-wrap: wrap; gap: 4px 6px; } .term { font: 400 12.5px var(--mono); padding: 2px 7px; border: 1px solid var(--line); border-radius: 5px; cursor: help; }
+details.feature { border-top: 1px solid var(--line); padding: 6px 0; } details.feature > summary { cursor: pointer; font: 500 15px var(--display); }
+details.feature > summary .hint { font: 400 13px var(--body); margin-left: 6px; }
+.rule-head { font: 600 14px var(--display); margin: 10px 0 2px; }
+.pend { font: 500 11.5px var(--mono); padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
+.pend.p-changes { background: color-mix(in srgb, var(--wait) 22%, transparent); } .pend.p-adds { background: color-mix(in srgb, var(--teal) 18%, transparent); }
 .way-link { background: none; border: 0; padding: 2px 0; font: 500 13px var(--mono); color: var(--accent); cursor: pointer; }
 details.more > summary { cursor: pointer; list-style: none; } details.more > summary::-webkit-details-marker { display: none; }
 details.more > summary h2::before { content: "▸ "; color: var(--muted); } details.more[open] > summary h2::before { content: "▾ "; }
@@ -285,6 +292,7 @@ const TABS = [
   ["run", "3 run", "Cycle", "The factory at work", "Your requests first, then the stories — one stage after the other, a gate between them."],
   ["decide", "4 decide", "Cycle", "Waiting for you", "A question a stage may not decide alone, or a result to look at."],
   ["delivered", "5 delivered", "Cycle", "Delivered", "What the factory delivered, the newest first."],
+  ["spec", "spec", "Always", "What holds", "Each context with its domain model and its features — the rules and scenarios that hold, and the open stories that would change them. What holds changes only by a story the gate delivers."],
   ["rules", "rules", "Always", "The rules", "What the gate checks, what the runner decides and what each stage is told — per stage of a story, the gates between them. Pick a rule to read it; pick a story to see which fired."]];
 const MARKS = {look: "!", question: "?", stopped: "✗", running: "▶", done: "✓", none: "·", next: "→"};
 const S = {tab: "backlog", status: null, decisions: null, discover: null, requests: null, follow: null, followSource: null,
@@ -512,7 +520,7 @@ function render() {
   if (editing) return;                                   // a person typing is not redrawn under their hands
   forget("m");
   const [, , eyebrow, title, lede] = TABS.find(([id]) => id === S.tab) || TABS[2];
-  const view = {describe, discover, backlog, run, decide, delivered, rules: rulesTab}[S.tab] || backlog;
+  const view = {describe, discover, backlog, run, decide, delivered, spec: specTab, rules: rulesTab}[S.tab] || backlog;
   $("main").innerHTML = `<div class="eyebrow">${esc(eyebrow)}</div><h1>${esc(title)}</h1><p class="lede">${esc(lede)}</p>`
     + (S.status ? endedLine(S.status) + view(S.status) : `<section class="card"><p class="empty">Reading the factory…</p></section>`);
   if (S.tab === "run") paintFollow();
@@ -768,6 +776,78 @@ document.addEventListener("click", event => {
   if (!at) return;
   event.stopPropagation();
   pickInFlow(at);
+}, true);
+
+// --- the spec: what holds, per context — its domain model, its features, rules and scenarios ---------------------------
+async function loadSpec() {
+  if (S.spec || S.specLoading) return;
+  S.specLoading = true;
+  if (await load("spec", "/api/view/spec")) render();
+  S.specLoading = false;
+}
+
+// a scenario's step as a sentence: its Gherkin keyword set apart
+const step = line => { const m = String(line).match(/^\s*-\s*(Given|When|Then|And|But)\b\s*(.*)$/);
+  return m ? `<p class="said"><span class="kw">${esc(m[1])}</span> ${inline(m[2])}</p>` : `<p class="said">${inline(String(line).replace(/^\s*-\s*/, ""))}</p>`; };
+
+function scenario(item) {
+  const open = (S.openScenarios || (S.openScenarios = new Set())).has(item.key);
+  const heading = item.form === "line" ? item.lines[0].replace(/^-\s*[a-z0-9-]+:\s*/, "") : item.key.replace(/-/g, " ");
+  const changes = item.changed_by.map(c => `<span class="pend p-${esc(c.verdict)}" title="${esc(c.title)} (${esc(c.status)})">${esc(c.verdict)} by ${esc(c.story)}</span>`).join(" ");
+  const body = !open ? "" : `<div class="rbody">${item.form === "scenario" ? item.lines.slice(1).map(step).join("") : ""}
+    <p class="hint">${item.tests.length ? "test: " + item.tests.map(esc).join(", ") : "no test named"} · <code>${esc(item.key)}</code></p></div>`;
+  return `<div class="rrow${open ? " open" : ""}"><button type="button" class="rhead" data-open-scenario="${esc(item.key)}" aria-expanded="${open}">
+    <span class="caret" aria-hidden="true">${open ? "▾" : "▸"}</span><span class="rgist">${inline(heading)}</span><span>${changes}</span></button>${body}</div>`;
+}
+
+function specContext(c) {
+  const model = c.model.map(g => `<div class="rgroup"><div class="lbl">${esc(g.kind)} <span class="n">${g.terms.length}</span></div>
+    <div class="terms">${g.terms.map(t => `<span class="term" title="${esc(t.meaning)}">${esc(t.name)}</span>`).join("")}</div></div>`).join("");
+  const features = c.features.map(f => {
+    const key = `feature:${c.context}:${f.feature}`, count = f.rules.reduce((n, r) => n + r.criteria.length, 0);
+    const pending = f.rules.reduce((n, r) => n + r.criteria.filter(x => x.changed_by.length).length, 0);
+    return `<details class="fold feature" data-fold="${esc(key)}"${foldOpen(key)}><summary><b>${esc(f.feature || "the context itself")}</b>
+      <span class="hint">${count} criteria${pending ? ` · ${pending} changed by open stories` : ""}</span></summary>`
+      + f.rules.map(r => `<div class="rgroup">${r.rule ? `<div class="rule-head">Rule: ${inline(r.rule)}</div>` : ""}${r.criteria.map(scenario).join("")}</div>`).join("")
+      + `</details>`;
+  }).join("");
+  const coming = c.coming.length ? `<div class="rgroup"><div class="lbl">coming — new criteria of open stories</div>${c.coming.map(s =>
+    `<p class="said"><span class="pend p-adds">${esc(s.status)}</span> ${story(s.story)} — ${s.keys.map(k => `<code>${esc(k.key)}</code>`).join(", ")}</p>`).join("")}</div>` : "";
+  return (c.purpose ? `<p class="about show-s">${esc(c.purpose)}</p>` : "")
+    + `<div class="part"><div class="part-head">Domain model</div>${model || `<p class="hint">The glossary names no term of a model.</p>`}</div>`
+    + `<div class="part"><div class="part-head">Features <span class="hint">— what holds, by rule</span></div>${features || `<p class="hint">No criterion holds yet.</p>`}${coming}</div>`;
+}
+
+function specTab(st) {
+  if (!S.spec) { loadSpec(); return card("", "", `<p class="empty">Reading the spec…</p>`); }
+  const open = S.openContexts || (S.openContexts = new Set());
+  const rows = (S.spec.contexts || []).map(c => {
+    const isOpen = open.has(c.context), pending = c.features.reduce((n, f) => n + f.rules.reduce((m, r) => m + r.criteria.filter(x => x.changed_by.length).length, 0), 0) + c.coming.length;
+    return `<tr class="epic-row ctx-row${isOpen ? " open" : ""}" data-context="${esc(c.context)}" tabindex="0" aria-expanded="${isOpen}">
+      <td><span class="caret" aria-hidden="true">${isOpen ? "▾" : "▸"}</span> <span class="title">${esc(c.context)}</span><div class="id">${esc(c.subdomain)}</div></td>
+      <td class="hide-s">${esc(c.purpose)}</td><td class="num">${c.features.length}</td><td class="num">${c.criteria}</td>
+      <td class="num">${pending ? `<span class="pend p-changes">${pending}</span>` : "—"}</td></tr>`
+      + (isOpen ? `<tr class="epic-body"><td colspan="5">${specContext(c)}</td></tr>` : "");
+  }).join("");
+  return card("Contexts", "open one to read its model and what holds",
+    rows ? `<table class="epics"><tr><th>context</th><th class="hide-s">what it is for</th><th class="num">features</th><th class="num">criteria</th><th class="num">open changes</th></tr>${rows}</table>`
+      : `<p class="empty">No spec yet — what holds is written by the stories the gate delivers.</p>`);
+}
+document.addEventListener("click", event => {
+  const row = event.target.closest && event.target.closest("tr.ctx-row");
+  if (row && !event.target.closest("button, a")) {
+    event.stopPropagation();
+    const open = S.openContexts || (S.openContexts = new Set()), id = row.dataset.context;
+    if (open.has(id)) open.delete(id); else open.add(id);
+    return render();
+  }
+  const sc = event.target.closest && event.target.closest("[data-open-scenario]");
+  if (sc) {
+    event.stopPropagation();
+    const open = S.openScenarios || (S.openScenarios = new Set()), id = sc.dataset.openScenario;
+    if (open.has(id)) open.delete(id); else open.add(id);
+    render();
+  }
 }, true);
 
 // on every tab: the factory that ended on its own, and why
