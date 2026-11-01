@@ -56,6 +56,11 @@ class CheckChangeUseCase:
         strict = Presence.PRESENT if required else Presence.ABSENT
         result.take(ChangeChecks.policy(frozenset(CommandKey(r) for r in required)))
         tree = None
+        installs = self._index.pipeline_paths() if command.staged and not names(command.only) else None
+        if installs:
+            result.take((ChangeChecks.pipeline_alone(Count(len(installs))),))
+            self._index.detach()
+            return result
         paths = self._index.backlog_paths() if command.staged and not names(command.only) else None
         if command.staged:
             if paths and not names(profile.get("checks.backlog")):

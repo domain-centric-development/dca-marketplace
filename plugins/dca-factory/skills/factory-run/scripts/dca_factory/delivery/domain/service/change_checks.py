@@ -49,6 +49,13 @@ class ChangeChecks(DomainService):
                                   "holds is not this commit's"))
 
     @staticmethod
+    def pipeline_alone(paths: Count) -> Finding:
+        """An update of the installed pipeline changes nothing the project builds, runs or tests; the pipeline was
+        verified where it is built. Running the project's suites over it costs minutes and proves nothing."""
+        return SCOPE.note(Said(f"the commit changes only the installed pipeline and its skill copies ({paths.value} "
+                               f"path(s)) — no project check runs; the pipeline is verified where it is built"))
+
+    @staticmethod
     def working_tree(head: typing.Optional[Detail]) -> Finding:
         return SNAPSHOT.note(Said("the working tree as it is" + (f", on top of {head.value}" if head else "")))
 

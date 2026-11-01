@@ -18,6 +18,7 @@ from ....domain.model.story_state import Detail
 from ..stack.commands import tail, TOOL_FOLDERS
 from ..stack.test_reports import read_scenarios, reported_names
 from ..files.decision_record_files import project_decisions_rel
+from ..files.delivery_files import PIPELINE_DIR
 from .repository import git
 
 #: (folders, files) — or (folders, files, never)
@@ -30,6 +31,17 @@ def pipeline_owned() -> typing.Callable[[str], bool]:
     runs = (PLACES_REL.get("runs") or DEFAULTS["runs"]).strip("/")
     prefixes = tuple(dict.fromkeys(folder + "/" for folder in (".dca-factory", runs, evidence_rel()) if folder))
     return lambda path: path.replace("\\", "/").startswith(prefixes)
+
+
+#: Where an install or an update writes its copies: the pipeline itself, its commit hook and the agent tools' skill
+#: folders.
+INSTALL_PLACES = (PIPELINE_DIR, ".githooks/pre-commit", ".claude/skills/", ".codex/skills/", ".opencode/skills/",
+                  ".agents/skills/")
+
+
+def installed(path: str) -> bool:
+    """Whether a path is a copy the pipeline's install wrote: nothing the project builds, runs or tests."""
+    return path.replace("\\", "/").startswith(INSTALL_PLACES)
 
 
 def rel(key: str) -> str:
@@ -71,7 +83,17 @@ def backlog_paths(cwd: str, env: typing.Mapping[str, str]) -> typing.Optional[ty
     if not paths:
         return None
     owned, places = pipeline_owned(), backlog_places()
-    return paths if all(in_places(p, places) or owned(p) for p in paths) else None
+    return paths if all(in_places(p, places) or owned(p) or installed(p) for p in paths) else None
+
+
+def pipeline_paths(cwd: str, env: typing.Mapping[str, str]) -> typing.Optional[typing.List[str]]:
+    """The staged paths when they are the installed pipeline (`INSTALL_PLACES`) — with its protocol beside it at
+    most — else None: an update of the pipeline, nothing of the project's."""
+    code, names = git(cwd, "diff", "--cached", "--name-only", "--no-renames", env=env)
+    paths = [p for p in names.splitlines() if p] if code == 0 else []
+    owned = pipeline_owned()
+    return paths if paths and any(installed(p) for p in paths) and all(installed(p) or owned(p) for p in paths) \
+        else None
 
 
 def snapshot(cwd: str, env: typing.Mapping[str, str]) -> Snapshot:
@@ -134,6 +156,9 @@ class ChangeIndexFiles:
 
     def backlog_paths(self) -> typing.Optional[typing.List[str]]:
         return backlog_paths(self._cwd, self._env)
+
+    def pipeline_paths(self) -> typing.Optional[typing.List[str]]:
+        return pipeline_paths(self._cwd, self._env)
 
     def snapshot(self) -> Snapshot:
         return snapshot(self._cwd, self._env)

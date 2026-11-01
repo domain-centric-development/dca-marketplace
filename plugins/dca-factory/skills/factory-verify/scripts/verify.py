@@ -6682,6 +6682,32 @@ def run_groups(args):
         expectations.append(("change: `checks.backlog` naming no check and no test command fails the policy",
                              code == 1 and "`checks.backlog:` names smoke" in output, output.strip().splitlines()[-5:]))
     for root in throwaway():
+        # an update of the installed pipeline changes nothing the project builds: no project check runs over it
+        change_project(root, "compile: false\ntest: sh suite.sh\nrequired: compile test\n", state="broken",
+                       repository=True)
+        write_file(root, ".agents/factory/factory-cli.py", "# a newer copy\n")
+        write_file(root, ".claude/skills/factory-run/SKILL.md", "---\nname: factory-run\n---\n")
+        write_file(root, ".githooks/pre-commit", "#!/bin/sh\n# a newer copy\n")
+        write_file(root, ".dca-factory/evidence/story-a/journal.tsv", "2026-11-01T08:00:00Z\tbacklog\tstart\n")
+        subprocess.run(["git", "add", "-A"], cwd=root, capture_output=True)
+        code, output = run_change(args.gate, root, "--staged")
+        expectations.append(("change: a commit of the installed pipeline alone runs no project check",
+                             code == 0 and "only the installed pipeline and its skill copies (4 path(s))" in output
+                             and "compile" not in checks_by_verdict(output)["fail"] and "ran 1 case" not in output,
+                             output.strip().splitlines()[-4:]))
+        write_file(root, "product/epics/epic-a/story-a/story.md", "---\nid: story-a\nstatus: draft\n---\n")
+        subprocess.run(["git", "add", "-A"], cwd=root, capture_output=True)
+        code, output = run_change(args.gate, root, "--staged")
+        expectations.append(("change: the installed pipeline with the backlog beside it is a backlog commit",
+                             code == 0 and "only the backlog and the pipeline's own files" in output
+                             and "only the installed pipeline" not in output, output.strip().splitlines()[-4:]))
+        write_file(root, "src/state", "fixed\n")
+        subprocess.run(["git", "add", "-A"], cwd=root, capture_output=True)
+        code, output = run_change(args.gate, root, "--staged")
+        expectations.append(("change: the installed pipeline with code beside it runs every check",
+                             code == 1 and "only the installed pipeline" not in output
+                             and "compile" in checks_by_verdict(output)["fail"], output.strip().splitlines()[-4:]))
+    for root in throwaway():
         # the hook is the same command; `git commit -a` hands it a temporary index
         change_project(root, "compile: true\ntest: sh suite.sh\nrequired: compile test\n", repository=True)
         os.makedirs(os.path.join(root, ".githooks"), exist_ok=True)

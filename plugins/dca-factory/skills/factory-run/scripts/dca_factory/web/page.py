@@ -163,7 +163,7 @@ pre.out { font: 12.5px/1.5 var(--mono); background: var(--code); border-radius: 
 pre.out:empty { display: none; }
 .step b { font: 600 14px var(--display); color: var(--accent); margin-right: 6px; }
 
-/* the flow, drawn by the factory: the ways back shown on a hover, an edge or a gate read on a click */
+/* the flow, drawn by the factory: a way back shown on a hover, a step, a gate or an edge picked by a click */
 .flowsvg { overflow-x: auto; margin-top: 12px; }
 .flowsvg svg { display: block; width: 100%; min-width: 880px; height: auto; }
 .flowsvg .f text { fill: var(--ink); } .flowsvg .f text.small { fill: var(--muted); stroke: var(--panel); }
@@ -177,25 +177,25 @@ pre.out:empty { display: none; }
 .flowsvg .way.sel path.vis { stroke-width: 3.2; } .flowsvg .gate.sel circle { r: 13; }
 .flowsvg [data-stage].has-back:hover { fill: var(--teal); }
 @media (prefers-reduced-motion: reduce) { .flowsvg .way-back { transition: none; } }
-.jumps { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
-.jumps .lbl { font: 500 10.5px var(--mono); letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-right: 4px; }
 
-/* the rules: a column per stage, the gates as barriers across it, a rule a chip */
-.flow { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(128px, 1fr); gap: 10px; margin-top: 14px; overflow-x: auto; padding-bottom: 6px; }
-.col { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.col > h3 { margin: 0; font: 700 15px var(--display); } .col .win { font: 400 11.5px var(--mono); color: var(--muted); }
-.slot { border-radius: 8px; padding: 6px; background: var(--soft); }
-.slot.gate { background: var(--code); border-top: 3px solid var(--deep); }
-.slot .lbl { font: 500 10.5px var(--mono); letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
-.chips { display: flex; flex-wrap: wrap; gap: 4px; }
-.chip { font: 400 11px var(--mono); padding: 2px 6px; border-radius: 5px; border: 1px solid var(--line); background: var(--panel);
-  color: var(--ink); cursor: pointer; max-width: 100%; overflow-wrap: anywhere; text-align: left; }
-.slot details summary { cursor: pointer; list-style: none; } .slot details summary::-webkit-details-marker { display: none; }
-.chip:hover, .chip[aria-pressed="true"] { border-color: var(--teal); color: var(--accent); }
-.chip.e-gate { border-left: 3px solid var(--deep); } .chip.e-runner { border-left: 3px solid var(--run); } .chip.e-instructed { border-left: 3px solid var(--wait); }
-.chip.f-pass { background: color-mix(in srgb, var(--done) 18%, var(--panel)); } .chip.f-fail { background: color-mix(in srgb, var(--stop) 22%, var(--panel)); }
-.chip.f-skip, .chip.f-note { background: color-mix(in srgb, var(--wait) 16%, var(--panel)); } .chip.f-wait { background: color-mix(in srgb, var(--wait) 30%, var(--panel)); }
-.chip .x { font-weight: 700; color: var(--stop); margin-left: 3px; }
+/* the rules: one detail under the drawing, a rule a row that opens where it stands */
+.rgroup { margin-top: 14px; } .rgroup .lbl { font: 500 10.5px var(--mono); letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.rgroup .lbl .n { color: var(--ink); margin-left: 4px; }
+.rrow { border-top: 1px solid var(--line); } .rrow:last-child { border-bottom: 1px solid var(--line); }
+.rhead { display: grid; grid-template-columns: 14px minmax(150px, max-content) minmax(0, 1fr); gap: 10px; align-items: baseline; width: 100%;
+  background: none; border: 0; padding: 7px 2px; text-align: left; color: var(--ink); cursor: pointer; font: 400 14px var(--body); }
+.rhead:hover .rid, .rhead:focus-visible .rid { color: var(--accent); } .rhead:focus-visible { outline: 2px solid var(--teal); outline-offset: 1px; }
+.rhead .caret { color: var(--muted); font: 400 12px var(--mono); } .rhead .rid { font: 500 12.5px var(--mono); padding-left: 6px; }
+.rhead .rid.e-gate { border-left: 3px solid var(--deep); } .rhead .rid.e-runner { border-left: 3px solid var(--run); } .rhead .rid.e-instructed { border-left: 3px solid var(--wait); }
+.rhead .rid.f-pass { background: color-mix(in srgb, var(--done) 18%, transparent); } .rhead .rid.f-fail { background: color-mix(in srgb, var(--stop) 22%, transparent); }
+.rhead .rgist { color: var(--muted); min-width: 0; }
+.rbody { padding: 2px 4px 12px 26px; } .rbody .kv { margin-top: 0; }
+.way-link { background: none; border: 0; padding: 2px 0; font: 500 13px var(--mono); color: var(--accent); cursor: pointer; }
+details.more > summary { cursor: pointer; list-style: none; } details.more > summary::-webkit-details-marker { display: none; }
+details.more > summary h2::before { content: "▸ "; color: var(--muted); } details.more[open] > summary h2::before { content: "▾ "; }
+.flowsvg [data-stage] { cursor: pointer; } .flowsvg [data-stage].sel { fill: var(--teal); }
+
+.rid .x { font-weight: 700; color: var(--stop); margin-left: 3px; }
 .back { font: 400 11.5px var(--mono); color: var(--muted); }
 .pick { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
 .pick select { font: 400 13px var(--mono); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px; }
@@ -494,105 +494,138 @@ async function loadRules() {
   if (await load("rules", "/api/view/rules" + (want ? `?id=${encodeURIComponent(want)}` : ""))) render();
 }
 
-function chip(id, rules, fired, refused, stage) {
-  const r = rules[id] || {enforcement: ""};
-  // in a stage's column, how it came out there; elsewhere, how it came out anywhere
-  const got = (fired[id] || []).filter(f => !stage || f.stage === stage), state = got.some(f => f.state === "fail") ? "fail" : got.length ? got[got.length - 1].state : "";
-  const n = refused[id];
-  return `<button type="button" class="chip e-${esc(r.enforcement)}${state ? " f-" + esc(state) : ""}" data-rule="${esc(id)}"
-    aria-pressed="${S.rule === id}" title="${esc(r.when || r.text || "")}">${esc(id)}${n ? `<span class="x">×${n}</span>` : ""}</button>`;
+// one place for what is picked in the drawing: a step, a gate or an edge; each rule a row that opens where it stands
+const pickedRules = () => S.openRules || (S.openRules = new Set(S.rule ? [S.rule] : []));
+
+function ruleRow(id, rules, story, stage) {
+  const r = rules[id] || {id, enforcement: "", outcomes: []}, open = pickedRules().has(id);
+  const fired = story && story.fired[id] ? story.fired[id].filter(f => !stage || f.stage === stage) : [];
+  const state = fired.some(f => f.state === "fail") ? "fail" : fired.length ? fired[fired.length - 1].state : "";
+  const refused = story && story.refused[id];
+  const gist = r.text ? r.text.replace(/\s+/g, " ").slice(0, 140) + (r.text.length > 140 ? "…" : "") : (r.why || r.when || "");
+  const body = !open ? "" : `<div class="rbody">` + (r.text
+      ? `<dl class="kv"><dt>where</dt><dd>${inline(r.when)}</dd></dl>${prose(r.text)}`
+      : `<dl class="kv"><dt>when</dt><dd>${inline(r.when)}</dd><dt>why</dt><dd>${inline(r.why)}</dd></dl>`
+        + (r.outcomes || []).map(o => `<div class="outcome"><b>${esc(o.state)}</b>${inline(o.said)}${(o.goes || []).length ? ` <span class="back">→ ${esc(o.goes.join(", "))}</span>` : ""}</div>`).join(""))
+    + (fired.length ? `<p class="rec">this story: ${esc(fired.map(f => `${f.stage}: ${f.state}`).join(" · "))}${refused ? ` · refused ${refused}×` : ""}</p>` : "")
+    + `<p class="hint">${esc(r.source || "")}${r.bound ? (r.part === "instruction" ? " · placed in " : " · bound in ") + esc(r.bound) : ""}</p></div>`;
+  return `<div class="rrow${open ? " open" : ""}"><button type="button" class="rhead" data-open-rule="${esc(id)}" aria-expanded="${open}">
+    <span class="caret" aria-hidden="true">${open ? "▾" : "▸"}</span><span class="rid e-${esc(r.enforcement)}${state ? " f-" + esc(state) : ""}">${esc(id)}${refused ? `<span class="x">×${refused}</span>` : ""}</span>
+    <span class="rgist">${inline(gist)}</span></button>${body}</div>`;
 }
 
-function slot(label, ids, cls, rules, fired, refused, folded, stage) {
-  if (!ids.length) return "";
-  const chips = `<div class="chips">${ids.map(i => chip(i, rules, fired, refused, stage)).join("")}</div>`;
-  // what a stage is told is long: folded to its count unless a rule of it is open
-  const open = !folded || ids.includes(S.rule);
-  return `<div class="slot${cls ? " " + cls : ""}">` + (folded ? `<details${open ? " open" : ""}><summary class="lbl">${esc(label)} (${ids.length}) ▾</summary>${chips}</details>`
-    : `<div class="lbl">${esc(label)}</div>${chips}`) + `</div>`;
+function ruleGroup(label, ids, rules, story, stage) {
+  if (!ids || !ids.length) return "";
+  return `<div class="rgroup"><div class="lbl">${esc(label)} <span class="n">${ids.length}</span></div>${ids.map(id => ruleRow(id, rules, story, stage)).join("")}</div>`;
 }
 
-function ruleDetail(r, story) {
-  if (!r) return "";
-  const where = (r.stages || []).join(", ") || "outside the stages", kinds = (r.kinds || []).join(", ") || "every kind";
-  const got = story && story.fired[r.id] ? story.fired[r.id].map(f => `${f.stage}: ${f.state}`).join(" · ") : "";
-  const body = r.text ? `<dl class="kv"><dt>where</dt><dd>${inline(r.when)}</dd></dl>${prose(r.text)}`
-    : `<dl class="kv"><dt>when</dt><dd>${inline(r.when)}</dd><dt>why</dt><dd>${inline(r.why)}</dd></dl>`
-      + (r.outcomes || []).map(o => `<div class="outcome"><b>${esc(o.state)}</b>${inline(o.said)}${(o.goes || []).length ? ` <span class="back">→ ${esc(o.goes.join(", "))}</span>` : ""}</div>`).join("");
-  return `<div id="rule-detail">` + card(esc(r.id), `${esc(r.enforcement)} · ${esc(r.part)} · ${esc(where)} · ${esc(kinds)}`,
-    body + (got ? `<p class="rec">this story: ${esc(got)}${story.refused[r.id] ? ` · refused ${story.refused[r.id]}×` : ""}</p>` : "")
-    + `<p class="hint">${esc(r.source)}${r.bound ? (r.part === "instruction" ? " · placed in " : " · bound in ") + esc(r.bound) : ""}${(r.reports || []).length ? " · reports as " + esc(r.reports.join(", ")) : ""}</p>`) + `</div>`;
+function waysLine(edges, title) {
+  if (!edges.length) return "";
+  return `<div class="rgroup"><div class="lbl">${esc(title)}</div>${edges.map(e => `<button type="button" class="way-link" data-edge="${esc(e.source)}>${esc(e.target)}>${esc(e.way)}">
+    ${esc(e.source)} → ${esc(e.target)}</button> <span class="hint">${esc([...new Set(e.rules.map(r => r.rule))].join(" · "))}</span>`).join("<br>")}</div>`;
+}
+
+function picked(flow, rules, story) {
+  const graph = flow.graph || {edges: [], every_gate: [], anywhere: []}, p = S.flowPick;
+  const ids = es => [...new Set(es.flatMap(e => e.rules.map(r => r.rule)))];
+  if (!p) {
+    return card("", "", `<p class="empty">Pick a step, a gate or a way in the drawing — its rules show here.</p>
+      <p class="hint">A teal dot is a gate: the checks between two steps. A dashed arc above is a round — a refused gate sends the story back into its step, three times at most. A way back appears below while the pointer is on its step. A red mark stops the run; a grey one waits for a person.</p>`);
+  }
+  if (p.type === "stage") {
+    const step = flow.steps.find(s => s.stage === p.stage) || {gate_before: [], told: [], gate_after: [], passed: [], decided: []};
+    const out = graph.edges.filter(e => e.source === p.stage && e.way === "back"), into = graph.edges.filter(e => e.target === p.stage && e.way === "back");
+    return card(esc(p.stage), (step.window || "") + (step.gate === "none" ? " · decides, no gate" : ""),
+      ruleGroup("gate before", step.gate_before, rules, story, p.stage) + ruleGroup("gate after", step.gate_after, rules, story, p.stage)
+      + ruleGroup("a pass does", step.passed, rules, story, p.stage) + ruleGroup("the runner decides", step.decided, rules, story, p.stage)
+      + waysLine(out, "ways back from here") + waysLine(into, "ways back to here")
+      + ruleGroup("what the stage is told", step.told, rules, story, p.stage));
+  }
+  if (p.type === "gate") {
+    const [where, stage] = p.gate.split(":"), step = flow.steps.find(s => s.stage === stage) || {};
+    return card(`gate ${esc(where === "gate-before" ? "before" : "after")} ${esc(stage)}`, "a refused check sends the story back into its step",
+      ruleGroup("its checks", (where === "gate-before" ? step.gate_before : step.gate_after) || [], rules, story, stage)
+      + ruleGroup("at every gate", flow.every_gate, rules, story, stage));
+  }
+  const edge = graph.edges.concat(graph.every_gate || [], graph.anywhere || []).find(e => `${e.source}>${e.target}>${e.way}` === p.key);
+  const title = p.way === "again" ? `${p.source} once more` : `${p.source} → ${p.target}`;
+  return card(esc(title), esc(p.way), ruleGroup("the rules that take it", edge ? ids([edge]) : [], rules, story, p.source));
+}
+
+function folded(title, sub, ids, rules, story) {
+  if (!ids || !ids.length) return "";
+  return `<details class="card more"><summary><h2>${esc(title)} <span class="sub">${ids.length} rules — ${esc(sub)}</span></h2></summary>`
+    + ruleGroup("", ids, rules, story) + `</details>`;
 }
 
 function rulesTab(st) {
   if (!S.rules) { loadRules(); return card("", "", `<p class="empty">Reading the rules…</p>`); }
   const v = S.rules, rules = Object.fromEntries((v.rules || []).map(r => [r.id, r]));
-  const story = v.story || null, fired = story ? story.fired : {}, refused = story ? story.refused : {};
+  const story = v.story || null;
   const kinds = Object.keys(v.flow || {}), kind = kinds.includes(S.ruleKind) ? S.ruleKind : kinds[0];
   const flow = (v.flow || {})[kind] || {steps: [], edges: [], every_gate: []};
-  const back = {}, at = Object.fromEntries(flow.steps.map((s, i) => [s.stage, i]));
-  for (const e of flow.edges) if (e.target in at && at[e.target] < at[e.source]) (back[e.target] = back[e.target] || new Set()).add(`${e.source} (${e.rule} ${e.state})`);
-  const again = {};
-  for (const e of flow.edges) if (e.target === e.source) (again[e.source] = again[e.source] || []).push(e.rule);
-  const stageOf = Object.fromEntries((v.stages || []).map(s => [s.name, s]));
-  const cols = flow.steps.map(s => `<div class="col"><h3 title="${esc([(stageOf[s.stage] || {}).about, (stageOf[s.stage] || {}).source].filter(Boolean).join(" — "))}">${esc(s.stage)}</h3><div class="win">${esc(s.window || "")}${s.gate === "none" ? " · no gate" : ""}</div>
-    ${back[s.stage] ? `<div class="back">↩ from ${esc([...back[s.stage]].join(", "))}</div>` : ""}
-    ${slot("gate before", s.gate_before, "gate", rules, fired, refused, false, s.stage)}${slot("told", s.told, "", rules, fired, refused, true)}
-    ${slot("gate after", s.gate_after, "gate", rules, fired, refused, false, s.stage)}${slot("a pass does", s.passed, "", rules, fired, refused, false, s.stage)}
-    ${slot("the runner decides", s.decided, "", rules, fired, refused)}
-    ${again[s.stage] ? `<div class="back">⟲ again: ${esc([...new Set(again[s.stage])].join(", "))}</div>` : ""}</div>`).join("");
   const stories = (st.rows || []).map(r => r.story);
   const picks = `<div class="pick">${kinds.map(k => `<button class="btn${k === kind ? " primary" : ""}" data-kind="${esc(k)}">${esc(k)}</button>`).join("")}
     <select data-overlay aria-label="a story's gate runs"><option value="">no story</option>${stories.map(id => `<option${id === S.ruleStory ? " selected" : ""}>${esc(id)}</option>`).join("")}</select></div>`;
-  const outside = {};
-  for (const id of v.outside || []) { const r = rules[id]; if (r) (outside[r.enforcement] = outside[r.enforcement] || []).push(id); }
-  const backs = ((flow.graph || {}).edges || []).filter(e => e.way === "back");
-  const jumps = backs.length ? `<div class="jumps"><span class="lbl">ways back</span>${backs.map(e => `<button type="button" class="chip" data-back="${esc(e.source)}>${esc(e.target)}"
-    data-rules="${esc(e.rules.map(r => r.rule + ":" + r.state).join(" "))}" data-source="${esc(e.source)}" data-target="${esc(e.target)}" data-way="back">${esc(e.source)} → ${esc(e.target)} · ${esc([...new Set(e.rules.map(r => r.rule))].join(" · "))}</button>`).join("")}</div>` : "";
-  const pick = S.flowPick ? slot(S.flowPick.title, S.flowPick.ids, S.flowPick.gate ? "gate" : "", rules, fired, refused) : "";
-  return card(`${esc(kind)}`, `${(v.rules || []).length} rules`, picks
-      + (flow.svg ? `<div class="flowsvg">${flow.svg}</div>` + jumps + pick : "")
-      + slot("every gate", flow.every_gate, "gate", rules, fired, refused) + `<div class="flow">${cols}</div>`)
-    + ruleDetail(rules[S.rule], story)
-    + card("Outside the stages", "the whole run, the commit hook, every stage alike",
-      Object.entries(outside).map(([e, ids]) => slot(e, ids, e === "gate" ? "gate" : "", rules, fired, refused)).join(""))
+  return card(`${esc(kind)}`, `${(v.rules || []).length} rules`, picks + (flow.svg ? `<div class="flowsvg">${flow.svg}</div>` : ""))
+    + picked(flow, rules, story)
+    + folded("At every gate", "the checks each gate of this flow runs as well", flow.every_gate, rules, story)
+    + folded("Anywhere in a run", "what stops a run or waits for a person at any step",
+             [...new Set(((flow.graph || {}).anywhere || []).flatMap(e => e.rules.map(r => r.rule)))], rules, story)
+    + `<details class="card more"><summary><h2>Outside the stages <span class="sub">${(v.outside || []).length} rules — the whole run, the commit hook, every stage alike</span></h2></summary>`
+    + ruleGroup("", v.outside || [], rules, story) + `</details>`
     + ((v.problems || []).length ? card("Problems", "the rulebook itself", `<ul>${v.problems.map(p => `<li>${esc(p)}</li>`).join("")}</ul>`) : "");
 }
 
-// the drawing: a way back shows while its step or its chip is hovered; the picked edge or gate stays marked
+// the drawing: a way back shows while its step is hovered; what is picked stays marked
 function showBacks(test) {
   document.querySelectorAll(".flowsvg .way-back").forEach(g => g.classList.toggle("show", test(g)));
 }
+const flowKey = g => g.dataset.gate ? "gate:" + g.dataset.gate : g.dataset.stage && !g.dataset.way ? "stage:" + g.dataset.stage
+  : `${g.dataset.source}>${g.dataset.target}>${g.dataset.way}`;
 function paintFlow() {
   const backs = new Set([...document.querySelectorAll(".flowsvg .way-back")].map(g => g.dataset.source));
   document.querySelectorAll(".flowsvg [data-stage]").forEach(t => t.classList.toggle("has-back", backs.has(t.dataset.stage)));
   const key = S.flowPick ? S.flowPick.key : "";
-  document.querySelectorAll(".flowsvg .way, .flowsvg .gate, .jumps [data-back]").forEach(g =>
-    g.classList.toggle("sel", !!key && flowKey(g) === key));
+  document.querySelectorAll(".flowsvg .way, .flowsvg .gate, .flowsvg [data-stage]").forEach(g => g.classList.toggle("sel", !!key && flowKey(g) === key));
+  if (S.flowPick && S.flowPick.type === "stage") showBacks(g => g.dataset.source === S.flowPick.stage);
+  else if (S.flowPick && S.flowPick.way === "back") showBacks(g => flowKey(g) === S.flowPick.key);
 }
-const flowKey = g => g.dataset.gate || `${g.dataset.source}>${g.dataset.target}>${g.dataset.way}`;
 document.addEventListener("mouseover", event => {
-  const at = event.target.closest && event.target.closest(".flowsvg [data-stage], .jumps [data-back]");
-  if (!at) return;
-  if (at.dataset.stage) showBacks(g => g.dataset.source === at.dataset.stage);
-  else showBacks(g => `${g.dataset.source}>${g.dataset.target}` === at.dataset.back);
+  const at = event.target.closest && event.target.closest(".flowsvg [data-stage]");
+  if (at) showBacks(g => g.dataset.source === at.dataset.stage);
 });
 document.addEventListener("mouseout", event => {
-  const at = event.target.closest && event.target.closest(".flowsvg [data-stage], .jumps [data-back]");
-  if (at) showBacks(() => false);
+  const at = event.target.closest && event.target.closest(".flowsvg [data-stage]");
+  if (at) { showBacks(() => false); paintFlow(); }
 });
+function pickInFlow(at) {
+  const key = flowKey(at);
+  if (S.flowPick && S.flowPick.key === key) S.flowPick = null;
+  else if (at.dataset.gate) S.flowPick = {key, type: "gate", gate: at.dataset.gate};
+  else if (at.dataset.stage && !at.dataset.way) S.flowPick = {key, type: "stage", stage: at.dataset.stage};
+  else S.flowPick = {key, type: "edge", source: at.dataset.source, target: at.dataset.target, way: at.dataset.way};
+  render();
+}
 document.addEventListener("click", event => {
-  const at = event.target.closest && event.target.closest(".flowsvg [data-rules], .jumps [data-back]");
+  const rule = event.target.closest && event.target.closest("[data-open-rule]");
+  if (rule) {
+    event.stopPropagation();
+    const id = rule.dataset.openRule, open = pickedRules();
+    if (open.has(id)) open.delete(id); else open.add(id);
+    return render();
+  }
+  const edge = event.target.closest && event.target.closest("[data-edge]");
+  if (edge) {
+    event.stopPropagation();
+    const [source, target, way] = edge.dataset.edge.split(">");
+    S.flowPick = {key: edge.dataset.edge, type: "edge", source, target, way};
+    return render();
+  }
+  const at = event.target.closest && event.target.closest(".flowsvg [data-rules], .flowsvg [data-stage]");
   if (!at) return;
   event.stopPropagation();
-  const ids = [...new Set(at.dataset.rules.split(" ").filter(Boolean).map(r => r.split(":")[0]))];
-  const key = flowKey(at);
-  if (S.flowPick && S.flowPick.key === key) { S.flowPick = null; return render(); }
-  const title = at.dataset.gate ? at.dataset.gate.replace(":", " ")
-    : at.dataset.way === "again" ? `${at.dataset.source} again` : `${at.dataset.source} → ${at.dataset.target}`;
-  S.flowPick = {key, title, ids, gate: !!at.dataset.gate};
-  S.rule = ids[0] || null;
-  render();
+  pickInFlow(at);
 }, true);
 
 // on every tab: the factory that ended on its own, and why

@@ -11,7 +11,7 @@ reports:
 - format
 pass: every command in scope ran green
 fail: a required command missing or red
-skip: out of scope (a required one: CI has to run it), or not declared
+skip: out of scope (a required one: CI has to run it), or not declared; a commit of the installed pipeline alone (`.agents/factory/`, its commit hook, the skill copies) runs none — the pipeline is verified where it is built
 note: red, but not required — it does not decide
 ---
 

@@ -13,7 +13,13 @@ class ChangeIndex(OutputPort, typing.Protocol):
     """The index and the working tree of one project."""
 
     def backlog_paths(self) -> typing.Optional[typing.List[str]]:
-        """The staged paths when every one is the backlog, the description or the pipeline's protocol, else None."""
+        """The staged paths when every one is the backlog, the description, the installed pipeline or its protocol,
+        else None."""
+        ...
+
+    def pipeline_paths(self) -> typing.Optional[typing.List[str]]:
+        """The staged paths when they are the installed pipeline and its skill copies (its protocol beside them at
+        most), else None."""
         ...
 
     def snapshot(self) -> Snapshot:

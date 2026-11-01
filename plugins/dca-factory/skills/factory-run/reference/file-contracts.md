@@ -508,6 +508,10 @@ profile's `checks.backlog:` line: checks and test commands by their own keys (`t
 alone), nothing when the line is absent. A required check it leaves out is named as not run here, as above. One
 path outside them, the profile included, and every check runs; an explicit `--checks` wins over the line. A name
 the line carries that is no check and no declared test command fails the policy. The key needs file contract 26.
+A staged commit of the installed pipeline alone — `.agents/factory/`, its commit hook and the tools' skill copies, its protocol
+beside them at most — is an update of the pipeline: it runs no project check, since nothing the project builds,
+runs or tests changed and the pipeline is verified where it is built. Beside the backlog it is a backlog commit,
+beside code every check runs.
 
 Without `required:` nothing is mandatory, and what runs still counts: a declared command that runs
 red fails, a command that is not declared is skipped and named. So "skipped and named, never failed"
