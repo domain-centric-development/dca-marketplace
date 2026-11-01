@@ -174,7 +174,15 @@ pre.out:empty { display: none; }
 .flowsvg .way, .flowsvg .gate { cursor: pointer; }
 .flowsvg .way-back { opacity: 0; pointer-events: none; transition: opacity .15s; }
 .flowsvg .way-back.show, .flowsvg .way-back.sel { opacity: 1; pointer-events: auto; }
-.flowsvg .way.sel path.vis { stroke-width: 3.2; } .flowsvg .gate.sel circle { r: 13; }
+/* what is picked stands out, the rest steps back: a band behind the picked way, a ring round the picked gate */
+.flowsvg.has-pick .way:not(.sel):not(.way-back), .flowsvg.has-pick .gate:not(.sel), .flowsvg.has-pick [data-stage]:not(.sel) { opacity: .35; }
+.flowsvg .way.sel path.vis { stroke-dasharray: none; stroke-width: 2.4; }
+.flowsvg .way-again.sel path.hit { stroke: color-mix(in srgb, var(--teal) 22%, transparent); }
+.flowsvg .way-back.sel path.hit { stroke: color-mix(in srgb, var(--ink) 14%, transparent); }
+.flowsvg .way.sel text.small { font-weight: 700; }
+.flowsvg .gate.sel circle { stroke: color-mix(in srgb, var(--teal) 30%, transparent); stroke-width: 10px; }
+.flowsvg .mark.sel circle { stroke: color-mix(in srgb, var(--stop) 30%, transparent); stroke-width: 8px; }
+.flowsvg [data-stage].sel { paint-order: stroke; stroke: color-mix(in srgb, var(--teal) 22%, transparent); stroke-width: 10px; stroke-linejoin: round; }
 .flowsvg [data-stage].has-back:hover { fill: var(--teal); }
 @media (prefers-reduced-motion: reduce) { .flowsvg .way-back { transition: none; } }
 
@@ -609,6 +617,7 @@ function paintFlow() {
   const backs = new Set([...document.querySelectorAll(".flowsvg .way-back")].map(g => g.dataset.source));
   document.querySelectorAll(".flowsvg [data-stage]").forEach(t => t.classList.toggle("has-back", backs.has(t.dataset.stage)));
   const key = S.flowPick ? S.flowPick.key : "";
+  document.querySelectorAll(".flowsvg").forEach(f => f.classList.toggle("has-pick", !!key));
   document.querySelectorAll(".flowsvg .way, .flowsvg .gate, .flowsvg [data-stage]").forEach(g => g.classList.toggle("sel", !!key && flowKey(g) === key));
   if (S.flowPick && S.flowPick.type === "stage") showBacks(g => g.dataset.source === S.flowPick.stage);
   else if (S.flowPick && S.flowPick.way === "back") showBacks(g => flowKey(g) === S.flowPick.key);

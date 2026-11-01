@@ -123,12 +123,16 @@ def markdown(view: Model) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def titles(view: Model) -> typing.Dict[str, str]:
+    return {rule["id"]: rule.get("title") or "" for rule in view["rules"]}
+
+
 def render(view: Model, fmt: str = "md") -> str:
     if fmt in ("svg", "mermaid"):
         kind = view.get("kind") or "story"
-        return (svg if fmt == "svg" else mermaid)(view["flow"][kind]["graph"], kind)
+        return (svg if fmt == "svg" else mermaid)(view["flow"][kind]["graph"], kind, titles(view))
     if fmt == "json":
         for kind, flow in view["flow"].items():
-            flow["svg"] = svg(flow["graph"], kind)
+            flow["svg"] = svg(flow["graph"], kind, titles(view))
         return json.dumps(view, indent=2) + "\n"
     return markdown(view)

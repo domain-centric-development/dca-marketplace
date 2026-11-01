@@ -16,7 +16,6 @@ GAP = 36                # between two things on the line
 DOT = 11                # a gate's radius
 MARK = 7                # a stop's or a wait's radius
 CHAR = 13.4             # a step's name, per character, in the display face at 22 px
-LANE = 44               # between two ways back, below the line
 
 STYLE = """
 .f text { font-family: 'Space Grotesk', 'Avenir Next', 'Trebuchet MS', sans-serif; fill: #1c2433; }
@@ -28,6 +27,7 @@ STYLE = """
 .f .way path.hit { stroke: transparent; stroke-width: 14; fill: none; }
 .f .way-again path.vis { stroke: #148f96; stroke-width: 2; stroke-dasharray: 5 4; fill: none; }
 .f .way-again text.small { fill: #148f96; }
+.f .way-name { font-weight: 700; }
 .f .way-back path.vis { stroke: #1c2433; stroke-width: 1.6; fill: none; }
 .f .gate circle { fill: #148f96; }
 .f .gate path, .f .mark path { stroke: #ffffff; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
@@ -98,21 +98,28 @@ def mark(x: float, y: float, way: str, edge: Model, source: str) -> str:
             f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{MARK}"/><path d="{sign}"/></g>')
 
 
-def svg(graph: Model, kind: str) -> str:
-    """The kind's flow; `graph` as the rulebook's json view gives it (`flow.<kind>.graph`)."""
+def svg(graph: Model, kind: str, titles: typing.Optional[typing.Mapping[str, str]] = None) -> str:
+    """The kind's flow; `graph` as the rulebook's json view gives it (`flow.<kind>.graph`); `titles` names a rule
+    by its title where a way back is labelled — its id where it has none."""
+    titles = titles or {}
     steps = graph["steps"]
     at, line, width = placed(steps)
     gated = {s["stage"]: s for s in steps}
     edges = graph["edges"]
     backs = sorted((e for e in edges if e["way"] == "back"),
                    key=lambda e: (abs(at[e["source"]].x - at[e["target"]].x), at[e["source"]].x))
-    height = Y + 66 + LANE * len(backs) + 24 * 2 + 20
+    named = [list(dict.fromkeys(titles.get(r["rule"]) or r["rule"] for r in e["rules"])) for e in backs]
+    depths, depth = [], 26.0
+    for names in named:                      # each lane below the label of the one above it
+        depths.append(depth)
+        depth += 22 + 13 * (len(names) + 1)
+    height = Y + 40 + depth + 24 * 2 + 10
     out = [f'<svg xmlns="http://www.w3.org/2000/svg" class="f" viewBox="0 0 __WIDTH__ {height:.0f}" '
            f'role="img" aria-label="the {esc(kind)} flow: its steps, gates, rounds and ways back">',
            f"<style>{STYLE}</style>",
            '<defs>' + "".join(
-               f'<marker id="a-{n}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" '
-               f'orient="auto-start-reverse"><path class="tip-{n}" d="M0,0 L10,5 L0,10 z"/></marker>'
+               f'<marker id="a-{n}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="12" markerHeight="12" '
+               f'markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="tip-{n}" d="M0,0 L10,5 L0,10 z"/></marker>'
                for n in ("on", "again", "back")) + "</defs>"]
     # the line: a plain arrow from one thing to the next, an edge on (judge → document) carrying its rules
     on = {(e["source"], e["target"]): e for e in edges if e["way"] == "on"}
@@ -151,19 +158,22 @@ def svg(graph: Model, kind: str) -> str:
                    f'{esc(said(edge))}</title><path class="hit" d="{d}"/><path class="vis" d="{d}" '
                    f'marker-end="url(#a-again)"/><text class="small" x="{mid:.1f}" y="{top + 2}" '
                    f'text-anchor="middle">{esc(label)}</text></g>')
-    # the ways back, nested: the shortest closest to the line
-    for lane, edge in enumerate(backs, start=1):
+    # the ways back, nested: the shortest closest to the line, each labelled beneath its lowest point — the way, then
+    # the title of each rule that takes it, one a line
+    for lane, edge in enumerate(backs):
         a, b = at[edge["source"]], at[edge["target"]]
-        top, bottom = Y + 66, Y + 66 + LANE * lane
-        d = f"M{a.x:.1f},{top} C{a.x:.1f},{bottom} {b.x:.1f},{bottom} {b.x:.1f},{top + 4}"
-        mid, low = (a.x + b.x) / 2, top + (bottom - top) * .75
-        rules = " · ".join(dict.fromkeys(r["rule"] for r in edge["rules"]))
+        top, low = Y + 40, Y + 40 + depths[lane]
+        bend = top + (low - top) / .75           # a cubic with both handles here bottoms out at `low`
+        d = f"M{a.x:.1f},{top} C{a.x:.1f},{bend:.1f} {b.x:.1f},{bend:.1f} {b.x:.1f},{top + 4}"
+        mid = (a.x + b.x) / 2
         out.append(f'<g class="way way-back" data-source="{esc(edge["source"])}" data-target="{esc(edge["target"])}" '
                    f'data-way="back" data-rules="{esc(ruled(edge))}"><title>{esc(edge["source"])} → '
                    f'{esc(edge["target"])}: {esc(said(edge))}</title><path class="hit" d="{d}"/>'
                    f'<path class="vis" d="{d}" marker-end="url(#a-back)"/>'
-                   f'<text class="small" x="{mid:.1f}" y="{low + 4:.1f}" text-anchor="middle">'
-                   f'{esc(edge["source"])} → {esc(edge["target"])}  {esc(rules)}</text></g>')
+                   f'<text class="small" x="{mid:.1f}" y="{low + 14:.1f}" text-anchor="middle">'
+                   f'<tspan class="way-name">{esc(edge["source"])} → {esc(edge["target"])}</tspan>'
+                   + "".join(f'<tspan x="{mid:.1f}" dy="13">{esc(name)}</tspan>' for name in named[lane])
+                   + '</text></g>')
     # a stop and a wait, marked under the step they leave from
     for edge in (e for e in edges if e["way"] in ("stop", "waits")):
         step = at[edge["source"]]

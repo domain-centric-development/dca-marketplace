@@ -13,11 +13,12 @@ def node(name: str) -> str:
     return name.replace("-", "_")
 
 
-def rules(edge: Model) -> str:
-    return " · ".join(dict.fromkeys(r["rule"] for r in edge["rules"]))
+def rules(edge: Model, titles: typing.Mapping[str, str]) -> str:
+    return "<br>".join(dict.fromkeys(titles.get(r["rule"]) or r["rule"] for r in edge["rules"]))
 
 
-def mermaid(graph: Model, kind: str) -> str:
+def mermaid(graph: Model, kind: str, titles: typing.Optional[typing.Mapping[str, str]] = None) -> str:
+    titles = titles or {}
     steps = graph["steps"]
     lines = ["flowchart LR"]
     chain: typing.List[str] = []
@@ -36,7 +37,7 @@ def mermaid(graph: Model, kind: str) -> str:
     on = {(e["source"], e["target"]): e for e in graph["edges"] if e["way"] == "on" and e["rules"]}
     for here, there in zip(chain, chain[1:]):
         edge = on.get((here.replace("gate_after_", ""), there))
-        lines.append(f'  {here} -- "{rules(edge)}" --> {there}' if edge else f"  {here} --> {there}")
+        lines.append(f'  {here} -- "{rules(edge, titles)}" --> {there}' if edge else f"  {here} --> {there}")
     gated = {s["stage"]: s for s in steps}
     for edge in graph["edges"]:
         source, target = edge["source"], edge["target"]
@@ -45,7 +46,7 @@ def mermaid(graph: Model, kind: str) -> str:
             label = f'again · {len(gated[source]["gate_after"])} checks' if gated[source]["gate"] == "after" else "again"
             lines.append(f'  {start} -. "{label}" .-> {node(target)}')
         elif edge["way"] == "back":
-            lines.append(f'  {node(source)} -. "{rules(edge)}" .-> {node(target)}')
+            lines.append(f'  {node(source)} -. "{rules(edge, titles)}" .-> {node(target)}')
     lines += ["  classDef step fill:none,stroke:none,font-weight:bold",
               "  classDef gate fill:#148f96,stroke:#148f96,color:#ffffff",
               "  classDef done fill:none,stroke:#1c2433"]
