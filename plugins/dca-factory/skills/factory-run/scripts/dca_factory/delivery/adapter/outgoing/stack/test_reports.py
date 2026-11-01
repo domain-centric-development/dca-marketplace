@@ -112,6 +112,19 @@ def reports_from_this_run(before: typing.Dict[str, typing.Tuple[str, float]], af
 #: One test, several report cases: a parametrised test reports `test_x[a]`, `test_x[b]`, …, and a
 #: JUnit writer may append the signature, `test_x(int)`. All of them are the mapped test, and one
 #: failing case fails it — so the outcomes merge, and failed wins.
+def path_named(cls: str, method: str) -> typing.Tuple[str, str]:
+    """A case named by a module path, as cargo-nextest writes it — `classname="my-crate::http"` for a test file,
+    `name="list::tests::refuses_it"` for a test in a module — read as a dotted class and a method, the form every
+    other report has: `my_crate.http` and the test, `my_crate.list.tests` and `refuses_it`. A crate name's dash
+    becomes an underscore, as in the code that names it."""
+    if "::" not in cls and "::" not in method:
+        return cls, method
+    parts = [p for p in (cls.split("::") if cls else []) + method.split("::") if p]
+    if len(parts) < 2:
+        return cls, method
+    return ".".join(p.replace("-", "_") for p in parts[:-1]), parts[-1]
+
+
 OUTCOME_RANK = {"failed": 2, "passed": 1, "skipped": 0}
 
 
@@ -136,8 +149,7 @@ def executed_tests(paths: typing.Iterable[str]) -> typing.Dict[typing.Tuple[str,
         for case in root.iter():
             tag = case.tag.rsplit("}", 1)[-1]
             if tag == "testcase":                                   # JUnit XML
-                cls = (case.get("classname") or "").strip()
-                method = (case.get("name") or "").strip()
+                cls, method = path_named((case.get("classname") or "").strip(), (case.get("name") or "").strip())
                 outcome = "passed"
                 for child in case:
                     if child.tag.rsplit("}", 1)[-1] in ("failure", "error"):

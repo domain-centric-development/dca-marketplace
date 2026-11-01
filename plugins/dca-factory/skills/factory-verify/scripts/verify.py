@@ -3593,6 +3593,9 @@ PRESET_FIXTURES = {
     "pytest-pyproject": {"pyproject.toml": "[tool.pytest.ini_options]\n"},
     "pytest-setupcfg": {"setup.cfg": "[pytest]\n"},
     "npm-playwright": {"package.json": '{"devDependencies": {"@playwright/test": "1.62.0"}}\n'},
+    # cargo-nextest with a junit path: the report is the evidence; plain cargo: the exit code is
+    "cargo-nextest": {"Cargo.toml": "[workspace]\n", ".config/nextest.toml": '[profile.ci.junit]\npath = "junit.xml"\n'},
+    "cargo": {"Cargo.toml": "[package]\n"},
     "empty": {},
 }
 _GRADLE = ['compile: ./gradlew testClasses', 'test: ./gradlew test --rerun', 'e2eTest: ./gradlew test --rerun',
@@ -3627,6 +3630,13 @@ PRESET_GOLDEN = {
                          + _DOTNET[3:] + ["browser: playwright"],
     "pytest-ini": _PYTEST, "pytest-pyproject": _PYTEST, "pytest-setupcfg": _PYTEST,
     "npm-playwright": ["browser: playwright"],
+    "cargo-nextest": ["compile: cargo build --workspace --all-targets", "test: cargo nextest run --workspace --profile ci",
+                      "e2eTest: cargo nextest run --workspace --profile ci", "filterFlag: -E",
+                      'filterFormat: "test(/(^|::){method}$/)"', "format: cargo fmt --all --check", "formatFix: cargo fmt --all",
+                      "testReport: target/nextest/ci/junit.xml", "covers.test: **"],
+    "cargo": ["compile: cargo build --workspace --all-targets", "test: cargo test --workspace",
+              "e2eTest: cargo test --workspace", 'filterFormat: "{method}"', "format: cargo fmt --all --check",
+              "formatFix: cargo fmt --all", "testEvidence: exit-code", "covers.test: **"],
     "empty": [],
 }
 

@@ -1,0 +1,16 @@
+# cargo-nextest writes the JUnit report the gate reads what ran from, under the profile that names a
+# `junit` path in `.config/nextest.toml` (here `ci`, path `junit.xml`). `-E` takes a filter expression and
+# is repeated per selector; nextest runs the union. A test in a module is named by its path
+# (`list::tests::it`), so the filter matches the method at the end of the path. The method alone selects:
+# two binaries may hold a test of the same name, and the report's class tells them apart.
+kind: stack
+order: 25
+detect.exists: Cargo.toml
+detect.exists: .config/nextest.toml
+compile: cargo build --workspace --all-targets
+test: cargo nextest run --workspace --profile ci
+e2eTest: cargo nextest run --workspace --profile ci
+filterFlag: -E
+filterFormat: "test(/(^|::){method}$/)"
+testReport: target/nextest/ci/junit.xml
+covers.test: **

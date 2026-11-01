@@ -1,0 +1,12 @@
+# `cargo test` writes no report, so the gate takes the exit code as its evidence, one process per selector,
+# and says so on every test. Add cargo-nextest and a `.config/nextest.toml` with a junit path for the stronger
+# check (the cargo-nextest preset then applies).
+kind: stack
+order: 26
+detect.exists: Cargo.toml
+compile: cargo build --workspace --all-targets
+test: cargo test --workspace
+e2eTest: cargo test --workspace
+filterFormat: "{method}"
+testEvidence: exit-code
+covers.test: **

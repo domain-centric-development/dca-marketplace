@@ -43,6 +43,17 @@ PLAYWRIGHT_JUNIT = """<?xml version="1.0" encoding="UTF-8"?>
 """
 
 
+#: cargo-nextest's JUnit: the crate and the test binary as the class, a test in a module named by its path.
+NEXTEST_JUNIT = """<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="nextest-run"><testsuite name="todo-bootstrap::http" tests="2">
+  <testcase name="a_list_is_shown" classname="todo-bootstrap::http"/>
+  <testcase name="a_blank_name_is_refused" classname="todo-bootstrap::http"><failure/></testcase>
+</testsuite><testsuite name="todo-domain" tests="1">
+  <testcase name="list::tests::refuses_a_second_title" classname="todo-domain"/>
+</testsuite></testsuites>
+"""
+
+
 class Reports(unittest.TestCase):
 
     def setUp(self):
@@ -54,6 +65,14 @@ class Reports(unittest.TestCase):
 
 
 class ExecutedTests(Reports):
+
+    def test_nextest_module_paths_read_as_class_and_method(self):
+        ran = test_reports.executed_tests([self.file("junit.xml", NEXTEST_JUNIT)])
+        self.assertEqual(ran[("todo_bootstrap.http", "a_list_is_shown")], "passed")
+        self.assertEqual(ran[("todo_bootstrap.http", "a_blank_name_is_refused")], "failed")
+        self.assertEqual(ran[("todo_domain.list.tests", "refuses_a_second_title")], "passed")
+        self.assertEqual(test_reports.outcome_for(ran, "http", "a_list_is_shown"), ("passed", "by name"))
+        self.assertEqual(test_reports.outcome_for(ran, "tests", "refuses_a_second_title"), ("passed", "by name"))
 
     def test_junit_cases_read_as_passed_failed_and_skipped(self):
         ran = test_reports.executed_tests([self.file("TEST-widget.xml", JUNIT)])
