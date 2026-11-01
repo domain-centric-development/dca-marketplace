@@ -23,7 +23,9 @@ order: 8
      external system stubbed at the protocol (`http.stub:`): the use case is tested once, however
      many adapters call it. A `Then` only an incoming adapter produces — a text on the page, a status
      code, a redirect, a message's payload — is asserted on **that adapter's translation**, against a
-     stubbed input port that answers with the outcome. Write the shape after the level:
+     stubbed input port that answers with the outcome. A refusal the page shows needs both: the port
+     shape proves the use case refuses, with the failure it raises; the adapter shape proves the text,
+     its stub throwing that same failure. Write the shape after the level:
      `level: integration (port)` or `level: integration (adapter: <Adapter>)`.
    - **`browser-only (<why>)`** for a scenario whose `Then` only a browser can observe — a countdown,
      a script's reaction to a click, a notification, anything that happens after the page has

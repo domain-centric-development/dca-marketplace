@@ -15,3 +15,6 @@ order: 10
    button still there, the message still shown — would it turn red? An assertion on a mechanism the code does
    not use, a count of something never written, an absence that held before the story is green whatever the
    code does: a test defect (`back: test`), not a proof.
+   An adapter test whose stub throws a failure the criterion's port test does not assert — another type, a
+   parent, no port test at all — proves the page for a refusal the use case may never raise: a test defect
+   (`back: test`).

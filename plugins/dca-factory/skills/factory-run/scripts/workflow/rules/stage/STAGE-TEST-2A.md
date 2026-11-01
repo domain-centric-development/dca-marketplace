@@ -16,7 +16,11 @@ order: 3
    <Adapter>)`: that incoming adapter's translation — the request it turns into a command, the page,
    status or payload it makes of the result and of each refusal — against a stubbed input port that
    answers with the outcome; stubbing the input port here is right, the use case behind it has its own
-   test. **A clause about what is stored** — the list stays unchanged, the task remains open, it is done
+   test. **A refusal the stub throws is one a port test proves:** the stub throws the very failure type —
+   the same class, never a parent or a generic one — that the port test of the same criterion asserts the
+   real use case throws, and both tests stand in that criterion's rows of the table. Together they hold
+   the seam the stub cuts: rename the failure or throw another, and the port test turns red. A failure
+   no port test asserts is a stub of nothing — write the port test beside it. **A clause about what is stored** — the list stays unchanged, the task remains open, it is done
    afterwards — is never asserted here: the stub answers what you told it, so the assertion holds whatever
    the code does. Assert it through the input port with the real store (`integration (port)`), or end to end;
    the adapter test asserts only the adapter's part (the status, the page, that the use case was not called). A plan line with the bare `integration` of an older plan is the port shape. An external system
