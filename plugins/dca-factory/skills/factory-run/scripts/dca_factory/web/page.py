@@ -217,6 +217,12 @@ details.fold > summary { cursor: pointer; font: 500 12px var(--mono); color: var
 .flowsvg [data-stage].ov-now { fill: var(--teal); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px; }
 .flowsvg .gate.ov-failed circle { stroke: var(--stop); stroke-width: 4px; }
 .flowsvg .ov-badge { font: 700 11px var(--mono); fill: var(--stop); }
+table.epics tr.epic-row { cursor: pointer; } table.epics tr.epic-row:hover td { background: var(--soft); }
+table.epics tr.epic-row:focus-visible { outline: 2px solid var(--teal); outline-offset: -2px; }
+table.epics .caret { color: var(--muted); font: 400 12px var(--mono); }
+table.epics tr.epic-body > td { padding-top: 0; } table.epics tr.epic-body table { margin-top: 4px; }
+.bar { height: 6px; border-radius: 3px; background: var(--line); min-width: 80px; overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--done); }
 .way-link { background: none; border: 0; padding: 2px 0; font: 500 13px var(--mono); color: var(--accent); cursor: pointer; }
 details.more > summary { cursor: pointer; list-style: none; } details.more > summary::-webkit-details-marker { display: none; }
 details.more > summary h2::before { content: "▸ "; color: var(--muted); } details.more[open] > summary h2::before { content: "▾ "; }
@@ -817,18 +823,55 @@ function storyRow(r) {
 }
 
 function backlog(st) {
-  const epics = (st.epics || []).map(e => card(esc(e.title || e.epic),
-    `${esc(e.epic)} · ${e.delivered}/${e.total} delivered${e.metric ? " · " + esc(e.metric) : ""}`,
-    (e.goal ? `<p class="about">${esc(e.goal)}</p>` : "")
-    + ((st.journeys || []).filter(j => j.epic === e.epic).map(j => `<p class="rec">${esc(j.text)}</p>`).join(""))
-    + (e.rows.length ? `<table><tr><th><span class="sr">mark</span></th><th>story</th><th>state</th><th class="hide-s">stage</th><th class="num hide-s">tokens</th><th><span class="sr">actions</span></th></tr>${e.rows.map(storyRow).join("")}</table>` : `<p class="empty">No story yet.</p>`)
-    + `<div class="acts">${acts(e.actions)}</div>`)).join("");
+  // the epics as one list, as the cockpit shows them; an epic opens its stories in place, and stays open on a redraw
+  const open = S.openEpics || (S.openEpics = new Set()), filter = S.backlogFilter || "all";
+  const keep = r => filter === "all" || (filter === "drafts" ? r.state === "draft" : !["delivered", "superseded"].includes(r.state));
+  const shown = (st.epics || []).map(e => Object.assign({}, e, {rows: e.rows.filter(keep)}))
+    .filter(e => filter === "all" || e.rows.length);
+  const counts = {all: (st.epics || []).length,
+    open: (st.epics || []).filter(e => e.rows.some(r => !["delivered", "superseded"].includes(r.state))).length,
+    drafts: (st.epics || []).filter(e => e.rows.some(r => r.state === "draft")).length};
+  const filters = `<div class="pick">${["all", "open", "drafts"].map(f => `<button class="btn${f === filter ? " primary" : ""}" data-filter="${f}">${f} <span class="n">${counts[f]}</span></button>`).join("")}</div>`;
+  const rows = shown.map(e => {
+    const drafts = e.rows.filter(r => r.state === "draft").length, busy = e.rows.some(r => r.mark === "running");
+    const m = busy ? "running" : e.total && e.delivered === e.total ? "done" : e.rows.some(r => ["look", "question", "stopped"].includes(r.mark)) ? "look" : "none";
+    const share = e.total ? Math.round(100 * e.delivered / e.total) : 0, isOpen = open.has(e.epic) !== (filter !== "all");
+    const head = `<tr class="epic-row${isOpen ? " open" : ""}" data-epic="${esc(e.epic)}" tabindex="0" aria-expanded="${isOpen}">
+      <td>${mark(m)}</td><td><span class="caret" aria-hidden="true">${isOpen ? "▾" : "▸"}</span> <span class="title">${esc(e.title || e.epic)}</span><div class="id">${esc(e.epic)}</div></td>
+      <td class="hide-s"><div class="bar" title="${e.delivered} of ${e.total} delivered"><i style="width:${share}%"></i></div></td>
+      <td class="num nowrap">${e.delivered}/${e.total}</td><td class="num hide-s">${drafts || "—"}</td>
+      <td class="hide-s id">${esc(e.metric || "")}</td></tr>`;
+    const body = !isOpen ? "" : `<tr class="epic-body"><td></td><td colspan="5">`
+      + (e.goal ? `<p class="about">${esc(e.goal)}</p>` : "")
+      + ((st.journeys || []).filter(j => j.epic === e.epic).map(j => `<p class="rec">${esc(j.text)}</p>`).join(""))
+      + (e.rows.length ? `<table><tr><th><span class="sr">mark</span></th><th>story</th><th>state</th><th class="hide-s">stage</th><th class="num hide-s">tokens</th><th><span class="sr">actions</span></th></tr>${e.rows.map(storyRow).join("")}</table>` : `<p class="empty">No story yet.</p>`)
+      + `<div class="acts">${acts(e.actions)}</div></td></tr>`;
+    return head + body;
+  }).join("");
   const findings = (st.findings || []).map(f => `<tr><td><span class="state">${esc(f.severity)}</span></td>
     <td>${esc(f.plain || f.defect)}<div class="id">${esc(f.row)} · ${esc(f.where)}</div></td><td class="act"><div class="acts">${act(f.action)}</div></td></tr>`).join("");
   return nextLine(st) + card("A wish", "your words become a story, kept as a draft until you release it", act((st.entries || {}).wish))
-    + (epics || card("", "", `<p class="empty">The backlog is empty.</p>`))
-    + (findings ? card("Findings", "what the judge kept open", `<table>${findings}</table>`) : "");
+    + (rows || filter !== "all" ? card("Epics", filter === "all" ? "newest first — open one to see its stories" : filter === "drafts" ? "the drafts, waiting for your release" : "what is not delivered yet",
+        filters + (rows ? `<table class="epics"><tr><th><span class="sr">mark</span></th><th>epic</th><th class="hide-s">progress</th><th class="num">delivered</th><th class="num hide-s">drafts</th><th class="hide-s">outcome</th></tr>${rows}</table>` : `<p class="empty">Nothing here.</p>`))
+      : card("", "", `<p class="empty">The backlog is empty.</p>`))
+    + (findings ? `<details class="card more" data-fold="findings"${foldOpen("findings")}><summary><h2>Findings <span class="sub">${(st.findings || []).length} the judge kept open — each to the backlog or done</span></h2></summary><table>${findings}</table></details>` : "");
 }
+document.addEventListener("click", event => {
+  const row = event.target.closest && event.target.closest("tr.epic-row");
+  if (!row || event.target.closest("button, a")) return;
+  const open = S.openEpics || (S.openEpics = new Set()), id = row.dataset.epic;
+  if (open.has(id)) open.delete(id); else open.add(id);
+  render();
+});
+document.addEventListener("click", event => {
+  const f = event.target.closest && event.target.closest("[data-filter]");
+  if (!f) return;
+  S.backlogFilter = f.dataset.filter; S.openEpics = new Set(); render();
+});
+document.addEventListener("keydown", event => {
+  const row = event.target.closest && event.target.closest("tr.epic-row");
+  if (row && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); row.click(); }
+});
 
 // --- 3 run ---------------------------------------------------------------------------------------------------------
 function run(st) {
