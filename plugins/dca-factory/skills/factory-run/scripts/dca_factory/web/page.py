@@ -163,6 +163,23 @@ pre.out { font: 12.5px/1.5 var(--mono); background: var(--code); border-radius: 
 pre.out:empty { display: none; }
 .step b { font: 600 14px var(--display); color: var(--accent); margin-right: 6px; }
 
+/* the flow, drawn by the factory: the ways back shown on a hover, an edge or a gate read on a click */
+.flowsvg { overflow-x: auto; margin-top: 12px; }
+.flowsvg svg { display: block; width: 100%; min-width: 880px; height: auto; }
+.flowsvg .f text { fill: var(--ink); } .flowsvg .f text.small { fill: var(--muted); stroke: var(--panel); }
+.flowsvg .f .on-line { stroke: var(--line); } .flowsvg .f .tip-on { fill: var(--line); }
+.flowsvg .f .gate circle, .flowsvg .f .tip-again { fill: var(--teal); } .flowsvg .f .way-again path.vis { stroke: var(--teal); }
+.flowsvg .f .way-again text.small { fill: var(--teal); } .flowsvg .f .way-back path.vis { stroke: var(--ink); } .flowsvg .f .tip-back { fill: var(--ink); }
+.flowsvg .f .mark-stop circle { fill: var(--stop); } .flowsvg .f .mark-waits circle { fill: var(--muted); } .flowsvg .f .done { stroke: var(--ink); }
+.flowsvg .way, .flowsvg .gate { cursor: pointer; }
+.flowsvg .way-back { opacity: 0; pointer-events: none; transition: opacity .15s; }
+.flowsvg .way-back.show, .flowsvg .way-back.sel { opacity: 1; pointer-events: auto; }
+.flowsvg .way.sel path.vis { stroke-width: 3.2; } .flowsvg .gate.sel circle { r: 13; }
+.flowsvg [data-stage].has-back:hover { fill: var(--teal); }
+@media (prefers-reduced-motion: reduce) { .flowsvg .way-back { transition: none; } }
+.jumps { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
+.jumps .lbl { font: 500 10.5px var(--mono); letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-right: 4px; }
+
 /* the rules: a column per stage, the gates as barriers across it, a rule a chip */
 .flow { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(128px, 1fr); gap: 10px; margin-top: 14px; overflow-x: auto; padding-bottom: 6px; }
 .col { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
@@ -239,7 +256,7 @@ const TABS = [
 const MARKS = {look: "!", question: "?", stopped: "✗", running: "▶", done: "✓", none: "·", next: "→"};
 const S = {tab: "backlog", status: null, decisions: null, discover: null, requests: null, follow: null, followSource: null,
            followLines: [], drawer: null, opener: null, drafts: {}, folded: {},
-           rules: null, rulesFor: null, ruleKind: "story", rule: null, ruleStory: ""};
+           rules: null, rulesFor: null, ruleKind: "story", rule: null, ruleStory: "", flowPick: null};
 const stored = key => { try { return localStorage.getItem(key) || ""; } catch (e) { return ""; } };
 const store = (key, value) => { try { localStorage.setItem(key, value); } catch (e) {} };
 S.tab = stored("factory.tab") || S.tab;
@@ -466,6 +483,7 @@ function render() {
   $("main").innerHTML = `<div class="eyebrow">${esc(eyebrow)}</div><h1>${esc(title)}</h1><p class="lede">${esc(lede)}</p>`
     + (S.status ? endedLine(S.status) + view(S.status) : `<section class="card"><p class="empty">Reading the factory…</p></section>`);
   if (S.tab === "run") paintFollow();
+  if (S.tab === "rules") paintFlow();
 }
 
 // --- the rules: the factory's rulebook, drawn as it says it ------------------------------------------------------------
@@ -528,13 +546,54 @@ function rulesTab(st) {
     <select data-overlay aria-label="a story's gate runs"><option value="">no story</option>${stories.map(id => `<option${id === S.ruleStory ? " selected" : ""}>${esc(id)}</option>`).join("")}</select></div>`;
   const outside = {};
   for (const id of v.outside || []) { const r = rules[id]; if (r) (outside[r.enforcement] = outside[r.enforcement] || []).push(id); }
+  const backs = ((flow.graph || {}).edges || []).filter(e => e.way === "back");
+  const jumps = backs.length ? `<div class="jumps"><span class="lbl">ways back</span>${backs.map(e => `<button type="button" class="chip" data-back="${esc(e.source)}>${esc(e.target)}"
+    data-rules="${esc(e.rules.map(r => r.rule + ":" + r.state).join(" "))}" data-source="${esc(e.source)}" data-target="${esc(e.target)}" data-way="back">${esc(e.source)} → ${esc(e.target)} · ${esc([...new Set(e.rules.map(r => r.rule))].join(" · "))}</button>`).join("")}</div>` : "";
+  const pick = S.flowPick ? slot(S.flowPick.title, S.flowPick.ids, S.flowPick.gate ? "gate" : "", rules, fired, refused) : "";
   return card(`${esc(kind)}`, `${(v.rules || []).length} rules`, picks
+      + (flow.svg ? `<div class="flowsvg">${flow.svg}</div>` + jumps + pick : "")
       + slot("every gate", flow.every_gate, "gate", rules, fired, refused) + `<div class="flow">${cols}</div>`)
     + ruleDetail(rules[S.rule], story)
     + card("Outside the stages", "the whole run, the commit hook, every stage alike",
       Object.entries(outside).map(([e, ids]) => slot(e, ids, e === "gate" ? "gate" : "", rules, fired, refused)).join(""))
     + ((v.problems || []).length ? card("Problems", "the rulebook itself", `<ul>${v.problems.map(p => `<li>${esc(p)}</li>`).join("")}</ul>`) : "");
 }
+
+// the drawing: a way back shows while its step or its chip is hovered; the picked edge or gate stays marked
+function showBacks(test) {
+  document.querySelectorAll(".flowsvg .way-back").forEach(g => g.classList.toggle("show", test(g)));
+}
+function paintFlow() {
+  const backs = new Set([...document.querySelectorAll(".flowsvg .way-back")].map(g => g.dataset.source));
+  document.querySelectorAll(".flowsvg [data-stage]").forEach(t => t.classList.toggle("has-back", backs.has(t.dataset.stage)));
+  const key = S.flowPick ? S.flowPick.key : "";
+  document.querySelectorAll(".flowsvg .way, .flowsvg .gate, .jumps [data-back]").forEach(g =>
+    g.classList.toggle("sel", !!key && flowKey(g) === key));
+}
+const flowKey = g => g.dataset.gate || `${g.dataset.source}>${g.dataset.target}>${g.dataset.way}`;
+document.addEventListener("mouseover", event => {
+  const at = event.target.closest && event.target.closest(".flowsvg [data-stage], .jumps [data-back]");
+  if (!at) return;
+  if (at.dataset.stage) showBacks(g => g.dataset.source === at.dataset.stage);
+  else showBacks(g => `${g.dataset.source}>${g.dataset.target}` === at.dataset.back);
+});
+document.addEventListener("mouseout", event => {
+  const at = event.target.closest && event.target.closest(".flowsvg [data-stage], .jumps [data-back]");
+  if (at) showBacks(() => false);
+});
+document.addEventListener("click", event => {
+  const at = event.target.closest && event.target.closest(".flowsvg [data-rules], .jumps [data-back]");
+  if (!at) return;
+  event.stopPropagation();
+  const ids = [...new Set(at.dataset.rules.split(" ").filter(Boolean).map(r => r.split(":")[0]))];
+  const key = flowKey(at);
+  if (S.flowPick && S.flowPick.key === key) { S.flowPick = null; return render(); }
+  const title = at.dataset.gate ? at.dataset.gate.replace(":", " ")
+    : at.dataset.way === "again" ? `${at.dataset.source} again` : `${at.dataset.source} → ${at.dataset.target}`;
+  S.flowPick = {key, title, ids, gate: !!at.dataset.gate};
+  S.rule = ids[0] || null;
+  render();
+}, true);
 
 // on every tab: the factory that ended on its own, and why
 function endedLine(st) {

@@ -1429,7 +1429,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
   if (current === 'rules') {
     if (!book) return page([ui.section('Rules'), <Text color={C.muted}>No rulebook — this project's pipeline is older than dca-factory 0.103.0, or factory.sh rules failed.</Text>], '')
     const kind = await read($, ruleKind)
-    const flow = book.flow[kind] ?? { every_gate: [], steps: [], edges: [] }
+    const flow = book.flow[kind] ?? { every_gate: [], steps: [], edges: [], svg: undefined }
     const at = new Map(flow.steps.map((one, index) => [one.stage, index] as const))
     const backFrom = (stage: string) =>
       [...new Set(flow.edges.filter(e => at.has(e.target) && e.target === stage && (at.get(e.target) ?? 0) < (at.get(e.source) ?? 0)).map(e => e.source))].join(', ')
@@ -1438,6 +1438,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
       [
         ui.section('Rules', `${book.rules.length} rules · what the gate checks, the runner decides and each stage is told`),
         ui.actions(Object.keys(book.flow).map(one => ui.button(`kind-${one}`, one, () => void update($, ruleKind, () => one), { isPrimary: one === kind }))),
+        ...[ui.flowDrawing(flow.svg, `the ${kind} flow: its steps, gates, rounds and ways back`)].filter((one): one is NonNullable<typeof one> => one !== null),
         <Text color={C.muted}>every gate: {flow.every_gate.join(', ')}</Text>,
         ui.table(
           [{ name: 'stage', width: 10 }, { name: 'gate before', width: 6, isNumber: true }, { name: 'told', width: 5, isNumber: true }, { name: 'gate after', width: 6, isNumber: true },

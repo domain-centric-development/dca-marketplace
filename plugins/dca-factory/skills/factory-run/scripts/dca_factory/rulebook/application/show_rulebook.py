@@ -8,7 +8,7 @@ import typing
 
 from ...building_blocks import UseCase
 from ..domain.model.rule import KindName, Rule, StageName
-from ..domain.model.rulebook import FlowStep, Rulebook
+from ..domain.model.rulebook import FlowEdge, FlowGraph, FlowStep, Rulebook
 from .shared.decided_rules import DecidedRules
 from .shared.gate_findings import GateFindings
 from .shared.instructed_rules import InstructedRules
@@ -49,6 +49,19 @@ def step_model(step: FlowStep) -> Model:
                 passed=ids(step.passed), decided=ids(step.decided))
 
 
+def edge_model(edge: FlowEdge) -> Model:
+    return dict(source=edge.source.value, target=edge.target.value, way=edge.way.value,
+                rules=[dict(rule=r.rule.value, state=r.state.value) for r in edge.rules])
+
+
+def graph_model(graph: FlowGraph) -> Model:
+    """The kind's flow as the views draw it: the steps in order with their gates, and the edges."""
+    return dict(steps=[dict(stage=s.stage.value, gate=s.gate.value, gate_before=ids(s.gate_before),
+                            gate_after=ids(s.gate_after), decided=ids(s.decided)) for s in graph.steps],
+                edges=[edge_model(e) for e in graph.edges], every_gate=[edge_model(e) for e in graph.every_gate],
+                anywhere=[edge_model(e) for e in graph.anywhere])
+
+
 class ShowRulebookUseCase:
     """The rules delivery registers and the skills mark, read as one rulebook."""
 
@@ -74,7 +87,8 @@ class ShowRulebookUseCase:
             flow={k.value: dict(every_gate=ids(book.at_every_gate(k)),
                                 edges=[dict(source=e.source.value, target=e.target.value, rule=e.rule.value,
                                             state=e.state.value) for e in book.edges(k)],
-                                steps=[step_model(s) for s in book.flow(k) if stage is None or s.stage == stage])
+                                steps=[step_model(s) for s in book.flow(k) if stage is None or s.stage == stage],
+                                graph=graph_model(book.graph(k)))
                   for k in kinds},
             outside=[r.id.value for r in book.outside() if r in chosen],
             problems=[p.said.value for p in book.problems(self._instructed.citations(), self._instructed.rules())],

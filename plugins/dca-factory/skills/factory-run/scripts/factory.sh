@@ -35,8 +35,9 @@
 #   factory.sh status [--all] [--story <id>] [--epic <id>] [--usage] [--refusals] [--brief]   what runs, what waits, what comes next; --all: every story and the cost; --refusals: form against substance
 #   factory.sh decisions [--story <id>]      the decision inbox
 #   factory.sh spec-delta <story> [--format json]  what holds before and after the story
-#   factory.sh rules [--stage <s>] [--kind <k>] [--story <id>] [--format md|json] [--check]   every rule the gate,
-#                                            the runner and the stage skills hold a story to, in each kind's flow
+#   factory.sh rules [--stage <s>] [--kind <k>] [--story <id>] [--format md|json|svg|mermaid] [--check]   every rule
+#                                            the gate, the runner and the stage skills hold a story to, in each kind's
+#                                            flow; svg, mermaid: the flow of --kind drawn — steps, gates, rounds, ways back
 #   factory.sh brief <story> <stage> [--format json]   what the stage is told for the story: its brief, from the
 #                                                     workflow's stages and rules and the profile
 #   factory.sh release <story> [--force]     give up a story's claim on the remote (`claim_remote:`); --force: another's

@@ -1,6 +1,9 @@
 ---
 id: RUN-ROUTE-5
 part: decision
+stages:
+- build
+- tidy
 fail: the run starts at the test stage instead — no round
 goes.fail: test
 ---

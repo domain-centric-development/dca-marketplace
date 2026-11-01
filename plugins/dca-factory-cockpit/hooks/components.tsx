@@ -461,6 +461,18 @@ export function components({ Box, Text, Button, Input, Svg = null, Markdown = nu
       return <Svg source={source} alt="domaincentric.dev" width={16} height={18} />
     },
 
+    // The factory's drawing of a flow (`factory.sh rules`, dca-factory 0.116.0), in the cockpit's face: its paper
+    // colours swapped for the theme's, its own dark face dropped. A surface without vectors draws nothing of it.
+    flowDrawing: (source: string | undefined, alt: string) => {
+      if (!Svg || isGrid || !source) return null
+      const themed = source
+        .replace(/@media \(prefers-color-scheme: dark\) \{[\s\S]*?\n\}\n/, '')
+        .replace(/paint-order: stroke; stroke: #ffffff/g, `paint-order: stroke; stroke: ${C.bg}`)
+        .replace(/#1c2433/g, C.text).replace(/#5b6472/g, C.muted).replace(/#a7adb8/g, C.line)
+        .replace(/#148f96/g, C.accent).replace(/#b2453a/g, C.fail)
+      return <Svg source={themed} alt={alt} isInteractive />
+    },
+
     // A heading as the site's kicker — upper case, teal — with a hint beside it; the space above it is the one
     // rhythm between parts.
     section: (title: string, hint?: string) => (

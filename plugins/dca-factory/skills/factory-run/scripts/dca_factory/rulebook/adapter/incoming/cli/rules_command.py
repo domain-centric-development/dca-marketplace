@@ -1,4 +1,4 @@
-"""`factory-cli.py --rules [--stage <s>] [--kind <k>] [--story <id>] [--format md|json] [--check]` — the rulebook, generated from
+"""`factory-cli.py --rules [--stage <s>] [--kind <k>] [--story <id>] [--format md|json|svg|mermaid] [--check]` — the rulebook, generated from
 where the rules are written; `--check` exits 1 when the rulebook itself does not hold (an id used twice, a cited id
 no rule has, a stage no row has)."""
 
@@ -20,7 +20,8 @@ def main(argv: typing.Sequence[str]) -> int:
     parser.add_argument("--stage", help="only the rules that hold at this stage")
     parser.add_argument("--kind", help="only the rules that hold for this story kind")
     parser.add_argument("--story", help="mark the rules that fired in the story's last gate runs")
-    parser.add_argument("--format", choices=("md", "json"), default="md")
+    parser.add_argument("--format", choices=("md", "json", "svg", "mermaid"), default="md",
+                        help="svg, mermaid: the flow of --kind (story when none) as a drawing")
     parser.add_argument("--check", action="store_true",
                         help="print what does not hold in the rulebook itself, exit 1 when anything does")
     args = parser.parse_args(list(argv))

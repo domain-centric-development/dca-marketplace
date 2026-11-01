@@ -297,7 +297,7 @@ export type Rule = {
 export type FlowStep = { stage: string; gate: string; window: string; gate_before: string[]; told: string[]; gate_after: string[]; passed: string[]; decided: string[] }
 export type RulesView = {
   rules: Rule[]
-  flow: Record<string, { every_gate: string[]; steps: FlowStep[]; edges: { source: string; target: string; rule: string; state: string }[] }>
+  flow: Record<string, { every_gate: string[]; steps: FlowStep[]; edges: { source: string; target: string; rule: string; state: string }[]; svg?: string }>
   outside: string[]
   problems: string[]
 }

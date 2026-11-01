@@ -27,6 +27,10 @@ from dca_factory.infrastructure.rulebook import show_rulebook
 from dca_factory.rulebook.adapter.outgoing.skills.skill_files import SkillFiles
 from dca_factory.rulebook.application.show_rulebook import ShowRulebookQuery, ShowRulebookUseCase
 from dca_factory.rulebook.adapter.outgoing.delivery.delivery_rules import DeliveryFindings, DeliveryRules
+from dca_factory.rulebook.adapter.incoming.cli.flow_svg import svg
+from dca_factory.rulebook.application.show_rulebook import graph_model
+from dca_factory.rulebook.domain.model import rule as book_rule
+from dca_factory.rulebook.domain.model.rulebook import GateTime, KindOrder, OrderPlace, Rulebook, StageRow, Way
 
 PACKAGE = os.path.join(support.SCRIPTS, "dca_factory")
 SKILLS = os.path.normpath(os.path.join(support.SCRIPTS, "..", ".."))
@@ -264,6 +268,76 @@ class FlowTest(unittest.TestCase):
             self.assertEqual({"GATE-SUITE": 2, "GATE-TESTS-KEPT": 1}, story["refused"])
 
 
+def rule(rule_id, stages, *outcomes, part=book_rule.Part.DECISION):
+    """A rule of the rulebook's own model: <outcomes> as (state, goes…)."""
+    return book_rule.Rule(
+        book_rule.RuleId(rule_id), part, tuple(book_rule.StageName(s) for s in stages), (), book_rule.Words("w"),
+        tuple(book_rule.Outcome(book_rule.OutcomeState(state), book_rule.Words("s"),
+                                tuple(book_rule.StageName(g) for g in goes)) for state, *goes in outcomes),
+        book_rule.Words("y"), book_rule.Words(""), (), book_rule.Source("x.md"))
+
+
+def row(name, gate):
+    return StageRow(book_rule.StageName(name), (book_rule.KindName("story"),), GateTime(gate), OrderPlace.IN_ORDER,
+                    book_rule.Words(""))
+
+
+class GraphTest(unittest.TestCase):
+    """The drawn flow comes from the rules alone (WP-172): a stage, a check or a `goes` changed in a file shows in the
+    graph and the drawing with no change of code."""
+
+    def book(self, stages, rules):
+        return Rulebook(tuple(rules), tuple(row(n, g) for n, g in stages),
+                        (KindOrder(book_rule.KindName("story"), tuple(book_rule.StageName(n) for n, _g in stages)),))
+
+    def edges(self, graph):
+        return {(e.source.value, e.target.value, e.way): {r.rule.value for r in e.rules} for e in graph.edges}
+
+    STAGES = [("plan", "before"), ("test", "after"), ("build", "after"), ("judge", "none")]
+    RULES = [rule("RUN-ROUNDS-1", ["test", "build"], ("fail", "again", "stop")),
+             rule("RUN-BACK-1", ["build"], ("fail", "test")),
+             rule("RUN-VERDICT-1", ["judge"], ("pass",), ("fail", "build", "stop")),
+             rule("RUN-ROUTE-6", [], ("ask", "stop")),
+             rule("GATE-TESTS-RED", ["test"], ("pass",), ("fail",), part=book_rule.Part.CHECK)]
+
+    def test_each_outcome_is_an_edge_of_its_way(self):
+        graph = self.book(self.STAGES, self.RULES).graph(book_rule.KindName("story"))
+        edges = self.edges(graph)
+        self.assertEqual({"RUN-ROUNDS-1"}, edges[("test", "test", Way.AGAIN)])
+        self.assertEqual({"RUN-BACK-1"}, edges[("build", "test", Way.BACK)])
+        self.assertEqual({"RUN-VERDICT-1"}, edges[("judge", "build", Way.BACK)])
+        self.assertIn(("judge", "delivered", Way.ON), edges)                 # the plain way on, to the end
+        self.assertIn(("plan", "test", Way.ON), edges)
+        anywhere = {(e.target.value, e.way) for e in graph.anywhere}
+        self.assertIn(("waits", Way.WAITS), anywhere)                          # `ask` waits for a person, not stop
+        self.assertEqual([], [p.said.value for p in self.book(self.STAGES, self.RULES).unrounded()])
+
+    def test_a_new_stage_a_new_way_back_and_a_stage_without_a_round_show_without_code(self):
+        stages = self.STAGES[:3] + [("review", "after")] + self.STAGES[3:]
+        rules = self.RULES + [rule("RUN-REVIEW-1", ["review"], ("fail", "plan"))]
+        book = self.book(stages, rules)
+        graph = book.graph(book_rule.KindName("story"))
+        self.assertEqual({"RUN-REVIEW-1"}, self.edges(graph)[("review", "plan", Way.BACK)])
+        problems = [p.said.value for p in book.unrounded()]
+        self.assertEqual(1, len(problems))
+        self.assertIn("review has a gate after it", problems[0])
+        drawn = svg(graph_model(graph), "story")
+        self.assertIn('data-stage="review"', drawn)
+        self.assertIn('data-source="review" data-target="plan" data-way="back"', drawn)
+        self.assertIn('data-gate="gate-after:review"', drawn)
+
+    def test_the_plugins_own_flow_has_a_round_at_every_gated_step(self):
+        flow = show_rulebook(tempfile.gettempdir()).execute(ShowRulebookQuery(kind="story"))["flow"]["story"]
+        graph = flow["graph"]
+        again = {e["source"] for e in graph["edges"] if e["way"] == "again" and
+                 any(r["rule"] == "RUN-ROUNDS-1" for r in e["rules"])}
+        gated = {s["stage"] for s in graph["steps"] if s["gate"] == "after"}
+        self.assertEqual(gated, again)
+        self.assertTrue(any(e["way"] == "waits" for e in graph["every_gate"]), graph["every_gate"])
+        backs = {(e["source"], e["target"]) for e in graph["edges"] if e["way"] == "back"}
+        self.assertTrue({("build", "test"), ("judge", "build"), ("document", "plan")} <= backs, backs)
+
+
 class CliTest(unittest.TestCase):
 
     def cli(self, *args):
@@ -281,6 +355,11 @@ class CliTest(unittest.TestCase):
         self.assertEqual(["plan", "build", "tidy", "judge", "document", "integrate"],
                          [s["stage"] for s in view["flow"]["task"]["steps"]])
         self.assertTrue(all(not r["kinds"] or "task" in r["kinds"] for r in view["rules"]))
+        self.assertTrue(view["flow"]["task"]["svg"].startswith("<svg"))
+        drawn = self.cli("--format", "svg", "--kind", "journey").stdout
+        self.assertTrue(drawn.startswith("<svg"), drawn[:200])
+        self.assertIn('data-stage="judge"', drawn)
+        self.assertNotIn('data-stage="build"', drawn)
 
 
 if __name__ == "__main__":

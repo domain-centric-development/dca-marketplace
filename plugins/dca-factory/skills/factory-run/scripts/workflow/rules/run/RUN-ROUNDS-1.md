@@ -1,6 +1,13 @@
 ---
 id: RUN-ROUNDS-1
 part: decision
+stages:
+- test
+- build
+- tidy
+- document
+- adopt
+- integrate
 fail: a round, and the run goes back to the refused stage (or an earlier one the story's files need); at three rounds the story stops (exit 1)
 goes.fail:
 - again

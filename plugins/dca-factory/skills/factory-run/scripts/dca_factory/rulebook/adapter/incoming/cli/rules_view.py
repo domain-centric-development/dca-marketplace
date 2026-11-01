@@ -1,9 +1,13 @@
-"""The rulebook as a person reads it — generated Markdown — or as the views draw it: JSON."""
+"""The rulebook as a person reads it — generated Markdown — or as the views draw it: JSON, each kind's flow drawn in it
+as SVG; or one kind's flow alone, as SVG or Mermaid."""
 
 from __future__ import annotations
 
 import json
 import typing
+
+from .flow_mermaid import mermaid
+from .flow_svg import svg
 
 Model = typing.Dict[str, typing.Any]
 
@@ -97,4 +101,11 @@ def markdown(view: Model) -> str:
 
 
 def render(view: Model, fmt: str = "md") -> str:
-    return json.dumps(view, indent=2) + "\n" if fmt == "json" else markdown(view)
+    if fmt in ("svg", "mermaid"):
+        kind = view.get("kind") or "story"
+        return (svg if fmt == "svg" else mermaid)(view["flow"][kind]["graph"], kind)
+    if fmt == "json":
+        for kind, flow in view["flow"].items():
+            flow["svg"] = svg(flow["graph"], kind)
+        return json.dumps(view, indent=2) + "\n"
+    return markdown(view)
