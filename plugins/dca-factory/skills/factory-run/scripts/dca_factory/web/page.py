@@ -538,7 +538,7 @@ function ruleRow(id, rules, story, stage) {
         + `<p class="said"><span class="kw">When</span> ${inline(clause(r.when))}</p>`
         + (r.outcomes || []).map(o => `<p class="said s-${esc(o.state)}"><span class="kw">${icon(o.state)} ${esc(SAYS[o.state] || o.state)}</span> ${inline(clause(o.said))}${going(o.goes)}</p>`).join(""))
     + (fired.length ? `<p class="rec">this story: ${esc(fired.map(f => `${f.stage}: ${f.state}`).join(" · "))}${refused ? ` · refused ${refused}×` : ""}</p>` : "")
-    + `<details class="src"><summary>source</summary><p class="hint">${esc(r.source || "")}${r.bound ? (r.part === "instruction" ? " · placed in " : " · bound in ") + esc(r.bound) : ""}</p></details></div>`;
+    + `<details class="src" data-fold="src:${esc(id)}"${foldOpen("src:" + id)}><summary>source</summary><p class="hint">${esc(r.source || "")}${r.bound ? (r.part === "instruction" ? " · placed in " : " · bound in ") + esc(r.bound) : ""}</p></details></div>`;
   return `<div class="rrow${open ? " open" : ""}"><button type="button" class="rhead" data-open-rule="${esc(id)}" aria-expanded="${open}">
     <span class="caret" aria-hidden="true">${open ? "▾" : "▸"}</span><span class="rgist">${inline(head)}</span>
     <span class="rid e-${esc(r.enforcement)}${state ? " f-" + esc(state) : ""}">${esc(id)}${refused ? `<span class="x">×${refused}</span>` : ""}</span></button>${body}</div>`;
@@ -587,9 +587,18 @@ function picked(flow, rules, story) {
   return card(`${esc(p.source)} → ${esc(p.target)}`, esc(p.way), ruleGroup("the rules that take it", edge ? ids([edge]) : [], rules, story, p.source));
 }
 
+// a folded part stays as the person left it: the page draws itself again on every refresh
+const folds = () => S.folds || (S.folds = new Set());
+const foldOpen = key => folds().has(key) ? " open" : "";
+document.addEventListener("toggle", event => {
+  const at = event.target;
+  if (!at.dataset || !at.dataset.fold) return;
+  if (at.open) folds().add(at.dataset.fold); else folds().delete(at.dataset.fold);
+}, true);
+
 function folded(title, sub, ids, rules, story) {
   if (!ids || !ids.length) return "";
-  return `<details class="card more"><summary><h2>${esc(title)} <span class="sub">${ids.length} rules — ${esc(sub)}</span></h2></summary>`
+  return `<details class="card more" data-fold="${esc(title)}"${foldOpen(title)}><summary><h2>${esc(title)} <span class="sub">${ids.length} rules — ${esc(sub)}</span></h2></summary>`
     + ruleGroup("", ids, rules, story) + `</details>`;
 }
 
@@ -607,7 +616,7 @@ function rulesTab(st) {
     + folded("At every gate", "the checks each gate of this flow runs as well", flow.every_gate, rules, story)
     + folded("Anywhere in a run", "what stops a run or waits for a person at any step",
              [...new Set(((flow.graph || {}).anywhere || []).flatMap(e => e.rules.map(r => r.rule)))], rules, story)
-    + `<details class="card more"><summary><h2>Outside the stages <span class="sub">${(v.outside || []).length} rules — the whole run, the commit hook, every stage alike</span></h2></summary>`
+    + `<details class="card more" data-fold="outside"${foldOpen("outside")}><summary><h2>Outside the stages <span class="sub">${(v.outside || []).length} rules — the whole run, the commit hook, every stage alike</span></h2></summary>`
     + ruleGroup("", v.outside || [], rules, story) + `</details>`
     + ((v.problems || []).length ? card("Problems", "the rulebook itself", `<ul>${v.problems.map(p => `<li>${esc(p)}</li>`).join("")}</ul>`) : "");
 }
