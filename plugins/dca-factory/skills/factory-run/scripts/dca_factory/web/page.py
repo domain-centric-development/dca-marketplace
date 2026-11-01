@@ -207,6 +207,11 @@ pre.out:empty { display: none; }
 .rbody .goes { font: 500 12.5px var(--mono); color: var(--accent); white-space: nowrap; }
 .rbody details.src summary { cursor: pointer; font: 400 11.5px var(--mono); color: var(--muted); margin-top: 8px; }
 .rbody { padding: 2px 4px 12px 26px; } .rbody .kv { margin-top: 0; }
+.part { border-left: 2px solid var(--line); padding: 2px 0 6px 14px; margin-top: 14px; }
+.part-head { font: 600 15px var(--display); display: flex; gap: 8px; align-items: baseline; }
+.part-head .num { font: 600 12px var(--mono); color: var(--accent); } .part-head .hint { font: 400 13px var(--body); }
+.part .rgroup:first-of-type { margin-top: 6px; } .then { margin: 6px 0 0; font: 400 14px var(--body); color: var(--muted); }
+details.fold > summary { cursor: pointer; font: 500 12px var(--mono); color: var(--accent); margin-top: 6px; }
 .way-link { background: none; border: 0; padding: 2px 0; font: 500 13px var(--mono); color: var(--accent); cursor: pointer; }
 details.more > summary { cursor: pointer; list-style: none; } details.more > summary::-webkit-details-marker { display: none; }
 details.more > summary h2::before { content: "▸ "; color: var(--muted); } details.more[open] > summary h2::before { content: "▾ "; }
@@ -546,13 +551,14 @@ function ruleRow(id, rules, story, stage) {
 
 function ruleGroup(label, ids, rules, story, stage) {
   if (!ids || !ids.length) return "";
-  return `<div class="rgroup"><div class="lbl">${esc(label)} <span class="n">${ids.length}</span></div>${ids.map(id => ruleRow(id, rules, story, stage)).join("")}</div>`;
+  return `<div class="rgroup">${label ? `<div class="lbl">${esc(label)} <span class="n">${ids.length}</span></div>` : ""}${ids.map(id => ruleRow(id, rules, story, stage)).join("")}</div>`;
 }
 
-function waysLine(edges, title) {
+function waysLine(edges, title, rules) {
   if (!edges.length) return "";
+  const named = id => (rules && rules[id] && rules[id].title) || id;
   return `<div class="rgroup"><div class="lbl">${esc(title)}</div>${edges.map(e => `<button type="button" class="way-link" data-edge="${esc(e.source)}>${esc(e.target)}>${esc(e.way)}">
-    ${esc(e.source)} → ${esc(e.target)}</button> <span class="hint">${esc([...new Set(e.rules.map(r => r.rule))].join(" · "))}</span>`).join("<br>")}</div>`;
+    ${esc(e.source)} → ${esc(e.target)}</button> <span class="hint">${esc([...new Set(e.rules.map(r => named(r.rule)))].join(" · "))}</span>`).join("<br>")}</div>`;
 }
 
 function picked(flow, rules, story) {
@@ -560,16 +566,33 @@ function picked(flow, rules, story) {
   const ids = es => [...new Set(es.flatMap(e => e.rules.map(r => r.rule)))];
   if (!p) {
     return card("", "", `<p class="empty">Pick a step, a gate or a way in the drawing — its rules show here.</p>
+      <p class="hint"><b>Four kinds of rule.</b> A <b>check</b> (GATE-…) is a question a gate asks after a stage — it passes or refuses. A <b>decision</b> (RUN-…) says where the story goes then: on, once more, back, or stop. A <b>pass</b> rule says what a passing gate does. What a stage is <b>told</b> (STAGE-…) is its instruction; no gate asks it directly.</p>
       <p class="hint">A teal dot is a gate: the checks between two steps. A dashed arc above is a round — a refused gate sends the story back into its step, three times at most. A way back appears below while the pointer is on its step. A red mark stops the run; a grey one waits for a person.</p>`);
   }
   if (p.type === "stage") {
+    // a stage told as it runs: what it is told, the gate that asks, what a pass does, where a refusal sends it
     const step = flow.steps.find(s => s.stage === p.stage) || {gate_before: [], told: [], gate_after: [], passed: [], decided: []};
-    const out = graph.edges.filter(e => e.source === p.stage && e.way === "back"), into = graph.edges.filter(e => e.target === p.stage && e.way === "back");
-    return card(esc(p.stage), (step.window || "") + (step.gate === "none" ? " · decides, no gate" : ""),
-      ruleGroup("gate before", step.gate_before, rules, story, p.stage) + ruleGroup("gate after", step.gate_after, rules, story, p.stage)
-      + ruleGroup("a pass does", step.passed, rules, story, p.stage) + ruleGroup("the runner decides", step.decided, rules, story, p.stage)
-      + waysLine(out, "ways back from here") + waysLine(into, "ways back to here")
-      + ruleGroup("what the stage is told", step.told, rules, story, p.stage));
+    const at = flow.steps.findIndex(s => s.stage === p.stage), next = (flow.steps[at + 1] || {}).stage || "delivered";
+    const own = e => e.source === p.stage;
+    const round = graph.edges.find(e => own(e) && e.way === "again"), on = graph.edges.find(e => own(e) && e.way === "on" && e.rules.length);
+    const out = graph.edges.filter(e => own(e) && e.way === "back"), into = graph.edges.filter(e => e.target === p.stage && e.way === "back");
+    const stops = graph.edges.filter(e => own(e) && (e.way === "stop" || e.way === "waits"));
+    const named = new Set([round, on, ...out, ...stops].filter(Boolean).flatMap(e => e.rules.map(r => r.rule)));
+    const rest = (step.decided || []).filter(id => !named.has(id));
+    let n = 0;
+    const part = (title, body) => body ? `<div class="part"><div class="part-head"><span class="num">${++n}</span>${title}</div>${body}</div>` : "";
+    return card(esc(p.stage), (step.window || "") + (step.gate === "none" ? " · decides with its verdict, no gate" : ""),
+      part("Before it — the gate before the stage asks; a refusal keeps it from starting", ruleGroup("", step.gate_before, rules, story, p.stage))
+      + part(`It is told <span class="hint">— ${(step.told || []).length} instructions</span>`, foldGroup(`told:${p.stage}`, "show what it is told", step.told, rules, story, p.stage))
+      + part(`The gate after it asks <span class="hint">— ${(step.gate_after || []).length} checks, each can refuse</span>`, foldGroup(`checks:${p.stage}`, "show the checks", step.gate_after, rules, story, p.stage))
+      + part(step.gate === "none" ? "Its verdict decides" : "When the gate passes",
+          ruleGroup("", [...(step.passed || []), ...(on ? on.rules.map(r => r.rule) : [])], rules, story, p.stage)
+          + `<p class="then">→ on to <b>${esc(next)}</b></p>`)
+      + part(step.gate === "none" ? "When it asks for changes" : "When a check refuses",
+          (round ? ruleGroup("once more into this stage", ids([round]), rules, story, p.stage) : "")
+          + waysLine(out, "back to an earlier stage", rules) + (stops.length ? ruleGroup("stop, or wait for a person", ids(stops), rules, story, p.stage) : ""))
+      + part("The runner also decides here", ruleGroup("", rest, rules, story, p.stage))
+      + (into.length ? `<div class="part">${waysLine(into, "ways back to this stage", rules)}</div>` : ""));
   }
   if (p.type === "gate") {
     const [where, stage] = p.gate.split(":"), step = flow.steps.find(s => s.stage === stage) || {};
@@ -598,6 +621,11 @@ document.addEventListener("toggle", event => {
   if (!at.dataset || !at.dataset.fold) return;
   if (at.open) folds().add(at.dataset.fold); else folds().delete(at.dataset.fold);
 }, true);
+
+function foldGroup(key, label, ids, rules, story, stage) {
+  if (!ids || !ids.length) return "";
+  return `<details class="fold" data-fold="${esc(key)}"${foldOpen(key)}><summary>${esc(label)} (${ids.length})</summary>${ruleGroup("", ids, rules, story, stage)}</details>`;
+}
 
 function folded(title, sub, ids, rules, story) {
   if (!ids || !ids.length) return "";
