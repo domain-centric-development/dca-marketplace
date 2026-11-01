@@ -68,5 +68,6 @@ class DeliveryFindings:
                      for stage, items in found.items() for item in items)
 
     def refused(self, story: str) -> typing.Tuple[Refused, ...]:
-        return tuple(Refused(Words(check), Count(times))
-                     for check, times in story_gate_findings(self._cwd, story)["refused"].items())
+        found = story_gate_findings(self._cwd, story)
+        return tuple(Refused(Words(check), Count(times), StageName(stage))
+                     for stage, checks in found.get("refused_at", {}).items() for check, times in checks.items())

@@ -103,5 +103,10 @@ class ShowRulebookUseCase:
             entry = dict(stage=item.stage.value, state=item.state.value)
             if entry not in states:
                 states.append(entry)
-        return dict(id=story, fired=fired,
-                    refused={r.rule.value: r.times.value for r in book.refused(self._findings.refused(story))})
+        found = self._findings.refused(story)
+        refused_at: typing.Dict[str, typing.Dict[str, int]] = {}
+        for item in book.refused_at(found):
+            at = refused_at.setdefault(item.stage.value, {})
+            at[item.rule.value] = at.get(item.rule.value, 0) + 1
+        return dict(id=story, fired=fired, refused={r.rule.value: r.times.value for r in book.refused(found)},
+                    refused_at=refused_at)

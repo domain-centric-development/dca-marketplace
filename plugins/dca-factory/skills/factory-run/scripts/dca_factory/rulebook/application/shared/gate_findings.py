@@ -16,5 +16,5 @@ class GateFindings(OutputPort, typing.Protocol):
         ...
 
     def refused(self, story: str) -> typing.Tuple[Refused, ...]:
-        """How often the gate refused the story, per name."""
+        """How often the gate refused the story, per name at each stage."""
         ...

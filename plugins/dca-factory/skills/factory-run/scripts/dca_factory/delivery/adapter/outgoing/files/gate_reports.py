@@ -50,10 +50,14 @@ def report_findings(path: str) -> Findings:
 
 
 def story_findings(runs: str, story_id: str) -> typing.Dict[str, typing.Any]:
-    """{stages: {stage: [{state, check}]}, refused: {check: n}} — empty where the story left no report."""
+    """{stages: {stage: [{state, check}]}, refused: {check: n}, refused_at: {stage: {check: n}}} — empty where the
+    story left no report."""
     stages = {stage: report_findings(path) for stage, path in sorted(latest_reports(runs, story_id).items())}
     refused: typing.Counter[str] = collections.Counter()
+    refused_at: typing.Dict[str, typing.Counter[str]] = {}
     for event in journal_events(runs, story_id):
         if event["kind"] == "gate" and event["fields"].get("exit") == "1":
-            refused.update(c for c in str(event["fields"].get("fail", "")).split(",") if c)
-    return dict(stages=stages, refused=dict(refused))
+            checks = [c for c in str(event["fields"].get("fail", "")).split(",") if c]
+            refused.update(checks)
+            refused_at.setdefault(event["name"], collections.Counter()).update(checks)
+    return dict(stages=stages, refused=dict(refused), refused_at={s: dict(c) for s, c in refused_at.items()})

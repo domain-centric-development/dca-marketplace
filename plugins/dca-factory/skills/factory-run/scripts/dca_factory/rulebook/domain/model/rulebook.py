@@ -267,6 +267,16 @@ class Rulebook(Value):
                      for item in found for rule in by_name.get(item.check, ())
                      if not rule.stages or rule.holds_at(item.stage))
 
+    def refused_at(self, found: typing.Tuple[Refused, ...]) -> typing.Tuple[RuleFired, ...]:
+        """Each rule a stage's refusal was reported under, at that stage, once per refusal — a rule that does not
+        hold at the stage is left out (a name several gates share counts where it was refused)."""
+        out = []
+        for item in found:
+            for rule in self.active():
+                if item.check in rule.reports and (not rule.stages or rule.holds_at(item.stage)):
+                    out += [RuleFired(rule.id, item.stage, OutcomeState.FAIL)] * item.times.value
+        return tuple(out)
+
     def refused(self, found: typing.Tuple[Refused, ...]) -> typing.Tuple[RuleRefused, ...]:
         """How often the gate refused for each rule's names, summed over them."""
         times: typing.Dict[RuleId, int] = {}

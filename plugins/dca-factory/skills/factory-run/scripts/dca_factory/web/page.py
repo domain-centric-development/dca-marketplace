@@ -212,6 +212,11 @@ pre.out:empty { display: none; }
 .part-head .num { font: 600 12px var(--mono); color: var(--accent); } .part-head .hint { font: 400 13px var(--body); }
 .part .rgroup:first-of-type { margin-top: 6px; } .then { margin: 6px 0 0; font: 400 14px var(--body); color: var(--muted); }
 details.fold > summary { cursor: pointer; font: 500 12px var(--mono); color: var(--accent); margin-top: 6px; }
+.storyline { font: 400 15px var(--body); margin: 12px 0 0; } .storyline .hint { display: block; }
+.flowsvg.has-story [data-stage]:not(.ov-reached) { opacity: .35; }
+.flowsvg [data-stage].ov-now { fill: var(--teal); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px; }
+.flowsvg .gate.ov-failed circle { stroke: var(--stop); stroke-width: 4px; }
+.flowsvg .ov-badge { font: 700 11px var(--mono); fill: var(--stop); }
 .way-link { background: none; border: 0; padding: 2px 0; font: 500 13px var(--mono); color: var(--accent); cursor: pointer; }
 details.more > summary { cursor: pointer; list-style: none; } details.more > summary::-webkit-details-marker { display: none; }
 details.more > summary h2::before { content: "▸ "; color: var(--muted); } details.more[open] > summary h2::before { content: "▾ "; }
@@ -633,16 +638,50 @@ function folded(title, sub, ids, rules, story) {
     + ruleGroup("", ids, rules, story) + `</details>`;
 }
 
+// a story laid over the drawing: the steps its gates ran at, where it stands, which gate refused it and how often
+function storyMarks(flow, story) {
+  if (!story) return null;
+  // the steps run in order: every step before the last one the story's gates ran at was reached too (a judge has none)
+  const ran = new Set(Object.values(story.fired).flat().map(f => f.stage));
+  const last = Math.max(-1, ...flow.steps.map((s, i) => ran.has(s.stage) ? i : -1));
+  const reached = new Set([...ran, ...flow.steps.slice(0, last + 1).map(s => s.stage)]);
+  const at = story.refused_at || {};
+  const gates = flow.steps.filter(s => s.gate === "after").map(s => {
+    const refused = Object.values(at[s.stage] || {}).reduce((n, k) => n + k, 0);
+    const failed = (s.gate_after || []).some(id => (story.fired[id] || []).some(f => f.stage === s.stage && f.state === "fail"));
+    return {stage: s.stage, refused, failed};
+  });
+  return {reached, gates};
+}
+
+function storyLine(st, flow, story) {
+  if (!story) return "";
+  const row = (st.rows || []).find(r => r.story === story.id) || {};
+  const marks = storyMarks(flow, story), refused = marks.gates.filter(g => g.refused);
+  const other = [...marks.reached].filter(name => !flow.steps.some(s => s.stage === name));
+  return `<p class="storyline"><b>${esc(story.id)}</b> — ${esc(row.state || "")}${row.stage && row.stage !== "—" ? `, now at <b>${esc(row.stage)}</b>` : ""}.
+    ${refused.length ? "Refused: " + refused.map(g => `${esc(g.stage)} ×${g.refused}`).join(", ") + "." : "No gate refused it."}
+    ${other.length ? `<span class="hint">It also ran ${esc(other.join(", "))} — another kind's steps; pick that kind to see them.</span>` : ""}</p>`;
+}
+
 function rulesTab(st) {
   if (!S.rules) { loadRules(); return card("", "", `<p class="empty">Reading the rules…</p>`); }
   const v = S.rules, rules = Object.fromEntries((v.rules || []).map(r => [r.id, r]));
   const story = v.story || null;
-  const kinds = Object.keys(v.flow || {}), kind = kinds.includes(S.ruleKind) ? S.ruleKind : kinds[0];
+  const kinds = Object.keys(v.flow || {});
+  if (story && S.kindFor !== story.id) {
+    S.kindFor = story.id;
+    const ran = new Set(Object.values(story.fired).flat().map(f => f.stage));
+    const fits = kinds.filter(k => [...ran].every(st => v.flow[k].steps.some(s => s.stage === st)))
+      .sort((a, b) => v.flow[a].steps.length - v.flow[b].steps.length);
+    if (fits.length) S.ruleKind = fits[0];
+  }
+  const kind = kinds.includes(S.ruleKind) ? S.ruleKind : kinds[0];
   const flow = (v.flow || {})[kind] || {steps: [], edges: [], every_gate: []};
   const stories = (st.rows || []).map(r => r.story);
   const picks = `<div class="pick">${kinds.map(k => `<button class="btn${k === kind ? " primary" : ""}" data-kind="${esc(k)}">${esc(k)}</button>`).join("")}
     <select data-overlay aria-label="a story's gate runs"><option value="">no story</option>${stories.map(id => `<option${id === S.ruleStory ? " selected" : ""}>${esc(id)}</option>`).join("")}</select></div>`;
-  return card(`${esc(kind)}`, `${(v.rules || []).length} rules`, picks + (flow.svg ? `<div class="flowsvg">${flow.svg}</div>` : ""))
+  return card(`${esc(kind)}`, `${(v.rules || []).length} rules`, picks + storyLine(st, flow, story) + (flow.svg ? `<div class="flowsvg">${flow.svg}</div>` : ""))
     + picked(flow, rules, story)
     + folded("At every gate", "the checks each gate of this flow runs as well", flow.every_gate, rules, story)
     + folded("Anywhere in a run", "what stops a run or waits for a person at any step",
@@ -667,6 +706,23 @@ function paintFlow() {
   const key = S.flowPick ? S.flowPick.key : "";
   document.querySelectorAll(".flowsvg").forEach(f => f.classList.toggle("has-pick", !!key));
   document.querySelectorAll(".flowsvg .way, .flowsvg .gate, .flowsvg [data-stage]").forEach(g => g.classList.toggle("sel", !!key && flowKey(g) === key));
+  const v = S.rules, flow = v && v.flow && v.flow[S.ruleKind], marks = flow ? storyMarks(flow, v.story) : null;
+  const row = marks && S.status ? (S.status.rows || []).find(r => r.story === v.story.id) : null;
+  document.querySelectorAll(".flowsvg").forEach(f => f.classList.toggle("has-story", !!marks));
+  document.querySelectorAll(".flowsvg .ov-badge").forEach(t => t.remove());
+  document.querySelectorAll(".flowsvg [data-stage]").forEach(t => {
+    t.classList.toggle("ov-reached", !!marks && marks.reached.has(t.dataset.stage));
+    t.classList.toggle("ov-now", !!row && row.stage === t.dataset.stage);
+  });
+  document.querySelectorAll(".flowsvg .gate").forEach(g => {
+    const [, stage] = (g.dataset.gate || "").split(":"), at = marks ? marks.gates.find(x => x.stage === stage) : null;
+    g.classList.toggle("ov-failed", !!at && at.failed);
+    if (at && at.refused) {
+      const c = g.querySelector("circle"), t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      t.setAttribute("x", +c.getAttribute("cx") + 14); t.setAttribute("y", +c.getAttribute("cy") - 12);
+      t.setAttribute("class", "ov-badge"); t.textContent = `×${at.refused}`; g.appendChild(t);
+    }
+  });
   if (S.flowPick && S.flowPick.type === "stage") showBacks(g => g.dataset.source === S.flowPick.stage);
   else if (S.flowPick && S.flowPick.way === "back") showBacks(g => flowKey(g) === S.flowPick.key);
 }

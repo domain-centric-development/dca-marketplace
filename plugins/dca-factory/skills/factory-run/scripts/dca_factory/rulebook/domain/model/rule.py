@@ -153,7 +153,8 @@ class Fired(Value):
 
 
 class Refused(Value):
-    """How often the gate refused a story for one name."""
+    """How often the gate refused a story for one name — at one stage, or over all of them where none is named."""
 
     check: Words
     times: Count
+    stage: StageName = StageName("")

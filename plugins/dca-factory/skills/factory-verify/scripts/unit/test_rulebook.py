@@ -266,6 +266,7 @@ class FlowTest(unittest.TestCase):
             self.assertEqual([{"stage": "build", "state": "pass"}], story["fired"]["GATE-TESTS-KEPT"])
             self.assertNotIn("GATE-PLAN-FILES", story["fired"])
             self.assertEqual({"GATE-SUITE": 2, "GATE-TESTS-KEPT": 1}, story["refused"])
+            self.assertEqual({"build": {"GATE-SUITE": 2, "GATE-TESTS-KEPT": 1}}, story["refused_at"])
 
 
 def rule(rule_id, stages, *outcomes, part=book_rule.Part.DECISION):
