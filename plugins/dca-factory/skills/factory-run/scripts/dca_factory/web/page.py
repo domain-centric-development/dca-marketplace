@@ -287,13 +287,12 @@ details.more > summary h2::before { content: "▸ "; color: var(--muted); } deta
 "use strict";
 const TOKEN = new URLSearchParams(location.search).get("t") || "";
 const TABS = [
-  ["describe", "0 describe", "Once", "The project description", "What is built, how, and in which domain — written once, changed when things move."],
+  ["describe", "0 describe", "Once", "The project description", "What is built, how, and in which domain — and in each context what holds today. You write the description; what holds changes by a story the gate delivers."],
   ["discover", "1 discover", "Cycle", "Discovery", "Which problem is worth solving — a report with its sources and the epics it proposes."],
   ["backlog", "2 backlog", "Cycle", "Backlog", "Epics and their stories, newest first. A story runs once released."],
   ["run", "3 run", "Cycle", "The factory at work", "Your requests first, then the stories — one stage after the other, a gate between them."],
   ["decide", "4 decide", "Cycle", "Waiting for you", "A question a stage may not decide alone, or a result to look at."],
   ["delivered", "5 delivered", "Cycle", "Delivered", "What the factory delivered, the newest first."],
-  ["spec", "spec", "Always", "What holds", "Each context with its domain model and its features — the rules and scenarios that hold, and the open stories that would change them. What holds changes only by a story the gate delivers."],
   ["rules", "rules", "Always", "The rules", "What the gate checks, what the runner decides and what each stage is told — per stage of a story, the gates between them. Pick a rule to read it; pick a story to see which fired."]];
 const MARKS = {look: "!", question: "?", stopped: "✗", running: "▶", done: "✓", none: "·", next: "→"};
 const S = {tab: "backlog", status: null, decisions: null, discover: null, requests: null, follow: null, followSource: null,
@@ -303,6 +302,7 @@ const stored = key => { try { return localStorage.getItem(key) || ""; } catch (e
 const store = (key, value) => { try { localStorage.setItem(key, value); } catch (e) {} };
 S.tab = stored("factory.tab") || S.tab;
 if (TABS.some(([id]) => id === location.hash.slice(1))) S.tab = location.hash.slice(1);
+if (location.hash === "#spec" || S.tab === "spec") S.tab = "describe";                // what holds is part of the description
 // `#rules:<story>[:<rule>]` opens the rules with that story's gate runs marked, and the rule read
 if (location.hash.startsWith("#rules:")) {
   const [story, rule] = decodeURIComponent(location.hash.slice(7)).split(":");
@@ -523,7 +523,7 @@ function render() {
   if (editing) return;                                   // a person typing is not redrawn under their hands
   forget("m"); forget("s");
   const [, , eyebrow, title, lede] = TABS.find(([id]) => id === S.tab) || TABS[2];
-  const view = {describe, discover, backlog, run, decide, delivered, spec: specTab, rules: rulesTab}[S.tab] || backlog;
+  const view = {describe, discover, backlog, run, decide, delivered, rules: rulesTab}[S.tab] || backlog;
   $("main").innerHTML = `<div class="eyebrow">${esc(eyebrow)}</div><h1>${esc(title)}</h1><p class="lede">${esc(lede)}</p>`
     + (S.status ? endedLine(S.status) + view(S.status) : `<section class="card"><p class="empty">Reading the factory…</p></section>`);
   if (S.tab === "run") paintFollow();
@@ -823,8 +823,8 @@ function specContext(c) {
       ${c.add ? `<details class="fold" data-fold="addfeature:${esc(c.context)}"${foldOpen("addfeature:" + c.context)}><summary>add a feature</summary><div class="spec-act">${act(c.add, "s")}</div></details>` : ""}</div>`;
 }
 
-function specTab(st) {
-  if (!S.spec) { loadSpec(); return card("", "", `<p class="empty">Reading the spec…</p>`); }
+function domainCard() {
+  if (!S.spec) { loadSpec(); return card("Domain", "", `<p class="empty">Reading the contexts…</p>`); }
   const open = S.openContexts || (S.openContexts = new Set());
   const rows = (S.spec.contexts || []).map(c => {
     const isOpen = open.has(c.context), pending = c.features.reduce((n, f) => n + f.rules.reduce((m, r) => m + r.criteria.filter(x => x.changed_by.length).length, 0), 0) + c.coming.length;
@@ -834,7 +834,7 @@ function specTab(st) {
       <td class="num">${pending ? `<span class="pend p-changes">${pending}</span>` : "—"}</td></tr>`
       + (isOpen ? `<tr class="epic-body"><td colspan="5">${specContext(c)}</td></tr>` : "");
   }).join("");
-  return card("Contexts", "open one to read its model and what holds",
+  return card("Domain", "the contexts as designed, and what holds in each — the model from its glossary, the features as the gate delivered them",
     rows ? `<table class="epics"><tr><th>context</th><th class="hide-s">what it is for</th><th class="num">features</th><th class="num">criteria</th><th class="num">open changes</th></tr>${rows}</table>`
       : `<p class="empty">No spec yet — what holds is written by the stories the gate delivers.</p>`);
 }
@@ -880,7 +880,8 @@ function describe(st) {
     <td>${p.present ? esc((p.sections || []).join(" · ")) : `<span class="empty">missing</span>`}
     ${(p.missing || []).length ? `<div class="rec">missing: ${esc(p.missing.join(", "))}</div>` : ""}
     ${(p.empty || []).length ? `<div class="rec">empty: ${esc(p.empty.join(", "))}</div>` : ""}</td></tr>`).join("");
-  return card("The parts", "", `<table><tr><th><span class="sr">state</span></th><th>part</th><th>sections</th></tr>${parts}</table>`)
+  return card("The parts", "written by you, through the description — what is built, how, and in which domain", `<table><tr><th><span class="sr">state</span></th><th>part</th><th>sections</th></tr>${parts}</table>`)
+    + domainCard()
     + card("Change the description", "", `<p class="about">In your words — <code>&lt;part&gt;: &lt;change&gt;</code> where it is one part. Where it needs a decision of yours, it asks under Decide.</p>${act((st.entries || {}).describe)}`);
 }
 

@@ -433,7 +433,7 @@ async function showDetail($: EngineInterface, next: Detail): Promise<void> {
 async function showTab($: EngineInterface, id: Tab): Promise<void> {
   await update($, detail, () => null)
   await update($, tab, () => id)
-  if (id === 'spec') {
+  if (id === 'describe' || id === 'spec') {
     const root = await $.session.root()
     const view = await factoryJson<SpecView>($, root, ['spec', '--format', 'json']).catch(() => null)
     await update($, specView, () => (view && Array.isArray(view.contexts) ? view : null))
@@ -937,7 +937,6 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
             { key: 'tab-describe', label: 'Describe', hotkey: '0', isOpen: current === 'describe' && !open, onPress: () => void showTab($, 'describe') },
             { key: 'setup', label: '✦ setup', isOpen: false, onPress: () => send($, '/factory-setup') },
             { key: 'update', label: '✦ update', isOpen: false, onPress: () => send($, '/factory-update') },
-            { key: 'tab-spec', label: 'Spec', hotkey: '7', isOpen: current === 'spec' && !open, onPress: () => void showTab($, 'spec') },
             { key: 'tab-rules', label: 'Rules', hotkey: '6', isOpen: current === 'rules' && !open, onPress: () => void showTab($, 'rules') },
           ],
           TABS.map(one => ({
@@ -1250,7 +1249,28 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
   ]
   const storyColumns = [COL.story(idWidth), COL.state, COL.stage, COL.passes, COL.started, COL.worked, COL.tokens, COL.cost]
 
-  if (current === 'describe') {
+  // the domain as designed and what holds in each context (`factory.sh spec`) — part of the description
+  const domainPart = async (): Promise<RenderElement[]> => {
+    const holds = await read($, specView)
+    if (!holds) return []
+    const open = (c: SpecContext) => c.features.reduce((n, f) => n + f.rules.reduce((m, r) => m + r.criteria.filter(x => x.changed_by.length > 0).length, 0), 0) + c.coming.length
+    return [
+      ui.section('Domain', 'the contexts as designed, and what holds in each — Enter opens a context'),
+      ui.table(
+        [{ name: 'context', width: 14 }, { name: 'subdomain', width: 12 }, { name: 'features', width: 8, isNumber: true }, { name: 'criteria', width: 8, isNumber: true }, { name: 'open', width: 6, isNumber: true }, { name: 'what it is for', width: 30, isWide: true }],
+        holds.contexts.map((c): Cell[] => [
+          ui.open(`ctx-${c.context}`, c.context, () => void update($, detail, () => ({ kind: 'spec-context', context: c.context, back: null }) as Detail)),
+          { text: c.subdomain, color: C.muted },
+          { text: String(c.features.length) },
+          { text: String(c.criteria) },
+          { text: open(c) ? String(open(c)) : '—', color: open(c) ? C.wait : C.muted },
+          { text: c.purpose, color: C.muted },
+        ]),
+        'No context yet.',
+      ),
+    ]
+  }
+  if (current === 'describe' && !open) {
     return page(
       [
         ui.section('Project description', 'the foundation — written once, changed when the product or the technical situation moves'),
@@ -1270,6 +1290,7 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
           }),
           'No description view — update the pipeline.',
         ),
+        ...(await domainPart()),
         ask('change', 'Change the description', 'what should change? e.g. "the shop also sells gift cards"', '/dca-describe'),
         ui.actions([ui.button('describe', 'describe / complete the project', () => send($, '/dca-describe'), { isPrimary: true, byClaude: true })]),
       ],
@@ -1371,6 +1392,59 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
   const back = (to: Detail | null | undefined) => ui.actions([ui.button('back', '← back', () => void update($, detail, () => to ?? null), { hotkey: 'b' })])
 
   // ---- one topic, one epic
+  // ---- what holds: the contexts, one context's model and features, one criterion and a change of it
+  const spec = await read($, specView)
+  const changes = (c: SpecContext) => c.features.reduce((n, f) => n + f.rules.reduce((m, r) => m + r.criteria.filter(x => x.changed_by.length > 0).length, 0), 0) + c.coming.length
+  const asked = (key: string, label: string, placeholder: string, prefix: string) =>
+    ui.ask(key, label, placeholder, value => send($, `/factory-backlog ${prefix.replace(/\s+/g, ' ')} ${value}`.trim()), () => void $.prompt.fill({ text: `/factory-backlog ${prefix.replace(/\s+/g, ' ')} ` }))
+  if (open?.kind === 'spec-criterion') {
+    const c = spec?.contexts.find(one => one.context === open.context)
+    const feature = c?.features.find(f => f.rules.some(r => r.criteria.some(x => x.key === open.key)))
+    const rule = feature?.rules.find(r => r.criteria.some(x => x.key === open.key))
+    const item = rule?.criteria.find(x => x.key === open.key)
+    return page(
+      [
+        back(open.back),
+        item
+          ? ui.card({ title: item.key, meta: `${open.context}${feature?.feature ? ' · ' + feature.feature : ''}${rule?.rule ? ' · Rule: ' + rule.rule : ''}` }, [],
+              [
+                ...item.lines.filter(line => !line.startsWith('####')).map(line => ({ label: (line.match(/^\s*-\s*(Given|When|Then|And|But)\b/)?.[1] ?? 'holds').toLowerCase(), text: line.replace(/^\s*-\s*(Given|When|Then|And|But)?\s*/, '') })),
+                { label: 'test', text: item.tests.join(', ') || 'no test named', color: C.muted },
+                ...item.changed_by.map(ch => ({ label: ch.verdict, text: `${ch.story} — ${ch.title} (${ch.status})`, color: C.wait })),
+              ])
+          : <Text color={C.muted}>No such criterion.</Text>,
+        ...(item?.change ? [asked(`change-${item.key}`, 'Change this', 'what should hold instead — it becomes a draft story', item.change.request.prefix)] : []),
+      ],
+      'b back · type a change, Enter writes it as a draft story',
+    )
+  }
+  if (open?.kind === 'spec-context') {
+    const c = spec?.contexts.find(one => one.context === open.context)
+    if (!c) return page([back(open.back), <Text color={C.muted}>No such context.</Text>], 'b back')
+    return page(
+      [
+        back(open.back),
+        ui.section(c.context, [c.subdomain, c.purpose].filter(Boolean).join(' · ')),
+        ...c.model.map(group => <Text>
+          <Text bold>{group.kind}: </Text><Text color={C.muted}>{group.terms.map(t => t.name).join(', ')}</Text>
+        </Text>),
+        ...c.features.flatMap(feature => [
+          ui.section(feature.feature || 'the context itself', `${feature.rules.reduce((n, r) => n + r.criteria.length, 0)} criteria`),
+          ui.table(
+            [{ name: 'criterion', width: 34 }, { name: 'rule', width: 30, isWide: true }, { name: 'open', width: 22 }],
+            feature.rules.flatMap(rule => rule.criteria.map((item): Cell[] => [
+              ui.open(`crit-${item.key}`, item.key, () => void update($, detail, () => ({ kind: 'spec-criterion', context: c.context, key: item.key, back: open }) as Detail)),
+              { text: rule.rule, color: C.muted },
+              { text: item.changed_by.map(ch => `${ch.verdict} ${ch.story}`).join(', ') || '—', color: item.changed_by.length ? C.wait : C.muted },
+            ])),
+          ),
+          ...(feature.add ? [asked(`add-${c.context}-${feature.feature}`, 'Add a scenario', 'what should hold that does not yet', feature.add.request.prefix)] : []),
+        ]),
+        ...(c.coming.length ? [ui.section('Coming', 'new criteria of open stories'), ...c.coming.map(s => <Text color={C.wait}>{s.story} ({s.status}): {s.keys.map(k => k.key).join(', ')}</Text>)] : []),
+      ],
+      'b back · Enter on a criterion opens it',
+    )
+  }
   if (open?.kind === 'topic') {
     const topic = now.topics.find(one => one.topic === open.topic)
     return page([back(open.back), topic ? topicBody(topic) : <Text color={C.muted}>No such topic.</Text>], 'b back · ✦ make epic: Claude writes the proposal as an epic')
@@ -1432,80 +1506,6 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
         ...slots.filter(([, ids]) => ids.length > 0).flatMap(([label, ids]) => [ui.section(label, `${ids.length}`), ui.table(ruleColumns, ids.map(id => ruleRow(id, open)))]),
       ],
       'b back · Enter on a rule opens it',
-    )
-  }
-  // ---- what holds: the contexts, one context's model and features, one criterion and a change of it
-  const spec = await read($, specView)
-  const changes = (c: SpecContext) => c.features.reduce((n, f) => n + f.rules.reduce((m, r) => m + r.criteria.filter(x => x.changed_by.length > 0).length, 0), 0) + c.coming.length
-  const asked = (key: string, label: string, placeholder: string, prefix: string) =>
-    ui.ask(key, label, placeholder, value => send($, `/factory-backlog ${prefix.replace(/\s+/g, ' ')} ${value}`.trim()), () => void $.prompt.fill({ text: `/factory-backlog ${prefix.replace(/\s+/g, ' ')} ` }))
-  if (open?.kind === 'spec-criterion') {
-    const c = spec?.contexts.find(one => one.context === open.context)
-    const feature = c?.features.find(f => f.rules.some(r => r.criteria.some(x => x.key === open.key)))
-    const rule = feature?.rules.find(r => r.criteria.some(x => x.key === open.key))
-    const item = rule?.criteria.find(x => x.key === open.key)
-    return page(
-      [
-        back(open.back),
-        item
-          ? ui.card({ title: item.key, meta: `${open.context}${feature?.feature ? ' · ' + feature.feature : ''}${rule?.rule ? ' · Rule: ' + rule.rule : ''}` }, [],
-              [
-                ...item.lines.filter(line => !line.startsWith('####')).map(line => ({ label: (line.match(/^\s*-\s*(Given|When|Then|And|But)\b/)?.[1] ?? 'holds').toLowerCase(), text: line.replace(/^\s*-\s*(Given|When|Then|And|But)?\s*/, '') })),
-                { label: 'test', text: item.tests.join(', ') || 'no test named', color: C.muted },
-                ...item.changed_by.map(ch => ({ label: ch.verdict, text: `${ch.story} — ${ch.title} (${ch.status})`, color: C.wait })),
-              ])
-          : <Text color={C.muted}>No such criterion.</Text>,
-        ...(item?.change ? [asked(`change-${item.key}`, 'Change this', 'what should hold instead — it becomes a draft story', item.change.request.prefix)] : []),
-      ],
-      'b back · type a change, Enter writes it as a draft story',
-    )
-  }
-  if (open?.kind === 'spec-context') {
-    const c = spec?.contexts.find(one => one.context === open.context)
-    if (!c) return page([back(open.back), <Text color={C.muted}>No such context.</Text>], 'b back')
-    return page(
-      [
-        back(open.back),
-        ui.section(c.context, [c.subdomain, c.purpose].filter(Boolean).join(' · ')),
-        ...c.model.map(group => <Text>
-          <Text bold>{group.kind}: </Text><Text color={C.muted}>{group.terms.map(t => t.name).join(', ')}</Text>
-        </Text>),
-        ...c.features.flatMap(feature => [
-          ui.section(feature.feature || 'the context itself', `${feature.rules.reduce((n, r) => n + r.criteria.length, 0)} criteria`),
-          ui.table(
-            [{ name: 'criterion', width: 34 }, { name: 'rule', width: 30, isWide: true }, { name: 'open', width: 22 }],
-            feature.rules.flatMap(rule => rule.criteria.map((item): Cell[] => [
-              ui.open(`crit-${item.key}`, item.key, () => void update($, detail, () => ({ kind: 'spec-criterion', context: c.context, key: item.key, back: open }) as Detail)),
-              { text: rule.rule, color: C.muted },
-              { text: item.changed_by.map(ch => `${ch.verdict} ${ch.story}`).join(', ') || '—', color: item.changed_by.length ? C.wait : C.muted },
-            ])),
-          ),
-          ...(feature.add ? [asked(`add-${c.context}-${feature.feature}`, 'Add a scenario', 'what should hold that does not yet', feature.add.request.prefix)] : []),
-        ]),
-        ...(c.coming.length ? [ui.section('Coming', 'new criteria of open stories'), ...c.coming.map(s => <Text color={C.wait}>{s.story} ({s.status}): {s.keys.map(k => k.key).join(', ')}</Text>)] : []),
-      ],
-      'b back · Enter on a criterion opens it',
-    )
-  }
-  if (current === 'spec') {
-    if (!spec) return page([ui.section('Spec'), <Text color={C.muted}>No spec view — this project's pipeline is older than dca-factory 0.122.0, or factory.sh spec failed.</Text>], '')
-    return page(
-      [
-        ui.section('What holds', 'each context with its model and features — it changes only by a delivered story'),
-        ui.table(
-          [{ name: 'context', width: 14 }, { name: 'subdomain', width: 12 }, { name: 'features', width: 8, isNumber: true }, { name: 'criteria', width: 8, isNumber: true }, { name: 'open', width: 6, isNumber: true }, { name: 'what it is for', width: 30, isWide: true }],
-          spec.contexts.map((c): Cell[] => [
-            ui.open(`ctx-${c.context}`, c.context, () => void update($, detail, () => ({ kind: 'spec-context', context: c.context, back: null }) as Detail)),
-            { text: c.subdomain, color: C.muted },
-            { text: String(c.features.length) },
-            { text: String(c.criteria) },
-            { text: changes(c) ? String(changes(c)) : '—', color: changes(c) ? C.wait : C.muted },
-            { text: c.purpose, color: C.muted },
-          ]),
-          'No spec yet.',
-        ),
-      ],
-      'Enter on a context opens its model and what holds',
     )
   }
   if (current === 'rules') {
