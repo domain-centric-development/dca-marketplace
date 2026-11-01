@@ -266,7 +266,7 @@ export type SpecDelta = {
 
 export type StageOutput = { story: string; stage: string; running: boolean; lines: string[] }
 
-export type Tab = 'describe' | 'discover' | 'backlog' | 'run' | 'decide' | 'delivered' | 'rules'
+export type Tab = 'describe' | 'discover' | 'backlog' | 'run' | 'decide' | 'delivered' | 'spec' | 'rules'
 
 // `back`: where the view returns to — a topic that opened an epic, a story that opened a hand-over.
 export type Detail =
@@ -277,6 +277,8 @@ export type Detail =
   | { kind: 'output'; story: string; process: string; back: Detail | null }
   | { kind: 'rules-stage'; stage: string; back: Detail | null }
   | { kind: 'rule'; id: string; back: Detail | null }
+  | { kind: 'spec-context'; context: string; back: Detail | null }
+  | { kind: 'spec-criterion'; context: string; key: string; back: Detail | null }
 
 // The factory's rulebook as `factory.sh rules --format json` prints it (dca-factory 0.103.0): every rule, each kind's
 // flow — per stage the gate before it, what it is told, the gate after it, what a pass does, what the runner decides —
@@ -327,6 +329,7 @@ declare module 'claude-code' {
       outputLines: string[]
       specDelta: SpecDelta | null
       rules: RulesView | null
+      spec: SpecView | null
       ruleKind: string
       worker: Worker
       // the note last attached to a prompt; the next is attached only when it differs
@@ -347,3 +350,19 @@ export type TokenClasses = { input?: number; output?: number; cache_write?: numb
 
 // A call the tool refused because nobody could grant it in a headless stage — each a turn spent on another way
 export type Denial = { stage: string; tool: string; command: string }
+
+// What holds, as `factory.sh spec --format json` prints it (dca-factory 0.123.0): each context with its purpose, its
+// domain model, its features with their rules and criteria, and the open stories that would change them.
+export type SpecChange = { label: string; request: { kind: string; prefix: string } }
+export type SpecCriterion = { key: string; form: string; lines: string[]; tests: string[]; changed_by: { story: string; title: string; status: string; verdict: string }[]; change?: SpecChange }
+export type SpecContext = {
+  context: string
+  purpose: string
+  subdomain: string
+  model: { kind: string; terms: { name: string; meaning: string }[] }[]
+  features: { feature: string; rules: { rule: string; criteria: SpecCriterion[] }[]; add?: SpecChange }[]
+  criteria: number
+  coming: { story: string; title: string; status: string; keys: { key: string }[] }[]
+  add?: SpecChange
+}
+export type SpecView = { contexts: SpecContext[] }
