@@ -10,7 +10,7 @@ enforced_by: "TacticalPatternRules#DCA-TAC-014"
 status: enforced
 maturity: released
 rule_set: tactical
-implementations: [java, dotnet]
+implementations: [java, dotnet, rust]
 tags: [tactical, archunit]
 ---
 
@@ -29,6 +29,14 @@ The interface resides in <module>.application.. of some module root, the shared 
 **Selection.** Interfaces below the root namespace assignable to IRepository, whatever their name; an interface named exactly Repository excluded.
 
 **Check.** The interface resides in <module>.Application of some module root, the shared kernel's included. Implementations are not selected; an empty selection passes.
+
+## Rust reading
+
+Unpublished (dca-rust); the suite implements it. **Held by** a lint or a test (source-test).
+
+**Selection.** Traits that carry the repository role, the building block excluded.
+
+**Check.** Each sits in an application crate, the shared kernel's included.
 
 ## Implementation
 

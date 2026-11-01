@@ -10,7 +10,7 @@ enforced_by: "AdvancedPatternRules#DCA-ADV-017"
 status: enforced
 maturity: released
 rule_set: advanced
-implementations: [java, dotnet]
+implementations: [java, dotnet, rust]
 tags: [advanced, archunit]
 ---
 
@@ -29,6 +29,14 @@ Each resides in a domain package of some module root (<module>.domain..). An emp
 **Selection.** Non-interface types anywhere under scan that are assignable to the configured specification role or whose simple name ends with Specification, the role's own type and a type named exactly Specification excluded. The marker and the name both select, so a specification named after the predicate it expresses is governed too.
 
 **Check.** Each resides in a domain namespace of some module root (<module>.Domain or below). An empty selection passes.
+
+## Rust reading
+
+Unpublished (dca-rust); the suite implements it. **Held by** a lint or a test (source-test).
+
+**Selection.** Types that implement Specification or whose name ends with Specification.
+
+**Check.** Each sits in a domain crate.
 
 ## Implementation
 

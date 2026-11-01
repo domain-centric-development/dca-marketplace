@@ -10,7 +10,7 @@ enforced_by: "AdvancedPatternRules#DCA-ADV-019"
 status: enforced
 maturity: released
 rule_set: advanced
-implementations: [java, dotnet]
+implementations: [java, dotnet, rust]
 tags: [advanced, archunit]
 ---
 
@@ -29,6 +29,14 @@ None of them calls a method of, reads a field of, or instantiates a type carryin
 **Selection.** Types anywhere under scan that carry the aggregate-root, entity or value role.
 
 **Check.** None of them calls a method of, or constructs, a type carrying the domain-service role. Holding one as a parameter or a field type is not a call and is not reported. A domain service calling another domain service is outside this selection. An empty selection passes.
+
+## Rust reading
+
+Unpublished (dca-rust); the suite implements it. **Held by** a lint or a test (source-test).
+
+**Selection.** Methods of types that implement AggregateRoot, Entity or Value.
+
+**Check.** No method body calls a function of, or constructs, a type that implements DomainService. A parameter of that type alone is not reported.
 
 ## Implementation
 

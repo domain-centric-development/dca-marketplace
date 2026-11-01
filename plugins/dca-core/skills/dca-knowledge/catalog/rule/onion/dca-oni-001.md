@@ -10,7 +10,7 @@ enforced_by: "OnionRules#DCA-ONI-001"
 status: enforced
 maturity: released
 rule_set: onion
-implementations: [java, dotnet]
+implementations: [java, dotnet, rust]
 tags: [onion, archunit]
 ---
 
@@ -29,6 +29,14 @@ No dependency on a class in an application package of any module root (<module>.
 **Selection.** Types whose namespace lies under <Module>.Domain of every module root - declared bounded contexts, the shared kernel when it owns a domain layer, and undeclared modules alike, at any depth below the root namespace.
 
 **Check.** No dependency on a type whose namespace lies under <Module>.Application of any module root, the module's own included. Dependencies on adapters or infrastructure are covered by other rules, not this one; an empty selection passes.
+
+## Rust reading
+
+Unpublished (dca-rust); the suite implements it. **Held by** the compiler (workspace, graph-test).
+
+**Selection.** Every crate with layer = domain.
+
+**Check.** Its Cargo dependencies name no crate with layer = application, its own context's included.
 
 ## Implementation
 

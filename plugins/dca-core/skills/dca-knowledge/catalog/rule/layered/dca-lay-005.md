@@ -10,7 +10,7 @@ enforced_by: "LayeredRules#DCA-LAY-005"
 status: enforced
 maturity: released
 rule_set: layered
-implementations: [java, dotnet]
+implementations: [java, dotnet, rust]
 tags: [layered, archunit]
 ---
 
@@ -29,6 +29,14 @@ Each is an interface. The project's own output ports in application.shared are n
 **Selection.** Types declared in the building-blocks namespace DomainCentric.BuildingBlocks.Hexagonal.Ports.Out, read from types imported in the architecture, including consumer assemblies. Compiler-generated types (closures, async state machines of default interface methods) are not selected.
 
 **Check.** Each is an interface. The project's own output ports in Application.Shared are not selected; the rule passes when no non-interface type is found.
+
+## Rust reading
+
+Unpublished (dca-rust); held without a test of the suite. **Held by** the compiler (workspace).
+
+**Selection.** Items in the building blocks' port module.
+
+**Check.** A crate cannot add an item to another crate's module, so the building blocks' output-port module holds what the library declares and nothing a project adds. The rule holds by the language.
 
 ## Implementation
 

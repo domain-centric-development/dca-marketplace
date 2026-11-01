@@ -10,7 +10,7 @@ enforced_by: "TacticalPatternRules#DCA-TAC-013"
 status: enforced
 maturity: released
 rule_set: tactical
-implementations: [java, dotnet]
+implementations: [java, dotnet, rust]
 tags: [tactical, archunit]
 ---
 
@@ -29,6 +29,14 @@ The interface is assignable to the Repository marker. A *Repository interface ou
 **Selection.** Interfaces in <module>.Application of every module root whose name ends with Repository; interfaces named exactly Repository or IRepository excluded.
 
 **Check.** The interface is assignable to the IRepository marker. A *Repository interface elsewhere is not selected; an empty selection passes.
+
+## Rust reading
+
+Unpublished (dca-rust); the suite implements it. **Held by** a lint or a test (source-test).
+
+**Selection.** Traits in every application crate whose name ends with Repository.
+
+**Check.** The trait carries the repository role.
 
 ## Implementation
 

@@ -10,7 +10,7 @@ enforced_by: "AdvancedPatternRules#DCA-ADV-020"
 status: enforced
 maturity: released
 rule_set: advanced
-implementations: [java, dotnet]
+implementations: [java, dotnet, rust]
 tags: [advanced, archunit]
 ---
 
@@ -29,6 +29,14 @@ At least one parameter of the method carries the aggregate-root or the entity ro
 **Selection.** Public methods declared on non-interface types carrying the domain-service role, except the methods every object has (Equals, GetHashCode, ToString) and compiler generated ones.
 
 **Check.** At least one parameter of the method carries the aggregate-root or the entity role. Value objects and foreign facts may be passed alongside but do not satisfy the check on their own: a calculation that needs no aggregate is behaviour of the value object or the aggregate, not a domain service. An empty selection passes.
+
+## Rust reading
+
+Unpublished (dca-rust); the suite implements it. **Held by** a lint or a test (source-test).
+
+**Selection.** pub methods of types that implement DomainService.
+
+**Check.** At least one parameter is, by value or by reference, a type that implements AggregateRoot or Entity.
 
 ## Implementation
 

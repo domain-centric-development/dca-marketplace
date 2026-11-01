@@ -12,6 +12,7 @@ maturity: released
 rule_set: naming
 implementations: [java, dotnet]
 tags: [naming, archunit]
+not_applicable_rust: "Rust web handlers are free functions, not resource classes; the module that holds them carries the name, and DCA-HEX-018 places it."
 ---
 
 # REST Controllers must end with 'Resource' (REST best practice)

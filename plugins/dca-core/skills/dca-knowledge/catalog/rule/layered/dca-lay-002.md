@@ -10,7 +10,7 @@ enforced_by: "LayeredRules#DCA-LAY-002"
 status: enforced
 maturity: released
 rule_set: layered
-implementations: [java, dotnet]
+implementations: [java, dotnet, rust]
 tags: [layered, archunit]
 ---
 
@@ -29,6 +29,14 @@ No dependency on a class in the global infrastructure package (<base>.infrastruc
 **Selection.** Types in <module>.Domain of every module root, the shared kernel's domain included.
 
 **Check.** No dependency on a type in the global infrastructure namespace (<root>.Infrastructure or below) or in any isolated module's own infrastructure namespace (<module>.Infrastructure or below). The shared kernel's infrastructure namespace is not in that list. A module without a domain layer selects nothing and passes.
+
+## Rust reading
+
+Unpublished (dca-rust); the suite implements it. **Held by** the compiler (workspace, graph-test).
+
+**Selection.** Every crate with layer = domain, the shared kernel's included.
+
+**Check.** Its Cargo dependencies name no crate with layer = infrastructure or bootstrap. The compiler then refuses every use of such a crate; the graph test refuses the Cargo.toml line.
 
 ## Implementation
 

@@ -10,7 +10,7 @@ enforced_by: "UseCaseRules#DCA-USE-003"
 status: enforced
 maturity: released
 rule_set: usecase
-implementations: [java, dotnet]
+implementations: [java, dotnet, rust]
 tags: [usecase, archunit]
 ---
 
@@ -29,6 +29,14 @@ Each resides in an application package of some module root (<module>.application
 **Selection.** Types under the root namespace the configured query role recognises - by default a simple name ending with Query.
 
 **Check.** Each resides in an application namespace of some module root (<module>.Application).
+
+## Rust reading
+
+Unpublished (dca-rust); the suite implements it. **Held by** a lint or a test (source-test).
+
+**Selection.** Structs and enums whose name ends with Query.
+
+**Check.** Each sits in an application crate.
 
 ## Implementation
 

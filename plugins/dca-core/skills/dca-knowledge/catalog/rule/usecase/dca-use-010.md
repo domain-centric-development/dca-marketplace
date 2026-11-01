@@ -10,7 +10,7 @@ enforced_by: "UseCaseRules#DCA-USE-010"
 status: enforced
 maturity: released
 rule_set: usecase
-implementations: [java, dotnet]
+implementations: [java, dotnet, rust]
 tags: [usecase, archunit]
 ---
 
@@ -29,6 +29,14 @@ No dependency on a class whose simple name ends with Dto.
 **Selection.** Types in <module>.Domain of every module root.
 
 **Check.** No dependency on a type whose name ends with Dto.
+
+## Rust reading
+
+Unpublished (dca-rust); the suite implements it. **Held by** a lint or a test (workspace, source-test).
+
+**Selection.** Items in every domain crate.
+
+**Check.** No item declares or names a type whose name ends with Dto.
 
 ## Implementation
 

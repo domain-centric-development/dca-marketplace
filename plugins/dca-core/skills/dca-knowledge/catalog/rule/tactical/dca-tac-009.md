@@ -12,6 +12,7 @@ maturity: released
 rule_set: tactical
 implementations: [java, dotnet]
 tags: [tactical, archunit]
+not_applicable_rust: "Rust has no inheritance; a struct cannot be extended, so a value object is final by construction."
 ---
 
 # Value Object classes should be final (immutability)

@@ -10,7 +10,7 @@ enforced_by: "TacticalPatternRules#DCA-TAC-001"
 status: enforced
 maturity: released
 rule_set: tactical
-implementations: [java, dotnet]
+implementations: [java, dotnet, rust]
 tags: [tactical, archunit]
 ---
 
@@ -29,6 +29,14 @@ The class is assignable to the aggregate-root role - through the marker or an in
 **Selection.** Non-interface types - classes, structs and enums - in <module>.Domain.Model of every module root whose name ends with AggregateRoot; the type named exactly AggregateRoot is excluded.
 
 **Check.** The type implements the IAggregateRoot marker. Only the name suffix triggers selection - an aggregate root not named *AggregateRoot is never reported, and an empty selection passes.
+
+## Rust reading
+
+Unpublished (dca-rust); the suite implements it. **Held by** a lint or a test (source-test).
+
+**Selection.** Structs in every domain crate whose name ends with AggregateRoot.
+
+**Check.** The type implements AggregateRoot. Rust names rarely carry the suffix; selection by name stays as in Java.
 
 ## Implementation
 

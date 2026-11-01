@@ -10,7 +10,7 @@ enforced_by: "TacticalPatternRules#DCA-TAC-017"
 status: enforced
 maturity: released
 rule_set: tactical
-implementations: [java, dotnet]
+implementations: [java, dotnet, rust]
 tags: [tactical, archunit]
 ---
 
@@ -29,6 +29,14 @@ No return type of a method declared on the interface itself - walked through raw
 **Selection.** Interfaces below the root namespace assignable to IRepository; an interface named exactly Repository excluded.
 
 **Check.** No return type of a method declared on the interface itself - walked through generic type arguments, so Task<T?>, IReadOnlyList<T> and IAsyncEnumerable<T> are seen through - involves a type assignable to IEntity that is not also assignable to IAggregateRoot. Inherited methods, property accessors and parameter types are not inspected.
+
+## Rust reading
+
+Unpublished (dca-rust); the suite implements it. **Held by** a lint or a test (visibility, source-test).
+
+**Selection.** Traits with the repository role.
+
+**Check.** No method of the trait returns a type, through generic arguments, that implements Entity but not AggregateRoot. A pub(crate) entity cannot be named by the application crate at all.
 
 ## Implementation
 

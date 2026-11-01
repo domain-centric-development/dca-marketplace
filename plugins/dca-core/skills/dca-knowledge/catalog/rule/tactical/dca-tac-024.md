@@ -10,7 +10,7 @@ enforced_by: "TacticalPatternRules#DCA-TAC-024"
 status: enforced
 maturity: experimental
 rule_set: tactical
-implementations: [java, dotnet]
+implementations: [java, dotnet, rust]
 tags: [tactical, archunit]
 ---
 
@@ -31,6 +31,14 @@ No factory named of takes the same raw parameter types, in the same sequence, as
 **Selection.** Concrete classes, records and structs below the root namespace assignable to IValue, with their runtime type in the loaded assemblies.
 
 **Check.** No public static method named Of, declared by the type itself and returning exactly that type, sits beside another such method that takes the same parameter types in the same sequence. Two named factories with equal parameters (FromInput, FromStored) pass, and so does an Of that is the only factory for its parameters. Operators, generic methods, inherited methods and factories that return a wrapper (a nullable struct, a task, a result type) are not counted - a nullable reference return is the type itself and counts; constructors are not factories in this sense. An empty selection passes.
+
+## Rust reading
+
+Unpublished (dca-rust); the suite implements it. **Held by** a test, reformulated for Rust (source-test).
+
+**Selection.** Types that implement Value and their pub associated functions returning Self.
+
+**Check.** No function named new takes the same parameter types, in the same order, as another such function. Two named origins (from_input, from_stored) pass.
 
 ## Implementation
 

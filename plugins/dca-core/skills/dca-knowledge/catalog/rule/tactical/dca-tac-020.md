@@ -10,7 +10,7 @@ enforced_by: "TacticalPatternRules#DCA-TAC-020"
 status: enforced
 maturity: released
 rule_set: tactical
-implementations: [java, dotnet]
+implementations: [java, dotnet, rust]
 tags: [tactical, archunit]
 ---
 
@@ -29,6 +29,14 @@ The class resides in <module>.adapter.outgoing.. of some module root; an empty s
 **Selection.** Non-interface types below the root namespace assignable to IStore, abstract base classes included.
 
 **Check.** The type resides in <module>.Adapter.Outgoing of some module root; an empty selection passes.
+
+## Rust reading
+
+Unpublished (dca-rust); the suite implements it. **Held by** a lint or a test (source-test).
+
+**Selection.** Types that implement a trait with the store role.
+
+**Check.** Each sits in the outgoing module of an adapters crate.
 
 ## Implementation
 

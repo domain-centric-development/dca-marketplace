@@ -12,6 +12,7 @@ maturity: released
 rule_set: usecase
 implementations: [java, dotnet]
 tags: [usecase, archunit]
+not_applicable_rust: "Rust has no declarative transaction attribute; the boundary is the explicit TransactionBoundary port, which DCA-USE-012 reads, and the rule selects only declaratively transactional use cases."
 ---
 
 # Declaratively transactional use cases must not call remote-capable output ports

@@ -10,7 +10,7 @@ enforced_by: "AdvancedPatternRules#DCA-ADV-013"
 status: enforced
 maturity: released
 rule_set: advanced
-implementations: [java, dotnet]
+implementations: [java, dotnet, rust]
 tags: [advanced, archunit]
 ---
 
@@ -29,6 +29,14 @@ The simple name ends with Factory. Only the suffix is checked. An empty selectio
 **Selection.** Non-interface types anywhere under scan that are assignable to IFactory.
 
 **Check.** The simple name ends with Factory. Only the suffix is checked. An empty selection passes.
+
+## Rust reading
+
+Unpublished (dca-rust); the suite implements it. **Held by** a lint or a test (source-test).
+
+**Selection.** Types that implement Factory.
+
+**Check.** The name ends with Factory.
 
 ## Implementation
 

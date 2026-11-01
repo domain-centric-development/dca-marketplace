@@ -10,7 +10,7 @@ enforced_by: "UseCaseRules#DCA-USE-011"
 status: enforced
 maturity: released
 rule_set: usecase
-implementations: [java, dotnet]
+implementations: [java, dotnet, rust]
 tags: [usecase, archunit]
 ---
 
@@ -29,6 +29,14 @@ No dependency on a class whose simple name ends with Dto. Command, Query and Res
 **Selection.** Types in <module>.Application of every module root.
 
 **Check.** No dependency on a type whose name ends with Dto. Command, Query and Result models are not DTOs by this rule's definition - only the Dto suffix is checked.
+
+## Rust reading
+
+Unpublished (dca-rust); the suite implements it. **Held by** a lint or a test (workspace, source-test).
+
+**Selection.** Items in every application crate.
+
+**Check.** No item declares or names a type whose name ends with Dto.
 
 ## Implementation
 

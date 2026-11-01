@@ -10,7 +10,7 @@ enforced_by: "NamingRules#DCA-NAM-007"
 status: enforced
 maturity: released
 rule_set: naming
-implementations: [java, dotnet]
+implementations: [java, dotnet, rust]
 tags: [naming, archunit]
 ---
 
@@ -29,6 +29,14 @@ Each resides in an adapter package of some module root (<module>.adapter..), inc
 **Selection.** Types under the root namespace whose name ends with Dto.
 
 **Check.** Each resides in an adapter namespace of some module root (<module>.Adapter or below), incoming or outgoing. A Dto in a domain, application or infrastructure namespace is reported; what the type contains is not checked. An empty selection passes.
+
+## Rust reading
+
+Unpublished (dca-rust); the suite implements it. **Held by** a lint or a test (source-test).
+
+**Selection.** Structs and enums whose name ends with Dto.
+
+**Check.** Each sits in an adapters crate.
 
 ## Implementation
 

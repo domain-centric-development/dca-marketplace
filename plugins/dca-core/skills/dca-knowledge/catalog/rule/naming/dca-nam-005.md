@@ -12,6 +12,7 @@ maturity: released
 rule_set: naming
 implementations: [java, dotnet]
 tags: [naming, archunit]
+not_applicable_rust: "Rust web handlers are free functions, not controller classes; the module that holds them carries the name, and DCA-HEX-018 places it."
 ---
 
 # Controller classes must end with 'Controller'

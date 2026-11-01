@@ -10,7 +10,7 @@ enforced_by: "HexagonalRules#DCA-HEX-010"
 status: enforced
 maturity: released
 rule_set: hexagonal
-implementations: [java, dotnet]
+implementations: [java, dotnet, rust]
 tags: [hexagonal, archunit]
 ---
 
@@ -29,6 +29,14 @@ None resides in <module>.domain.. of any module root. Classes implementing an ou
 **Selection.** Interfaces anywhere in the loaded assemblies that are assignable to IOutputPort - the building-block port interfaces themselves included.
 
 **Check.** None resides in <module>.Domain of any module root. Classes implementing an output port are not selected; where an interface outside the domain has to live is not checked here. An empty selection passes.
+
+## Rust reading
+
+Unpublished (dca-rust); the suite implements it. **Held by** a lint or a test (source-test).
+
+**Selection.** Traits in every crate that carry the output-port role.
+
+**Check.** None sits in a domain crate. A domain crate sees the building blocks and could declare one; the compiler does not refuse it.
 
 ## Implementation
 
