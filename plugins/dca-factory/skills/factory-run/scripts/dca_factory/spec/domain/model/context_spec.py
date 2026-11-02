@@ -1,5 +1,6 @@
 """A bounded context as the product's spec holds it (WP-173): what it is for, its domain model as its glossary names
-it, and its features with the rules and the criteria that hold — and the open stories that would change them."""
+it, and its features with the rules and the criteria that hold — and the open stories that would change them. Beside
+the contexts, the shared kernel: the model they share, written once (WP-175)."""
 
 from __future__ import annotations
 
@@ -80,6 +81,10 @@ KIND_WORDS: typing.Tuple[typing.Tuple[TermKind, typing.Tuple[str, ...]], ...] = 
 class TermName(Value):
     value: str
 
+    def bare(self) -> TermName:
+        """The name without what a heading adds in brackets: `Money (borrowed from the Shared Kernel)` is Money."""
+        return TermName(re.sub(r"\s*\(.*\)\s*$", "", self.value).strip() or self.value)
+
 
 class Term(Value):
     """One term of the context's domain model: its name, its kind, what it means."""
@@ -87,6 +92,34 @@ class Term(Value):
     name: TermName
     kind: TermKind
     meaning: Statement
+
+
+class Origin(enum.Enum):
+    """Where a term of a context's model is defined: in its own glossary, or in the shared kernel's."""
+
+    OWN = "own"
+    SHARED = "shared"
+
+
+class ModelTerm(Value):
+    """A term as a context's model shows it: one of its own, or one of the shared kernel it uses."""
+
+    term: Term
+    origin: Origin
+
+
+class SharedKernel(Value):
+    """The model every context shares, the same in each, as its own glossary names it — no context: no subdomain, no
+    features, no criteria."""
+
+    terms: typing.Tuple[Term, ...]
+
+    def defined(self) -> typing.Dict[TermName, Term]:
+        return {term.name.bare(): term for term in self.terms}
+
+    def users(self, term: Term, contexts: typing.Sequence[ContextSpec]) -> typing.Tuple[ContextName, ...]:
+        """The contexts whose glossary names the term."""
+        return tuple(spec.id for spec in contexts if spec.names(term.name.bare()))
 
 
 class RuleBlock(Value):
@@ -174,13 +207,16 @@ class ContextSpec(AggregateRoot[ContextName]):
     the gate delivers."""
 
     def __init__(self, name: ContextName, purpose: Statement, subdomain: Subdomain,
-                 terms: typing.Sequence[Term], features: typing.Sequence[Feature]) -> None:
+                 terms: typing.Sequence[Term], features: typing.Sequence[Feature],
+                 identities: typing.Sequence[TermName] = (), mentions: typing.AbstractSet[TermName] = frozenset()) -> None:
         super().__init__()
         self._name = name
         self._purpose = purpose
         self._subdomain = subdomain
         self._terms = tuple(terms)
         self._features = tuple(features)
+        self._identities = tuple(identities)
+        self._mentions = frozenset(mentions)
 
     @property
     def id(self) -> ContextName:
@@ -200,6 +236,21 @@ class ContextSpec(AggregateRoot[ContextName]):
 
     def terms_of(self, kind: TermKind) -> typing.Tuple[Term, ...]:
         return tuple(term for term in self._terms if term.kind is kind)
+
+    def names(self, name: TermName) -> bool:
+        """Whether its glossary names the term — as an entry, on an identity line or in code."""
+        return name in self._mentions or any(term.name.bare() == name for term in self._terms)
+
+    def model(self, kernel: typing.Optional[SharedKernel]) -> typing.Tuple[ModelTerm, ...]:
+        """Its terms, each marked shared where the shared kernel defines it, then each id an identity line names that
+        it has no entry for — the shared kernel's where it defines it, else an id of its own without a meaning."""
+        shared = kernel.defined() if kernel else {}
+        own = tuple(ModelTerm(term, Origin.SHARED if term.name.bare() in shared else Origin.OWN) for term in self._terms)
+        named = {term.name.bare() for term in self._terms}
+        ids = tuple(ModelTerm(shared[name], Origin.SHARED) if name in shared
+                    else ModelTerm(Term(name, TermKind.IDENTITY, Statement("")), Origin.OWN)
+                    for name in dict.fromkeys(self._identities) if name not in named)
+        return own + ids
 
     def held(self) -> typing.Tuple[Criterion, ...]:
         return tuple(item for feature in self._features for item in feature.criteria)

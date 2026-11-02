@@ -67,6 +67,9 @@ could show goes to `docs/`.
    that file (`dca-new context` does it): moved, not copied, never two places for one word. A glossary
    still beside the domain code is moved by a migration — `factory.sh update` in a project with a delivery
    pipeline, by hand with `git mv` otherwise.
+   The shared kernel's words — what every context shares, the same in each — go into
+   `product/spec/shared-kernel/glossary.md`, never into a context's file; a context names a shared term where
+   it uses it and does not define it again.
 6. **One designed map, never two.** A designed map written earlier at `docs/context-map.md` — or
    under another name the project used — is moved, not copied: propose
    `git mv docs/context-map.md product/domain.md` and do it on the person's confirmation. A map

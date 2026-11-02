@@ -58,6 +58,8 @@ from .....sharedkernel.adapter.outgoing.profile.profile_files import (
     DEFAULTS, place, PROFILE_FILE, read_profile, resolve_profile, set_places, shown)
 from .....infrastructure.schedule import schedule_data, start_of
 from .....infrastructure.profile import ask_profile
+from .....infrastructure.description import show_part
+from ....application.description.show_part import ShowPartQuery
 from ....application.profile.ask_profile import AskProfileQuery, Question
 from ....application.status.show_status import ShowStatusQuery
 from ....application.status.show_story import ShowStoryQuery, UnknownStory
@@ -1000,6 +1002,8 @@ def main(argv: typing.Sequence[str]) -> int:
     parser.add_argument("--free-id", metavar="PREFIX", help="the next story id `<PREFIX>-<n>` no factory uses")
     parser.add_argument("--undeliver-branch", metavar="STORY",
                         help="take a published story's delivery back on its branch, before it is integrated again")
+    parser.add_argument("--description-part", choices=("product", "tech", "domain"),
+                        help="one part of the project description as written, section by section (--format json)")
     parser.add_argument("--spec-delta", metavar="STORY",
                         help="what holds before and after the story — per key its verb, feature and lines (--format json)")
     parser.add_argument("--spec-check", action="store_true",
@@ -1189,6 +1193,11 @@ def main(argv: typing.Sequence[str]) -> int:
         return prove(cwd, args.runs, args.epics, args.prove)
     if args.spec_check:
         return spec_check(cwd, args.runs, args.epics)
+    if args.description_part:
+        view = show_part(cwd).execute(ShowPartQuery(args.description_part))
+        print(json.dumps(view, indent=2) if args.format == "json"
+              else "\n\n".join(f"## {s['heading']}\n\n{s['text']}" for s in view["sections"]) or f"{view['path']}: missing")
+        return 0
     if args.spec_delta:
         view = wiring.show_spec_delta(args.runs, args.epics).execute(ShowSpecDeltaQuery(args.spec_delta))
         print(spec_delta_text.render(view, args.format))

@@ -26,6 +26,19 @@ class Heading(Value):
         return Heading(self.value.lower())
 
 
+class Body(Value):
+    """What a section of a part says, as written — guidance in comments left out."""
+
+    value: str
+
+
+class Section(Value):
+    """One `## ` section of a part: its heading and what it says."""
+
+    heading: Heading
+    body: Body
+
+
 #: The headings a part must fill — the product: what is built, for whom, through which surfaces; the technical
 #: decisions: what a stage may not decide in passing. The designed domain has none the check holds it to.
 REQUIRED: typing.Mapping[Part, typing.Tuple[Heading, ...]] = {

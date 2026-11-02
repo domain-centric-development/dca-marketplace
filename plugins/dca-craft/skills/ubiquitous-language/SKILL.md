@@ -40,6 +40,11 @@ configuration keeps it. Where glossaries still stand beside the domain code, a m
 the delivery pipeline's update where the project has one, by hand with `git mv` otherwise; never start
 a second glossary beside one.
 
+A shared kernel — the model several contexts share, the same in each — has a glossary of its own beside
+them, `{spec}/shared-kernel/glossary.md`, in the same format. It is no context: no scenarios, no features.
+A context names a shared term where it uses it — an aggregate's `**Identity:**` line names its shared id —
+and does not define it again; the definition has its one place in the shared kernel's glossary.
+
 A project may describe its designed contexts before they have code, with a section of words per context.
 Until the context's glossary file exists, that section is its glossary. The first entry written to the
 file takes the section's rows with it and leaves one line there naming the file — moved, not copied: the

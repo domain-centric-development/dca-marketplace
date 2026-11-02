@@ -38,7 +38,7 @@ PAGE = r"""<!doctype html>
   --teal: #148f96; --deep: #171d29; --mist: #e8eaf0;
   --bg: #f7f6f3; --panel: #ffffff; --ink: #1c2433; --muted: #5b6472; --line: #dedbd3; --soft: #eef4f4; --group: #e4efef; --group-line: #cfe0e0; --code: #f0eee9;
   --accent: #0d6b70; --accent-hover: #0b5b60; --on-accent: #ffffff; --fill: #0d6b70; --fill-hover: #0b5b60;
-  --done: #0d6b70; --wait: #93600f; --stop: #c96a5a; --run: #148f96;
+  --done: #0d6b70; --wait: #93600f; --stop: #c96a5a; --run: #148f96; --shared: #4b47b8;
   --shadow: 0 6px 24px rgba(28, 36, 51, .10);
   --display: "Space Grotesk", "Avenir Next", "Trebuchet MS", sans-serif;
   --body: "Newsreader", Georgia, "Times New Roman", serif;
@@ -49,14 +49,14 @@ PAGE = r"""<!doctype html>
   :root:not([data-theme="light"]) {
     --bg: #12171f; --panel: #1a2130; --ink: #e8eaf0; --muted: #9aa3b2; --line: #2b3445; --soft: #172a30; --group: #233d45; --group-line: #33545d; --code: #222a39;
     --accent: #3cbcc3; --accent-hover: #5fcdd3; --on-accent: #ffffff; --fill: #0d6b70; --fill-hover: #0b5b60;
-    --done: #3cbcc3; --wait: #e2ab55; --stop: #d9826f; --run: #3cbcc3; --shadow: 0 6px 24px rgba(0, 0, 0, .35);
+    --done: #3cbcc3; --wait: #e2ab55; --stop: #d9826f; --run: #3cbcc3; --shared: #b3b0f2; --shadow: 0 6px 24px rgba(0, 0, 0, .35);
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #12171f; --panel: #1a2130; --ink: #e8eaf0; --muted: #9aa3b2; --line: #2b3445; --soft: #172a30; --group: #233d45; --group-line: #33545d; --code: #222a39;
   --accent: #3cbcc3; --accent-hover: #5fcdd3; --on-accent: #ffffff; --fill: #0d6b70; --fill-hover: #0b5b60;
-  --done: #3cbcc3; --wait: #e2ab55; --stop: #d9826f; --run: #3cbcc3; --shadow: 0 6px 24px rgba(0, 0, 0, .35);
+  --done: #3cbcc3; --wait: #e2ab55; --stop: #d9826f; --run: #3cbcc3; --shared: #b3b0f2; --shadow: 0 6px 24px rgba(0, 0, 0, .35);
   color-scheme: dark;
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -218,6 +218,13 @@ table.epics tr.ctx-row.open .title { font-weight: 700; }
 .dm-facts dd { margin: 0; display: flex; flex-wrap: wrap; gap: 4px; }
 .chip { font: 500 12px var(--mono); padding: 2px 8px; border-radius: 3px; background: color-mix(in srgb, var(--teal) 14%, transparent); color: var(--accent); white-space: nowrap; cursor: help; }
 .chip.minor { background: transparent; color: var(--accent); box-shadow: inset 0 0 0 1px var(--teal); }
+/* a term of the shared kernel, in a context or in the kernel's own block: indigo, never a context's teal */
+.chip.shared { background: color-mix(in srgb, var(--shared) 14%, transparent); color: var(--shared); }
+.chip.shared::before { content: "⇄ "; font-size: 10px; }
+.dm-kernel { border: 1px solid color-mix(in srgb, var(--shared) 35%, var(--line)); border-top: 4px solid var(--shared); border-radius: 4px 4px 9px 9px;
+  padding: 10px 14px 12px; margin: 12px 0 4px; background: color-mix(in srgb, var(--shared) 5%, var(--panel)); }
+.dm-kernel .top { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin-bottom: 8px; }
+.dm-kernel .top b { font: 700 18px var(--display); color: var(--shared); }
 details.dm-group { border: 1px solid var(--group-line); border-radius: 6px; margin-top: 6px; background: var(--panel); }
 details.dm-group > summary { display: flex; justify-content: space-between; align-items: baseline; padding: 6px 10px; background: var(--group); border-radius: 6px; cursor: pointer; list-style: none; font: 600 15px var(--display); }
 details.dm-group > summary::-webkit-details-marker { display: none; } details.dm-group > summary::before { content: "▸"; color: var(--muted); font: 400 12px var(--mono); margin-right: 8px; }
@@ -946,8 +953,7 @@ const KIND_LABEL = {"aggregate": "aggregate", "entity": "entities", "identity": 
 const subdomainClass = sd => /core/i.test(sd) ? "core" : /generic/i.test(sd) ? "gen" : "sup";
 
 function specContext(c) {
-  const facts = c.model.map(g => `<dt>${esc(KIND_LABEL[g.kind] || g.kind)}</dt><dd>${g.terms.map(t =>
-    `<span class="chip${["concept", "other"].includes(g.kind) ? " minor" : ""}" title="${esc(t.meaning)}">${esc(t.name)}</span>`).join("")}</dd>`).join("");
+  const facts = modelFacts(c.model);
   const features = c.features.map(f => {
     const key = `feature:${c.context}:${f.feature}`, count = f.rules.reduce((n, r) => n + r.criteria.length, 0);
     const pending = f.rules.reduce((n, r) => n + r.criteria.filter(x => x.changed_by.length).length, 0);
@@ -974,6 +980,15 @@ function healthCell(h) {
   return (bad.length ? bad.join(" ") : `<span class="hint">all tested</span>`) + (h.undelivered ? ` <span class="hint" title="adopted, delivered by hand without a story, or written before the factory">· ${h.undelivered} not from a story</span>` : "");
 }
 
+// a model as its kinds, each a row of chips; a shared term in the kernel's colour, saying who uses it
+const modelFacts = model => model.map(g => `<dt>${esc(KIND_LABEL[g.kind] || g.kind)}</dt><dd>${g.terms.map(t =>
+  `<span class="chip${t.shared ? " shared" : ["concept", "other"].includes(g.kind) ? " minor" : ""}" title="${esc([t.meaning, t.shared ? "shared kernel" : "", (t.used_by || []).length ? "used by " + t.used_by.join(", ") : ""].filter(Boolean).join(" — "))}">${esc(t.name)}</span>`).join("")}</dd>`).join("");
+function kernelBlock(k) {
+  if (!k) return "";
+  return `<div class="dm-kernel"><div class="top"><b>Shared kernel</b><span class="hint">what every context shares, the same in each — no context of its own</span></div>
+    <dl class="dm-facts">${modelFacts(k.model)}</dl></div>`;
+}
+
 function domainCard() {
   if (!S.spec) { loadSpec(); return card("Domain", "", `<p class="empty">Reading the contexts…</p>`); }
   const open = S.openContexts || (S.openContexts = new Set());
@@ -987,8 +1002,8 @@ function domainCard() {
       + (isOpen ? `<tr class="epic-body"><td colspan="6">${specContext(c)}</td></tr>` : "");
   }).join("");
   return card("Domain", "the contexts as designed, and what holds in each — the model from its glossary, the features as the gate delivered them",
-    rows ? `<table class="epics"><tr><th>context</th><th class="hide-s">what it is for</th><th class="num">features</th><th class="num">criteria</th><th class="num">open changes</th><th class="hide-s">health</th></tr>${rows}</table>`
-      : `<p class="empty">No spec yet — what holds is written by the stories the gate delivers.</p>`);
+    kernelBlock(S.spec.shared_kernel) + (rows ? `<table class="epics"><tr><th>context</th><th class="hide-s">what it is for</th><th class="num">features</th><th class="num">criteria</th><th class="num">open changes</th><th class="hide-s">health</th></tr>${rows}</table>`
+      : `<p class="empty">No spec yet — what holds is written by the stories the gate delivers.</p>`));
 }
 document.addEventListener("click", event => {
   const row = event.target.closest && event.target.closest("tr.ctx-row");
@@ -1026,16 +1041,46 @@ function card(title, sub, body) {
 }
 
 // --- 0 describe ----------------------------------------------------------------------------------------------------
+// a part of the description opens in place and reads as written, section by section
+async function loadPart(name) {
+  try { S.partText[name] = await api(`/api/view/part?id=${encodeURIComponent(name)}`); }
+  catch (e) { S.partText[name] = {error: e.message}; }
+  render();
+}
+function partBody(name) {
+  const v = S.partText[name];
+  if (!v || v.loading) {          // one read at a time, whatever redraws meanwhile
+    if (!v) { S.partText[name] = {loading: true}; loadPart(name); }
+    return `<p class="empty">Reading ${esc(name)}…</p>`;
+  }
+  if (v.error) return `<p class="m-stopped">${esc(v.error)}</p>`;
+  return v.sections.length ? v.sections.map(sec => `<h3>${esc(sec.heading)}</h3><div class="prose">${prose(sec.text) || `<p class="empty">empty</p>`}</div>`).join("")
+    : `<p class="empty">${esc(v.path)} is missing.</p>`;
+}
+
 function describe(st) {
-  const parts = (st.description || []).map(p => `<tr><td>${mark(p.mark)}</td>
-    <td><div class="title">${esc(p.part)}</div><div class="id">${esc(p.path)}</div></td>
+  const open = S.openParts || (S.openParts = new Set());
+  S.partText = S.partText || {};
+  const parts = (st.description || []).map(p => {
+    const isOpen = open.has(p.part);
+    return `<tr class="epic-row part-row${isOpen ? " open" : ""}" data-part="${esc(p.part)}" tabindex="0" aria-expanded="${isOpen}"><td>${mark(p.mark)}</td>
+    <td><span class="caret" aria-hidden="true">${isOpen ? "▾" : "▸"}</span> <span class="title">${esc(p.part)}</span><div class="id">${esc(p.path)}</div></td>
     <td>${p.present ? esc((p.sections || []).join(" · ")) : `<span class="empty">missing</span>`}
     ${(p.missing || []).length ? `<div class="rec">missing: ${esc(p.missing.join(", "))}</div>` : ""}
-    ${(p.empty || []).length ? `<div class="rec">empty: ${esc(p.empty.join(", "))}</div>` : ""}</td></tr>`).join("");
-  return card("The parts", "written by you, through the description — what is built, how, and in which domain", `<table><tr><th><span class="sr">state</span></th><th>part</th><th>sections</th></tr>${parts}</table>`)
+    ${(p.empty || []).length ? `<div class="rec">empty: ${esc(p.empty.join(", "))}</div>` : ""}</td></tr>`
+      + (isOpen ? `<tr class="epic-body"><td></td><td colspan="2">${partBody(p.part)}</td></tr>` : "");
+  }).join("");
+  return card("The parts", "written by you, through the description — what is built, how, and in which domain; open one to read it", `<table class="epics"><tr><th><span class="sr">state</span></th><th>part</th><th>sections</th></tr>${parts}</table>`)
     + domainCard()
     + card("Change the description", "", `<p class="about">In your words — <code>&lt;part&gt;: &lt;change&gt;</code> where it is one part. Where it needs a decision of yours, it asks under Decide.</p>${act((st.entries || {}).describe)}`);
 }
+document.addEventListener("click", event => {
+  const row = event.target.closest && event.target.closest("tr.part-row");
+  if (!row || event.target.closest("button, a")) return;
+  const open = S.openParts || (S.openParts = new Set()), name = row.dataset.part;
+  if (open.has(name)) open.delete(name); else { open.add(name); delete (S.partText || {})[name]; }
+  render();
+});
 
 // --- 1 discover ----------------------------------------------------------------------------------------------------
 function discover(st) {

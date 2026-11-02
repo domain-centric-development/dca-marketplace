@@ -5,7 +5,7 @@ from __future__ import annotations
 import typing
 
 from ....building_blocks import Store
-from ...domain.model.description import Part, Written
+from ...domain.model.description import Part, Section, Written
 
 
 class DescriptionStore(Store, typing.Protocol):
@@ -21,4 +21,8 @@ class DescriptionStore(Store, typing.Protocol):
 
     def read(self, part: Part) -> typing.Optional[Written]:
         """The part as written — None where its file is not there."""
+        ...
+
+    def sections(self, part: Part) -> typing.Optional[typing.Tuple[Section, ...]]:
+        """Each `## ` section of the part with what it says, in its order — None where its file is not there."""
         ...

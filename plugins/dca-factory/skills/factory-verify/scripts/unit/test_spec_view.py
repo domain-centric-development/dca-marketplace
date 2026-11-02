@@ -75,6 +75,30 @@ class SpecViewTest(unittest.TestCase):
             self.assertEqual([{"story": "s-1", "title": "A title names the field", "status": "approved",
                                "keys": [{"key": "a-long-title-is-refused"}]}], tasks["coming"])
 
+    def test_the_shared_kernel_stands_beside_the_contexts_and_a_context_shows_the_shared_terms_it_uses(self):
+        with tempfile.TemporaryDirectory() as root:
+            plant(root, dict(PROJECT, **{
+                "product/spec/tasks/glossary.md": PROJECT["product/spec/tasks/glossary.md"].replace(
+                    "**Type:** Aggregate Root\n\n", "**Type:** Aggregate Root\n\n**Identity:** `TaskListId`\n\n")
+                .replace("### Task\n\nOne thing to do.", "### Task\n\n**Identity:** `TaskId` (Shared Kernel)\n\nOne thing to do.")
+                .replace("### TaskTitle\n\n", "### TaskTitle\n\nWritten as `Text`.\n\n"),
+                "product/spec/shared-kernel/glossary.md": "# Shared Kernel\n\n## Value Objects\n\n### TaskId\n\n"
+                                                         "**Type:** Value Object (ID)\n\nA task's identity.\n\n"
+                                                         "### Text\n\n**Type:** Value Object\n\nWords as written.\n\n"
+                                                         "### Owner\n\n**Type:** Value Object\n\nWho owns a thing.\n"}))
+            view = self.view(root)
+            self.assertEqual(["tasks"], [c["context"] for c in view["contexts"]])     # the kernel is no context
+            kernel = {t["name"]: t["used_by"] for g in view["shared_kernel"]["model"] for t in g["terms"]}
+            self.assertEqual({"TaskId": ["tasks"], "Text": ["tasks"], "Owner": []}, kernel)
+            [tasks] = view["contexts"]
+            ids = {t["name"]: t["shared"] for g in tasks["model"] if g["kind"] == "identity" for t in g["terms"]}
+            self.assertEqual({"TaskId": True, "TaskListId": False}, ids)      # a shared id, and one of its own
+
+    def test_without_a_shared_kernel_glossary_there_is_no_kernel(self):
+        with tempfile.TemporaryDirectory() as root:
+            plant(root, PROJECT)
+            self.assertIsNone(self.view(root)["shared_kernel"])
+
     def test_health_names_what_proves_each_criterion_a_test_gone_and_who_delivered_it(self):
         with tempfile.TemporaryDirectory() as root:
             plant(root, dict(PROJECT, **{

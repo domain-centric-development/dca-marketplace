@@ -1,6 +1,6 @@
 """The contexts as the project keeps them: the spec's folders (`<spec>/<context>/[<feature>/]scenarios.md`), each
 context's `glossary.md`, and the designed domain's table of contexts (`## Bounded Contexts` in the description's
-domain file) — read into the spec's model."""
+domain file) — read into the spec's model; and the shared kernel's glossary (`<spec>/shared-kernel/glossary.md`)."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import typing
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_text
 from .....sharedkernel.adapter.outgoing.profile.profile_files import place
 from ....domain.model.context_spec import (
-    ContextName, ContextSpec, Feature, Statement, Subdomain, Term, TermKind, TermName)
+    ContextName, ContextSpec, Feature, SharedKernel, Statement, Subdomain, Term, TermKind, TermName)
 from ....domain.model.criterion import Criterion, CriterionKey, FeatureName, Form, Line, RuleText, Selector
 from .spec_files import GLOSSARY_FILE, parse_spec, SCENARIOS_FILE
 
@@ -20,6 +20,11 @@ CONTEXT_ROW = re.compile(r"^\|\s*`?([A-Za-z][\w -]*?)`?\s*\|\s*(.*?)\s*\|\s*(.*?
 SECTION = re.compile(r"^##\s+(.+?)\s*$")
 TERM = re.compile(r"^###\s+(.+?)\s*$")
 TYPE = re.compile(r"^\*\*Type:\*\*\s*(.+?)\s*$")
+#: An aggregate's or an entity's identity: **Identity:** `ProductId` (Shared Kernel)
+IDENTITY = re.compile(r"^\*\*Identity:\*\*\s*`([A-Z]\w*)`")
+NAMED = re.compile(r"`([A-Z]\w*)")
+#: The shared kernel's folder in the spec: its glossary, never a context.
+SHARED_KERNEL = "shared-kernel"
 
 
 def criterion_of(item: typing.Mapping[str, typing.Any], feature: str) -> Criterion:
@@ -82,6 +87,18 @@ def terms_of(glossary: str) -> typing.List[Term]:
     return found
 
 
+def identities_of(glossary: str) -> typing.List[TermName]:
+    """The ids the glossary's identity lines name, in its order."""
+    lines = read_text(glossary).splitlines() if os.path.isfile(glossary) else []
+    return [TermName(m.group(1)) for m in (IDENTITY.match(line.strip()) for line in lines) if m]
+
+
+def mentions_of(glossary: str) -> typing.FrozenSet[TermName]:
+    """Every name the glossary writes in code — `ProductId`, `Money.add` names Money."""
+    text = read_text(glossary) if os.path.isfile(glossary) else ""
+    return frozenset(TermName(name) for name in NAMED.findall(text))
+
+
 class ContextSpecFiles:
     """The contexts of the project <cwd>."""
 
@@ -91,8 +108,8 @@ class ContextSpecFiles:
     def contexts(self) -> typing.Sequence[ContextSpec]:
         spec = os.path.join(self._cwd, place("spec"))
         table = designed(os.path.join(self._cwd, place("domain")))
-        held = sorted(name for name in os.listdir(spec) if os.path.isdir(os.path.join(spec, name))) \
-            if os.path.isdir(spec) else []
+        held = sorted(name for name in os.listdir(spec) if os.path.isdir(os.path.join(spec, name))
+                      and name != SHARED_KERNEL) if os.path.isdir(spec) else []
         names = list(table) + [name for name in held if name not in table]
         return [self._context(spec, name, table.get(name, ("", ""))) for name in names]
 
@@ -105,5 +122,10 @@ class ContextSpecFiles:
         features = [Feature(FeatureName(feature), tuple(criterion_of(item, feature)
                                                       for item in parse_spec(read_text(path))[1]))
                     for feature, path in files]
-        return ContextSpec(ContextName(name), Statement(said[0]), Subdomain(said[1]),
-                           terms_of(os.path.join(folder, GLOSSARY_FILE)), features)
+        glossary = os.path.join(folder, GLOSSARY_FILE)
+        return ContextSpec(ContextName(name), Statement(said[0]), Subdomain(said[1]), terms_of(glossary), features,
+                           identities_of(glossary), mentions_of(glossary))
+
+    def shared_kernel(self) -> typing.Optional[SharedKernel]:
+        glossary = os.path.join(self._cwd, place("spec"), SHARED_KERNEL, GLOSSARY_FILE)
+        return SharedKernel(tuple(terms_of(glossary))) if os.path.isfile(glossary) else None

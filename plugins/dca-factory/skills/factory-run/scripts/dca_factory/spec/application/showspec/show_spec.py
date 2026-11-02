@@ -1,5 +1,6 @@
 """Show what holds: each bounded context with what it is for, its domain model, its features with their rules and
-criteria — and beside each criterion the open stories that would add or change it (WP-173)."""
+criteria — and beside each criterion the open stories that would add or change it (WP-173); above them the shared
+kernel, each of its terms with the contexts that use it (WP-175)."""
 
 from __future__ import annotations
 
@@ -7,7 +8,8 @@ import dataclasses
 import typing
 
 from ....building_blocks import UseCase
-from ...domain.model.context_spec import ContextName, ContextSpec, Health, PendingChange, Proof, TermKind
+from ...domain.model.context_spec import (
+    ContextName, ContextSpec, Health, ModelTerm, Origin, PendingChange, Proof, SharedKernel, TermKind)
 from ...domain.model.criterion import Criterion
 from ..shared.context_specs import ContextSpecs
 from ..shared.open_stories import OpenStories
@@ -36,7 +38,27 @@ def criterion_model(item: Criterion, pending: typing.Sequence[PendingChange]) ->
                                  verdict=p.verdict.value) for p in pending if p.key == item.key])
 
 
-def context_model(spec: ContextSpec, pending: typing.Sequence[PendingChange]) -> Model:
+def model_groups(terms: typing.Sequence[ModelTerm],
+                 used_by: typing.Callable[[ModelTerm], typing.List[str]] = lambda _: []) -> typing.List[Model]:
+    """The terms by kind, in the order a reader meets the kinds; a term says whether it is shared and who uses it."""
+    groups = []
+    for kind in TermKind:
+        mine = [t for t in terms if t.term.kind is kind]
+        if mine:
+            groups.append(dict(kind=kind.value, terms=[dict(name=t.term.name.value, meaning=t.term.meaning.value,
+                                                            shared=t.origin is Origin.SHARED, used_by=used_by(t)) for t in mine]))
+    return groups
+
+
+def kernel_model(kernel: typing.Optional[SharedKernel], contexts: typing.Sequence[ContextSpec]) -> typing.Optional[Model]:
+    if kernel is None:
+        return None
+    return dict(model=model_groups([ModelTerm(term, Origin.SHARED) for term in kernel.terms],
+                                   lambda t: [c.value for c in kernel.users(t.term, contexts)]))
+
+
+def context_model(spec: ContextSpec, pending: typing.Sequence[PendingChange],
+                  kernel: typing.Optional[SharedKernel] = None) -> Model:
     held = {item.key for item in spec.held()}
     coming: typing.Dict[str, typing.List[Model]] = {}
     for change in pending:
@@ -44,9 +66,7 @@ def context_model(spec: ContextSpec, pending: typing.Sequence[PendingChange]) ->
             coming.setdefault(change.story.value, []).append(dict(key=change.key.value))
     return dict(
         context=spec.id.value, purpose=spec.purpose.value, subdomain=spec.subdomain.value,
-        model=[dict(kind=kind.value, terms=[dict(name=t.name.value, meaning=t.meaning.value)
-                                            for t in spec.terms_of(kind)])
-               for kind in TermKind if spec.terms_of(kind)],
+        model=model_groups(spec.model(kernel)),
         features=[dict(feature=feature.name.value,
                        rules=[dict(rule=block.rule.value if block.rule else "",
                                    criteria=[criterion_model(item, pending) for item in block.criteria])
@@ -92,10 +112,13 @@ class ShowSpecUseCase:
     def execute(self, query: ShowSpecQuery) -> Model:
         wanted = ContextName(query.context) if query.context else None
         stories = tuple(self._stories.not_delivered())
-        contexts = [spec for spec in self._specs.contexts() if wanted is None or spec.id == wanted]
-        models = [context_model(spec, spec.pending(stories)) for spec in contexts]
+        every = tuple(self._specs.contexts())
+        kernel = self._specs.shared_kernel()
+        contexts = [spec for spec in every if wanted is None or spec.id == wanted]
+        models = [context_model(spec, spec.pending(stories), kernel) for spec in contexts]
         if query.health:
             named = sorted({t for spec in contexts for item in spec.held() for t in item.tests}, key=lambda t: t.value)
             located, delivered = self._tests.located(named), tuple(self._deliveries.delivered())
             models = [with_health(model, spec, spec.health(located, delivered)) for model, spec in zip(models, contexts)]
-        return dict(context=query.context, health=query.health, contexts=models)
+        return dict(context=query.context, health=query.health, shared_kernel=kernel_model(kernel, every),
+                    contexts=models)
