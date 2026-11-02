@@ -14,6 +14,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import re
 import signal
 import socket
 import subprocess
@@ -127,10 +128,16 @@ def worker(cwd: str) -> typing.Optional[Info]:
                 stopping=os.path.isfile(stop_file()))
 
 
+def stopped_story(why: str) -> str:
+    """The story a factory's last word says stopped it — `story <id> stopped (exit 1) — …` — '' where it names none."""
+    found = re.search(r"\bstory (\S+) stopped\b", why)
+    return found.group(1) if found else ""
+
+
 def ended(cwd: str) -> typing.Optional[Info]:
-    """The factory `up` started that is gone without a `down` — {at, why, log}: its start and the last thing its log
-    says since then (a refusal, a crash); None while it runs, after a `down` or a stop request (the stop file stays),
-    or where nobody started one."""
+    """The factory `up` started that is gone without a `down` — {at, why, log, story}: its start, the last thing its log
+    says since then (a refusal, a crash) and the story that stopped it where it names one; None while it runs, after a
+    `down` or a stop request (the stop file stays), or where nobody started one."""
     started = read_json(own_file(FACTORY_FILE)) or {}
     if not started.get("pid") or alive(started["pid"]) or os.path.isfile(stop_file()) or (worker(cwd) or {}).get("alive"):
         return None
@@ -143,7 +150,8 @@ def ended(cwd: str) -> typing.Optional[Info]:
             said[-1] += " " + text
         elif text:
             said.append(text)
-    return dict(at=started.get("started", ""), why=said[-1] if said else "no word in its log", log=started.get("log", ""))
+    why = said[-1] if said else "no word in its log"
+    return dict(at=started.get("started", ""), why=why, log=started.get("log", ""), story=stopped_story(why))
 
 
 def worker_line(info: typing.Optional[Info]) -> str:

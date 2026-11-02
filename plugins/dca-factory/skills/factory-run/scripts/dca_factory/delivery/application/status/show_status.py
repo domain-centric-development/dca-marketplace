@@ -188,6 +188,8 @@ class ShowStatusUseCase:
             worker["since_text"] = stamp_text(worker.get("since")) + " UTC"
         # a factory that ended on its own says why, where a person looks — not only in its log
         gone = facts.ended() if live and not (worker or {}).get("alive") else None
+        if gone and gone.get("story") and stories.get(gone["story"], {}).get("state") == "delivered":
+            gone = None                       # the story that stopped it is delivered since: nothing left to say
         if gone:
             gone["text"] = f"the factory ended on its own: {gone['why']}"
             extra.append(f"{gone['text']} — its log: {gone['log']}")

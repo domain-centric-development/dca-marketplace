@@ -95,7 +95,8 @@ class StatusFacts(OutputPort, typing.Protocol):
         ...
 
     def ended(self) -> typing.Optional[Facts]:
-        """The factory `up` started that is gone without a `down`: {at, why, log}, or None."""
+        """The factory `up` started that is gone without a `down`: {at, why, log, story — the one that stopped it, or ''},
+        or None."""
         ...
 
     def listener(self) -> typing.Optional[str]:

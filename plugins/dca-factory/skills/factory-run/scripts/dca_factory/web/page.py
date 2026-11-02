@@ -119,7 +119,10 @@ h3 { font: 600 15px var(--display); margin: 18px 0 6px; }
 .drawer h2 { font: 600 16px var(--display); margin: 20px 0 6px; }
 .sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .prose { font-size: 16px; }
-.prose p, .prose ul, .prose ol { margin: 0 0 8px; } .prose ul, .prose ol { padding-left: 1.3em; } .prose li { margin: 2px 0; }
+.prose p, .prose ul, .prose ol { margin: 0 0 8px; }
+.prose table.md { width: auto; margin: 4px 0 10px; font-size: 15px; } .prose table.md td, .prose table.md th { padding: 5px 12px 5px 0; }
+.prose pre.md { font: 12.5px/1.5 var(--mono); background: var(--code); border-radius: 6px; padding: 10px 12px; overflow-x: auto; margin: 4px 0 10px; }
+.prose h4 { font: 600 14px var(--display); margin: 10px 0 4px; } .prose ul, .prose ol { padding-left: 1.3em; } .prose li { margin: 2px 0; }
 .more { margin: 10px 0 6px; } .more summary { cursor: pointer; font: 500 14px var(--display); color: var(--accent); }
 .more[open] summary { margin-bottom: 4px; }
 .aside { margin-top: 18px; padding: 4px 14px 6px; border-left: 4px solid var(--wait); border-radius: 6px; background: var(--panel); }
@@ -452,13 +455,29 @@ const mark = m => `<span class="mark m-${esc(m)}" aria-hidden="true">${esc(MARKS
 // a section's markdown as the website sets it: paragraphs, lists, `code` and **strong** — escaped first
 const inline = text => esc(text).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
 function prose(text) {
+  // the markdown a person writes in a description, a record or a story: paragraphs, lists, tables, code, headings
   const out = [];
-  let para = [], list = null;
+  let para = [], list = null, table = null, code = null;
   const endPara = () => { if (para.length) out.push(`<p>${inline(para.join(" "))}</p>`); para = []; };
   const endList = () => { if (list) out.push(`<${list.tag}>${list.items.map(i => `<li>${inline(i)}</li>`).join("")}</${list.tag}>`); list = null; };
+  const cells = row => row.trim().replace(/^\||\|$/g, "").split("|").map(c => c.trim());
+  const endTable = () => {
+    if (!table) return;
+    const [head, ...rows] = table.filter(r => !/^\s*\|?\s*:?-{2,}/.test(r));
+    out.push(`<table class="md"><tr>${cells(head).map(c => `<th>${inline(c)}</th>`).join("")}</tr>`
+      + rows.map(r => `<tr>${cells(r).map(c => `<td>${inline(c)}</td>`).join("")}</tr>`).join("") + `</table>`);
+    table = null;
+  };
+  const endAll = () => { endPara(); endList(); endTable(); };
   for (const line of String(text || "").split("\n")) {
+    if (code) { if (/^\s*```/.test(line)) { out.push(`<pre class="md">${esc(code.join("\n"))}</pre>`); code = null; } else code.push(line); continue; }
+    if (/^\s*```/.test(line)) { endAll(); code = []; continue; }
+    if (/^\s*\|/.test(line)) { endPara(); endList(); (table = table || []).push(line); continue; }
+    endTable();
+    const heading = line.match(/^#{3,6}\s+(.*)$/);
     const item = line.match(/^\s*(?:([-*])|\d+\.)\s+(.*)$/);
-    if (item) {
+    if (heading) { endAll(); out.push(`<h4>${inline(heading[1])}</h4>`); }
+    else if (item) {
       endPara();
       const tag = item[1] ? "ul" : "ol";
       if (list && list.tag !== tag) endList();
@@ -468,7 +487,8 @@ function prose(text) {
     else if (list && /^\s/.test(line)) list.items[list.items.length - 1] += " " + line.trim();
     else { endList(); para.push(line.trim()); }
   }
-  endPara(); endList();
+  if (code) out.push(`<pre class="md">${esc(code.join("\n"))}</pre>`);
+  endAll();
   return `<div class="prose">${out.join("")}</div>`;
 }
 // one of the factory's sections; one with a kind (why a story is not built) set apart in the wait colour
