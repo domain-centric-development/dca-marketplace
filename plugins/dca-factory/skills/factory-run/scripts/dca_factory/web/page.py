@@ -1690,7 +1690,7 @@ async function openStory(id) {
     + list.slice(at).map(one => section(one, 2)).join("");
   const stages = Object.entries(v.stages || {}).map(([name, e]) => `<tr><td>${esc(name)}</td><td class="num">${e.runs || ""}</td>
     <td class="num">${esc(e.seconds_text)}</td><td class="num">${esc(e.tokens_text)}</td><td class="num hide-s">${esc(e.cost_text)}</td><td class="id">${esc(e.why || "")}</td></tr>`).join("");
-  node.innerHTML = `${close}<div class="eyebrow">${esc(v.epic)}</div><h1>${mark(row.mark || "none")} ${esc(v.title || id)}</h1>
+  node.innerHTML = `${close}<div class="eyebrow">${esc(v.epic)}</div><h1>${esc(v.title || id)}</h1>
     <dl class="kv"><dt>story</dt><dd class="mono">${esc(id)}</dd><dt>state</dt><dd>${esc(row.state || v.situation || "")}</dd>
       ${v.context ? `<dt>context</dt><dd>${esc(v.context)}</dd>` : ""}<dt>file</dt><dd><code>${esc(v.path)}</code></dd>
       ${row.tokens_text ? `<dt>tokens</dt><dd>${esc(row.tokens_text)}${row.cost_text ? " · " + esc(row.cost_text) : ""}</dd>` : ""}</dl>
