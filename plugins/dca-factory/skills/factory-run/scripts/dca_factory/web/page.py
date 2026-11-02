@@ -312,8 +312,17 @@ details.dm-group > summary { justify-content: flex-start; }
 .days { border-left: 2px solid var(--line); margin: 16px 0 0 6px; padding-left: 16px; display: grid; gap: 12px; }
 .day { position: relative; } .day::before { content: ""; position: absolute; left: -22px; top: 5px; width: 10px; height: 10px; border-radius: 50%; background: var(--teal); }
 .day h4 { font: 600 12px var(--mono); color: var(--muted); margin-bottom: 2px; }
-.dl { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; padding: 4px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
-.dl .right { display: flex; gap: 8px; align-items: baseline; white-space: nowrap; }
+/* a delivery a row of fixed columns: when, what, its epic, its outcome event, how long, what it cost — the figures
+   right-aligned, a column never wider than its place */
+.dl { display: grid; grid-template-columns: 44px minmax(0, 1fr) 150px 210px 76px 64px; gap: 4px 14px; align-items: start;
+  padding: 5px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
+.dl .cut { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dl .fig, .dl .at, .dl .epic { font: 400 12.5px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dl .fig { text-align: right; }
+.dl > :not(.what) { padding-top: 4px; }   /* a title is a button, its baseline its last line: the small cells meet its first */
+@media (max-width: 760px) {
+  .dl { grid-template-columns: 44px minmax(0, 1fr) auto; } .dl .epic { display: none; }
+  .dl .ev { grid-column: 2 / -1; grid-row: 2; } .dl .fig + .fig { grid-column: 3; grid-row: 2; } }
 
 /* discover: the problem with an amber edge, the proposed epics as cards */
 .report { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 16px; margin-top: 10px; }
@@ -1312,8 +1321,10 @@ function delivered(st) {
     if (!days.length || days[days.length - 1].day !== day) days.push({day, rows: []});
     days[days.length - 1].rows.push(r);
   }
-  const line = r => `<div class="dl"><span>${story(r.story, r.title)}<span class="id"> ${esc(r.epic)} · ${esc((r.delivered_text || "").slice(11))}</span></span>
-    <span class="right">${events[r.epic] ? `<span class="event">${esc(events[r.epic])}</span>` : ""}<span class="hint">${esc([r.seconds_text, r.cost_text].filter(Boolean).join(" · "))}</span></span></div>`;
+  const line = r => `<div class="dl"><div class="at">${esc((r.delivered_text || "").slice(11))}</div><div class="what">${story(r.story, r.title)}</div>
+    <div class="epic cut" title="${esc(r.epic)}">${esc(r.epic)}</div>
+    <div class="ev cut">${events[r.epic] ? `<span class="event" title="${esc(events[r.epic])}">${esc(events[r.epic])}</span>` : ""}</div>
+    <div class="fig">${esc(r.seconds_text || "")}</div><div class="fig">${esc(r.cost_text || "")}</div></div>`;
   return card("Delivered", "what is delivered, by day, with the outcome event its epic is measured by",
     `<div class="tiles">${tiles}</div>` + (days.length ? `<div class="days">${days.map(d => `<div class="day"><h4>${esc(d.day)}</h4>${d.rows.map(line).join("")}</div>`).join("")}</div>` : `<p class="empty">Nothing delivered yet.</p>`));
 }
