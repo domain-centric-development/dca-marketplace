@@ -107,6 +107,14 @@ class SpecViewTest(unittest.TestCase):
                               ("TaskTitle", TermKind.VALUE_OBJECT, "What a task is called.")],
                              [(t.name.value, t.kind, t.meaning.value) for t in terms])
 
+    def test_an_identity_is_a_kind_of_its_own_and_a_name_in_code_names_no_kind(self):
+        from dca_factory.spec.domain.model.context_spec import Statement
+        kind = lambda words: TermKind.named(Statement(words))
+        self.assertEqual([TermKind.IDENTITY] * 3, [kind("Value Object (Id)"), kind("Value Object (ID, Shared Kernel)"),
+                                                    kind("Value Object (Identity)")])
+        self.assertEqual(TermKind.VALUE_OBJECT, kind("Value Object"))
+        self.assertEqual(TermKind.CONCEPT, kind("Concept (read through the Shared Kernel's `IdentityProvider.Identity`)"))
+
     def test_the_cli_shows_the_spec_as_markdown_and_json(self):
         with tempfile.TemporaryDirectory() as root:
             plant(root, PROJECT)

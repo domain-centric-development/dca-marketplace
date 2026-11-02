@@ -276,7 +276,7 @@ details.dm-group > summary { justify-content: flex-start; }
 .stepper { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 3px; padding: 0 12px 10px; }
 .st { text-align: center; font: 500 11px var(--mono); color: var(--muted); }
 .st i { display: block; height: 8px; border-radius: 4px; background: var(--line); margin-bottom: 4px; }
-.st.done i { background: var(--teal); } .st.now i { background: var(--wait); animation: pulse 1.5s infinite; } .st.now { color: var(--ink); font-weight: 600; }
+.st.done i { background: var(--teal); } .st.stopped i { background: var(--stop); } .st.stopped { color: var(--stop); font-weight: 600; } .st.now i { background: var(--wait); animation: pulse 1.5s infinite; } .st.now { color: var(--ink); font-weight: 600; }
 @keyframes pulse { 50% { opacity: .45; } } @media (prefers-reduced-motion: reduce) { .st.now i { animation: none; } }
 .live .doing { padding: 6px 12px; font: 400 12.5px var(--mono); color: var(--muted); border-top: 1px solid var(--line); }
 
@@ -940,7 +940,7 @@ function scenario(item) {
 
 // a context as the designed domain and the spec hold it: an ink head with its numbers, then its course — 1 its model
 // as a profile by kind, 2 its features as cards, each rule a line above its criteria
-const KIND_LABEL = {"aggregate": "aggregate", "entity": "entities", "value object": "values", "domain event": "events",
+const KIND_LABEL = {"aggregate": "aggregate", "entity": "entities", "identity": "ids", "value object": "values", "domain event": "events",
   "domain service": "services", "domain gateway": "gateways", "specification": "specifications", "factory": "factories",
   "read model": "read models", "failure": "failures", "concept": "concepts", "other": "other"};
 const subdomainClass = sd => /core/i.test(sd) ? "core" : /generic/i.test(sd) ? "gen" : "sup";
@@ -1154,17 +1154,21 @@ function run(st) {
     ${r.record ? `<div class="rec">asks: <code>${esc(r.record)}</code> — answer it under Decide</div>` : ""}
     ${ops(r) ? `<div class="acts">${ops(r)}</div>` : ""}</div>`).join("");
   const titles = Object.fromEntries((st.rows || []).map(r => [r.story, r.title]));
-  const live = (st.running || []).map(r => {
-    const where = `${r.part || r.stage}${r.round > 1 ? ` · round ${r.round}` : ""}`;
-    return `<div class="live"><div class="top"><div>${story(r.story, titles[r.story])}<div class="id">${esc(r.story)}</div></div>
-      <div class="right"><span class="tone ${r.interrupted ? "bad" : "wait"}">${r.interrupted ? "interrupted" : esc(where)}</span>
-      <span class="hint">${esc(r.ago || "")}</span><button class="btn small" data-call="follow" data-kind="story" data-id="${esc(r.story)}">follow</button></div></div>
-      ${(r.course || []).length ? `<div class="stepper">${r.course.map(c => `<div class="st ${c.state}"><i></i>${esc(c.stage)}</div>`).join("")}</div>` : ""}
-      ${r.activity ? `<div class="doing">${esc(r.activity)}</div>` : ""}</div>`;
-  }).join("");
+  // a story in flight as its course: running, or stopped where it goes on from, with why and what goes on
+  const course = (id, tone, label, extra, acts) => `<div class="live"><div class="top"><div>${story(id, titles[id])}<div class="id">${esc(id)}</div></div>
+      <div class="right"><span class="tone ${tone}">${esc(label)}</span>${acts}</div></div>
+      ${extra.course && extra.course.length ? `<div class="stepper">${extra.course.map(c => `<div class="st ${c.state}"><i></i>${esc(c.stage)}</div>`).join("")}</div>` : ""}
+      ${extra.doing ? `<div class="doing">${esc(extra.doing)}</div>` : ""}</div>`;
+  const follows = id => `<button class="btn small" data-call="follow" data-kind="story" data-id="${esc(id)}">follow</button>`;
+  const live = (st.running || []).map(r => course(r.story, r.interrupted ? "bad" : "wait",
+      r.interrupted ? "interrupted" : `${r.part || r.stage}${r.round > 1 ? ` · round ${r.round}` : ""}`,
+      {course: r.course, doing: r.activity}, `<span class="hint">${esc(r.ago || "")}</span>${follows(r.story)}`)).join("")
+    + (st.waiting || []).filter(w => w.mark === "stopped" && !(st.running || []).some(r => r.story === w.story))
+      .map(w => course(w.story, "bad", "stopped", {course: w.course, doing: (w.action && w.action.text) || w.what},
+        `${act(w.action)}${follows(w.story)}`)).join("");
   const ready = (st.rows || []).filter(r => st.queue && st.queue.ready.includes(r.story)).map(storyRow).join("");
   return nextLine(st)
-    + card("Running", "a story's course through its stages", live || `<p class="empty">No stage runs.</p>`)
+    + card("Running", "a story's course through its stages — running, or stopped where it goes on", live || `<p class="empty">No stage runs.</p>`)
     + card("Output", `<span id="follow-title"></span>`, `<div class="acts" id="follow-acts"></div><pre class="out" id="follow-out"></pre>`)
     + card("Requests", "worked before the next story, oldest first", tickets ? `<div class="queue">${tickets}</div>` : `<p class="empty">No request waits.</p>`)
     + (ready ? card("Next in line", "ready, in the order the factory takes them", `<table>${ready}</table>`) : "")

@@ -11,7 +11,7 @@ import os
 import re
 import typing
 
-from ..pipeline.stage_rows import stage_windows, stage_order
+from ..pipeline.stage_rows import stage_course, stage_windows, stage_order
 from .findings_files import finding_records, FINDINGS_FILE
 from .story_layout import delivered_on, find_story, story_kind
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir, read_profile, resolve_profile, shown
@@ -330,7 +330,7 @@ class StatusFactFiles:
         return stage_windows()
 
     def stage_course(self, kind: str) -> typing.Tuple[str, ...]:
-        return stage_order(kind)
+        return stage_course(kind)
 
     def window_part(self, story_id: str, window: str) -> str:
         return window_part_now(self._runs, story_id, window)

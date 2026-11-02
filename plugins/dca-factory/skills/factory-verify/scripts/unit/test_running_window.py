@@ -73,11 +73,15 @@ class CourseFacts:
 class TheCourseOfARunningStory(unittest.TestCase):
     """The page draws a running story as its course: each stage of its kind done, now or open."""
 
-    def course(self, stage, part=""):
+    def course(self, stage, part="", at="now"):
         from dca_factory.delivery.application.status.show_status import ShowStatusUseCase
         use_case = ShowStatusUseCase(CourseFacts(), None, None)
         return [(c["stage"], c["state"]) for c in use_case._course("s", {"path": "story.md"}, stage, part,
-                                                                       {"builder": ("test", "build", "tidy")})]
+                                                                       {"builder": ("test", "build", "tidy")}, at=at)]
+
+    def test_a_stopped_story_stands_stopped_at_the_stage_it_goes_on_from(self):
+        self.assertEqual([("plan", "done"), ("build", "done"), ("tidy", "done"), ("judge", "done"), ("document", "stopped")],
+                         self.course("document", at="stopped"))
 
     def test_the_stages_before_the_running_one_are_done_and_the_rest_open(self):
         self.assertEqual([("plan", "done"), ("build", "done"), ("tidy", "done"), ("judge", "now"), ("document", "open")],

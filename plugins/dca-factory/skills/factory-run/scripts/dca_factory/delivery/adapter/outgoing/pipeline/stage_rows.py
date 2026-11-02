@@ -104,6 +104,13 @@ def stage_order(kind: str = "story") -> typing.Tuple[str, ...]:
     return tuple(name.value for name in workflow().order(StoryKind(kind)))
 
 
+def stage_course(kind: str = "story") -> typing.Tuple[str, ...]:
+    """Every stage a story of this kind passes, the run order and the integration after it — what a view draws as its
+    course; an unknown kind passes a story's."""
+    known = StoryKind(kind if kind in ALL_KINDS else "story")
+    return tuple(s.name.value for s in workflow().stages if known in s.kinds)
+
+
 def order_for(kind: str) -> typing.Tuple[str, ...]:
     """The run order of a story of this kind — an unknown kind runs a story's."""
     return stage_order(kind if kind in ALL_KINDS else "story")

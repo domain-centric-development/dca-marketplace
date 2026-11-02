@@ -50,6 +50,7 @@ class ShowStatusUseCase:
         stories, order = data["stories"], data["order"]
         now = facts.now()
         running_stages = facts.running_stages()
+        windows = facts.shared_windows()
         rows: typing.List[Model] = []
         waiting: typing.List[Model] = []
         attention: typing.Dict[str, Action] = {}
@@ -77,6 +78,8 @@ class ShowStatusUseCase:
                 waiting.append(dict(mark=mark, story=story_id, what=words, action=action,
                                     draft=story["state"] == "unreleased",
                                     record=self._open_record(story_id, story) if mark != "stopped" else ""))
+                if mark == "stopped" and stage:            # where it stands: the stage it goes on from
+                    waiting[-1]["course"] = self._course(story_id, story, stage, "", windows, at="stopped")
         for name, front, _body, state, error, path in facts.decision_files():
             story_id = str(front.get("story", "")).strip() if not error else ""
             if story_id in stories:
@@ -90,7 +93,6 @@ class ShowStatusUseCase:
                                                         label="answer", primary=True)))
         running: typing.List[Model] = []
         held = facts.claim() if live else None
-        windows = facts.shared_windows()
         for story_id, stage, started in running_stages:
             if story_id in stories and stories[story_id]["state"] in ENDED_WORDS:
                 continue
@@ -235,13 +237,14 @@ class ShowStatusUseCase:
                            primary=primary)
 
     def _course(self, story_id: str, story: typing.Optional[Model], stage: str, part: str,
-                windows: typing.Mapping[str, typing.Tuple[str, ...]]) -> typing.List[Model]:
-        """The stages of the story's kind, each done, now or open — the stage a shared window is in, or its first."""
+                windows: typing.Mapping[str, typing.Tuple[str, ...]], at: str = "now") -> typing.List[Model]:
+        """The stages of the story's kind, each done, `at` (now, or stopped) or open — the stage a shared window is in,
+        or its first."""
         kind = self._facts.story_kind(story["path"]) if story and story.get("path") else "story"
         stages = self._facts.stage_course(kind)
         now = part or (windows[stage][0] if stage in windows else stage)
-        at = stages.index(now) if now in stages else -1
-        return [dict(stage=s, state="done" if n < at else "now" if n == at else "open") for n, s in enumerate(stages)]
+        here = stages.index(now) if now in stages else -1
+        return [dict(stage=s, state="done" if n < here else at if n == here else "open") for n, s in enumerate(stages)]
 
     def _attention(self, story_id: str, story: Model,
                    profile: typing.Dict[str, str]) -> typing.Tuple[str, str, Action]:

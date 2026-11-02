@@ -59,7 +59,7 @@ class StatusFacts(OutputPort, typing.Protocol):
         ...
 
     def stage_course(self, kind: str) -> typing.Tuple[str, ...]:
-        """The stages a story of <kind> runs through, in their order."""
+        """The stages a story of <kind> passes, in their order — the integration after the run order too."""
         ...
 
     def window_part(self, story_id: str, window: str) -> str:

@@ -4,6 +4,7 @@ it, and its features with the rules and the criteria that hold — and the open 
 from __future__ import annotations
 
 import enum
+import re
 import typing
 
 from ....building_blocks import AggregateRoot, Id, Value
@@ -35,6 +36,7 @@ class TermKind(enum.Enum):
 
     AGGREGATE = "aggregate"
     ENTITY = "entity"
+    IDENTITY = "identity"
     VALUE_OBJECT = "value object"
     DOMAIN_EVENT = "domain event"
     DOMAIN_SERVICE = "domain service"
@@ -49,17 +51,19 @@ class TermKind(enum.Enum):
     @staticmethod
     def named(words: Statement) -> typing.Optional[TermKind]:
         """The kind a `**Type:**` line or a section heading names — `Aggregate Root`, `Value Objects`, `Value Object
-        (ID)` —, None where it names none (a feature, a note)."""
-        said = words.value.lower()
+        (ID)`, an identity —, None where it names none (a feature, a note)."""
+        said = re.sub(r"`[^`]*`", "", words.value).lower()     # a name in code is no kind: `IdentityProvider`
         for kind, marks in KIND_WORDS:
             if any(mark in said for mark in marks):
                 return kind
         return None
 
 
-#: The words that name a kind, the most specific first: "domain event" before "event".
+#: The words that name a kind, the most specific first: "domain event" before "event", an identity — `Value Object (Id)`,
+#: `(ID, Shared Kernel)`, `(Identity)` — before the value object it is.
 KIND_WORDS: typing.Tuple[typing.Tuple[TermKind, typing.Tuple[str, ...]], ...] = (
     (TermKind.AGGREGATE, ("aggregate",)),
+    (TermKind.IDENTITY, ("(identity", "(id)", "(id,")),
     (TermKind.VALUE_OBJECT, ("value object",)),
     (TermKind.DOMAIN_EVENT, ("domain event", "event")),
     (TermKind.DOMAIN_SERVICE, ("domain service",)),
