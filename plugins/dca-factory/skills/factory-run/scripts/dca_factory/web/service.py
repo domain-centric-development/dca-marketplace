@@ -73,7 +73,7 @@ def serve_here(cwd, port=None, open_browser=False, by_up=False):
         say(f"port {port} is taken — name another with --port" if port else
             f"no free port between {PORT_BASE} and {PORT_BASE + PORT_SPAN - 1} — name one with --port")
         return 2
-    token = secrets.token_urlsafe(24)
+    token = secrets.token_hex(20)        # letters and digits only: a link pasted into markdown stays whole
     server = Server(("127.0.0.1", chosen), Handler)
     server.project, server.token, server.port = os.path.realpath(cwd), token, chosen
     url = f"http://127.0.0.1:{chosen}/?t={token}"

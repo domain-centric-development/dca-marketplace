@@ -90,3 +90,17 @@ class TheCourseOfARunningStory(unittest.TestCase):
     def test_a_shared_window_is_at_the_part_it_runs_or_at_its_first_stage_of_the_kind(self):
         self.assertEqual("now", dict(self.course("builder", "tidy"))["tidy"])
         self.assertEqual("open", dict(self.course("builder"))["build"])     # its first stage, test, is not a task's
+
+
+class TheDeliveredCurve(unittest.TestCase):
+    """What all deliveries up to one cost together, oldest first; an unpriced one adds tokens, not cost."""
+
+    def test_the_sums_grow_with_each_delivery_in_its_order(self):
+        from dca_factory.delivery.application.status.show_status import ShowStatusUseCase
+        row = lambda story, at, tokens, cost: dict(story=story, title=story, delivered=at, tokens=tokens, cost=cost,
+                                                   priced=1 if cost is not None else 0)
+        curve = ShowStatusUseCase._curve([row("b", "2026-10-02T10:00:00Z", 300, None),
+                                          row("a", "2026-10-01T10:00:00Z", 100, 1.5),
+                                          row("c", "2026-10-03T10:00:00Z", 50, 2.25)])
+        self.assertEqual([("a", 100, 1.5, 1), ("b", 400, 1.5, 1), ("c", 450, 3.75, 2)],
+                         [(c["story"], c["tokens_total"], c["cost_total"], c["priced_total"]) for c in curve])

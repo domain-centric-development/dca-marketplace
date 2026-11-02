@@ -177,6 +177,7 @@ class ShowStatusUseCase:
             epic.update(figures(epic), drafts=drafts)
         # the delivered stories, the newest delivery first; one without a time (delivered before the field) last
         delivered_order = [r["story"] for r in newest_first([r for r in rows if r["done"]], key="delivered")]
+        delivered_curve = self._curve([r for r in rows if r["done"] and r["delivered"]])
         next_line = self._next_line(data, stories, rows, empty, attention)
         extra = []
         requests = ListRequestsUseCase(self._requests).execute(ListRequestsQuery())["counts"]
@@ -224,6 +225,7 @@ class ShowStatusUseCase:
                     holder=(facts.claim() or {}).get("owner"), listening=facts.listener(),
                     dangling=facts.dangling_skill_links(), findings_name=facts.findings_name(),
                     perspectives=perspectives, description=description, queue=queue, delivered_order=delivered_order,
+                    delivered_curve=delivered_curve,
                     rows=rows, next=next_line, journeys=journeys,
                     priced=any(r["priced"] for r in rows), extra=extra, hint=data["hint"],
                     delivered=sum(r["done"] for r in rows), total=len(rows),
@@ -237,6 +239,22 @@ class ShowStatusUseCase:
                 primary: bool = False) -> Action:
         return make_action(self._facts.names_story, text=text, skill=skill, shell=shell, look=look, label=label,
                            primary=primary)
+
+    @staticmethod
+    def _curve(done: typing.Sequence[Model]) -> typing.List[Model]:
+        """The deliveries oldest first, each with what it cost and what all up to it cost together — tokens, and the
+        cost of those priced (`priced_total`: how many of them carry a price)."""
+        tokens = cost = 0.0
+        priced = 0
+        curve = []
+        for row in sorted(done, key=lambda r: str(r["delivered"])):
+            tokens += row["tokens"] or 0
+            if row["cost"] is not None and row["priced"]:
+                cost += row["cost"]
+                priced += 1
+            curve.append(dict(at=row["delivered"], story=row["story"], title=row["title"], tokens=row["tokens"] or 0,
+                              cost=row["cost"], tokens_total=int(tokens), cost_total=round(cost, 2), priced_total=priced))
+        return curve
 
     def _course(self, story_id: str, story: typing.Optional[Model], stage: str, part: str,
                 windows: typing.Mapping[str, typing.Tuple[str, ...]], at: str = "now") -> typing.List[Model]:

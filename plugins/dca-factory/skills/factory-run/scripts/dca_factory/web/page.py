@@ -324,6 +324,22 @@ details.dm-group > summary { justify-content: flex-start; }
   .dl { grid-template-columns: 44px minmax(0, 1fr) auto; } .dl .epic { display: none; }
   .dl .ev { grid-column: 2 / -1; grid-row: 2; } .dl .fig + .fig { grid-column: 3; grid-row: 2; } }
 
+/* delivered over time: two panels on one time axis — cost above, tokens below, never two scales on one axis */
+.curve { position: relative; margin-top: 14px; }
+.curve svg { display: block; width: 100%; height: auto; }
+.curve .grid { stroke: var(--line); stroke-width: 1; }
+.curve .axis { font: 400 11px var(--mono); fill: var(--muted); }
+.curve .name { font: 600 11px var(--mono); fill: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+.curve .end { font: 600 12px var(--mono); fill: var(--ink); }
+.curve .area { fill: color-mix(in srgb, var(--teal) 12%, transparent); }
+.curve .line { fill: none; stroke: var(--teal); stroke-width: 2; stroke-linejoin: round; }
+.curve .cross { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; }
+.curve .dot { fill: var(--teal); stroke: var(--panel); stroke-width: 2; }
+.curve .tip { position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: var(--shadow); padding: 8px 10px; font: 400 12.5px var(--mono); color: var(--ink); max-width: 320px; }
+.curve .tip b { display: block; font: 600 13.5px var(--display); margin-bottom: 4px; }
+.curve .tip .row { display: flex; justify-content: space-between; gap: 14px; color: var(--muted); } .curve .tip .row span:last-child { color: var(--ink); }
+
 /* discover: the problem with an amber edge, the proposed epics as cards */
 .report { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 16px; margin-top: 10px; }
 @media (max-width: 860px) { .report { grid-template-columns: minmax(0, 1fr); } }
@@ -1311,6 +1327,69 @@ function decide(st) {
 }
 
 // --- 5 delivered ---------------------------------------------------------------------------------------------------
+// --- the delivered curve: what all deliveries up to a day cost together, as the factory sums it --------------------
+const CURVE = {w: 1000, left: 64, right: 96, top: 26, panel: 120, gap: 44, bottom: 24};
+const money = n => n >= 1000 ? `$${(n / 1000).toFixed(1)}k` : `$${Math.round(n)}`;
+const count = n => n >= 1e9 ? `${(n / 1e9).toFixed(1)} G` : n >= 1e6 ? `${(n / 1e6).toFixed(0)} M` : n >= 1e3 ? `${(n / 1e3).toFixed(0)} k` : `${n}`;
+function niceMax(v) { const p = Math.pow(10, Math.floor(Math.log10(v || 1))); return [1, 2, 2.5, 5, 10].map(m => m * p).find(m => m >= v) || v; }
+function curveSvg(curve) {
+  const {w, left, right, top, panel, gap, bottom} = CURVE, h = top + panel * 2 + gap + bottom;
+  const t = curve.map(c => Date.parse(c.at)), t0 = t[0], t1 = t[t.length - 1] === t0 ? t0 + 864e5 : t[t.length - 1];
+  const x = v => left + (v - t0) / (t1 - t0) * (w - left - right);
+  const panels = [{name: "cost, cumulative", key: "cost_total", fmt: money, y0: top},
+                  {name: "tokens, cumulative", key: "tokens_total", fmt: count, y0: top + panel + gap}];
+  let out = `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="cost and tokens of every delivery so far, over time">`;
+  for (const p of panels) {
+    const max = niceMax(curve[curve.length - 1][p.key]), y = v => p.y0 + panel - v / max * panel;
+    p.y = y;
+    for (const f of [0, .5, 1]) out += `<line class="grid" x1="${left}" x2="${w - right}" y1="${y(max * f)}" y2="${y(max * f)}"/>`
+      + `<text class="axis" x="${left - 8}" y="${y(max * f) + 4}" text-anchor="end">${esc(p.fmt(max * f))}</text>`;
+    // a sum holds until the next delivery: a step, not a slope
+    let d = `M${x(t[0])},${y(0)}`;
+    curve.forEach((c, i) => { d += ` V${y(c[p.key])}` + (i + 1 < curve.length ? ` H${x(t[i + 1])}` : ""); });
+    out += `<path class="area" d="${d} V${y(0)} Z"/><path class="line" d="${d}"/>`
+      + `<text class="name" x="${left}" y="${p.y0 - 10}">${esc(p.name)}</text>`
+      + `<text class="end" x="${x(t[t.length - 1]) + 8}" y="${y(curve[curve.length - 1][p.key]) + 4}">${esc(p.fmt(curve[curve.length - 1][p.key]))}</text>`;
+  }
+  const ticks = 6, axisY = top + panel * 2 + gap + 18;
+  for (let i = 0; i <= ticks; i++) {
+    const v = t0 + (t1 - t0) * i / ticks, day = new Date(v).toISOString().slice(5, 10);
+    out += `<text class="axis" x="${x(v)}" y="${axisY}" text-anchor="middle">${day}</text>`;
+  }
+  out += `<line class="cross" id="curve-cross" x1="0" x2="0" y1="${top}" y2="${top + panel * 2 + gap}" visibility="hidden"/>`
+    + panels.map((p, n) => `<circle class="dot" id="curve-dot-${n}" r="4.5" cx="0" cy="0" visibility="hidden"/>`).join("")
+    + `<rect id="curve-hit" x="${left}" y="${top}" width="${w - left - right}" height="${panel * 2 + gap}" fill="transparent"/></svg>`;
+  S.curvePanels = panels.map(p => ({key: p.key, y: p.y}));
+  S.curveX = {t0, t1, x0: left, x1: w - right};
+  return out;
+}
+function curveCard(st) {
+  const curve = st.delivered_curve || [];
+  if (curve.length < 2) return "";
+  S.curve = curve;
+  const last = curve[curve.length - 1], unpriced = curve.length - last.priced_total;
+  return `<div class="curve" id="curve">${curveSvg(curve)}<div class="tip" id="curve-tip" hidden></div></div>`
+    + (unpriced ? `<p class="hint">${unpriced} deliver${unpriced === 1 ? "y carries" : "ies carry"} no price and add nothing to the cost.</p>` : "");
+}
+document.addEventListener("mousemove", event => {
+  const hit = event.target.closest && event.target.closest("#curve-hit"), tip = $("curve-tip");
+  const marks = ["curve-cross", "curve-dot-0", "curve-dot-1"].map(id => $(id));
+  if (!hit || !S.curve) { if (tip) tip.hidden = true; marks.forEach(m => m && m.setAttribute("visibility", "hidden")); return; }
+  const svg = hit.ownerSVGElement, box = svg.getBoundingClientRect(), scale = CURVE.w / box.width;
+  const vx = (event.clientX - box.left) * scale, {t0, t1, x0, x1} = S.curveX;
+  const at = t0 + (vx - x0) / (x1 - x0) * (t1 - t0);
+  let i = 0; while (i + 1 < S.curve.length && Date.parse(S.curve[i + 1].at) <= at) i++;
+  const c = S.curve[i], cx = x0 + (Date.parse(c.at) - t0) / (t1 - t0) * (x1 - x0);
+  marks[0].setAttribute("x1", cx); marks[0].setAttribute("x2", cx); marks[0].setAttribute("visibility", "visible");
+  S.curvePanels.forEach((p, n) => { marks[n + 1].setAttribute("cx", cx); marks[n + 1].setAttribute("cy", p.y(c[p.key])); marks[n + 1].setAttribute("visibility", "visible"); });
+  tip.innerHTML = `<b>${esc(c.title || c.story)}</b><div class="row"><span>delivered</span><span>${esc(c.at.replace("T", " ").slice(0, 16))}</span></div>`
+    + `<div class="row"><span>cost so far</span><span>$${c.cost_total.toFixed(2)}</span></div><div class="row"><span>tokens so far</span><span>${c.tokens_total.toLocaleString("en")}</span></div>`
+    + `<div class="row"><span>this one</span><span>${c.cost == null ? "unpriced" : "$" + c.cost.toFixed(2)} · ${count(c.tokens)}</span></div>`;
+  tip.hidden = false;
+  const left = cx / scale + 14, room = box.width - tip.offsetWidth - 8;
+  tip.style.left = `${Math.min(left, room)}px`; tip.style.top = `${(event.clientY - box.top) - tip.offsetHeight - 12}px`;
+});
+
 function delivered(st) {
   const rows = Object.fromEntries((st.rows || []).map(r => [r.story, r])), events = Object.fromEntries((st.epics || []).map(e => [e.epic, e.metric]));
   const tiles = [[`${st.delivered}`, `of ${st.total} stories delivered`, "lead"], [st.seconds_text, "worked"], [st.tokens_text, "tokens"], [st.cost_text, "cost"]]
@@ -1326,7 +1405,7 @@ function delivered(st) {
     <div class="ev cut">${events[r.epic] ? `<span class="event" title="${esc(events[r.epic])}">${esc(events[r.epic])}</span>` : ""}</div>
     <div class="fig">${esc(r.seconds_text || "")}</div><div class="fig">${esc(r.cost_text || "")}</div></div>`;
   return card("Delivered", "what is delivered, by day, with the outcome event its epic is measured by",
-    `<div class="tiles">${tiles}</div>` + (days.length ? `<div class="days">${days.map(d => `<div class="day"><h4>${esc(d.day)}</h4>${d.rows.map(line).join("")}</div>`).join("")}</div>` : `<p class="empty">Nothing delivered yet.</p>`));
+    `<div class="tiles">${tiles}</div>` + curveCard(st) + (days.length ? `<div class="days">${days.map(d => `<div class="day"><h4>${esc(d.day)}</h4>${d.rows.map(line).join("")}</div>`).join("")}</div>` : `<p class="empty">Nothing delivered yet.</p>`));
 }
 
 // --- one story -----------------------------------------------------------------------------------------------------
