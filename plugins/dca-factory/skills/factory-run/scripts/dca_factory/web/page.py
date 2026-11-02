@@ -186,6 +186,38 @@ pre.out:empty { display: none; }
 .flowsvg [data-stage].has-back:hover { fill: var(--teal); }
 @media (prefers-reduced-motion: reduce) { .flowsvg .way-back { transition: none; } }
 
+/* the domain: an ink head, a teal course with numbered nodes, the model as a profile, features as cards */
+.dm { margin: 4px 0 8px; }
+.dm-head { background: var(--ink); color: var(--bg); border-top: 4px solid var(--teal); border-radius: 4px 4px 9px 9px; padding: 10px 14px 12px; }
+.dm-head .top { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; } .dm-head .top b { font: 700 22px var(--display); }
+.dm-head p { margin: 2px 0 8px; color: color-mix(in srgb, var(--bg) 75%, transparent); font-size: 14px; }
+.dm-head .nums { display: flex; flex-wrap: wrap; gap: 6px 16px; font: 500 12px var(--mono); color: color-mix(in srgb, var(--bg) 70%, transparent); }
+.dm-head .nums b { font: 700 16px var(--display); color: var(--teal); margin-right: 4px; } .dm-head .nums b.warn { color: var(--wait); } .dm-head .nums b.bad { color: var(--stop); }
+.pill { font: 600 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.core { background: var(--teal); color: var(--on-accent); } .pill.sup { box-shadow: inset 0 0 0 1.5px var(--teal); color: var(--teal); }
+.pill.gen { box-shadow: inset 0 0 0 1.5px currentColor; opacity: .7; }
+.dm-track { border-left: 2px solid var(--line); margin: 10px 0 0 12px; padding-left: 20px; }
+.dm-node { position: relative; margin: 16px 0 8px; font: 600 15px var(--display); }
+.dm-node .n { position: absolute; left: -33px; top: -1px; width: 22px; height: 22px; border-radius: 50%; background: var(--teal); color: var(--on-accent); font: 600 12px var(--mono); display: grid; place-items: center; }
+.dm-node .hint { font: 400 13px var(--body); margin-left: 6px; }
+.dm-facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 12px; margin: 2px 0 0; }
+.dm-facts dt { font: 600 11px var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: .06em; padding-top: 3px; }
+.dm-facts dd { margin: 0; display: flex; flex-wrap: wrap; gap: 4px; }
+.chip { font: 500 12px var(--mono); padding: 2px 8px; border-radius: 4px; background: var(--teal); color: var(--on-accent); white-space: nowrap; cursor: help; }
+.chip.minor { background: transparent; color: var(--accent); box-shadow: inset 0 0 0 1px var(--teal); }
+details.dm-group { border: 1px solid var(--line); border-radius: 6px; margin-top: 6px; background: var(--panel); }
+details.dm-group > summary { display: flex; justify-content: space-between; align-items: baseline; padding: 6px 10px; background: var(--soft); border-radius: 6px; cursor: pointer; list-style: none; font: 600 15px var(--display); }
+details.dm-group > summary::-webkit-details-marker { display: none; } details.dm-group > summary::before { content: "▸"; color: var(--muted); font: 400 12px var(--mono); margin-right: 8px; }
+details.dm-group[open] > summary { border-radius: 6px 6px 0 0; } details.dm-group[open] > summary::before { content: "▾"; color: var(--accent); }
+details.dm-group > summary span { font: 400 12px var(--mono); color: var(--muted); margin-left: auto; }
+details.dm-group > summary { justify-content: flex-start; }
+.dm-rule { padding: 8px 10px 2px; font: italic 500 14px var(--body); color: var(--muted); }
+.dm-rule::before { content: "Rule · "; font: normal 600 11px var(--mono); color: var(--accent); letter-spacing: .06em; }
+.dm .rrow { border-top: 0; } .dm .rrow + .rrow { border-top: 1px solid var(--line); }
+.dm .rhead { padding: 5px 10px 5px 20px; }
+.dm .rrow.open { box-shadow: inset 3px 0 0 var(--teal); background: color-mix(in srgb, var(--teal) 7%, transparent); }
+.dm .spec-act { padding: 6px 10px 10px; }
+
 /* the rules: one detail under the drawing, a rule a row that opens where it stands */
 .rgroup { margin-top: 14px; } .rgroup .lbl { font: 500 10.5px var(--mono); letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
 .rgroup .lbl .n { color: var(--ink); margin-left: 4px; }
@@ -810,23 +842,39 @@ function scenario(item) {
     <span class="caret" aria-hidden="true">${open ? "▾" : "▸"}</span><span class="rgist">${inline(heading)}</span><span>${changes}</span></button>${body}</div>`;
 }
 
+// a context as the designed domain and the spec hold it: an ink head with its numbers, then its course — 1 its model
+// as a profile by kind, 2 its features as cards, each rule a line above its criteria
+const KIND_LABEL = {"aggregate": "aggregate", "entity": "entities", "value object": "values", "domain event": "events",
+  "domain service": "services", "domain gateway": "gateways", "specification": "specifications", "factory": "factories",
+  "read model": "read models", "failure": "failures", "concept": "concepts", "other": "other"};
+const subdomainClass = sd => /core/i.test(sd) ? "core" : /generic/i.test(sd) ? "gen" : "sup";
+
 function specContext(c) {
-  const model = c.model.map(g => `<div class="rgroup"><div class="lbl">${esc(g.kind)} <span class="n">${g.terms.length}</span></div>
-    <div class="terms">${g.terms.map(t => `<span class="term" title="${esc(t.meaning)}">${esc(t.name)}</span>`).join("")}</div></div>`).join("");
+  const h = c.health || {}, open = c.features.reduce((n, f) => n + f.rules.reduce((m, r) => m + r.criteria.filter(x => x.changed_by.length).length, 0), 0) + c.coming.length;
+  const proof = h.orphaned || h.untested ? `<span><b class="bad">${(h.orphaned || 0) + (h.untested || 0)}</b>without a test</span>` : `<span><b>✓</b>all tested</span>`;
+  const head = `<div class="dm-head"><div class="top"><b>${esc(c.context)}</b>${c.subdomain ? `<span class="pill ${subdomainClass(c.subdomain)}">${esc(c.subdomain)}</span>` : ""}</div>
+    ${c.purpose ? `<p>${esc(c.purpose)}</p>` : ""}
+    <div class="nums"><span><b>${c.features.length}</b>features</span><span><b>${c.criteria}</b>criteria</span>${c.health ? proof : ""}<span><b${open ? ' class="warn"' : ""}>${open}</b>open changes</span>
+    ${h.undelivered ? `<span title="adopted, delivered by hand without a story, or written before the factory"><b>${h.undelivered}</b>not from a story</span>` : ""}</div></div>`;
+  const facts = c.model.map(g => `<dt>${esc(KIND_LABEL[g.kind] || g.kind)}</dt><dd>${g.terms.map(t =>
+    `<span class="chip${["concept", "other"].includes(g.kind) ? " minor" : ""}" title="${esc(t.meaning)}">${esc(t.name)}</span>`).join("")}</dd>`).join("");
   const features = c.features.map(f => {
     const key = `feature:${c.context}:${f.feature}`, count = f.rules.reduce((n, r) => n + r.criteria.length, 0);
     const pending = f.rules.reduce((n, r) => n + r.criteria.filter(x => x.changed_by.length).length, 0);
-    return `<details class="fold feature" data-fold="${esc(key)}"${foldOpen(key)}><summary><b>${esc(f.feature || "the context itself")}</b>
-      <span class="hint">${count} criteria${pending ? ` · ${pending} changed by open stories` : ""}</span></summary>`
-      + f.rules.map(r => `<div class="rgroup">${r.rule ? `<div class="rule-head">Rule: ${inline(r.rule)}</div>` : ""}${r.criteria.map(scenario).join("")}</div>`).join("")
+    return `<details class="dm-group" data-fold="${esc(key)}"${foldOpen(key)}><summary><b>${esc(f.feature || "the context itself")}</b>
+      <span>${count}${pending ? ` · ${pending} changed` : ""}</span></summary>`
+      + f.rules.map(r => (r.rule ? `<div class="dm-rule">${inline(r.rule)}</div>` : "") + r.criteria.map(scenario).join("")).join("")
       + (f.add ? `<div class="spec-act">${act(f.add, "s")}</div>` : "") + `</details>`;
   }).join("");
   const coming = c.coming.length ? `<div class="rgroup"><div class="lbl">coming — new criteria of open stories</div>${c.coming.map(s =>
     `<p class="said"><span class="pend p-adds">${esc(s.status)}</span> ${story(s.story)} — ${s.keys.map(k => `<code>${esc(k.key)}</code>`).join(", ")}</p>`).join("")}</div>` : "";
-  return (c.purpose ? `<p class="about show-s">${esc(c.purpose)}</p>` : "")
-    + `<div class="part"><div class="part-head">Domain model</div>${model || `<p class="hint">The glossary names no term of a model.</p>`}</div>`
-    + `<div class="part"><div class="part-head">Features <span class="hint">— what holds, by rule</span></div>${features || `<p class="hint">No criterion holds yet.</p>`}${coming}
-      ${c.add ? `<details class="fold" data-fold="addfeature:${esc(c.context)}"${foldOpen("addfeature:" + c.context)}><summary>add a feature</summary><div class="spec-act">${act(c.add, "s")}</div></details>` : ""}</div>`;
+  return `<div class="dm">${head}<div class="dm-track">
+    <div class="dm-node"><span class="n">1</span>Domain model<span class="hint">from its glossary</span></div>
+    ${facts ? `<dl class="dm-facts">${facts}</dl>` : `<p class="hint">The glossary names no term of a model.</p>`}
+    <div class="dm-node"><span class="n">2</span>Features<span class="hint">what holds, by rule</span></div>
+    ${features || `<p class="hint">No criterion holds yet.</p>`}${coming}
+    ${c.add ? `<details class="fold" data-fold="addfeature:${esc(c.context)}"${foldOpen("addfeature:" + c.context)}><summary>add a feature</summary><div class="spec-act">${act(c.add, "s")}</div></details>` : ""}
+  </div></div>`;
 }
 
 // how a context stands over the whole of it: tests gone or missing, criteria no delivered story brought
