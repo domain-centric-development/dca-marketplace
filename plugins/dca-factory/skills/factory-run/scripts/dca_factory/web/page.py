@@ -201,6 +201,9 @@ pre.out:empty { display: none; }
 /* the domain: an ink head, a teal course with numbered nodes, the model as a profile, features as cards */
 .dm { margin: 4px 0 8px; }
 .dm-head { background: var(--ink); color: var(--bg); border-top: 4px solid var(--teal); border-radius: 4px 4px 9px 9px; padding: 10px 14px 12px; }
+.dm-head[data-context] { cursor: pointer; } .dm-head:focus-visible { outline: 3px solid var(--teal); outline-offset: 2px; }
+.dm-head .caret { font: 400 13px var(--mono); color: color-mix(in srgb, var(--bg) 60%, transparent); }
+table.epics tr.ctx-body > td { padding-top: 10px; }
 .dm-head .top { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; } .dm-head .top b { font: 700 22px var(--display); }
 .dm-head p { margin: 2px 0 8px; color: color-mix(in srgb, var(--bg) 75%, transparent); font-size: 14px; }
 .dm-head .nums { display: flex; flex-wrap: wrap; gap: 6px 16px; font: 500 12px var(--mono); color: color-mix(in srgb, var(--bg) 70%, transparent); }
@@ -865,7 +868,7 @@ const subdomainClass = sd => /core/i.test(sd) ? "core" : /generic/i.test(sd) ? "
 function specContext(c) {
   const h = c.health || {}, open = c.features.reduce((n, f) => n + f.rules.reduce((m, r) => m + r.criteria.filter(x => x.changed_by.length).length, 0), 0) + c.coming.length;
   const proof = h.orphaned || h.untested ? `<span><b class="bad">${(h.orphaned || 0) + (h.untested || 0)}</b>without a test</span>` : `<span><b>✓</b>all tested</span>`;
-  const head = `<div class="dm-head"><div class="top"><b>${esc(c.context)}</b>${c.subdomain ? `<span class="pill ${subdomainClass(c.subdomain)}">${esc(c.subdomain)}</span>` : ""}</div>
+  const head = `<div class="dm-head" data-context="${esc(c.context)}" tabindex="0" role="button" aria-expanded="true"><div class="top"><span class="caret" aria-hidden="true">▾</span><b>${esc(c.context)}</b>${c.subdomain ? `<span class="pill ${subdomainClass(c.subdomain)}">${esc(c.subdomain)}</span>` : ""}</div>
     ${c.purpose ? `<p>${esc(c.purpose)}</p>` : ""}
     <div class="nums"><span><b>${c.features.length}</b>features</span><span><b>${c.criteria}</b>criteria</span>${c.health ? proof : ""}<span><b${open ? ' class="warn"' : ""}>${open}</b>open changes</span>
     ${h.undelivered ? `<span title="adopted, delivered by hand without a story, or written before the factory"><b>${h.undelivered}</b>not from a story</span>` : ""}</div></div>`;
@@ -902,19 +905,20 @@ function domainCard() {
   const open = S.openContexts || (S.openContexts = new Set());
   const rows = (S.spec.contexts || []).map(c => {
     const isOpen = open.has(c.context), pending = c.features.reduce((n, f) => n + f.rules.reduce((m, r) => m + r.criteria.filter(x => x.changed_by.length).length, 0), 0) + c.coming.length;
-    return `<tr class="epic-row ctx-row${isOpen ? " open" : ""}" data-context="${esc(c.context)}" tabindex="0" aria-expanded="${isOpen}">
-      <td><span class="caret" aria-hidden="true">${isOpen ? "▾" : "▸"}</span> <span class="title">${esc(c.context)}</span><div class="id">${esc(c.subdomain)}</div></td>
+    // an open context is its head alone: the ink head carries the name, the purpose and the numbers the row had
+    if (isOpen) return `<tr class="epic-body ctx-body"><td colspan="6">${specContext(c)}</td></tr>`;
+    return `<tr class="epic-row ctx-row" data-context="${esc(c.context)}" tabindex="0" aria-expanded="${isOpen}">
+      <td><span class="caret" aria-hidden="true">▸</span> <span class="title">${esc(c.context)}</span><div class="id">${esc(c.subdomain)}</div></td>
       <td class="hide-s">${esc(c.purpose)}</td><td class="num">${c.features.length}</td><td class="num">${c.criteria}</td>
       <td class="num">${pending ? `<span class="pend p-changes">${pending}</span>` : "—"}</td>
-      <td class="hide-s">${healthCell(c.health)}</td></tr>`
-      + (isOpen ? `<tr class="epic-body"><td colspan="6">${specContext(c)}</td></tr>` : "");
+      <td class="hide-s">${healthCell(c.health)}</td></tr>`;
   }).join("");
   return card("Domain", "the contexts as designed, and what holds in each — the model from its glossary, the features as the gate delivered them",
     rows ? `<table class="epics"><tr><th>context</th><th class="hide-s">what it is for</th><th class="num">features</th><th class="num">criteria</th><th class="num">open changes</th><th class="hide-s">health</th></tr>${rows}</table>`
       : `<p class="empty">No spec yet — what holds is written by the stories the gate delivers.</p>`);
 }
 document.addEventListener("click", event => {
-  const row = event.target.closest && event.target.closest("tr.ctx-row");
+  const row = event.target.closest && event.target.closest("tr.ctx-row, .dm-head[data-context]");
   if (row && !event.target.closest("button, a")) {
     event.stopPropagation();
     const open = S.openContexts || (S.openContexts = new Set()), id = row.dataset.context;
@@ -1030,7 +1034,7 @@ document.addEventListener("click", event => {
   S.backlogFilter = f.dataset.filter; S.openEpics = new Set(); render();
 });
 document.addEventListener("keydown", event => {
-  const row = event.target.closest && event.target.closest("tr.epic-row");
+  const row = event.target.closest && event.target.closest("tr.epic-row, .dm-head[data-context]");
   if (row && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); row.click(); }
 });
 
