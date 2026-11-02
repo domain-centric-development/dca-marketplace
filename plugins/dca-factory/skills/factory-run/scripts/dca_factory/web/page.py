@@ -569,7 +569,7 @@ const CALLS = {
 };
 
 document.addEventListener("click", async event => {
-  const target = event.target.closest("[data-press],[data-call],[data-story],[data-tab],[data-pick],[data-rule],[data-kind]");
+  const target = event.target.closest("[data-press],[data-call],[data-story],[data-tab],[data-pick],[data-rule],[data-flow]");
   if (!target) return;
   if (target.dataset.rule) {
     S.rule = S.rule === target.dataset.rule ? null : target.dataset.rule;
@@ -578,7 +578,7 @@ document.addEventListener("click", async event => {
     if (read) read.scrollIntoView({block: "nearest", behavior: "smooth"});
     return;
   }
-  if (target.dataset.kind) { S.ruleKind = target.dataset.kind; return render(); }
+  if (target.dataset.flow) { S.ruleKind = target.dataset.flow; return render(); }
   if (target.dataset.pick) return theme(target.dataset.pick);
   if (target.dataset.tab) return show(target.dataset.tab);
   if (target.dataset.story) return openStory(target.dataset.story);
@@ -825,7 +825,7 @@ function rulesTab(st) {
   const kind = kinds.includes(S.ruleKind) ? S.ruleKind : kinds[0];
   const flow = (v.flow || {})[kind] || {steps: [], edges: [], every_gate: []};
   const stories = (st.rows || []).map(r => r.story);
-  const picks = `<div class="pick"><span class="seg">${kinds.map(k => `<button aria-pressed="${k === kind}" data-kind="${esc(k)}">${esc(k)}</button>`).join("")}</span>
+  const picks = `<div class="pick"><span class="seg">${kinds.map(k => `<button aria-pressed="${k === kind}" data-flow="${esc(k)}">${esc(k)}</button>`).join("")}</span>
     <select data-overlay aria-label="a story's gate runs"><option value="">no story</option>${stories.map(id => `<option${id === S.ruleStory ? " selected" : ""}>${esc(id)}</option>`).join("")}</select></div>`;
   return card(`${esc(kind)}`, `${(v.rules || []).length} rules`, picks + storyLine(st, flow, story) + (flow.svg_one_at_a_time ? `<div class="flowsvg">${flow.svg_one_at_a_time}</div>` : ""))
     + picked(flow, rules, story)
@@ -1185,7 +1185,10 @@ function follow(kind, id) {
     source.addEventListener("end", () => { S.followLines.push("— the output ended —"); paintFollow(); source.close(); });
     S.followSource = source;
   }
+  // the output is a card of the run page: the story's drawer would hide it, so it closes, and the card comes into view
+  if (S.drawer) CALLS.close();
   if (S.tab !== "run") show("run"); else paintFollow();
+  if (kind) requestAnimationFrame(() => { const out = $("follow-out"); if (out) out.closest(".card").scrollIntoView({behavior: "smooth", block: "start"}); });
 }
 
 function paintFollow() {
