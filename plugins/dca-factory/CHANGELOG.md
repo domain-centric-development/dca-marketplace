@@ -325,3 +325,4 @@ instead of by the model; the table below them names every version and what it ch
 | 0.137.4 | 2026-11-02 | Backlog: an epic is a white card with its head in teal mist and the strip flush along the head's foot as the seam; each lane carries its state's colour as a rule along its top, all of one height, an empty one quiet |
 | 0.137.5 | 2026-11-02 | An empty lane stands level with the others |
 | 0.137.6 | 2026-11-02 | The page draws no mark for a story without a state — no dot before a title; the terminal keeps it for its columns |
+| 0.137.7 | 2026-11-02 | A list draws its marks' column only where one of its rows has a mark — next in line and what else waits start at the title |

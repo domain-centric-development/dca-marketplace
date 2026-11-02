@@ -1366,8 +1366,10 @@ document.addEventListener("click", event => {
 });
 
 // --- 2 backlog -----------------------------------------------------------------------------------------------------
-function storyRow(r) {
-  return `<tr><td>${mark(r.mark)}</td><td>${story(r.story, r.title)}<div class="id">${esc(r.story)}</div></td>
+// a list draws its marks' column only where one of its rows has a mark
+const marked = list => list.some(r => MARKS[r.mark]);
+function storyRow(r, withMark) {
+  return `<tr>${withMark ? `<td>${mark(r.mark)}</td>` : ""}<td>${story(r.story, r.title)}<div class="id">${esc(r.story)}</div></td>
     <td>${esc(r.state)}</td><td class="hide-s">${esc(r.stage === "—" ? "" : r.stage)}</td>
     <td class="num hide-s">${esc(r.tokens_text)}</td><td class="act"><div class="acts">${acts(r.actions)}</div></td></tr>`;
 }
@@ -1485,7 +1487,8 @@ function run(st) {
     + (st.waiting || []).filter(w => w.mark === "stopped" && !(st.running || []).some(r => r.story === w.story))
       .map(w => course(w.story, "bad", "stopped", {course: w.course, doing: (w.action && w.action.text) || w.what},
         `${act(w.action)}${follows(w.story)}`)).join("");
-  const ready = (st.rows || []).filter(r => st.queue && st.queue.ready.includes(r.story)).map(storyRow).join("");
+  const readyRows = (st.rows || []).filter(r => st.queue && st.queue.ready.includes(r.story)), readyMarked = marked(readyRows);
+  const ready = readyRows.map(r => storyRow(r, readyMarked)).join("");
   return card("The backlog", backlogOn(st) ? "on — the released stories one after the other"
         : `off — ${(st.queue || {ready: []}).ready.length} released stories would run`, factory)
     + wishCard(st)
@@ -1549,7 +1552,8 @@ function recordCard(r) {
 function decide(st) {
   const records = ((S.decisions || {}).records || []).filter(r => (r.actions || []).length && (r.place || "decide") === "decide");
   // a waiting story whose record is open stands above as that record; the others — a draft, a stopped story — here
-  const others = (st.waiting || []).filter(w => !w.record).map(w => `<tr><td>${mark(w.mark)}</td>
+  const waiting = (st.waiting || []).filter(w => !w.record), waitMarked = marked(waiting);
+  const others = waiting.map(w => `<tr>${waitMarked ? `<td>${mark(w.mark)}</td>` : ""}
     <td>${story(w.story)}</td><td>${esc(w.what)}</td>
     <td class="act"><div class="acts">${act(w.action) || `<span class="hint">${esc(w.action.text || w.action.skill || w.action.shell || "")}</span>`}</div></td></tr>`).join("");
   return records.map(recordCard).join("")
