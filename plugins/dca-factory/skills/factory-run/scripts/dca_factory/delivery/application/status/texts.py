@@ -160,4 +160,6 @@ def worker_text(info: typing.Optional[Entry]) -> str:
         return f"{info['how']} — no sign of life"
     if info["stopping"]:
         return "stopping after its stage"
-    return str({"up": "up", "runner": "up — a runner from a terminal", "session": "up — a session's run"}[info["how"]])
+    if info["how"] == "up":                    # the factory's worker: requests always, the backlog while it is on
+        return "up — the backlog runs" if info.get("backlog") else "requests only — the backlog is off"
+    return str({"runner": "up — a runner from a terminal", "session": "up — a session's run"}[info["how"]])

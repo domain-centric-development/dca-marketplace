@@ -100,5 +100,10 @@ def request_of(skill: typing.Optional[str], names_story: NamesStory) -> typing.O
     if head == "/dca-describe":
         return dict(kind="describe", fields={}, words=rest, open="" if rest else "words")
     if head == "/factory-discover":
+        # `--topic <topic> <words>`: the discovery of that topic continued with the words
+        match = re.match(r"^--topic (\S+)\s*(.*)$", rest)
+        if match:
+            return dict(kind="discover", fields=dict(topic=match.group(1)), words=match.group(2),
+                        open="" if match.group(2) else "words")
         return dict(kind="discover", fields={}, words=rest, open="" if rest else "words")
     return None

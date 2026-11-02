@@ -58,7 +58,7 @@ class RunnerCases:
     def run_backlog(self, run: Run, tool: str, slots: int, watch: bool, interval: int, dry: bool) -> int:
         backlog = RunnerBacklog(run, tool)
         return RunBacklogUseCase(backlog, backlog, backlog, self.queue(run), ConsoleLines()).execute(
-            RunBacklogCommand(slots, watch, interval, dry, run.keep_going, run.stay))
+            RunBacklogCommand(slots, watch, interval, dry, run.keep_going, run.stay, run.lane))
 
     def queue(self, run: Run) -> RequestQueue:
         return requests.request_queue(run.home, run.worker, run.profile)

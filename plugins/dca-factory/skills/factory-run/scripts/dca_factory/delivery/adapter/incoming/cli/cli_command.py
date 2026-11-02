@@ -102,6 +102,7 @@ from ....application.delivery.next_free_story_id import NextFreeStoryIdQuery
 from ....application.upkeep.migrate_layout import MigrateLayoutCommand
 from ....application.lifecycle.start_factory import StartFactoryCommand
 from ....application.lifecycle.stop_factory import StopFactoryCommand
+from ....application.lifecycle.end_page import EndPageCommand
 from ....application.lifecycle.start_page import StartPageCommand
 from ....application.lifecycle.show_running_page import ShowRunningPageQuery
 from ....application.lifecycle.show_worker import ShowWorkerQuery
@@ -861,6 +862,8 @@ def up_command(argv: typing.Sequence[str]) -> int:
     parser.add_argument("--serve", action="store_true", help="the page too")
     parser.add_argument("--port", type=int)
     parser.add_argument("--by")
+    parser.add_argument("--requests", action="store_true",
+                        help="the worker for a person's requests alone — the backlog stays as it is (the page starts it)")
     args, run_args = parser.parse_known_args(argv)
     allowed = {"--tool", "--parallel", "--interval", "--max-stages", "--story-budget", "--keep-going",
                "--separate-stages", "--shared-builder", "--shared-verifier"}
@@ -870,7 +873,8 @@ def up_command(argv: typing.Sequence[str]) -> int:
               file=sys.stderr)
         return 2
     placed()
-    return wiring.start_factory().execute(StartFactoryCommand(tuple(run_args), args.serve, args.port, args.by or ""))
+    return wiring.start_factory().execute(StartFactoryCommand(tuple(run_args), args.serve, args.port, args.by or "",
+                                                              backlog=not args.requests))
 
 
 def down_command(argv: typing.Sequence[str]) -> int:
@@ -888,9 +892,13 @@ def serve_command(argv: typing.Sequence[str]) -> int:
     parser.add_argument("--port", type=int)
     parser.add_argument("--open", action="store_true", help="open it in the browser")
     parser.add_argument("--background", action="store_true", help="start it detached and return")
+    parser.add_argument("--stop", action="store_true",
+                        help="end the page that runs here; its requests' worker ends too unless the backlog is on")
     parser.add_argument("--by-up", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     placed()
+    if args.stop:
+        return wiring.end_page().execute(EndPageCommand())
     if args.by_up:
         return web.serve_here(os.getcwd(), args.port, by_up=True)
     if args.background:

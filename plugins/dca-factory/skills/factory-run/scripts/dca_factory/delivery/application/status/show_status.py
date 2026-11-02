@@ -11,7 +11,7 @@ from ...domain.model.story_state import RUNNABLE
 from ...domain.model.usage import USAGE_FIELDS
 from ..requests.list_requests import ListRequestsQuery, ListRequestsUseCase
 from ..requests.pending import mark_pending
-from ..shared.requests import PENDING, RequestStore
+from ..shared.requests import PENDING, RequestStore, place_of
 from ..description.parts import parts_as_they_stand
 from ..shared.description_store import DescriptionStore
 from ..shared.status_facts import StatusFacts
@@ -94,6 +94,7 @@ class ShowStatusUseCase:
             if error or state in WAITING_WORDS:
                 waiting.append(dict(mark="question", story=story_id or name, what="an open question",
                                     record=facts.shown(path), draft=False,
+                                    place=place_of(str(front.get("request", "")).strip()) if not error else "decide",
                                     action=self._action(skill="/factory-decisions",
                                                         shell=f"write the answer into {facts.shown(path)} under "
                                                               "`## Answer`",

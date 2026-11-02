@@ -10833,11 +10833,16 @@ def verify_requests(runner, verbose=False):
         owner = (json.load(open(claim, encoding="utf-8")) if os.path.isfile(claim) else {}).get("owner", "")
         started = (json.load(open(os.path.join(root, ".dca-factory", "factory.json"), encoding="utf-8"))
                    if os.path.isfile(os.path.join(root, ".dca-factory", "factory.json")) else {})
+        backlog = os.path.join(root, ".dca-factory", "backlog")
         check("lifecycle: `up` starts the factory in the background; it holds the checkout under its own pid",
               code == 0 and owner.endswith(f":{started.get('pid')}") and "factory.sh down" in out, f"{code} {out} {owner}")
+        check("lifecycle: `up` turns the backlog on, and its worker runs on the lane (WP-177)",
+              os.path.isfile(backlog) and "--lane" in open(os.path.join(root, started.get("log", "")), encoding="utf-8").read()
+              if started.get("log") and os.path.isfile(os.path.join(root, started.get("log", ""))) else False,
+              f"{os.path.isfile(backlog)} {started}")
         second = run_runner(runner, root, "up", env=env)
-        check("lifecycle: a second `up` names the factory that is up and starts nothing",
-              second[0] == 0 and "nothing started" in second[1] and owner in second[1], second[1])
+        check("lifecycle: a second `up` names the worker that runs and starts no second one",
+              second[0] == 0 and "the backlog is on" in second[1] and owner in second[1], second[1])
         code, out = run_runner(runner, root, "status", "--format", "json", "--live", env=env)
         try:
             model = json.loads(out[out.index("{"):])
@@ -10847,8 +10852,9 @@ def verify_requests(runner, verbose=False):
               (model.get("worker") or {}).get("how") == "up" and (model.get("worker") or {}).get("owner") == owner
               and "requests" in model, str(model.get("worker"))[:200])
         code, out = run_runner(runner, root, "down", env=env)
-        check("lifecycle: `down` ends it, gives the checkout back and removes its stop file and pid file",
-              code == 0 and "down" in out and not os.path.isfile(claim)
+        check("lifecycle: `down` without a page ends it, gives the checkout back and removes its stop file, pid file "
+              "and the backlog's",
+              code == 0 and "down" in out and not os.path.isfile(claim) and not os.path.isfile(backlog)
               and not os.path.isfile(os.path.join(root, ".dca-factory", "stop"))
               and not os.path.isfile(os.path.join(root, ".dca-factory", "factory.json")), f"{code} {out}")
         code, out = run_runner(runner, root, "down", env=env)
@@ -10999,6 +11005,35 @@ def verify_requests(runner, verbose=False):
                             os.kill(served["pid"], signal.SIGTERM)
                         except OSError:
                             pass
+    # WP-177: the page works a person's requests while it is open; `up` and `down` are the backlog's alone
+    if os.name != "nt":
+        for root in throwaway():
+            _log, env = fixture(root, status="draft")
+            claim = os.path.join(root, ".git", "dca-factory-worker.lock")
+            backlog = os.path.join(root, ".dca-factory", "backlog")
+            owner = lambda: (json.load(open(claim, encoding="utf-8")) if os.path.isfile(claim) else {}).get("owner", "")
+
+            def until(test, seconds=25):
+                deadline = time.time() + seconds
+                while time.time() < deadline and not test():
+                    time.sleep(0.25)
+                return test()
+            code, out = run_runner(runner, root, "serve", "--background", env=env)
+            try:
+                check("requests: the page starts the factory's worker for a person's requests, the backlog left off",
+                      code == 0 and until(lambda: bool(owner())) and not os.path.isfile(backlog), f"{code} {out} {owner()}")
+                worker = owner()
+                up = run_runner(runner, root, "up", env=env)
+                check("requests: `up` with the page's worker running turns the backlog on and starts no second worker",
+                      up[0] == 0 and os.path.isfile(backlog) and owner() == worker, f"{up} {owner()}")
+                down = run_runner(runner, root, "down", env=env)
+                check("requests: `down` with the page open turns the backlog off and leaves the worker to its requests",
+                      down[0] == 0 and "the backlog is off" in down[1] and not os.path.isfile(backlog) and owner() == worker,
+                      f"{down} {owner()}")
+            finally:
+                stop = run_runner(runner, root, "serve", "--stop", env=env)
+            check("requests: `serve --stop` ends the page, and its worker ends once idle with the backlog off",
+                  stop[0] == 0 and "ended" in stop[1] and until(lambda: not owner()), f"{stop} {owner()}")
     failures = [name for name, ok, _ in results if not ok]
     print(f"\nverify: {len(results) - len(failures)}/{len(results)} request cases behaved as specified")
     return failures

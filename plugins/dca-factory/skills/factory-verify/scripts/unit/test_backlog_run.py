@@ -203,6 +203,70 @@ class OneAtATime(unittest.TestCase):
         self.assertEqual(worker.ran, [])
 
 
+class Child:
+    """A process that ends with <code> after it was asked <after> times."""
+
+    def __init__(self, code=0, after=2):
+        self.code, self.left = code, after
+
+    def ended(self):
+        self.left -= 1
+        return self.code if self.left <= 0 else None
+
+
+class LaneWorker(Worker):
+    """The factory's worker: stories and requests as processes; the backlog on or off, the page open or closed."""
+
+    def __init__(self, schedule, store, backlog=False, page=False):
+        super().__init__(schedule)
+        self.store, self.backlog, self.page, self.started, self.reads = store, backlog, page, [], 0
+
+    def backlog_on(self):
+        return self.backlog
+
+    def page_open(self):
+        return self.page
+
+    def start(self, story, start):
+        self.started.append(("story", story))
+        if story in self.schedule.stories:
+            self.schedule.stories.remove(story)
+        return Child(0, after=4)
+
+    def start_request(self, request):
+        self.started.append(("request", request["id"]))
+        self.store.remove(request)                  # its process takes it and, done, removes its file
+        return Child(0, after=1)
+
+
+class Lane(unittest.TestCase):
+    """WP-177: what a person asks for runs; the backlog only while it is on."""
+
+    def run_lane(self, worker, store):
+        use_case, lines = backlog(worker.schedule, worker, store)
+        reads = worker.schedule.read
+        worker.schedule.read = lambda *a: (setattr(worker, "reads", worker.reads + 1), reads(*a))[1]
+        return use_case.execute(RunBacklogCommand(1, watch=True, stay=True, lane=True)), lines
+
+    def test_a_request_runs_beside_a_story_that_takes_the_only_place_and_the_backlog_off_starts_none(self):
+        store = Store({"id": "r1", "kind": "run", "state": "queued", "story": "B-1", "from": "plan", "by": "ann"},
+                      {"id": "r2", "kind": "discover", "state": "queued", "by": "ann"})
+        worker = LaneWorker(Schedule("A-1"), store)
+        code, lines = self.run_lane(worker, store)
+        self.assertEqual(0, code)
+        self.assertEqual([("request", "r2"), ("story", "B-1")], worker.started)     # A-1: the backlog is off
+        self.assertEqual(0, worker.reads)
+        self.assertIn("the backlog is off and no page is open — the worker ends", lines.text())
+
+    def test_with_the_backlog_on_its_story_takes_the_place_a_run_request_left(self):
+        store = Store({"id": "r1", "kind": "run", "state": "queued", "story": "B-1", "from": "plan", "by": "ann"})
+        worker = LaneWorker(Schedule("A-1"), store, backlog=True)
+        worker.wait = lambda interval: setattr(worker, "backlog", False)       # `down` while it waits
+        code, _lines = self.run_lane(worker, store)
+        self.assertEqual(0, code)
+        self.assertEqual([("story", "B-1"), ("story", "A-1")], worker.started)
+
+
 class Queue(unittest.TestCase):
 
     def test_a_request_stopped_by_a_signal_is_queued_again_and_one_that_died_silently_failed(self):

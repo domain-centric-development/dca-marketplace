@@ -39,6 +39,7 @@ from ..delivery.application.status.show_discovery import ShowDiscoveryUseCase
 from ..delivery.application.lifecycle.show_running_page import ShowRunningPageUseCase
 from ..delivery.application.lifecycle.show_worker import ShowWorkerUseCase
 from ..delivery.application.lifecycle.start_factory import StartFactoryUseCase
+from ..delivery.application.lifecycle.end_page import EndPageUseCase
 from ..delivery.application.lifecycle.start_page import StartPageUseCase
 from ..delivery.application.lifecycle.stop_factory import StopFactoryUseCase
 from ..delivery.application.upkeep.let_journals_into_git import LetJournalsIntoGitUseCase
@@ -322,6 +323,10 @@ def stop_factory() -> StopFactoryUseCase:
 
 def start_page() -> StartPageUseCase:
     return StartPageUseCase(FactoryProcessFiles())
+
+
+def end_page() -> EndPageUseCase:
+    return EndPageUseCase(FactoryProcessFiles())
 
 
 def show_worker() -> ShowWorkerUseCase:

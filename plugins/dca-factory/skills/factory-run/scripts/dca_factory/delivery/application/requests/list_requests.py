@@ -57,5 +57,7 @@ def target_text(request: Request) -> str:
             return str(request[key])
     if request.get("proposal"):
         return f"{request.get('topic')}/{request['proposal']}"
+    if request.get("topic"):
+        return f"{request['topic']}: " + " ".join(str(request.get("words", "")).split())[:50]
     words = " ".join(str(request.get("words", "")).split())
     return (words[:60] + "…") if len(words) > 60 else words

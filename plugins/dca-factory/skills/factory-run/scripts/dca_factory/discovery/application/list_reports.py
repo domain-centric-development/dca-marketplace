@@ -43,5 +43,6 @@ class ListReportsUseCase:
             changes = [dict(target=item.name.value, change=item.field(Text("change")).value,
                             why=item.field(Text("why")).value) for item in report.changes]
             topics.append(dict(topic=topic.value, report=self._reports.report_path(topic),
-                               title=self._reports.title(topic), proposals=proposals, description_changes=changes))
+                               title=self._reports.title(topic), proposals=proposals, description_changes=changes,
+                               sections=[dict(heading=h, text=t) for h, t in self._reports.sections(topic)]))
         return dict(store=self._reports.where() + "/", topics=topics)

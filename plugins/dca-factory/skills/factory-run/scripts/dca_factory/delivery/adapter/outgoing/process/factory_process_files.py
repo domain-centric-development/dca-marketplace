@@ -14,8 +14,12 @@ class FactoryProcessFiles:
     def __init__(self, cwd: typing.Optional[str] = None) -> None:
         self._cwd = cwd or os.getcwd()
 
-    def up(self, run_args: typing.Sequence[str], serve: bool, port: typing.Optional[int], by: str) -> int:
-        return factory_process.up(self._cwd, run_args, serve, port, by)
+    def up(self, run_args: typing.Sequence[str], serve: bool, port: typing.Optional[int], by: str,
+           backlog: bool = True) -> int:
+        return factory_process.up(self._cwd, run_args, serve, port, by, backlog=backlog)
+
+    def end_page(self) -> int:
+        return factory_process.end_page()
 
     def down(self, now: bool, wait: bool, by: str) -> int:
         return factory_process.down(self._cwd, now, wait, by)

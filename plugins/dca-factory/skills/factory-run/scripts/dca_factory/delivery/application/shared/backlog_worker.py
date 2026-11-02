@@ -36,6 +36,14 @@ class BacklogCheckout(OutputPort, typing.Protocol):
         """Where the stop file goes."""
         ...
 
+    def backlog_on(self) -> bool:
+        """Whether `up` has the backlog on: the worker then takes the backlog's stories, not only what is asked."""
+        ...
+
+    def page_open(self) -> bool:
+        """Whether the factory's page runs: a person's requests are worked while it does."""
+        ...
+
     def claims(self) -> str:
         """The remote claims refreshed, as a person reads them; "" when the project claims nothing remotely."""
         ...

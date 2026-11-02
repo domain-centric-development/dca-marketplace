@@ -78,6 +78,15 @@ class ReportFiles:
         ignore = os.path.join(self._cwd, self._folder, topic.value, ".gitignore")
         return os.path.isfile(ignore) and re.search(r"^/?originals/?\s*$", read_text(ignore), re.M) is not None
 
+    def sections(self, topic: Topic) -> typing.List[typing.Tuple[str, str]]:
+        found: typing.List[typing.Tuple[str, typing.List[str]]] = []
+        for line in (self.text(topic) or "").splitlines():
+            if line.startswith("## "):
+                found.append((line[3:].strip(), []))
+            elif found:
+                found[-1][1].append(line)
+        return [(heading, "\n".join(lines).strip()) for heading, lines in found]
+
     def text(self, topic: Topic) -> typing.Optional[str]:
         path = os.path.join(self._cwd, self.report_path(topic))
         return read_text(path) if os.path.isfile(path) else None

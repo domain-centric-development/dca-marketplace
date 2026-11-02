@@ -205,11 +205,11 @@ pre.out:empty { display: none; }
 
 /* the domain: the open context's row as an ink head, a teal course with numbered nodes, the model as a profile, features as cards */
 .dm { margin: 4px 0 8px; }
-table.epics tr.ctx-row.open td, table.epics tr.ctx-row.open:hover td { background: var(--ink); color: var(--bg); border-bottom: 0;
+table.epics tr.epic-row.ink-open td, table.epics tr.epic-row.ink-open:hover td { background: var(--ink); color: var(--bg); border-bottom: 0;
   box-shadow: inset 0 4px 0 var(--teal); }
-table.epics tr.ctx-row.open td:first-child { border-radius: 4px 0 0 0; } table.epics tr.ctx-row.open td:last-child { border-radius: 0 4px 0 0; }
-table.epics tr.ctx-row.open .id, table.epics tr.ctx-row.open .hint, table.epics tr.ctx-row.open .caret { color: color-mix(in srgb, var(--bg) 70%, transparent); }
-table.epics tr.ctx-row.open .title { font-weight: 700; }
+table.epics tr.ink-open td:first-child { border-radius: 4px 0 0 0; } table.epics tr.ink-open td:last-child { border-radius: 0 4px 0 0; }
+table.epics tr.ink-open .id, table.epics tr.ink-open .hint, table.epics tr.ink-open .caret { color: color-mix(in srgb, var(--bg) 70%, transparent); }
+table.epics tr.ink-open .title { font-weight: 700; }
 .pill { font: 600 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
 .pill.core { background: color-mix(in srgb, var(--teal) 28%, transparent); box-shadow: inset 0 0 0 1.5px var(--teal); color: var(--teal); }
 .pill.sup { box-shadow: inset 0 0 0 1.5px var(--teal); color: var(--teal); }
@@ -307,8 +307,11 @@ details.dm-group > summary { justify-content: flex-start; }
 .decision.accept .q { background: color-mix(in srgb, var(--teal) 10%, var(--panel)); }
 .decision .q b { font: 600 17px/1.3 var(--display); display: block; margin-top: 2px; }
 .decision .dbody { padding: 10px 18px 16px; }
-.opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; margin-top: 10px; }
-.opt { border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; font-size: 15px; display: grid; gap: 8px; align-content: start; }
+/* the options as rows, each its button first and what it means beside it — long words read across, not down */
+.opts { display: grid; gap: 6px; margin-top: 10px; }
+.opt { border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; font-size: 15px; display: grid;
+  grid-template-columns: 64px minmax(0, 1fr); gap: 4px 12px; align-items: start; }
+.opt > .pick-it { grid-row: 1 / span 2; } .opt .rec-word { grid-column: 2; }
 .opt.advised { border-color: var(--teal); box-shadow: inset 0 0 0 1px var(--teal); }
 .decision details.more > summary::before { content: "▸ "; color: var(--muted); } .decision details.more[open] > summary::before { content: "▾ "; }
 .decision .id .link.title { font: inherit; }
@@ -362,10 +365,7 @@ details.dm-group > summary { justify-content: flex-start; }
 .qline b { color: var(--ink); font-weight: 600; } .qline .bad { color: var(--stop); }
 
 /* discover: the problem with an amber edge, the proposed epics as cards */
-.report { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 16px; margin-top: 10px; }
-@media (max-width: 860px) { .report { grid-template-columns: minmax(0, 1fr); } }
-.problem { border-left: 4px solid var(--wait); padding: 2px 0 2px 12px; align-self: start; }
-.problem b { font: 600 17px var(--display); display: block; } .problem p { margin: 4px 0 0; font-size: 15px; }
+.proposals { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px; }
 .proposal { border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; margin-bottom: 8px; display: grid; gap: 5px; }
 .proposal > b { font: 600 15px var(--display); } .proposal .ev { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
 .proposal .acts { margin-top: 2px; }
@@ -475,7 +475,7 @@ const TABS = [
   ["describe", "0 describe", "Once", "The project description", "What is built, how, and in which domain — and in each context what holds today. You write the description; what holds changes by a story the gate delivers."],
   ["discover", "1 discover", "Cycle", "Discovery", "Which problem is worth solving — a report with its sources and the epics it proposes."],
   ["backlog", "2 backlog", "Cycle", "Backlog", "Epics and their stories, newest first. A story runs once released."],
-  ["run", "3 run", "Cycle", "The factory at work", "Your requests first, then the stories — one stage after the other, a gate between them."],
+  ["run", "3 run", "Cycle", "The factory at work", "Your requests at once, while this page is open; the backlog's stories while `up` has it on — one stage after the other, a gate between them."],
   ["decide", "4 decide", "Cycle", "Waiting for you", "A question a stage may not decide alone, or a result to look at."],
   ["delivered", "5 delivered", "Cycle", "Delivered", "What the factory delivered, the newest first."],
   ["rules", "rules", "Always", "The rules", "What the gate checks, what the runner decides and what each stage is told — per stage of a story, the gates between them. Pick a rule to read it; pick a story to see which fired."]];
@@ -687,7 +687,7 @@ async function refresh() {
   if (refreshing) return;
   refreshing = true;
   try {
-    const slow = Date.now() - lastSlow > 15000 || ["decide", "discover"].includes(S.tab);
+    const slow = Date.now() - lastSlow > 15000 || ["decide", "discover", "describe"].includes(S.tab);
     const jobs = [load("status", "/api/view/status"), load("requests", "/api/view/requests")];
     if (slow || !S.decisions) jobs.push(load("decisions", "/api/view/decisions"));
     if (slow || !S.discover) jobs.push(load("discover", "/api/view/discover"));
@@ -715,10 +715,14 @@ function renderFrame() {
   const queued = (S.requests || {}).counts_text;
   $("worker").innerHTML = `<span class="dot ${dot}"></span>${esc(st.worker_text || "…")}${queued ? ` · ${esc(queued)}` : ""}`;
   $("worker").title = w ? `${w.owner} since ${w.since_text}` : "nobody holds the checkout";
-  $("up").hidden = !!(w && w.alive);
-  $("down").hidden = !(w && w.alive) || w.stopping;
+  // up and down are the backlog's: the worker of a person's requests runs while this page does (WP-177)
+  const backlog = !!(w && w.alive && (w.how !== "up" || w.backlog));
+  $("up").hidden = backlog;
+  $("down").hidden = !backlog || w.stopping;
   $("tabs").innerHTML = TABS.map(([id, label]) => {
-    const n = id === "decide" ? (st.waiting || []).length : id === "run" ? (counts.failed || 0) : 0;
+    // a record waits where it is answered: a discovery's on discover, the description's on describe, the rest decide
+    const asking = place => (st.waiting || []).filter(w => (w.place || "decide") === place).length;
+    const n = ["decide", "discover", "describe"].includes(id) ? asking(id) : id === "run" ? (counts.failed || 0) : 0;
     return `<button role="tab" data-tab="${id}" aria-selected="${S.tab === id}">${esc(label)}${n ? `<span class="n">${n}</span>` : ""}</button>`;
   }).join("");
 }
@@ -729,6 +733,7 @@ function renderFrame() {
 // (`id`, `data-fold`, `data-epic`, `data-context`, `data-story`) is found again by it, wherever it moved; a fold's
 // `open` and a text field's words are the person's, and the match leaves them alone.
 const keyOf = node => node.nodeType === 1 ? node.id || node.dataset.fold || node.dataset.epic || node.dataset.context
+  || node.dataset.topic
   || (node.tagName === "BUTTON" ? "" : node.dataset.story) || "" : "";
 const PERSONS = {DETAILS: ["open"], TEXTAREA: ["value"], INPUT: ["value"], SELECT: ["value"]};
 function morphNode(old, want) {
@@ -1103,7 +1108,7 @@ function domainCard() {
   const open = S.openContexts || (S.openContexts = new Set());
   const rows = (S.spec.contexts || []).map(c => {
     const isOpen = open.has(c.context), pending = c.features.reduce((n, f) => n + f.rules.reduce((m, r) => m + r.criteria.filter(x => x.changed_by.length).length, 0), 0) + c.coming.length;
-    return `<tr class="epic-row ctx-row${isOpen ? " open" : ""}" data-context="${esc(c.context)}" tabindex="0" aria-expanded="${isOpen}">
+    return `<tr class="epic-row ctx-row${isOpen ? " open ink-open" : ""}" data-context="${esc(c.context)}" tabindex="0" aria-expanded="${isOpen}">
       <td><span class="caret" aria-hidden="true">${isOpen ? "▾" : "▸"}</span> <span class="title">${esc(c.context)}</span>${c.subdomain ? `<div class="sd"><span class="pill ${subdomainClass(c.subdomain)}">${esc(c.subdomain)}</span></div>` : ""}</td>
       <td class="hide-s">${esc(c.purpose)}</td><td class="num">${c.features.length}</td><td class="num">${c.criteria}</td>
       <td class="num">${pending ? `<span class="pend p-changes">${pending}</span>` : "—"}</td>
@@ -1181,7 +1186,8 @@ function describe(st) {
   }).join("");
   return card("The parts", "written by you, through the description — what is built, how, and in which domain; open one to read it", `<table class="epics"><tr><th><span class="sr">state</span></th><th>part</th><th>sections</th></tr>${parts}</table>`)
     + domainCard()
-    + card("Change the description", "", `<p class="about">In your words — <code>&lt;part&gt;: &lt;change&gt;</code> where it is one part. Where it needs a decision of yours, it asks under Decide.</p>${act((st.entries || {}).describe)}`);
+    + card("Change the description", "", `<p class="about">In your words — <code>&lt;part&gt;: &lt;change&gt;</code> where it is one part. Where it needs a decision of yours, it asks here.</p>${act((st.entries || {}).describe)}`)
+    + ((S.decisions || {}).records || []).filter(r => (r.actions || []).length && r.place === "describe").map(recordCard).join("");
 }
 document.addEventListener("click", event => {
   const row = event.target.closest && event.target.closest("tr.part-row");
@@ -1192,24 +1198,58 @@ document.addEventListener("click", event => {
 });
 
 // --- 1 discover ----------------------------------------------------------------------------------------------------
-function discover(st) {
-  const topics = (S.discover || {}).topics || [];
-  const cards = topics.map(t => {
-    const proposals = t.proposals.map(p => `<div class="proposal"><b>${esc(p.goal || p.intent || p.id)}</b>
+// a discovery opens in place like a context: its report, what it proposes, and words that continue it
+function discoveryBody(t) {
+  const proposals = t.proposals.map(p => `<div class="proposal"><b>${esc(p.goal || p.intent || p.id)}</b>
       ${p.goal && p.intent ? `<span>${esc(p.intent)}</span>` : ""}
       <div class="ev">${p.metric ? `<span class="event">${esc(p.metric)}</span>` : ""}${p.domain_contact ? `<span>asks ${esc(p.domain_contact)}</span>` : ""}<span class="id">${esc(p.id)}</span></div>
       ${p.epic ? `<div><span class="tone ok">epic ${esc(p.epic)}</span></div>` : `<div class="acts">${acts(p.actions)}</div>`}</div>`).join("");
-    const changes = t.description_changes.map(c => `<tr><td><div class="title">${esc(c.target)}</div></td>
+  const changes = t.description_changes.map(c => `<tr><td><div class="title">${esc(c.target)}</div></td>
       <td>${esc(c.change)}<div class="id">${esc(c.why)}</div></td><td class="act"><div class="acts">${acts(c.actions)}</div></td></tr>`).join("");
-    const problem = `<div class="problem"><span class="hint">topic · ${esc(t.topic)}</span><b>${esc(t.title)}</b>
-      <p class="hint">${t.proposals.length} proposed · ${t.description_changes.length} description change${t.description_changes.length === 1 ? "" : "s"}</p>
-      <p class="id">${esc(t.report)}</p></div>`;
-    return card("", "", `<div class="report">${problem}<div>${proposals || `<p class="empty">No proposed work.</p>`}</div></div>`
-      + (changes ? `<h3>Changes to the description</h3><table>${changes}</table>` : ""));
-  }).join("");
-  return card("A new discovery", "", act((st.entries || {}).discover))
-    + (cards || card("", "", `<p class="empty">No discovery yet — it goes to ${esc((S.discover || {}).store || "")}.</p>`));
+  const report = (t.sections || []).filter(sec => !/^proposed /i.test(sec.heading))
+    .map(sec => `<h3>${esc(sec.heading)}</h3>${prose(sec.text)}`).join("");
+  return `<div class="dm"><div class="dm-track">
+    <div class="dm-node"><span class="n">1</span>The report<span class="hint">${esc(t.report)}</span></div>
+    ${report || `<p class="empty">The report says nothing beyond what it proposes.</p>`}
+    <div class="dm-node"><span class="n">2</span>Proposed epics<span class="hint">${t.proposals.length}, each an epic once you make it one</span></div>
+    ${proposals ? `<div class="proposals">${proposals}</div>` : `<p class="empty">No proposed work.</p>`}
+    ${changes ? `<div class="dm-node"><span class="n">3</span>Changes to the description<span class="hint">applied one by one, through the description</span></div><table>${changes}</table>` : ""}
+    <div class="dm-node"><span class="n">${changes ? 4 : 3}</span>Continue this discovery<span class="hint">a question, a document, a wish — the report grows</span></div>
+    ${acts(t.actions, "s")}
+  </div></div>`;
 }
+
+function discover(st) {
+  const topics = (S.discover || {}).topics || [], open = S.openTopics || (S.openTopics = new Set());
+  const rows = topics.map(t => {
+    const isOpen = open.has(t.topic), made = t.proposals.filter(p => p.epic).length;
+    return `<tr class="epic-row topic-row${isOpen ? " open ink-open" : ""}" data-topic="${esc(t.topic)}" tabindex="0" aria-expanded="${isOpen}">
+      <td><span class="caret" aria-hidden="true">${isOpen ? "▾" : "▸"}</span> <span class="title">${esc(t.title)}</span><div class="id">${esc(t.topic)}</div></td>
+      <td class="num">${t.proposals.length}</td><td class="num">${made}</td><td class="num hide-s">${t.description_changes.length}</td></tr>`
+      + (isOpen ? `<tr class="epic-body"><td colspan="4">${discoveryBody(t)}</td></tr>` : "");
+  }).join("");
+  // a discovery on its way: where it stands and its output, until its report stands below
+  const tone = {queued: "mute", running: "wait", waiting: "wait"};
+  const working = ((S.discover || {}).working || []).map(r => `<div class="ticket"><div class="what"><b>${esc(r.topic || "new")}</b>
+      <span class="tone ${tone[r.state] || "mute"}">${esc(r.state === "waiting" ? "asks you" : r.state)}</span><span>${esc(r.words)}</span></div>
+      <div class="acts"><button class="btn small" data-call="follow" data-kind="request" data-id="${esc(r.id)}">follow</button></div></div>`).join("");
+  // what a discovery asks back is answered where the discovery stands — the same record Decide lists
+  const records = ((S.decisions || {}).records || []).filter(rec => (rec.actions || []).length);
+  const asking = ((S.discover || {}).working || []).map(r => records.find(rec => r.record && rec.path === r.record))
+    .filter(Boolean).map(recordCard).join("");
+  return card("A new discovery", "a problem worth solving, or what should exist — the report and the epics it proposes", act((st.entries || {}).discover)
+      + (working ? `<h3>In progress</h3><div class="queue">${working}</div>` : "") + asking)
+    + card("Discoveries", "each topic with its report — open one to read it, act on what it proposes, or continue it",
+      rows ? `<table class="epics"><tr><th>topic</th><th class="num">proposed</th><th class="num">epics made</th><th class="num hide-s">description changes</th></tr>${rows}</table>`
+        : `<p class="empty">No discovery yet — it goes to ${esc((S.discover || {}).store || "")}.</p>`);
+}
+document.addEventListener("click", event => {
+  const row = event.target.closest && event.target.closest("tr.topic-row");
+  if (!row || event.target.closest("button, a")) return;
+  const open = S.openTopics || (S.openTopics = new Set()), topic = row.dataset.topic;
+  if (open.has(topic)) open.delete(topic); else open.add(topic);
+  render();
+});
 
 // --- 2 backlog -----------------------------------------------------------------------------------------------------
 function storyRow(r) {
@@ -1381,8 +1421,8 @@ function recordCard(r) {
   const body = (accept ? full : "")
     + (accept
       ? `<div class="acts">${acts(offered.filter(a => a.request.open !== "words"))}</div>`
-      : options.length ? `<div class="opts">${options.map(a => `<div class="opt${a.primary ? " advised" : ""}">${a.primary ? `<span class="rec-word">recommended</span>` : ""}
-          <span>${inline(a.text)}${a.note ? ` <span class="hint">— ${esc(a.note)}</span>` : ""}</span><div>${act(a)}</div></div>`).join("")}</div>` : "")
+      : options.length ? `<div class="opts">${options.map(a => `<div class="opt${a.primary ? " advised" : ""}"><div class="pick-it">${act(a)}</div>${a.primary ? `<span class="rec-word">recommended</span>` : ""}
+          <span>${inline(a.text)}${a.note ? ` <span class="hint">— ${esc(a.note)}</span>` : ""}</span></div>`).join("")}</div>` : "")
     + words.map(a => `<h3>${accept ? "or correct it" : options.length ? "or in your words" : "your answer"}</h3>${act(a)}`).join("")
     + (accept ? "" : full)
     + `<p class="id" style="margin-top:10px">${r.story ? `${story(r.story, r.story)} · ` : ""}${esc(r.path)}</p>`;
@@ -1390,7 +1430,7 @@ function recordCard(r) {
 }
 
 function decide(st) {
-  const records = ((S.decisions || {}).records || []).filter(r => (r.actions || []).length);
+  const records = ((S.decisions || {}).records || []).filter(r => (r.actions || []).length && (r.place || "decide") === "decide");
   // a waiting story whose record is open stands above as that record; the others — a draft, a stopped story — here
   const others = (st.waiting || []).filter(w => !w.record).map(w => `<tr><td>${mark(w.mark)}</td>
     <td>${story(w.story)}</td><td>${esc(w.what)}</td>

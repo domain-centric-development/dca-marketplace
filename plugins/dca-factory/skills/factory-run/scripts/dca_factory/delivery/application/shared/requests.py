@@ -34,6 +34,7 @@ class Kind:
 
     name: str
     keys: typing.Tuple[str, ...] = ()   #: the keys it must name — `story`, `epic`, `record`, `topic`, `proposal`
+    may: typing.Tuple[str, ...] = ()    #: the keys it may name — a discovery the topic it continues
     words: str = "none"                 #: the person's words: "required", "optional" or "none"
     option: bool = False                #: it takes `option:` — an answer's option key, a correction's reason code
     skill: str = ""                     #: the skill a session would run; "" — the runner works it itself
@@ -50,7 +51,7 @@ KINDS = (
     Kind("journey", keys=("epic",), skill="factory-backlog", creates=True, about="propose the journey of a delivered epic"),
     Kind("describe", words="required", skill="description", creates=True,
          about="a change to the project description, in the person's words (`<part>: <change>`)"),
-    Kind("discover", words="required", skill="factory-discover", creates=True,
+    Kind("discover", words="required", may=("topic",), skill="factory-discover", creates=True,
          about="a problem or a wished deliverable — the discovery report and the epics it proposes"),
     Kind("epic-from", keys=("topic", "proposal"), skill="factory-backlog", creates=True,
          about="a discovery's proposed epic, released as an epic"),
@@ -97,9 +98,20 @@ def operations_of(state: str) -> typing.List[str]:
     return RequestState(state).operations() if state in STATES else ["drop"]
 
 
+#: Where a question a request's skill asks back is answered: beside what the request was about — a discovery's on the
+#: discover tab, the description's on describe —; every other on decide, beside the stories.
+PLACE_OF_KIND = {"discover": "discover", "describe": "describe"}
+
+
+def place_of(request_id: str) -> str:
+    """The tab a record of the request <request_id> is answered on — `decide` for a stage's record or another kind."""
+    kind = request_id.split("Z-", 1)[1] if "Z-" in request_id else ""
+    return PLACE_OF_KIND.get(kind, "decide")
+
+
 def written_keys(kind: Kind) -> typing.Set[str]:
     """The keys a person gives a request of this kind — what the check takes; the rest it adds from the files."""
-    return {key for spec in kind.keys for key in spec.split("|")} | ({"option"} if kind.option else set()) \
+    return {key for spec in kind.keys for key in spec.split("|")} | set(kind.may) | ({"option"} if kind.option else set()) \
         | ({"from"} if kind.name == "run" else set())
 
 

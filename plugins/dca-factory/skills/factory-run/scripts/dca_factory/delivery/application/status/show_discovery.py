@@ -45,6 +45,13 @@ class ShowDiscoveryUseCase:
                 change["actions"] = offered(make_action(
                     names_story, text="the change, written into the description",
                     skill=f"/dca-describe {change['target']}: {change['change']}", label="apply"))
-            mark_pending([a for item in topic["proposals"] + topic["description_changes"] for a in item["actions"]],
+            topic["actions"] = offered(make_action(
+                names_story, text="What else should this discovery look at — a question, a document, a wish?",
+                skill=f"/factory-discover --topic {topic['topic']}", label="continue"))
+            mark_pending([a for item in topic["proposals"] + topic["description_changes"] + [topic] for a in item["actions"]],
                          pending)
-        return dict(project=query.project, store=model["store"], topics=model["topics"])
+        # what a person asked a discovery for and is on its way: the request, where it stands, and what it is about
+        working = [dict(id=r["id"], state=r["state"], topic=r.get("topic", ""), words=" ".join(str(r.get("words", "")).split()),
+                        record=r.get("record_file", ""), by=r.get("by", ""))
+                   for r in pending if r.get("kind") == "discover"]
+        return dict(project=query.project, store=model["store"], topics=model["topics"], working=working)

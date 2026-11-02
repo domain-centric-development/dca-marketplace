@@ -9,7 +9,7 @@
 #   factory.sh setup --check                 what detection finds against the profile (read-only)
 #   factory.sh setup --write [--replace <key>]   adds the detected keys the profile lacks
 #   factory.sh backlog [--check]             every story's state and the next one; --check the backlog
-#   factory.sh run [--story <id>] [--tool <tool>] [--from <stage>] [--watch [--stay]] [--interval <s>]
+#   factory.sh run [--story <id>] [--tool <tool>] [--from <stage>] [--watch [--stay] [--lane]] [--interval <s>]
 #                  [--max-stages <n>] [--story-budget <tokens>] [--separate-stages] [--parallel <n>] [--dry-run]
 #                  [--shared-builder] [--shared-verifier] [--keep-going]
 #                    one story from where its files say (--from names the stage and starts a new
@@ -20,17 +20,19 @@
 #                    --keep-going: a stopped story does not end the backlog run — it and what depends on it
 #                    are skipped, and the run ends when nothing more can start (a stop file still ends it)
 #   factory.sh up [--serve] [--port <n>] [--by <who>] [--tool <tool>] [--parallel <n>] [--interval <s>] [--keep-going] …
-#                    the factory as a process of its own: `run --watch --stay` in the background, its pid and log
-#                    beside the run folder; it works the requests and the backlog until `down`. A factory that is up
-#                    already — from a terminal, a session or another `up` — is named and nothing starts. --serve: the
-#                    page too
-#   factory.sh down [--now] [--no-wait]      the factory ends after its running stage and gives the checkout back;
-#                                            --now interrupts the running stage too
-#   factory.sh serve [--port <n>] [--open] [--background]   the factory's page on 127.0.0.1 — a URL with a token of
-#                    this start; every press writes a request. Each checkout takes a port of its own (8700–8899)
+#                    the backlog on, and the factory's worker started where none runs: `run --watch --stay --lane` in
+#                    the background, its pid and log beside the run folder; it works a person's requests at once and
+#                    the backlog off until `down`. --serve: the page too. --requests: the worker alone, the backlog as
+#                    it is (the page starts it so)
+#   factory.sh down [--now] [--no-wait]      the backlog off — no further story of it starts; with a page open its
+#                                            requests go on, without one the worker ends after its running stage;
+#                                            --now interrupts the running stage and ends the worker too
+#   factory.sh serve [--port <n>] [--open] [--background] [--stop]   the factory's page on 127.0.0.1 — a URL with a
+#                    token of this start; every press writes a request, worked while the page is open. Each checkout
+#                    takes a port of its own (8700–8899); --stop ends a page that runs in the background
 #   factory.sh request <kind> [<target>…] [<words>…|-] [--by <who>] [--option <key>] [--from <stage>]
-#                    one request the factory works before its next story: wish, release, stories, journey, describe,
-#                    discover, epic-from, answer, accept, correct, run, stop
+#                    one request the factory's worker runs at once, beside any running story: wish, release,
+#                    stories, journey, describe, discover, epic-from, answer, accept, correct, run, stop
 #   factory.sh requests [--format text|json] [--drop <id>] [--retry <id>]   the requests and their state
 #   factory.sh status [--all] [--story <id>] [--epic <id>] [--usage] [--refusals] [--brief]   what runs, what waits, what comes next; --all: every story and the cost; --refusals: form against substance
 #   factory.sh decisions [--story <id>]      the decision inbox
@@ -1755,7 +1757,7 @@ setup_write() {                             # setup_write [<key>]
 
 [ $# -ge 1 ] || usage
 command=$1; shift
-story=""; tool=""; from=""; dry=""; source_dir=""; copy_mode=""; LINK_MODE=""; watch=""; stay=""; interval=60
+story=""; tool=""; from=""; dry=""; source_dir=""; copy_mode=""; LINK_MODE=""; watch=""; stay=""; lane=""; interval=60
 setup_mode=""; replace_key=""; want_usage=""; want_refusals=""; want_brief=""; session_start=""; live=""; view=()
 
 # The reading commands are the CLI's; the runner passes them on, so a project calls one script.
@@ -1905,6 +1907,7 @@ while [ $# -gt 0 ]; do
     --dry-run) dry=1; shift ;;
     --watch) watch=1; shift ;;
     --stay) stay=1; shift ;;
+    --lane) lane=1; shift ;;
     --interval) interval=$2; shift 2 ;;
     --max-stages) MAX_STAGES=$2; shift 2 ;;
     --story-budget) STORY_BUDGET=$2; shift 2 ;;
@@ -1980,7 +1983,8 @@ case "$command" in
     check_local_context "${tool:-}"
     check_tool "${tool:-}" || exit $?
     [ -z "$stay" ] || [ -n "$watch" ] || { echo "factory: --stay keeps a --watch waiting — it takes --watch" >&2; exit 2; }
-    run_python --tool "${tool:-stand-in}" ${watch:+--watch} ${stay:+--stay} --interval "$interval"
+    [ -z "$lane" ] || [ -n "$watch" ] || { echo "factory: --lane is the factory's worker — it takes --watch" >&2; exit 2; }
+    run_python --tool "${tool:-stand-in}" ${watch:+--watch} ${stay:+--stay} ${lane:+--lane} --interval "$interval"
     ;;
   *) usage ;;
 esac

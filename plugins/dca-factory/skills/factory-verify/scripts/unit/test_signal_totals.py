@@ -52,5 +52,28 @@ class LaneTest(unittest.TestCase):
                          [lane(s) for s in ("unreleased", "ready", "blocked", "resumable", "waiting", "delivered",
                                             "superseded")])
 
+
+class ContinueDiscoveryTest(unittest.TestCase):
+    """A discovery continued from the page names its topic, so the skill continues that report and no other."""
+
+    def test_continue_writes_a_discover_request_that_names_its_topic(self):
+        from dca_factory.delivery.application.status.actions import make_action
+        from dca_factory.delivery.application.shared.requests import KIND, written_keys
+        action = make_action(lambda word: False, skill="/factory-discover --topic agent-buyers", label="continue")
+        self.assertEqual(("discover", {"topic": "agent-buyers"}, "words"),
+                         (action["request"]["kind"], action["request"]["fields"], action["request"]["open"]))
+        self.assertTrue(action["creates"])
+        self.assertIn("topic", written_keys(KIND["discover"]))
+
+
+class PlaceTest(unittest.TestCase):
+    """A record a request's skill wrote is answered beside what the request was about."""
+
+    def test_a_discoverys_record_is_answered_on_discover_a_stages_on_decide(self):
+        from dca_factory.delivery.application.shared.requests import place_of
+        self.assertEqual(["discover", "describe", "decide", "decide", "decide"],
+                         [place_of(r) for r in ("20261102T164212270Z-discover", "20261102T164212270Z-describe",
+                                                "20261102T164212270Z-wish", "20261102T164212270Z-epic-from", "")])
+
 if __name__ == "__main__":
     unittest.main()

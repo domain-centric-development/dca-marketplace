@@ -41,6 +41,9 @@ def run_options(argv: typing.Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--watch", action="store_true")
     parser.add_argument("--stay", action="store_true",
                         help="with --watch: keep waiting when nothing waits on an answer — for a person's requests")
+    parser.add_argument("--lane", action="store_true",
+                        help="with --watch: the factory's worker — a person's requests on a lane of their own, never "
+                             "held up by a story; the backlog's stories only while `up` has the backlog on (WP-177)")
     parser.add_argument("--interval", type=int, default=30)
     parser.add_argument("--max-stages", type=int, default=0)
     parser.add_argument("--story-budget", type=int, default=0)

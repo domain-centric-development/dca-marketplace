@@ -133,6 +133,8 @@ class Run:
         absolute = os.path.isabs(runs) or re.match(r"^[A-Za-z]:", runs)
         parent = os.path.dirname(runs) if absolute else os.path.join(home, os.path.dirname(runs))
         self.stop_file = os.path.join(parent, "stop").replace("\\", "/") if absolute else f"{home}/{os.path.dirname(runs)}/stop"
+        # `up` lays it, `down` takes it away: while it is there the worker takes the backlog's stories (WP-177)
+        self.backlog_file = os.path.join(os.path.dirname(self.stop_file), "backlog")
         self.lock_dir = f"{os.path.dirname(runs)}/integrate.lock" if absolute else f"{home}/{os.path.dirname(runs)}/integrate.lock"
         self.worker = worker or f"runner:{socket.gethostname() or 'host'}:{os.getpid()}"
         self.suites_key = secrets.token_hex(16)
@@ -145,6 +147,8 @@ class Run:
         self.parallel = options.parallel
         self.keep_going = getattr(options, "keep_going", False)
         self.stay = getattr(options, "stay", False)
+        self.lane = getattr(options, "lane", False)
+        self.backlog_seen = False
         #: story → its tests whose red proof a merge left stale
         self.red_stale: typing.Dict[str, typing.List[str]] = {}
         self.options = options
@@ -1121,7 +1125,7 @@ class Run:
         end = time.time() + interval
         while time.time() < end:
             self.sleep(min(2, max(0.1, end - time.time())))
-            if os.path.isfile(self.stop_file):
+            if os.path.isfile(self.stop_file) or (self.lane and os.path.isfile(self.backlog_file) != self.backlog_seen):
                 return
             with contextlib.suppress(OSError):
                 if self.queue().any_queued():

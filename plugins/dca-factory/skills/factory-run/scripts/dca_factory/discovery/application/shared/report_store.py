@@ -27,6 +27,10 @@ class ReportStore(Store, typing.Protocol):
         """The topic's report — None where it has none."""
         ...
 
+    def sections(self, topic: Topic) -> typing.List[typing.Tuple[str, str]]:
+        """The report as a person reads it: each `## ` section, its heading and what it says; [] where it has none."""
+        ...
+
     def title(self, topic: Topic) -> str:
         """The report's title, the topic's name where it has none."""
         ...

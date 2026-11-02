@@ -446,7 +446,7 @@ class DecisionInboxFiles:
             found.append(dict(name=name, error=None, path=shown(path), id=str(front.get("id", name)).strip(),
                               state=state, kind="acceptance" if acceptance else "question",
                               story=str(front.get("story", "")).strip(), stage=str(front.get("stage", "?")).strip(),
-                              asked=str(front.get("asked", "")),
+                              asked=str(front.get("asked", "")), request=str(front.get("request", "")).strip(),
                               title=(body.strip().splitlines() or ["(no title)"])[0].lstrip("# ").strip(),
                               answer=decision_state(body)[1],
                               options=[dict(key=o["key"], text=o["text"]) for o in options],

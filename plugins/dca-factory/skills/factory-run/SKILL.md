@@ -239,7 +239,7 @@ checkout, the stale claim, listening under a scheduler (`/loop /factory-run`, `f
 
 ## The factory without a session
 
-`factory.sh up` runs the factory in the background until `down`; `serve` shows it in a browser, and
-every press there — or `factory.sh request <kind> …` — writes a request it works before the next
-story. A prompt that says *request `<id>` … you run headless* is such a request: read
+`serve` shows the factory in a browser, and every press there — or `factory.sh request <kind> …` —
+writes a request the factory's worker runs at once, beside any running story, while the page is open;
+`factory.sh up` turns the backlog on, so the worker works it off too, and `down` turns it off. A prompt that says *request `<id>` … you run headless* is such a request: read
 `reference/requests.md` first.

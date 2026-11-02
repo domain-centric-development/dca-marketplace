@@ -23,6 +23,9 @@ class RunBacklogCommand:
     dry: bool = False           #: name the first story and what would run, start nothing
     keep_going: bool = False    #: a stopped story is set aside with what depends on it; the run goes on
     stay: bool = False          #: the watch waits even when nothing waits on an answer
+    #: the factory's worker (WP-177): a person's requests on a lane of their own, never held up by a story; the
+    #: backlog's stories only while `up` has the backlog on; it ends once neither the backlog nor the page wants it
+    lane: bool = False
 
 
 class RunBacklogInputPort(UseCase[RunBacklogCommand, int], typing.Protocol):
@@ -48,7 +51,7 @@ class RunBacklogUseCase:
         if not command.dry:
             self._checkout.prune()
             self._queue.requeue_orphans()
-        if command.slots > 1 and not command.dry:
+        if (command.slots > 1 or command.lane) and not command.dry:
             return self._side_by_side(command)
         return self._one_at_a_time(command)
 
@@ -124,10 +127,13 @@ class RunBacklogUseCase:
             last = None
             self._checkout.wait(command.interval)
 
+    @decides("RUN-BACKLOG-6")
     def _side_by_side(self, command: RunBacklogCommand) -> int:
         """Several stories at once, each a process of its own. A failure starts nothing more and lets the running ones
-        finish; so does the stop file, a `stop` request and a signal."""
-        slots = command.slots
+        finish; so does the stop file, a `stop` request and a signal. On the worker's lane a request needs no place of
+        a story's — a story that runs never holds one up —, a `run` request takes the next free place before the
+        backlog, and the backlog's stories start only while it is on."""
+        slots, lane = command.slots, command.lane
         children: typing.Dict[str, typing.Tuple[Child, str]] = {}          # a story's process and its start
         asked: typing.Dict[str, typing.Tuple[Child, Request]] = {}         # a request's process by the request's id
         ran_for: typing.Dict[str, Request] = {}                            # a `run` request by the story it runs
@@ -175,14 +181,15 @@ class RunBacklogUseCase:
                 # a person's request takes the next free slot, before any story; one about a running story waits.
                 # One at a time: requests work in the main checkout, and two at once would commit each other's files
                 busy = set(children) | {s for _c, r in asked.values() for s in stories_of(r)}
-                while len(children) + len(asked) < slots and not asked:
+                while (lane or len(children) + len(asked) < slots) and not asked:
                     queued = self._queue.next(busy)
                     if queued is None or queued["id"] in asked:
                         break
                     asked[queued["id"]] = (self._worker.start_request(queued), queued)
                     busy |= stories_of(queued)
                     launched = True
-                while len(children) + len(asked) < slots:
+                taken_places = len(children) + (0 if lane else len(asked))
+                while taken_places < slots:
                     taken = self._take_run(busy)
                     if not taken:
                         break
@@ -192,13 +199,17 @@ class RunBacklogUseCase:
                     children[story] = (self._worker.start(story, taken.start), taken.start)
                     ran_for[story] = taken.request
                     busy.add(story)
+                    taken_places += 1
                     launched = True
-                loose = sum(1 for _c, r in asked.values() if not stories_of(r))
-                schedule = self._schedule.read(max(0, slots - loose), sorted(busy), tuple(self._skipped))
+                loose = 0 if lane else sum(1 for _c, r in asked.values() if not stories_of(r))
+                backlog = not lane or self._checkout.backlog_on()
+                schedule = self._schedule.read(max(0, slots - loose), sorted(busy), tuple(self._skipped)) if backlog \
+                    else ScheduleRead(True, "factory: the backlog is off — a person's requests are worked, and a story "
+                                            "asked to run; `factory.sh up` works the backlog off.")
                 if not schedule.readable:
                     stopping = failed = self._unreadable(schedule)
                 for story, start in schedule.following if schedule.readable else ():
-                    if len(children) + len(asked) >= slots:
+                    if len(children) + (0 if lane else len(asked)) >= slots:
                         continue
                     if (story, start) in seen:
                         self._lines.err(f"factory: {story} ran from {start} and the schedule names it there again — "
@@ -214,6 +225,9 @@ class RunBacklogUseCase:
             if not children and not asked and not launched:
                 if stopping is not None:
                     return failed if isinstance(stopping, int) or failed else 0
+                if lane and not self._checkout.backlog_on() and not self._checkout.page_open():
+                    self._lines.out("factory: the backlog is off and no page is open — the worker ends.")
+                    return 0
                 if not command.watch or not (command.stay or schedule.waits):
                     self._nothing_more(schedule, command.watch)
                     return failed or self._skipped_exit()

@@ -303,7 +303,7 @@ test('a backlog with hundreds of open findings still draws the decide tab', asyn
 
 // WP-91: a factory `factory.sh up` started holds the checkout — the run tab says so and offers no second runner
 test('a factory that is up elsewhere replaces the run buttons with what it is', async ($, on) => {
-  const up = { ...STATUS, worker: { owner: 'runner:host:42', since: '2026-09-23T17:00:00Z', beat: '2026-09-23T17:29:00Z', how: 'up', pid: 42, alive: true, log: '.dca-factory/factory.log', stopping: false }, requests: { queued: 2, running: 0, waiting: 0, failed: 0 }, extra: ['requests: 2 queued — `factory.sh requests`'] }
+  const up = { ...STATUS, worker: { owner: 'runner:host:42', since: '2026-09-23T17:00:00Z', beat: '2026-09-23T17:29:00Z', how: 'up', pid: 42, alive: true, log: '.dca-factory/factory.log', stopping: false, backlog: true }, requests: { queued: 2, running: 0, waiting: 0, failed: 0 }, extra: ['requests: 2 queued — `factory.sh requests`'] }
   on('session.root', async () => ({ value: ROOT }))
   on('fs.exists', async () => ({ value: true }))
   on('fs.list', async () => ({ value: [] }))

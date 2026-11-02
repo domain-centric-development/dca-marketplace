@@ -122,7 +122,7 @@ export type FactoryStatus = {
   }[]
   extra: string[]
   // who holds the checkout (`--live`, dca-factory 0.93.0): `how` is `up` (factory.sh up), `runner` or `session`
-  worker?: { owner: string; since: string; beat: string; how: 'up' | 'runner' | 'session'; pid?: number | null; alive: boolean; log?: string; stopping: boolean } | null
+  worker?: { owner: string; since: string; beat: string; how: 'up' | 'runner' | 'session'; pid?: number | null; alive: boolean; log?: string; stopping: boolean; backlog?: boolean } | null
   // what a person asked the factory to do from a page or a terminal, by state (dca-factory 0.93.0)
   requests?: { queued: number; running: number; waiting: number; failed: number }
   delivered: number

@@ -16,6 +16,7 @@ from ..git.integration import lost_text, main_tests_lost
 from ..tools.agents import TOOL
 from ..tools.tool_processes import TIMED_OUT, utc
 from ..files.request_files import out_path, prune_outputs, stamp_utc
+from .factory_process import running_page
 from ..files.decision_record_files import project_record_path
 from ....application.shared.request_skill import SkillRun
 from ....application.shared.backlog_schedule import ScheduleRead
@@ -86,6 +87,8 @@ class RunnerRequestSkill:
         """The arguments a session would give the skill for this request — the same words the cockpit sends."""
         kind, words, option = request["kind"], request.get("words", ""), request.get("option", "")
         story, record = request.get("story", ""), request.get("record", "")
+        if kind == "discover" and request.get("topic"):
+            return f"--topic {request['topic']} {words}"
         if kind in ("wish", "discover", "describe"):
             return words
         if kind == "release":
@@ -353,6 +356,13 @@ class RunnerBacklog:
 
     def stop_place(self) -> str:
         return self._run.stop_file
+
+    def backlog_on(self) -> bool:
+        self._run.backlog_seen = os.path.isfile(self._run.backlog_file)
+        return self._run.backlog_seen
+
+    def page_open(self) -> bool:
+        return running_page(self._run.home) is not None
 
     def claims(self) -> str:
         if not claim_config_here(self._run.home):

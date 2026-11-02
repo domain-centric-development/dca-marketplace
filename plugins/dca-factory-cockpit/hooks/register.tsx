@@ -1604,7 +1604,9 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
       [
         ui.section('Worker', 'factory.sh run in the background — one stage per process, a gate between them'),
         ...(held ? [<Text color={C.accent}>{held.how === 'up'
-          ? 'The factory is up (factory.sh up) — it works the backlog and the requests; factory.sh down ends it.'
+          ? (held.backlog
+            ? 'The factory is up (factory.sh up) — it works the backlog and the requests; factory.sh down stops the backlog.'
+            : 'The factory works the requests (its page is open) — factory.sh up works the backlog off too.')
           : `${held.owner} holds the checkout — a runner started here would be refused.`}</Text>] : []),
         ui.actions([
           !isRunning() && !held && ui.button('run-all', '▶ Run the backlog', () => void runWorker($, 'run the backlog', ['run']), { hotkey: 'r', isPrimary: true }),

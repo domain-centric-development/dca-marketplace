@@ -13,8 +13,8 @@ class Process:
     def __init__(self, page=None):
         self.page, self.calls = page, []
 
-    def up(self, run_args, serve, port, by):
-        self.calls.append(("up", tuple(run_args), serve))
+    def up(self, run_args, serve, port, by, backlog=True):
+        self.calls.append(("up", tuple(run_args), serve) + (() if backlog else ("requests only",)))
         return 0
 
     def running_page(self):
@@ -60,6 +60,12 @@ class LifecycleTest(unittest.TestCase):
         self.assertEqual([("up", ("--tool", "claude"), True), ("start_page", 9000)], process.calls)
         self.assertEqual([], running.calls)
 
+    def test_the_page_starts_the_worker_for_requests_alone_and_up_turns_the_backlog_on(self):
+        process = Process()
+        StartFactoryUseCase(process).execute(StartFactoryCommand((), False, backlog=False))
+        StartFactoryUseCase(process).execute(StartFactoryCommand(()))
+        self.assertEqual([("up", (), False, "requests only"), ("up", (), False)], process.calls)
+
     def test_the_worker_comes_with_its_line(self):
         self.assertEqual(({"owner": "runner:me"}, "factory: up — runner:me"),
                          ShowWorkerUseCase(Process()).execute(ShowWorkerQuery()))
@@ -74,6 +80,19 @@ class DiscoveryViewTest(unittest.TestCase):
         self.assertEqual(["make epic"], [a["label"] for a in topic["proposals"][0]["actions"]])
         self.assertEqual([], topic["proposals"][1]["actions"])
         self.assertEqual(["apply"], [a["label"] for a in topic["description_changes"][0]["actions"]])
+
+
+class Asked(Requests):
+    def all(self):
+        return [dict(id="r1", kind="discover", state="running", words="keep the page", by="ann"),
+                dict(id="r2", kind="wish", state="queued", words="a wish")]
+
+
+class DiscoveryInProgressTest(unittest.TestCase):
+
+    def test_a_discovery_on_its_way_is_named_with_where_it_stands(self):
+        model = ShowDiscoveryUseCase(Discovery(), Asked(), Stories()).execute(ShowDiscoveryQuery("shop"))
+        self.assertEqual([("r1", "running", "keep the page")], [(w["id"], w["state"], w["words"]) for w in model["working"]])
 
 
 if __name__ == "__main__":

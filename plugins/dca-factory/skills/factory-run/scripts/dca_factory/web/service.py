@@ -67,6 +67,14 @@ def bindable(port):
             return False
 
 
+def requests_worker(project, by=""):
+    """A person's requests are worked while the page runs: the worker for them started where none runs (WP-177) —
+    in the background, so the page answers meanwhile."""
+    # a short watch: a press wakes it at once anyway, and a closed page ends it soon
+    threading.Thread(target=lambda: run_cli(project, ["--up", "--requests", "--interval", "10"]
+                                            + (["--by", by] if by else []), timeout=60), daemon=True).start()
+
+
 def serve_here(cwd, port=None, open_browser=False, by_up=False):
     chosen = free_port(cwd, port)
     if not chosen:
@@ -80,7 +88,9 @@ def serve_here(cwd, port=None, open_browser=False, by_up=False):
     write_json(own_file(SERVE_FILE), dict(pid=os.getpid(), port=chosen, url=url, started=stamp_utc(), by_up=by_up),
                private=True)
     say(f"the page for {os.path.basename(server.project)}: {url}")
-    say("bound to 127.0.0.1 alone; the token is this start's — Ctrl-C ends the page, the factory runs on")
+    say("bound to 127.0.0.1 alone; the token is this start's — Ctrl-C ends the page and the working of a person's "
+        "requests; the backlog runs on where `up` has it on")
+    requests_worker(server.project)
     if open_browser:
         import webbrowser
         with contextlib.suppress(Exception):
@@ -377,6 +387,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.json(200, dict(id=same.existing, duplicate=True, message=str(same)))
             except (UseCaseException, GateError) as error:
                 return self.refuse(400, str(error))
+            requests_worker(project, by)                # a worker that ended meanwhile starts again for it
             return self.json(201, dict(id=written.id, path=os.path.relpath(written.path, project).replace(os.sep, "/")))
         if url.path in ("/api/requests/drop", "/api/requests/retry"):
             request_id = str(body.get("id", ""))

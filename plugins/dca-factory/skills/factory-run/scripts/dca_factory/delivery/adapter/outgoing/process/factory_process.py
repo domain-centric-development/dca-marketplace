@@ -108,11 +108,21 @@ def stop_file() -> str:
     return os.path.join(factory_dir(), "stop")
 
 
+def backlog_file() -> str:
+    """While it is there the worker works the backlog off; `up` lays it, `down` takes it away (WP-177)."""
+    return os.path.join(factory_dir(), "backlog")
+
+
+def backlog_on() -> bool:
+    return os.path.isfile(backlog_file())
+
+
 # --- the worker -------------------------------------------------------------------------------------------------------
 def worker(cwd: str) -> typing.Optional[Info]:
-    """Who holds the checkout, as every view shows it: {owner, since, beat, how, pid, alive, log, stopping} — `how`
-    is `up` (started by `factory.sh up`), `runner` (a runner started in a terminal or by a view) or `session` (a
-    session's own run). None when nobody holds it."""
+    """Who holds the checkout, as every view shows it: {owner, since, beat, how, pid, alive, log, stopping, backlog}
+    — `how` is `up` (the factory's worker, started by `factory.sh up` or the page), `runner` (a runner started in a
+    terminal or by a view) or `session` (a session's own run); `backlog` whether `up` has the backlog on. None when
+    nobody holds it."""
     held = read_claim(claim_path(cwd))
     if not held or not held.get("owner"):
         return None
@@ -125,7 +135,7 @@ def worker(cwd: str) -> typing.Optional[Info]:
     how = "up" if pid and started.get("pid") == pid else "runner" if owner.startswith("runner:") else "session"
     return dict(owner=owner, since=held.get("since"), beat=held.get("beat"), how=how, pid=pid, alive=living,
                 log=started.get("log", "") if how == "up" else "", by=started.get("by", "") if how == "up" else "",
-                stopping=os.path.isfile(stop_file()))
+                stopping=os.path.isfile(stop_file()), backlog=backlog_on())
 
 
 def stopped_story(why: str) -> str:
@@ -151,6 +161,8 @@ def ended(cwd: str) -> typing.Optional[Info]:
         elif text:
             said.append(text)
     why = said[-1] if said else "no word in its log"
+    if "no page is open" in why:                      # the requests' worker ended as it should: nothing to say
+        return None
     return dict(at=started.get("started", ""), why=why, log=started.get("log", ""), story=stopped_story(why))
 
 
@@ -191,15 +203,22 @@ def log_tail(path: str, lines: int = 20) -> typing.List[str]:
 
 
 def up(cwd: str, run_args: typing.Sequence[str] = (), serve_too: bool = False, port: typing.Optional[int] = None,
-       by: str = "", wait: float = 20.0) -> int:
-    """Start the factory in the background; 0 when it holds the checkout (or one was up already)."""
+       by: str = "", wait: float = 20.0, backlog: bool = True) -> int:
+    """The backlog on, and the factory's worker started in the background where none runs; 0 when it holds the
+    checkout (or one was up already). <backlog> False: the worker the page starts for a person's requests — the
+    backlog stays as it is (WP-177)."""
     if not os.path.isfile(os.path.join(cwd, ".agents", "factory", "story-gate.py")):
         say("no pipeline here (.agents/factory/story-gate.py) — `factory.sh setup` installs it; nothing started")
         return 2
+    if backlog:
+        os.makedirs(factory_dir(), exist_ok=True)
+        with open(backlog_file(), "w", encoding="utf-8") as handle:
+            handle.write(f"on by {by or default_by(cwd)} at {stamp_utc()}\n")
     info = worker(cwd)
     if info and info["alive"]:
-        print(worker_line(info))
-        say("nothing started — one factory per checkout")
+        if backlog:
+            print(worker_line(info))
+            say("the backlog is on — the running worker takes its stories")
         return (start_page(cwd, port) if serve_too else 0)
     if os.path.isfile(stop_file()):
         os.remove(stop_file())
@@ -211,11 +230,12 @@ def up(cwd: str, run_args: typing.Sequence[str] = (), serve_too: bool = False, p
             os.replace(log_path, log_path + ".1")
     by = by or default_by(cwd)
     with open(log_path, "a", encoding="utf-8") as log:
-        log.write(f"\n== {stamp_utc()} up by {by}: factory.sh run --watch --stay {' '.join(run_args)}\n")
+        log.write(f"\n== {stamp_utc()} {'up' if backlog else 'requests'} by {by}: factory.sh run --watch --stay --lane "
+                  f"{' '.join(run_args)}\n")
         log.flush()
         # the bash the gate runs profile commands with: on Windows Git Bash, never System32's WSL launcher
         process = detached([posix_shell() or os.environ.get("FACTORY_BASH") or "bash", runner_path(), "run", "--watch",
-                            "--stay", *run_args], cwd, log, session_free_env())
+                            "--stay", "--lane", *run_args], cwd, log, session_free_env())
     started = stamp_utc()
     record = dict(pid=process.pid, started=started, log=log_path.replace(os.sep, "/"), by=by, args=list(run_args))
     write_json(own_file(FACTORY_FILE), record)
@@ -277,8 +297,16 @@ def stop_page() -> None:
 
 
 def down(cwd: str, now: bool = False, wait: bool = True, by: str = "") -> int:
-    """End the factory after its running stage; 0 when it is down."""
+    """The backlog off. Where no page is open — or --now — the worker ends after its running stage too; with a page
+    open it goes on with a person's requests (WP-177). 0 when it did what was asked."""
+    with contextlib.suppress(OSError):
+        os.remove(backlog_file())
     info = worker(cwd)
+    page = running_page(None)
+    if page and not now and info and info["alive"]:
+        say("the backlog is off — the running stories finish, no further one starts; the page's requests go on "
+            f"(port {page.get('port')}; `factory.sh serve --stop` ends it)")
+        return 0
     started = read_json(own_file(FACTORY_FILE)) or {}
     if not info or not info["alive"]:
         if started and not alive(started.get("pid")):
@@ -348,6 +376,20 @@ def running_page(cwd: typing.Optional[str]) -> typing.Optional[Info]:
     if served.get("pid") and alive(served["pid"]) and served.get("port") and answers(served["port"]):
         return served
     return None
+
+
+def end_page() -> int:
+    """The page that runs here ended, whoever started it. The worker of a person's requests ends on its own once it is
+    idle and the backlog is off — what it works now it finishes (WP-177)."""
+    served = running_page(None)
+    if not served:
+        say("no page runs here")
+        return 0
+    with contextlib.suppress(OSError):
+        os.kill(served["pid"], signal.SIGTERM)
+    say(f"the page on port {served.get('port')} ended" + ("" if backlog_on() else
+        " — the requests' worker ends once its running work is done; the backlog is off"))
+    return 0
 
 
 def start_page(cwd: str, port: typing.Optional[int] = None) -> int:

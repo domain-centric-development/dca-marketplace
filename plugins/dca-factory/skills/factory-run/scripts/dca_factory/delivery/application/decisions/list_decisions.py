@@ -8,7 +8,7 @@ import typing
 from ....building_blocks import UseCase
 from ..requests.pending import mark_pending
 from ..shared.decision_inbox import DecisionInbox, Facts
-from ..shared.requests import PENDING, RequestStore
+from ..shared.requests import PENDING, RequestStore, place_of
 from ..shared.story_repository import StoryRepository
 from ..status.actions import Action, make_action, NamesStory, offered
 from ..status.texts import parse_time
@@ -56,7 +56,8 @@ class ListDecisionsUseCase:
             record: Model = dict(rank=RANKS[state], id=facts["id"], state=state, kind=facts["kind"],
                                  story=facts["story"], stage=facts["stage"], asked=parse_time(facts["asked"]),
                                  text=facts["title"] + given, options=facts["options"],
-                                 recommended=facts["recommended"], path=facts["path"], sections=facts["sections"])
+                                 recommended=facts["recommended"], path=facts["path"], sections=facts["sections"],
+                                 place=place_of(facts.get("request") or ""))
             record["actions"] = mark_pending(record_actions(record, self._stories.names_story)
                                              if state in WAITING_WORDS else [], pending)
             records.append(record)

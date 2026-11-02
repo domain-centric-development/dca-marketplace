@@ -15,6 +15,8 @@ class StartFactoryCommand:
     serve: bool = False
     port: typing.Optional[int] = None
     by: str = ""
+    #: the backlog on (`up`); False: the worker for a person's requests alone, as the page starts it (WP-177)
+    backlog: bool = True
 
 
 class StartFactoryInputPort(UseCase[StartFactoryCommand, int], typing.Protocol):
@@ -26,4 +28,4 @@ class StartFactoryUseCase:
         self._process = process
 
     def execute(self, command: StartFactoryCommand) -> int:
-        return self._process.up(command.run_args, command.serve, command.port, command.by)
+        return self._process.up(command.run_args, command.serve, command.port, command.by, command.backlog)

@@ -10,12 +10,20 @@ Info = typing.Mapping[str, typing.Any]
 
 
 class FactoryProcess(OutputPort, typing.Protocol):
-    def up(self, run_args: typing.Sequence[str], serve: bool, port: typing.Optional[int], by: str) -> int:
-        """The factory started in the background (`run --watch --stay` with <run_args>), its page too with <serve>."""
+    def up(self, run_args: typing.Sequence[str], serve: bool, port: typing.Optional[int], by: str,
+           backlog: bool = True) -> int:
+        """The backlog on and the factory's worker started in the background where none runs (`run --watch --stay
+        --lane` with <run_args>), its page too with <serve>; <backlog> False — the worker for requests alone."""
+        ...
+
+    def end_page(self) -> int:
+        """The page that runs here ended; its requests' worker ends once idle where the backlog is off. 0 when none
+        runs any more."""
         ...
 
     def down(self, now: bool, wait: bool, by: str) -> int:
-        """The factory ended after its running stage — or at once with <now>; <wait> until it is gone."""
+        """The backlog off; the worker ended after its running stage where no page is open — or at once with <now>;
+        <wait> until it is gone."""
         ...
 
     def running_page(self) -> typing.Optional[Info]:

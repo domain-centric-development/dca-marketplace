@@ -37,7 +37,8 @@ Write `.gitignore` with the line `originals/` before anything lands in the folde
 ## Do
 
 1. **Read what is there.** The project description, the epics and what they delivered (their outcome
-   events), an earlier report on the topic. A report that exists is continued, never started again.
+   events), an earlier report on the topic. A report that exists is continued, never started again;
+   `--topic <topic>` names the one to continue.
 2. **Ask the catalogue.** `reference/questions.md` holds the questions, in order, word for word. Ask
    only the open ones, all at once; what the description or the person already answered is not asked
    again. Answers go where the entry says.
@@ -86,7 +87,8 @@ Write `.gitignore` with the line `originals/` before anything lands in the folde
 When the factory runs you for a person's request — the prompt says *request `<id>` … you run headless* — follow
 `factory-run/reference/requests.md`, *Run headless*. Here that means: the request's words are the problem or the
 deliverable; name the topic yourself from them, short and hyphenated, unless a report on the same matter exists —
-then continue that one. Ask the catalogue's open questions not in the chat but as **one** project record, all of
+then continue that one. A request that names its topic (`--topic <topic> <words>`, the page's "continue") continues
+that topic's report with the words — a question, a document, a wish —, never another. Ask the catalogue's open questions not in the chat but as **one** project record, all of
 them as its question with your proposed answers as options where the files suggest them, and end; the report so far
 stays. Documents come only from the project's files and `originals/`; excerpts are the default. Run the gate (step
 6) before you end. Releasing a proposal stays the person's — a separate request.

@@ -9,9 +9,9 @@ instead of a person in a chat.
 | | In a session (`/factory-…`, the cockpit) | Through a request (`factory.sh request`, the page) |
 |---|---|---|
 | who acts | the session's agent, in the chat | the factory, headless, with the profile's tool |
-| when | at once | before the next story, and between the stages of a running one |
+| when | at once | at once, beside any story that runs — never held up by one |
 | asking back | in the chat | as a decision record, answered on the page or in any session |
-| needs | an open session | `factory.sh up` |
+| needs | an open session | the page open (`factory.sh serve`), or `factory.sh up` |
 | tools | the session's | every tool the factory runs stages with |
 
 Both write the same files: a request runs the skill a session would run, with the arguments a session would give
@@ -27,16 +27,24 @@ neither composes a command of its own.
 
 ## The lifecycle
 
-- `factory.sh up [--serve] [--port <n>]` starts `factory.sh run --watch --stay` in the background — a process of
-  its own, outside any session — and says when it holds the checkout. Its pid and log lie beside the run folder
-  (`.dca-factory/factory.json`, `factory.log`). The flags `run` takes for the backlog (`--tool`, `--parallel`,
-  `--interval`, `--keep-going`, …) pass on. A factory that is up already — from `up`, a terminal or a session —
-  is named, and nothing starts: one worker per checkout, as the claim has it.
-- `factory.sh down` writes the stop file and sends the runner a TERM: it ends after its running stage (at once
-  where it only waits), gives the claim back, and `down` waits for that. On Windows a signal would end the process
-  at once, so there the stop file alone ends it — before its next story, or at once where it waits. `--now` interrupts the running stage too;
-  its work so far stays, and the stage runs again later. `--no-wait` returns at once.
-- `factory.sh serve [--port <n>]` serves the page. `up --serve` starts it with the factory, and `down` ends both.
+- **The factory's worker** is `factory.sh run --watch --stay --lane` in the background — a process of its own,
+  outside any session, one per checkout as the claim has it; its pid and log lie beside the run folder
+  (`.dca-factory/factory.json`, `factory.log`). On its lane a person's requests run at once, one after the other and
+  never held up by a story; a `run` request ("run now") starts its story in its own worktree at the next free place
+  (`parallel:`, every running story counted), before any story of the backlog. The backlog's own stories start only
+  while the backlog is on. It ends once the backlog is off, no page is open and nothing it started still works.
+- **The page starts the worker** for a person's requests where none runs (`up --requests`): the page open is the
+  requests worked. `factory.sh serve --stop` ends a page that runs in the background (Ctrl-C one in the
+  foreground); the worker then ends once idle, unless the backlog is on.
+- `factory.sh up [--serve] [--port <n>]` turns **the backlog on** (`.dca-factory/backlog`) and starts the worker
+  where none runs. The flags `run` takes for the backlog (`--tool`, `--parallel`, `--interval`, `--keep-going`, …)
+  pass on. A worker that runs already — the page's — takes the backlog's stories from its next look.
+- `factory.sh down` turns the backlog off: no further story of the backlog starts, the running ones finish. With
+  a page open that is all — its requests go on. Without one, or with `--now`, the worker ends too: `down` writes the
+  stop file and sends a TERM; it ends after its running stage (at once where it only waits), gives the claim back,
+  and `down` waits for that. On Windows a signal would end the process at once, so there the stop file alone ends
+  it. `--now` interrupts the running stage too; its work so far stays, and the stage runs again later. `--no-wait`
+  returns at once. `up --serve` starts the page with the worker, and a `down` without another page ends both.
 - `status --live` names the worker — `worker: {owner, since, beat, how, alive, stopping}`, `how` one of `up`,
   `runner`, `session` — and every status counts the requests. A factory `up` started that is gone without a `down`
   or a stop request is `ended: {at, why, log, text}` — `why` the last thing its log says since its start (a refused
