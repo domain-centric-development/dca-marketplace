@@ -63,6 +63,8 @@ PAGE = r"""<!doctype html>
 body { background: var(--bg); color: var(--ink); font: 17px/1.55 var(--body); min-height: 100vh; }
 a, .link { color: var(--accent); cursor: pointer; text-decoration: none; }
 .link:hover { text-decoration: underline; }
+.link:not(.title), .way-link { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px;
+  text-decoration-color: color-mix(in srgb, var(--accent) 45%, transparent); }
 button.link { background: none; border: 0; padding: 0; text-align: left; } button.link:not(.title) { font: inherit; }
 button:focus-visible, a:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-visible {
   outline: 3px solid var(--teal); outline-offset: 2px; border-radius: 4px; }
@@ -138,13 +140,23 @@ tr:last-child td { border-bottom: 0; }
 .state { font: 400 12px var(--mono); padding: 2px 8px; border-radius: 999px; background: var(--code); white-space: nowrap; }
 .st-queued { color: var(--accent); } .st-running { color: var(--run); } .st-waiting { color: var(--wait); } .st-failed { color: var(--stop); }
 
-.btn { font: 500 14px var(--display); padding: 7px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel);
-  color: var(--ink); cursor: pointer; white-space: nowrap; }
+/* a control is pressed, a display is read: a control is a raised rectangle in the display face, a display flat, in the mono
+   face, never with an edge — teal alone tells neither (the brand's controls and displays, branding/README.md) */
+.btn { font: 600 14px var(--display); padding: 7px 14px; border-radius: 7px; border: 1px solid var(--line); background: var(--panel);
+  color: var(--ink); cursor: pointer; white-space: nowrap; box-shadow: 0 1px 0 var(--line), 0 1px 3px rgba(28, 36, 51, .06); }
+.btn:active:not(:disabled) { transform: translateY(1px); box-shadow: none; }
 .btn:hover { border-color: var(--teal); color: var(--accent); }
-.btn.primary { background: var(--fill); border-color: var(--fill); color: var(--on-accent); }
+.btn.primary { background: var(--fill); border-color: var(--fill); color: var(--on-accent);
+  box-shadow: 0 1px 0 var(--fill-hover), 0 2px 6px color-mix(in srgb, var(--teal) 30%, transparent); }
+.btn.primary::after { content: "→"; font-weight: 400; margin-left: 6px; }
 .btn.primary:hover { background: var(--fill-hover); border-color: var(--fill-hover); color: var(--on-accent); }
 .btn.danger:hover { border-color: var(--stop); color: var(--stop); }
 .btn:disabled { opacity: .5; cursor: default; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; background: var(--panel); }
+.seg button { font: 500 13px var(--display); color: var(--ink); background: none; border: 0; padding: 5px 11px; cursor: pointer; white-space: nowrap; }
+.seg button + button { border-left: 1px solid var(--line); } .seg button:hover { color: var(--accent); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.seg .n { font: 400 11px var(--mono); margin-left: 4px; opacity: .7; }
 .acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; align-items: center; }
 td .acts { margin-top: 0; justify-content: flex-end; }
 .ask { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; margin-top: 12px; }
@@ -194,7 +206,8 @@ pre.out:empty { display: none; }
 .dm-head .nums { display: flex; flex-wrap: wrap; gap: 6px 16px; font: 500 12px var(--mono); color: color-mix(in srgb, var(--bg) 70%, transparent); }
 .dm-head .nums b { font: 700 16px var(--display); color: var(--teal); margin-right: 4px; } .dm-head .nums b.warn { color: var(--wait); } .dm-head .nums b.bad { color: var(--stop); }
 .pill { font: 600 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
-.pill.core { background: var(--teal); color: var(--on-accent); } .pill.sup { box-shadow: inset 0 0 0 1.5px var(--teal); color: var(--teal); }
+.pill.core { background: color-mix(in srgb, var(--teal) 28%, transparent); box-shadow: inset 0 0 0 1.5px var(--teal); color: var(--teal); }
+.pill.sup { box-shadow: inset 0 0 0 1.5px var(--teal); color: var(--teal); }
 .pill.gen { box-shadow: inset 0 0 0 1.5px currentColor; opacity: .7; }
 .dm-track { border-left: 2px solid var(--line); margin: 10px 0 0 12px; padding-left: 20px; }
 .dm-node { position: relative; margin: 16px 0 8px; font: 600 15px var(--display); }
@@ -203,7 +216,7 @@ pre.out:empty { display: none; }
 .dm-facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 12px; margin: 2px 0 0; }
 .dm-facts dt { font: 600 11px var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: .06em; padding-top: 3px; }
 .dm-facts dd { margin: 0; display: flex; flex-wrap: wrap; gap: 4px; }
-.chip { font: 500 12px var(--mono); padding: 2px 8px; border-radius: 4px; background: var(--teal); color: var(--on-accent); white-space: nowrap; cursor: help; }
+.chip { font: 500 12px var(--mono); padding: 2px 8px; border-radius: 3px; background: color-mix(in srgb, var(--teal) 14%, transparent); color: var(--accent); white-space: nowrap; cursor: help; }
 .chip.minor { background: transparent; color: var(--accent); box-shadow: inset 0 0 0 1px var(--teal); }
 details.dm-group { border: 1px solid var(--group-line); border-radius: 6px; margin-top: 6px; background: var(--panel); }
 details.dm-group > summary { display: flex; justify-content: space-between; align-items: baseline; padding: 6px 10px; background: var(--group); border-radius: 6px; cursor: pointer; list-style: none; font: 600 15px var(--display); }
@@ -257,7 +270,7 @@ table.epics tr.epic-body > td { padding-top: 0; } table.epics tr.epic-body table
 .bar i { display: block; height: 100%; background: var(--done); }
 .show-s { display: none; } @media (max-width: 760px) { .show-s { display: block; } }
 .spec-act { margin-top: 8px; } .spec-act .ask textarea { min-height: 64px; }
-.terms { display: flex; flex-wrap: wrap; gap: 4px 6px; } .term { font: 400 12.5px var(--mono); padding: 2px 7px; border: 1px solid var(--line); border-radius: 5px; cursor: help; }
+.terms { display: flex; flex-wrap: wrap; gap: 4px 6px; } .term { font: 400 12.5px var(--mono); padding: 2px 7px; border-radius: 3px; background: color-mix(in srgb, var(--teal) 14%, transparent); color: var(--accent); cursor: help; }
 details.feature { border-top: 1px solid var(--line); padding: 6px 0; } details.feature > summary { cursor: pointer; font: 500 15px var(--display); }
 details.feature > summary .hint { font: 400 13px var(--body); margin-left: 6px; }
 .rule-head { font: 600 14px var(--display); margin: 10px 0 2px; }
@@ -729,7 +742,7 @@ function rulesTab(st) {
   const kind = kinds.includes(S.ruleKind) ? S.ruleKind : kinds[0];
   const flow = (v.flow || {})[kind] || {steps: [], edges: [], every_gate: []};
   const stories = (st.rows || []).map(r => r.story);
-  const picks = `<div class="pick">${kinds.map(k => `<button class="btn${k === kind ? " primary" : ""}" data-kind="${esc(k)}">${esc(k)}</button>`).join("")}
+  const picks = `<div class="pick"><span class="seg">${kinds.map(k => `<button aria-pressed="${k === kind}" data-kind="${esc(k)}">${esc(k)}</button>`).join("")}</span>
     <select data-overlay aria-label="a story's gate runs"><option value="">no story</option>${stories.map(id => `<option${id === S.ruleStory ? " selected" : ""}>${esc(id)}</option>`).join("")}</select></div>`;
   return card(`${esc(kind)}`, `${(v.rules || []).length} rules`, picks + storyLine(st, flow, story) + (flow.svg ? `<div class="flowsvg">${flow.svg}</div>` : ""))
     + picked(flow, rules, story)
@@ -979,7 +992,7 @@ function backlog(st) {
   const counts = {all: (st.epics || []).length,
     open: (st.epics || []).filter(e => e.rows.some(r => !["delivered", "superseded"].includes(r.state))).length,
     drafts: (st.epics || []).filter(e => e.rows.some(r => r.state === "draft")).length};
-  const filters = `<div class="pick">${["all", "open", "drafts"].map(f => `<button class="btn${f === filter ? " primary" : ""}" data-filter="${f}">${f} <span class="n">${counts[f]}</span></button>`).join("")}</div>`;
+  const filters = `<div class="pick"><span class="seg">${["all", "open", "drafts"].map(f => `<button aria-pressed="${f === filter}" data-filter="${f}">${f}<span class="n">${counts[f]}</span></button>`).join("")}</span></div>`;
   const rows = shown.map(e => {
     const drafts = e.rows.filter(r => r.state === "draft").length, busy = e.rows.some(r => r.mark === "running");
     const m = busy ? "running" : e.total && e.delivered === e.total ? "done" : e.rows.some(r => ["look", "question", "stopped"].includes(r.mark)) ? "look" : "none";
