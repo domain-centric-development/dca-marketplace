@@ -40,7 +40,7 @@ from .decision_record_files import (
     ANSWER_FIELDS, answer_sentence, decisions_store, needs_human_ids, read_decisions, record_path, resume_stage,
     stamp_applied)
 from .epic_files import epic_dependency_problem
-from .findings_files import findings_path, findings_rows, project_findings_path
+from .findings_files import confirmed_defects, findings_path, findings_rows, project_findings_path
 from .owned_files import owned_changes, write_answered
 import glob
 from .delivery_files import (
@@ -794,8 +794,12 @@ class StageEvidenceFiles:
                 malformed.append(name)
                 continue
             read.append(name)
+        known = {name for name, _carrier in perspectives_of(self._profile)}
+        judge = os.path.join(self._runs, story.value, "judge.md")
+        named = [row[0].strip().lower() for row in confirmed_defects(read_text(judge))] if os.path.isfile(judge) else []
+        unknown = sorted({n or "—" for n in named if n not in known})
         return ReviewFacts(tuple(Detail(r) for r in read), tuple(Detail(m) for m in missing),
-                           tuple(Detail(m) for m in malformed))
+                           tuple(Detail(m) for m in malformed), tuple(Detail(u) for u in unknown))
 
     def pipeline(self, story: StoryId) -> PipelineFacts:
         records = sorted(glob.glob(os.path.join(evidence_dir(self._runs, story.value), "changed-*.txt")))

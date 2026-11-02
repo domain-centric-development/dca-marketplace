@@ -22,6 +22,12 @@ from ...domain.model.story_state import ENDED_WORDS
 
 Model = typing.Dict[str, typing.Any]
 
+#: Where a story stands on the backlog's lanes, by its state as the schedule reads it: a draft waits for its release,
+#: a released one for its run, a started one is on its way — running, stopped, asking, waiting for a look —, a
+#: delivered one is done, a superseded one was dropped for another. A state not named here is released and waits.
+LANES = dict(unreleased="draft", delivered="delivered", superseded="superseded", running="running", stopped="running",
+             waiting="running", published="running", **{"in-progress": "running"}, resumable="running")
+
 
 @dataclasses.dataclass(frozen=True)
 class ShowStatusQuery:
@@ -69,7 +75,8 @@ class ShowStatusUseCase:
             rows.append(dict(journal=facts.has_journal(story_id), done=done, epic=story.get("epic", ""), story=story_id,
                              flaky=flaky, signals=signals,
                              title=story.get("title", ""), mark=mark, created=created_of(story.get("front") or {}),
-                             state=words, stage=stage or "—", passes=len(told["passes"]) or 0,
+                             state=words, lane=LANES.get(story["state"], "approved"), stage=stage or "—",
+                             passes=len(told["passes"]) or 0,
                              started=told["started"], delivered=told["delivered"], seconds=told["seconds"],
                              tokens=told["tokens"], measured=told["measured"], runs=told["runs"],
                              **{k: sum(e.get(k, 0) for e in told["stages"].values()) for k in USAGE_FIELDS},
@@ -108,6 +115,7 @@ class ShowStatusUseCase:
                 entry["activity"] = facts.activity((held or {}).get("owner", ""), started, now,
                                                    story_id).split(": ", 1)[-1]
             running.append(entry)
+        known = {name for name, _carrier in facts.perspectives(profile)}
         epics: typing.List[Model] = []
         for row in rows:
             if not epics or epics[-1]["epic"] != row["epic"]:
@@ -122,7 +130,7 @@ class ShowStatusUseCase:
             epic.update(delivered=sum(r["done"] for r in epic["rows"]), total=len(epic["rows"]),
                         tokens=sum(r["tokens"] for r in epic["rows"]),
                         measured=sum(r["measured"] for r in epic["rows"]),
-                        seconds=sum(r["seconds"] for r in epic["rows"]), signals=signal_totals(epic["rows"]))
+                        seconds=sum(r["seconds"] for r in epic["rows"]), signals=signal_totals(epic["rows"], known))
         epics.sort(key=lambda e: min(order.index(r["story"]) for r in e["rows"]))
         journeys = self._journey_hints(stories, epics)
         blank = dict(title="", goal="", metric="", discovery="", intent="", domain_contact="", created="", path="")
@@ -230,7 +238,7 @@ class ShowStatusUseCase:
                     priced=any(r["priced"] for r in rows), extra=extra, hint=data["hint"],
                     delivered=sum(r["done"] for r in rows), total=len(rows),
                     tokens=totals["tokens"], measured=totals["measured"],
-                    seconds=totals["seconds"], signals=signal_totals(rows),
+                    seconds=totals["seconds"], signals=signal_totals(rows, known),
                     entries=entry_actions(facts.names_story),
                     worker_text=worker_text(worker) if live else "",
                     **figures(totals))

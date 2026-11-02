@@ -11,7 +11,7 @@ import os
 import re
 import typing
 
-from ..pipeline.stage_rows import stage_course, stage_windows, stage_order
+from ..pipeline.stage_rows import all_stages, stage_course, stage_windows, stage_order
 from .findings_files import finding_records, FINDINGS_FILE
 from .story_layout import delivered_on, find_story, story_kind
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir, read_profile, resolve_profile, shown
@@ -430,7 +430,8 @@ def story_signals(runs: str, story_id: str, records: typing.Sequence[typing.Any]
     answered, the story's assumptions open and answered, what the plan left open, each named rule's verdict at the
     test gate, the judge's confirmed findings by perspective and domain code, the acceptance corrections by reason
     code. Counted, never rated. What a gate decided is read from the journal alone (WP-150): a fact no gate recorded
-    is None — "not recorded", never 0."""
+    is None — "not recorded", never 0. `tested`: whether a gate of a stage that runs a story's tests red ever ran —
+    a story without one (a task, an adopted story) has no rules to measure (WP-176)."""
     questions = [(front, state) for _p, front, _b, state, _a in records if not is_acceptance(front)]
     lines = [l.strip()[1:].strip().lower() for l in section_of(body, "assumptions") or [] if l.strip().startswith(("-", "*"))]
     events = journal_events(runs, story_id)
@@ -452,7 +453,9 @@ def story_signals(runs: str, story_id: str, records: typing.Sequence[typing.Any]
         code = correction_code(answer.get("answer")) if is_acceptance(front) and state in ANSWERED_WORDS else None
         if code:
             corrections[code] = corrections.get(code, 0) + 1
-    return dict(asked=len(questions), answered=sum(1 for _f, st in questions if st in ANSWERED_WORDS),
+    red = {s.name for s in all_stages() if s.red}
+    tested = any(e["kind"] == "gate" and e["name"] in red for e in events)
+    return dict(tested=tested, asked=len(questions), answered=sum(1 for _f, st in questions if st in ANSWERED_WORDS),
                 assumptions_open=sum(1 for l in lines if l.startswith("open:")),
                 assumptions_answered=sum(1 for l in lines if l.startswith("answered:")),
                 plan_open=int(plan[0].get("open", 0)) if plan else None,

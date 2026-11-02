@@ -71,18 +71,25 @@ def signals_line(totals: Entry) -> str:
     return " · ".join(parts)
 
 
-def signal_totals(rows: typing.Sequence[Entry]) -> Entry:
+def signal_totals(rows: typing.Sequence[Entry], perspectives: typing.Optional[typing.AbstractSet[str]] = None) -> Entry:
     """The signals of several stories summed (WP-150 E) — the figures the bench rates: the rules named and each
     verdict, the kill rate (killed / named) and the guarded rate ((red + killed) / named) — None where no rule was
     named —, questions, assumptions, what plans left open, the judges' findings by perspective and domain code, the
-    corrections by code. A story whose gate recorded no rules (one built before 0.88.0) is counted as not measured,
-    never as zero."""
-    total: Entry = dict(stories=len(rows), measured=0, not_measured=0, named=0, **{v: 0 for v in RULE_VERDICTS},
+    corrections by code. A story whose test gate recorded no rules (one built before 0.88.0) is counted as not
+    measured, never as zero; one that never had a test gate (a task, an adopted story) as `without_test` — there is
+    nothing to measure; one not delivered yet that has none as `open` (WP-176). Given the `perspectives` the profile
+    knows, a finding under any other name — free text a judge wrote before the gate held it — counts as `other`."""
+    total: Entry = dict(stories=len(rows), measured=0, not_measured=0, without_test=0, open=0, named=0,
+                        **{v: 0 for v in RULE_VERDICTS},
                         asked=0, answered=0, assumptions_open=0, assumptions_answered=0, plan_open=0,
                         findings={}, domain={}, corrections={})
     for row in rows:
         signals = row.get("signals") or {}
-        if signals.get("rules") is None:
+        if signals.get("rules") is None and not row.get("done", True):
+            total["open"] += 1
+        elif signals.get("rules") is None and signals.get("tested") is False:
+            total["without_test"] += 1
+        elif signals.get("rules") is None:
             total["not_measured"] += 1
         else:
             total["measured"] += 1
@@ -93,6 +100,8 @@ def signal_totals(rows: typing.Sequence[Entry]) -> Entry:
             total[key] += signals.get(key) or 0
         for key in ("findings", "domain", "corrections"):
             for name, n in (signals.get(key) or {}).items():
+                if key == "findings" and perspectives is not None and name not in perspectives:
+                    name = "other"
                 total[key][name] = total[key].get(name, 0) + n
     named = total["named"]
     total["kill_rate"] = round(total["killed"] / named, 2) if named else None

@@ -6378,6 +6378,20 @@ def run_groups(args):
               must_fail=("reviews",), text=("not a review report",)),
          dict(green=both_green, ledger=both_green, document=DOCUMENT, extra_sources=(
              (".dca-factory/runs/STORY-1/reviews/ddd.md", "# Review\n\nLooks fine to me.\n"),))),
+        # WP-176: a finding names a review perspective — experimental, a note; a known one says nothing.
+        (Case("document: a confirmed finding under a perspective the profile does not know is a note", "document", 0,
+              text=("gate:note judge-perspective — a confirmed finding names a perspective the profile does not know: plan",)),
+         dict(green=both_green, ledger=both_green, document=DOCUMENT, extra_sources=(
+             (".dca-factory/runs/STORY-1/judge.md", "## Verdict\nverdict: pass\n\n## Confirmed defects\n"
+              "| Perspective | File:line | Severity | In plain words | Defect | Fix |\n|---|---|---|---|---|---|\n"
+              "| plan | src/main/Thing.java:5 | minor | the plan named no test | a criterion untested | name it |\n"
+              "| ddd | src/main/Thing.java:9 | minor | a name not from the glossary | a synonym | the glossary's word |\n"),))),
+        (Case("document: confirmed findings under the profile's perspectives say nothing of their perspective", "document", 0,
+              absent=("judge-perspective",)),
+         dict(green=both_green, ledger=both_green, document=DOCUMENT, extra_sources=(
+             (".dca-factory/runs/STORY-1/judge.md", "## Verdict\nverdict: pass\n\n## Confirmed defects\n"
+              "| Perspective | File:line | Severity | In plain words | Defect | Fix |\n|---|---|---|---|---|---|\n"
+              "| clean-code | src/main/Thing.java:5 | minor | a name that says nothing | a vague name | rename it |\n"),))),
         (Case("document: `reviews:` in the profile adds a perspective the check expects a file for", "document", 0,
               text=("gate:note reviews — no review file for security",)),
          dict(green=both_green, ledger=both_green, document=DOCUMENT, profile=PROFILE + "reviews: security\n",

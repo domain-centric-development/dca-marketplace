@@ -259,6 +259,7 @@ def _plan(run: Run) -> None:
     "GATE-DOCUMENTED",
     "GATE-GLOSSARY",
     "GATE-REVIEWS",
+    "GATE-JUDGE-PERSPECTIVE",
 ))
 def _document(run: Run) -> None:
     passed = DeliveryChecks.story_pass(run.story, run.evidence, workflow().hand_over(StageName("judge")))

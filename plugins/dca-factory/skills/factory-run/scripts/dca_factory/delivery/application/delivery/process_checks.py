@@ -123,6 +123,7 @@ def invariant_breaks(result: Verdict, runs: StageRuns, profile: typing.Mapping[s
         if selector and SELECTOR_FORM.match(selector) and selector not in criterion:
             rules.setdefault(selector, []).append((element, numbers))
     if not rules:
+        runs.rule_proofs(story, [])          # measured, and none named: a zero, never "not recorded"
         return
     keys = {sel: "; ".join(f"{e} rule {', '.join(map(str, n))}" for e, n in owners) for sel, owners in rules.items()}
     located = runs.locate({keys[sel]: [sel] for sel in rules})

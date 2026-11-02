@@ -38,20 +38,21 @@ class Kind:
     option: bool = False                #: it takes `option:` — an answer's option key, a correction's reason code
     skill: str = ""                     #: the skill a session would run; "" — the runner works it itself
     about: str = ""
+    creates: bool = False               #: whether an agent writes something new for it — a draft, an epic, a report
 
 
 KINDS = (
-    Kind("wish", words="required", skill="factory-backlog",
+    Kind("wish", words="required", skill="factory-backlog", creates=True,
          about="the person's words become a backlog item — a story, a task, a finding settled — kept as a draft"),
     Kind("release", keys=("story|epic",), skill="factory-backlog",
          about="release drafts — stories by id, or every draft of an epic — where the question pass leaves nothing open"),
-    Kind("stories", keys=("epic",), skill="factory-backlog", about="cut the next stories of an epic, as drafts"),
-    Kind("journey", keys=("epic",), skill="factory-backlog", about="propose the journey of a delivered epic"),
-    Kind("describe", words="required", skill="description",
+    Kind("stories", keys=("epic",), skill="factory-backlog", creates=True, about="cut the next stories of an epic, as drafts"),
+    Kind("journey", keys=("epic",), skill="factory-backlog", creates=True, about="propose the journey of a delivered epic"),
+    Kind("describe", words="required", skill="description", creates=True,
          about="a change to the project description, in the person's words (`<part>: <change>`)"),
-    Kind("discover", words="required", skill="factory-discover",
+    Kind("discover", words="required", skill="factory-discover", creates=True,
          about="a problem or a wished deliverable — the discovery report and the epics it proposes"),
-    Kind("epic-from", keys=("topic", "proposal"), skill="factory-backlog",
+    Kind("epic-from", keys=("topic", "proposal"), skill="factory-backlog", creates=True,
          about="a discovery's proposed epic, released as an epic"),
     Kind("answer", keys=("record",), words="optional", option=True, skill="factory-decisions",
          about="the answer to an open question — an option key or the person's words"),

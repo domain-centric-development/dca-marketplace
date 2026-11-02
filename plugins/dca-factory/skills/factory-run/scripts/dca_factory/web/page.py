@@ -117,6 +117,7 @@ h1 { font: 700 clamp(28px, 4vw, 38px)/1.1 var(--display); letter-spacing: -1px; 
 .card > .about { color: var(--muted); margin-top: 6px; font-size: 16px; max-width: 48em; }
 h3 { font: 600 15px var(--display); margin: 18px 0 6px; }
 .drawer h2 { font: 600 16px var(--display); margin: 20px 0 6px; }
+.drawer > .acts { margin: 16px 0 22px; }
 .sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .prose { font-size: 16px; }
 .prose p, .prose ul, .prose ol { margin: 0 0 8px; }
@@ -155,6 +156,7 @@ tr:last-child td { border-bottom: 0; }
 .btn.primary:hover { background: var(--fill-hover); border-color: var(--fill-hover); color: var(--on-accent); }
 .btn.danger:hover { border-color: var(--stop); color: var(--stop); }
 .btn:disabled { opacity: .5; cursor: default; }
+.btn.claude::before { content: "✦"; color: var(--accent); margin-right: 6px; font-weight: 400; } .btn.primary.claude::before { color: var(--on-accent); }
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; background: var(--panel); }
 .seg button { font: 500 13px var(--display); color: var(--ink); background: none; border: 0; padding: 5px 11px; cursor: pointer; white-space: nowrap; }
 .seg button + button { border-left: 1px solid var(--line); } .seg button:hover { color: var(--accent); }
@@ -261,8 +263,14 @@ details.dm-group > summary { justify-content: flex-start; }
 .ehead .name b { font: 600 15.5px var(--display); } .ehead .caret { color: var(--muted); font: 400 12px var(--mono); }
 .ehead .meta { display: flex; gap: 8px; align-items: center; font: 400 12.5px var(--mono); color: var(--muted); white-space: nowrap; }
 .strip { display: flex; gap: 2px; grid-column: 1 / -1; } .strip i { flex: 1; height: 5px; border-radius: 1px; background: var(--line); }
-.strip i.l-delivered { background: var(--teal); } .strip i.l-running { background: var(--wait); } .strip i.l-stopped { background: var(--stop); }
-.strip i.l-approved { background: color-mix(in srgb, var(--teal) 40%, var(--line)); }
+.strip i.l-delivered, .legend i.l-delivered { background: var(--teal); } .strip i.l-running, .legend i.l-running { background: var(--wait); } .strip i.l-stopped, .legend i.l-stopped { background: var(--stop); }
+.strip i.l-approved, .legend i.l-approved { background: color-mix(in srgb, var(--teal) 40%, var(--line)); }
+.strip i.l-draft, .legend i.l-draft { background: transparent; box-shadow: inset 0 0 0 1px var(--muted); }
+.strip i.l-superseded, .legend i.l-superseded { background: var(--line); }
+/* the strip's key, said once above the epics */
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font: 400 12px var(--mono); color: var(--muted); margin-top: 10px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { display: inline-block; width: 18px; height: 6px; border-radius: 1px; }
 .ebody { padding: 0 12px 12px; } .ebody > .about { margin: 0 0 8px; }
 .lanes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 @media (max-width: 760px) { .lanes { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
@@ -270,7 +278,10 @@ details.dm-group > summary { justify-content: flex-start; }
 .lane h4 { font: 600 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); display: flex; justify-content: space-between; margin-bottom: 6px; }
 .scard { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; margin-bottom: 6px; font-size: 14px; line-height: 1.35; }
 .scard .link.title { font: 500 14px var(--display); } .scard .id { margin-top: 3px; }
-.scard.hot { box-shadow: inset 3px 0 0 var(--wait); } .scard.ok { box-shadow: inset 3px 0 0 var(--teal); } .scard.bad { box-shadow: inset 3px 0 0 var(--stop); }
+/* a card's edge is its segment's colour in the strip above */
+.scard.l-delivered { box-shadow: inset 3px 0 0 var(--teal); } .scard.l-running { box-shadow: inset 3px 0 0 var(--wait); }
+.scard.l-stopped { box-shadow: inset 3px 0 0 var(--stop); } .scard.l-approved { box-shadow: inset 3px 0 0 color-mix(in srgb, var(--teal) 40%, var(--line)); }
+.scard.l-superseded { box-shadow: inset 3px 0 0 var(--line); } .scard.l-draft { border-left: 2px dashed var(--muted); }
 .scard .acts { margin-top: 6px; } .scard .btn { font-size: 12.5px; padding: 4px 9px; }
 .lane details > summary { cursor: pointer; font: 500 12px var(--mono); color: var(--accent); }
 
@@ -339,6 +350,16 @@ details.dm-group > summary { justify-content: flex-start; }
   box-shadow: var(--shadow); padding: 8px 10px; font: 400 12.5px var(--mono); color: var(--ink); max-width: 320px; }
 .curve .tip b { display: block; font: 600 13.5px var(--display); margin-bottom: 4px; }
 .curve .tip .row { display: flex; justify-content: space-between; gap: 14px; color: var(--muted); } .curve .tip .row span:last-child { color: var(--ink); }
+
+/* quality: what the stages asked, what the judge found, what a person corrected — counted, never rated */
+.tiles.five { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.tile.bad b { color: var(--stop); } .tile small { display: block; font: 400 11.5px var(--mono); color: var(--muted); margin-top: 2px; }
+.qbars { display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content; gap: 6px 12px; align-items: center; margin-top: 8px; }
+.qbars .lbl { font: 500 12.5px var(--mono); color: var(--ink); } .qbars .n { font: 500 12.5px var(--mono); color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.qbars .track { height: 8px; } .qbars .track i { display: block; height: 100%; border-radius: 0 4px 4px 0; background: var(--teal); min-width: 2px; }
+.qrules { margin-top: 12px; font-size: 15px; } .qrules .hint { display: block; }
+.qline { display: flex; flex-wrap: wrap; gap: 4px 14px; font: 400 12.5px var(--mono); color: var(--muted); margin: 0 0 10px; }
+.qline b { color: var(--ink); font-weight: 600; } .qline .bad { color: var(--stop); }
 
 /* discover: the problem with an amber edge, the proposed epics as cards */
 .report { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 16px; margin-top: 10px; }
@@ -478,7 +499,10 @@ const $ = id => document.getElementById(id);
 const esc = v => String(v == null ? "" : v).replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
 const mark = m => `<span class="mark m-${esc(m)}" aria-hidden="true">${esc(MARKS[m] || "·")}</span>`;
 // a section's markdown as the website sets it: paragraphs, lists, `code` and **strong** — escaped first
-const inline = text => esc(text).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+// code first, as markdown reads it — `x`, and ``x`` that may hold a backtick —, bold only outside it
+const inline = text => String(text == null ? "" : text).split(/(``.+?``|`[^`]+`)/).map((part, i) => i % 2
+  ? `<code>${esc(part.startsWith("``") ? part.slice(2, -2).trim() : part.slice(1, -1))}</code>`
+  : esc(part).replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")).join("");
 function prose(text) {
   // the markdown a person writes in a description, a record or a story: paragraphs, lists, tables, code, headings
   const out = [];
@@ -558,16 +582,18 @@ function act(action, scope) {
   if (action.queued) return `<span class="state st-queued" title="request ${esc(action.queued)}">${esc(action.label)} — ${esc(action.queued_text || "queued")}</span>`;
   const id = `${scope || "m"}${++actionCount}`;
   ACTIONS[id] = action;
-  const r = action.request, cls = `btn${action.primary ? " primary" : ""}`;
+  // a press that has an agent write something new says so before it is pressed: ✦ on the button, words in its title
+  const r = action.request, cls = `btn${action.primary ? " primary" : ""}${action.creates ? " claude" : ""}`;
+  const said = [action.creates ? "an agent writes this, in the factory's queue" : "", action.text].filter(Boolean).join(" — ");
   if (r.open === "words") {
     const choices = (r.choices || []).length ? `<select aria-label="why"><option value="">why? (optional)</option>${r.choices.map(c => `<option>${esc(c)}</option>`).join("")}</select>` : "";
     // what the person typed outlives a redraw: kept by the action's command, until its request is written
     const draft = r.draft || action.skill;
     return `<div class="ask" data-ask="${id}"><textarea data-draft="${esc(draft)}" placeholder="${esc(action.text)}" aria-label="${esc(action.label)}">${esc(S.drafts[draft] || "")}</textarea>${choices}
-      <button class="${cls}" data-press="${id}">${esc(action.label)}</button></div>`;
+      <button class="${cls}" data-press="${id}" title="${esc(said)}">${esc(action.label)}</button></div>`;
   }
   if (r.open === "record") return `<button class="${cls}" data-tab="decide">${esc(action.label)}</button>`;
-  return `<button class="${cls}" data-press="${id}" title="${esc(action.text)}">${esc(action.label)}</button>`;
+  return `<button class="${cls}" data-press="${id}" title="${esc(said)}">${esc(action.label)}</button>`;
 }
 const acts = (list, scope) => (list || []).map(a => act(a, scope)).join("");
 function forget(scope) { for (const key of Object.keys(ACTIONS)) if (key[0] === scope) delete ACTIONS[key]; }
@@ -697,6 +723,44 @@ function renderFrame() {
   }).join("");
 }
 
+// --- drawing: the new page is matched against the one on screen, never put in its place -------------------------------
+// An element that stays the same element keeps what the browser holds for the person — where a box is scrolled, what
+// has the focus, a caret, a selection —, so nothing of it has to be remembered and put back. An element with a key
+// (`id`, `data-fold`, `data-epic`, `data-context`, `data-story`) is found again by it, wherever it moved; a fold's
+// `open` and a text field's words are the person's, and the match leaves them alone.
+const keyOf = node => node.nodeType === 1 ? node.id || node.dataset.fold || node.dataset.epic || node.dataset.context
+  || (node.tagName === "BUTTON" ? "" : node.dataset.story) || "" : "";
+const PERSONS = {DETAILS: ["open"], TEXTAREA: ["value"], INPUT: ["value"], SELECT: ["value"]};
+function morphNode(old, want) {
+  if (old.nodeType !== 1) { if (old.nodeValue !== want.nodeValue) old.nodeValue = want.nodeValue; return; }
+  const keep = PERSONS[old.tagName] || [];
+  for (const {name} of [...old.attributes]) if (!want.hasAttribute(name) && !keep.includes(name)) old.removeAttribute(name);
+  for (const {name, value} of [...want.attributes]) if (!keep.includes(name) && old.getAttribute(name) !== value) old.setAttribute(name, value);
+  // a text field's words are the person's, and what the page fills in itself (`data-own`) is the page's
+  if (old.tagName !== "TEXTAREA" && !old.hasAttribute("data-own")) morphChildren(old, want);
+}
+function morphChildren(from, to) {
+  const keyed = new Map([...from.childNodes].filter(keyOf).map(n => [keyOf(n), n]));
+  let cur = from.firstChild;
+  for (const want of [...to.childNodes]) {
+    const key = keyOf(want);
+    const match = key ? keyed.get(key)
+      : cur && !keyOf(cur) && cur.nodeType === want.nodeType && cur.nodeName === want.nodeName ? cur : null;
+    if (!match) { from.insertBefore(want, cur); continue; }
+    if (key) keyed.delete(key);
+    if (match === cur) cur = cur.nextSibling; else from.insertBefore(match, cur);
+    morphNode(match, want);
+  }
+  while (cur) { const next = cur.nextSibling; cur.remove(); cur = next; }
+}
+function morph(target, html) {
+  if (target.dataset.drawn === html) return;            // nothing changed: nothing is touched
+  const fresh = document.createElement("template");
+  fresh.innerHTML = html;
+  morphChildren(target, fresh.content);
+  target.dataset.drawn = html;
+}
+
 function render() {
   renderFrame();
   const editing = document.activeElement && ["TEXTAREA", "SELECT"].includes(document.activeElement.tagName)
@@ -705,8 +769,8 @@ function render() {
   forget("m"); forget("s");
   const [, , eyebrow, title, lede] = TABS.find(([id]) => id === S.tab) || TABS[2];
   const view = {describe, discover, backlog, run, decide, delivered, rules: rulesTab}[S.tab] || backlog;
-  $("main").innerHTML = `<div class="eyebrow">${esc(eyebrow)}</div><h1>${esc(title)}</h1><p class="lede">${esc(lede)}</p>`
-    + (S.status ? endedLine(S.status) + view(S.status) : `<section class="card"><p class="empty">Reading the factory…</p></section>`);
+  morph($("main"), `<div class="eyebrow">${esc(eyebrow)}</div><h1>${esc(title)}</h1><p class="lede">${esc(lede)}</p>`
+    + (S.status ? endedLine(S.status) + view(S.status) : `<section class="card"><p class="empty">Reading the factory…</p></section>`));
   if (S.tab === "run") paintFollow();
   if (S.tab === "rules") paintFlow();
 }
@@ -1154,27 +1218,35 @@ function storyRow(r) {
     <td class="num hide-s">${esc(r.tokens_text)}</td><td class="act"><div class="acts">${acts(r.actions)}</div></td></tr>`;
 }
 
-// where a story stands, as a lane of its epic: its state and its mark, as the factory gives them
+// where a story stands, as a lane of its epic — the factory's `lane`
 const LANES = ["draft", "approved", "running", "delivered"];
-const laneOf = r => r.state === "draft" ? "draft" : ["delivered", "superseded"].includes(r.state) ? "delivered"
-  : ["running", "stopped", "look", "question"].includes(r.mark) || r.state === "can continue" ? "running" : "approved";
-const heat = r => r.mark === "stopped" ? "bad" : ["running", "look", "question"].includes(r.mark) ? "hot" : r.state === "ready" ? "ok" : "";
+const laneOf = r => r.lane || "approved";
 function storyCard(r) {
   const stage = r.stage && r.stage !== "—" ? ` · ${r.stage}` : "";
-  return `<div class="scard ${heat(r)}">${story(r.story, r.title)}<div class="id">${esc(r.state)}${esc(stage)}${r.delivered_text ? ` · ${esc(r.delivered_text)}` : ""}</div>
+  return `<div class="scard l-${segment(r)}">${story(r.story, r.title)}<div class="id">${esc(r.state)}${esc(stage)}${r.delivered_text ? ` · ${esc(r.delivered_text)}` : ""}</div>
     ${(r.actions || []).length ? `<div class="acts">${acts(r.actions)}</div>` : ""}</div>`;
 }
-function lane(name, rows, order) {
+function lane(name, rows, order, epic) {
   if (name === "delivered") rows = rows.slice().sort((a, b) => order.indexOf(a.story) - order.indexOf(b.story));
   const shown = name === "delivered" ? rows.slice(0, 3) : rows, rest = rows.slice(shown.length);
   return `<div class="lane"><h4>${name} <span>${rows.length}</span></h4>${shown.map(storyCard).join("")}
-    ${rest.length ? `<details><summary>${rest.length} more</summary>${rest.map(storyCard).join("")}</details>` : ""}</div>`;
+    ${rest.length ? `<details data-fold="lane:${esc(epic)}:${name}"${foldOpen(`lane:${epic}:${name}`)}><summary>${rest.length} more</summary>${rest.map(storyCard).join("")}</details>` : ""}</div>`;
 }
+// a segment a story, in the lanes' order from left to right — draft, released, on its way, delivered —, the superseded
+// last: the strip reads as the lanes beneath it
+const STRIP = ["draft", "approved", "running", "stopped", "delivered", "superseded"];
+const segment = r => r.mark === "stopped" ? "stopped" : laneOf(r);
+const stripOf = rows => rows.map(segment).sort((a, b) => STRIP.indexOf(a) - STRIP.indexOf(b)).map(l => `<i class="l-${l}"></i>`).join("");
+const STRIP_KEY = `<div class="legend"><span><i class="strip-key l-draft"></i>draft</span><span><i class="strip-key l-approved"></i>released</span>
+  <span><i class="strip-key l-running"></i>on its way</span><span><i class="strip-key l-stopped"></i>stopped</span><span><i class="strip-key l-delivered"></i>delivered</span><span><i class="strip-key l-superseded"></i>superseded</span></div>`;
+// what an epic needs first, in one word: stopped, waiting for a person, running, a draft to release, ready, done
 function epicTone(e) {
-  const n = m => e.rows.filter(r => r.mark === m).length, ready = e.rows.filter(r => r.state === "ready").length;
+  const n = m => e.rows.filter(r => r.mark === m && laneOf(r) !== "draft").length;
+  const drafts = e.rows.filter(r => laneOf(r) === "draft").length, ready = e.rows.filter(r => r.state === "ready").length;
   if (n("stopped")) return `<span class="tone bad">${n("stopped")} stopped</span>`;
-  if (n("look") + n("question")) return `<span class="tone wait">${n("look") + n("question")} to look at</span>`;
+  if (n("look") + n("question")) return `<span class="tone wait">${n("look") + n("question")} waits for you</span>`;
   if (n("running")) return `<span class="tone wait">running</span>`;
+  if (drafts) return `<span class="tone mute">${drafts} draft${drafts === 1 ? "" : "s"}</span>`;
   if (e.total && e.delivered === e.total) return `<span class="tone ok">delivered</span>`;
   return ready ? `<span class="tone mute">${ready} ready</span>` : "";
 }
@@ -1182,31 +1254,32 @@ function epicTone(e) {
 function backlog(st) {
   // the epics as one list, as the cockpit shows them; an epic opens its stories in place, and stays open on a redraw
   const open = S.openEpics || (S.openEpics = new Set()), filter = S.backlogFilter || "all", order = st.delivered_order || [];
-  const keep = r => filter === "all" || (filter === "drafts" ? r.state === "draft" : !["delivered", "superseded"].includes(r.state));
+  const keep = r => filter === "all" || (filter === "drafts" ? r.lane === "draft" : !["delivered", "superseded"].includes(r.lane));
   const shown = (st.epics || []).map(e => Object.assign({}, e, {rows: e.rows.filter(keep)}))
     .filter(e => filter === "all" || e.rows.length);
   const counts = {all: (st.epics || []).length,
-    open: (st.epics || []).filter(e => e.rows.some(r => !["delivered", "superseded"].includes(r.state))).length,
-    drafts: (st.epics || []).filter(e => e.rows.some(r => r.state === "draft")).length};
+    open: (st.epics || []).filter(e => e.rows.some(r => !["delivered", "superseded"].includes(r.lane))).length,
+    drafts: (st.epics || []).filter(e => e.rows.some(r => r.lane === "draft")).length};
   const filters = `<div class="pick"><span class="seg">${["all", "open", "drafts"].map(f => `<button aria-pressed="${f === filter}" data-filter="${f}">${f}<span class="n">${counts[f]}</span></button>`).join("")}</span></div>`;
   const epics = shown.map(e => {
     const isOpen = open.has(e.epic) !== (filter !== "all"), full = (st.epics || []).find(x => x.epic === e.epic) || e;
     const head = `<div class="ehead" data-epic="${esc(e.epic)}" tabindex="0" role="button" aria-expanded="${isOpen}">
       <div class="name"><span class="caret" aria-hidden="true">${isOpen ? "▾" : "▸"}</span><b>${esc(e.title || e.epic)}</b><span class="id">${esc(e.epic)}</span>${e.metric ? `<span class="event">${esc(e.metric)}</span>` : ""}</div>
       <div class="meta">${epicTone(full)}<span>${full.delivered}/${full.total}</span></div>
-      <div class="strip" title="${full.delivered} of ${full.total} delivered">${full.rows.map(r => `<i class="l-${r.mark === "stopped" ? "stopped" : laneOf(r)}"></i>`).join("")}</div></div>`;
+      <div class="strip" title="${full.delivered} of ${full.total} delivered">${stripOf(full.rows)}</div></div>`;
     const body = !isOpen ? "" : `<div class="ebody">`
       + (e.goal ? `<p class="about">${esc(e.goal)}</p>` : "")
-      + ((st.journeys || []).filter(j => j.epic === e.epic).map(j => `<p class="rec">${esc(j.text)}</p>`).join(""))
-      + (e.rows.length ? `<div class="lanes">${LANES.map(name => lane(name, e.rows.filter(r => laneOf(r) === name), order)).join("")}</div>` : `<p class="empty">No story yet.</p>`)
-      + `<div class="acts">${acts(e.actions)}</div></div>`;
+      + qualityLine(full.signals)
+      + (e.rows.length ? `<div class="lanes">${LANES.map(name => lane(name, e.rows.filter(r => laneOf(r) === name || (name === "delivered" && laneOf(r) === "superseded")), order, e.epic)).join("")}</div>` : `<p class="empty">No story yet.</p>`)
+      // the epic's own buttons, and beside them why one is offered — a delivered epic without its journey
+      + `<div class="acts">${acts(e.actions)}${(st.journeys || []).filter(j => j.epic === e.epic).map(j => `<span class="hint">${esc(j.text)}</span>`).join("")}</div></div>`;
     return `<div class="erow">${head}${body}</div>`;
   }).join("");
   const findings = (st.findings || []).map(f => `<tr><td><span class="state">${esc(f.severity)}</span></td>
     <td>${esc(f.plain || f.defect)}<div class="id">${esc(f.row)} · ${esc(f.where)}</div></td><td class="act"><div class="acts">${act(f.action)}</div></td></tr>`).join("");
   return nextLine(st) + card("A wish", "your words become a story, kept as a draft until you release it", act((st.entries || {}).wish))
     + (epics || filter !== "all" ? card("Epics", filter === "all" ? "newest first — open one to see its stories by where they stand" : filter === "drafts" ? "the drafts, waiting for your release" : "what is not delivered yet",
-        filters + (epics ? `<div class="erows">${epics}</div>` : `<p class="empty">Nothing here.</p>`))
+        filters + STRIP_KEY + (epics ? `<div class="erows">${epics}</div>` : `<p class="empty">Nothing here.</p>`))
       : card("", "", `<p class="empty">The backlog is empty.</p>`))
     + (findings ? `<details class="card more" data-fold="findings"${foldOpen("findings")}><summary><h2>Findings <span class="sub">${(st.findings || []).length} the judge kept open — each to the backlog or done</span></h2></summary><table>${findings}</table></details>` : "");
 }
@@ -1259,7 +1332,7 @@ function run(st) {
   const ready = (st.rows || []).filter(r => st.queue && st.queue.ready.includes(r.story)).map(storyRow).join("");
   return nextLine(st)
     + card("Running", "a story's course through its stages — running, or stopped where it goes on", live || `<p class="empty">No stage runs.</p>`)
-    + card("Output", `<span id="follow-title"></span>`, `<div class="acts" id="follow-acts"></div><pre class="out" id="follow-out"></pre>`)
+    + card("Output", `<span id="follow-title" data-own></span>`, `<div class="acts" id="follow-acts" data-own></div><pre class="out" id="follow-out" data-own></pre>`)
     + card("Requests", "worked before the next story, oldest first", tickets ? `<div class="queue">${tickets}</div>` : `<p class="empty">No request waits.</p>`)
     + (ready ? card("Next in line", "ready, in the order the factory takes them", `<table>${ready}</table>`) : "")
     + card("The factory", "", factory);
@@ -1290,8 +1363,9 @@ function paintFollow() {
   if (!out) return;
   $("follow-title").textContent = S.follow ? `${S.follow.kind} ${S.follow.id}` : "follow a running stage or request";
   $("follow-acts").innerHTML = S.follow ? `<button class="btn" data-call="unfollow">stop following</button>` : "";
-  const atEnd = out.scrollTop + out.clientHeight >= out.scrollHeight - 20;
-  out.textContent = S.followLines.join("\n") || (S.follow ? "waiting for output…" : "");
+  const atEnd = out.scrollTop + out.clientHeight >= out.scrollHeight - 20;   // at the end it follows the newest line
+  const text = S.followLines.join("\n") || (S.follow ? "waiting for output…" : "");
+  if (out.textContent !== text) out.textContent = text;
   if (atEnd) out.scrollTop = out.scrollHeight;
 }
 
@@ -1390,6 +1464,40 @@ document.addEventListener("mousemove", event => {
   tip.style.left = `${Math.min(left, room)}px`; tip.style.top = `${(event.clientY - box.top) - tip.offsetHeight - 12}px`;
 });
 
+// --- quality: the signals the factory counts per story, summed — shown as counted, never rated -------------------
+const sum = o => Object.values(o || {}).reduce((n, v) => n + v, 0);
+const domainWords = o => Object.entries(o || {}).sort((a, b) => b[1] - a[1]).map(([c, n]) => `${n} ${c.replace(/^domain-/, "")}`).join(" · ");
+function qualityCard(q) {
+  if (!q || !q.stories) return "";
+  const domain = sum(q.domain), corrected = sum(q.corrections);
+  const tiles = [
+    [`${q.answered}/${q.asked}`, "questions answered", "a stage asked, a person answered", ""],
+    [`${q.assumptions_answered}`, "assumptions answered", `${q.assumptions_open} still open`, q.assumptions_open ? "bad" : ""],
+    [`${q.plan_open}`, "left open by plans", "what a plan named and did not decide", ""],
+    [`${domain}`, "domain findings", domain ? domainWords(q.domain) : "none confirmed", domain ? "bad" : ""],
+    [`${corrected}`, "corrections at acceptance", corrected ? domainWords(q.corrections) : "none", corrected ? "bad" : ""],
+  ].map(([n, label, said, cls]) => `<div class="tile ${cls}"><b>${esc(n)}</b><span>${esc(label)}</span><small>${esc(said)}</small></div>`).join("");
+  const found = Object.entries(q.findings || {}).sort((a, b) => b[1] - a[1]), most = found.length ? found[0][1] : 1;
+  const bars = found.map(([name, n]) => `<span class="lbl">${esc(name)}</span><span class="track"><i style="width:${Math.round(100 * n / most)}%"></i></span><span class="n">${n}</span>`).join("");
+  const rules = (q.named
+    ? `<b>${q.named}</b> rules named in ${q.measured} measured ${q.measured === 1 ? "story" : "stories"} — killed ${q.killed} · red ${q.red} · survived ${q.survived} · no-break ${q["no-break"]} — kill rate <b>${q.kill_rate.toFixed(2)}</b>, guarded <b>${q.guarded_rate.toFixed(2)}</b>`
+    : q.measured ? `${q.measured} measured ${q.measured === 1 ? "story names" : "stories name"} no rule` : `No rule measured yet`);
+  return card("Quality", "what the stages asked, what the judge confirmed, what a person corrected — counted over every story, never rated",
+    `<div class="tiles five">${tiles}</div>`
+    + (bars ? `<h3>Findings the judge confirmed, by perspective</h3><div class="qbars">${bars}</div>` : "")
+    + `<p class="qrules">${rules}<span class="hint">of ${q.stories} stories: ${q.measured} measured · ${q.not_measured} tested before rules were recorded, counted as not measured, never as zero · ${q.without_test || 0} delivered without a test stage (a task, an adopted story) — nothing to measure · ${q.open || 0} not delivered</span></p>`);
+}
+// the same figures in one line, for an epic
+function qualityLine(q) {
+  if (!q || !q.stories) return "";
+  const domain = sum(q.domain), found = Object.entries(q.findings || {}).sort((a, b) => b[1] - a[1]);
+  return `<div class="qline"><span>questions <b>${q.answered}/${q.asked}</b></span><span>assumptions <b>${q.assumptions_answered}</b>${q.assumptions_open ? ` <span class="bad">${q.assumptions_open} open</span>` : ""}</span>`
+    + `<span>left open by plans <b>${q.plan_open}</b></span>`
+    + (found.length ? `<span>findings ${found.map(([n, c]) => `${esc(n)} <b>${c}</b>`).join(" · ")}</span>` : "")
+    + `<span>domain <b class="${domain ? "bad" : ""}">${domain ? esc(domainWords(q.domain)) : "0"}</b></span>`
+    + (q.named ? `<span>kill rate <b>${q.kill_rate.toFixed(2)}</b> (${q.named} rules)</span>` : "") + `</div>`;
+}
+
 function delivered(st) {
   const rows = Object.fromEntries((st.rows || []).map(r => [r.story, r])), events = Object.fromEntries((st.epics || []).map(e => [e.epic, e.metric]));
   const tiles = [[`${st.delivered}`, `of ${st.total} stories delivered`, "lead"], [st.seconds_text, "worked"], [st.tokens_text, "tokens"], [st.cost_text, "cost"]]
@@ -1404,8 +1512,10 @@ function delivered(st) {
     <div class="epic cut" title="${esc(r.epic)}">${esc(r.epic)}</div>
     <div class="ev cut">${events[r.epic] ? `<span class="event" title="${esc(events[r.epic])}">${esc(events[r.epic])}</span>` : ""}</div>
     <div class="fig">${esc(r.seconds_text || "")}</div><div class="fig">${esc(r.cost_text || "")}</div></div>`;
-  return card("Delivered", "what is delivered, by day, with the outcome event its epic is measured by",
-    `<div class="tiles">${tiles}</div>` + curveCard(st) + (days.length ? `<div class="days">${days.map(d => `<div class="day"><h4>${esc(d.day)}</h4>${d.rows.map(line).join("")}</div>`).join("")}</div>` : `<p class="empty">Nothing delivered yet.</p>`));
+  return card("Delivered", "what is delivered, and what it cost as it summed up",
+    `<div class="tiles">${tiles}</div>` + curveCard(st))
+    + qualityCard(st.signals)
+    + card("By day", "each delivery with the outcome event its epic is measured by", (days.length ? `<div class="days">${days.map(d => `<div class="day"><h4>${esc(d.day)}</h4>${d.rows.map(line).join("")}</div>`).join("")}</div>` : `<p class="empty">Nothing delivered yet.</p>`));
 }
 
 // --- one story -----------------------------------------------------------------------------------------------------
@@ -1436,7 +1546,7 @@ async function openStory(id) {
     <dl class="kv"><dt>story</dt><dd class="mono">${esc(id)}</dd><dt>state</dt><dd>${esc(row.state || v.situation || "")}</dd>
       ${v.context ? `<dt>context</dt><dd>${esc(v.context)}</dd>` : ""}<dt>file</dt><dd><code>${esc(v.path)}</code></dd>
       ${row.tokens_text ? `<dt>tokens</dt><dd>${esc(row.tokens_text)}${row.cost_text ? " · " + esc(row.cost_text) : ""}</dd>` : ""}</dl>
-    <div class="acts">${acts((v.actions || []).filter(a => a.request.open !== "words"), "d")}<button class="btn" data-call="follow" data-kind="story" data-id="${esc(id)}">output</button></div>
+    <div class="acts">${acts((v.actions || []).filter(a => a.request.open !== "words"), "d")}${Object.keys(v.stages || {}).length || row.mark === "running" ? `<button class="btn" data-call="follow" data-kind="story" data-id="${esc(id)}">output</button>` : ""}</div>
     ${(v.actions || []).filter(a => a.request.open === "words" && !a.waits_on).map(a => `<h2>${esc(a.label)}</h2>${act(a, "d")}`).join("")}
     ${sections}
     ${stages ? `<h2>Processes</h2><table><tr><th>process</th><th class="num">runs</th><th class="num">time</th><th class="num">tokens</th><th class="num hide-s">cost</th><th>why</th></tr>${stages}</table>` : ""}`;

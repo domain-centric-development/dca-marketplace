@@ -630,11 +630,13 @@ class ProposalFacts(Value):
 
 
 class ReviewFacts(Value):
-    """The review perspectives: the ones with a report, without a file, with a file that is no report."""
+    """The review perspectives: the ones with a report, without a file, with a file that is no report — and the
+    perspectives the judge's confirmed findings name that the profile does not know (`unknown`)."""
 
     read: typing.Tuple[Detail, ...]
     missing: typing.Tuple[Detail, ...]
     malformed: typing.Tuple[Detail, ...]
+    unknown: typing.Tuple[Detail, ...] = ()
 
 
 class PipelineFacts(Value):

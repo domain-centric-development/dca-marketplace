@@ -17,6 +17,7 @@ OUTCOME = CheckName("outcome")
 DOCUMENTED = CheckName("documented")
 GLOSSARY = CheckName("glossary")
 REVIEWS = CheckName("reviews")
+JUDGE_PERSPECTIVE = CheckName("judge-perspective")
 PIPELINE = CheckName("pipeline")
 
 #: The contract that holds a delivered story to its outcome event.
@@ -157,6 +158,12 @@ class DeliveryChecks(DomainService):
         if facts.read:
             found.append(REVIEWS.ok(Said(f"{len(facts.read)} review file(s) for the judge to converge from: "
                                          f"{', '.join(r.value for r in facts.read)}")))
+        # experimental: said, not refused, until the judges keep to it (WP-176)
+        if facts.unknown:
+            found.append(JUDGE_PERSPECTIVE.note(Said(
+                f"a confirmed finding names a perspective the profile does not know: "
+                f"{', '.join(u.value for u in facts.unknown)} — a finding names one of the review perspectives, so "
+                f"the figures per perspective stay whole")))
         return tuple(found)
 
     @staticmethod

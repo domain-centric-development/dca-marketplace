@@ -11,7 +11,7 @@ import typing
 from ...domain.model.correction import REASON_CODES
 from ...domain.model.run_argument import ArgumentMeaning, RunArgument
 from ...domain.model.story import StoryId
-from ..shared.requests import ID_WORD
+from ..shared.requests import ID_WORD, KIND
 
 #: A request as an action offers it: {kind, fields, words, open} — `open` names what the person still has to give.
 Offer = typing.Dict[str, typing.Any]
@@ -28,11 +28,13 @@ def make_action(names_story: NamesStory, text: str = "", skill: str = "", shell:
                 label: str = "", primary: bool = False) -> Action:
     """What to do, every way: `skill` in an agent session, `shell` in a terminal — empty where a
     terminal cannot do it (writing a story needs an agent) —, and `request` from a page. `label` is the
-    word on its button and `primary` marks the one to press: a view draws them, it never chooses them."""
+    word on its button and `primary` marks the one to press: a view draws them, it never chooses them. `creates`: a
+    press has an agent write something new — a draft, an epic, a report —, and the person sees it before pressing."""
     action: Action = dict(text=text, skill=skill, shell=shell, look=look, label=label, primary=primary)
     request = request_of(skill, names_story)        # the same press from a page: the request it writes (WP-91)
     if request:
         action["request"] = request
+        action["creates"] = KIND[request["kind"]].creates
     return action
 
 
