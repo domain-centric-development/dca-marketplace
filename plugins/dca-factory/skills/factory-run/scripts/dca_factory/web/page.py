@@ -230,6 +230,7 @@ details.feature { border-top: 1px solid var(--line); padding: 6px 0; } details.f
 details.feature > summary .hint { font: 400 13px var(--body); margin-left: 6px; }
 .rule-head { font: 600 14px var(--display); margin: 10px 0 2px; }
 .pend { font: 500 11.5px var(--mono); padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
+.pend.p-gone { background: color-mix(in srgb, var(--stop) 22%, transparent); }
 .pend.p-changes { background: color-mix(in srgb, var(--wait) 22%, transparent); } .pend.p-adds { background: color-mix(in srgb, var(--teal) 18%, transparent); }
 .way-link { background: none; border: 0; padding: 2px 0; font: 500 13px var(--mono); color: var(--accent); cursor: pointer; }
 details.more > summary { cursor: pointer; list-style: none; } details.more > summary::-webkit-details-marker { display: none; }
@@ -795,10 +796,15 @@ const step = line => { const m = String(line).match(/^\s*-\s*(Given|When|Then|An
 
 function scenario(item) {
   const open = (S.openScenarios || (S.openScenarios = new Set())).has(item.key);
-  const heading = item.form === "line" ? item.lines[0].replace(/^-\s*[a-z0-9-]+:\s*/, "") : item.key.replace(/-/g, " ");
-  const changes = item.changed_by.map(c => `<span class="pend p-${esc(c.verdict)}" title="${esc(c.title)} (${esc(c.status)})">${esc(c.verdict)} by ${esc(c.story)}</span>`).join(" ");
+  const heading = item.form === "line" ? item.lines.join(" ").replace(/\s+/g, " ").replace(/^-\s*[a-z0-9-]+:\s*/, "") : item.key.replace(/-/g, " ");
+  const h = item.health || null;
+  const proof = !h ? "" : h.proof === "orphaned" ? `<span class="pend p-gone" title="${esc(h.missing.join(", "))}">test gone</span>`
+    : h.proof === "untested" ? `<span class="pend p-gone">no test</span>` : "";
+  const changes = proof + item.changed_by.map(c => `<span class="pend p-${esc(c.verdict)}" title="${esc(c.title)} (${esc(c.status)})">${esc(c.verdict)} by ${esc(c.story)}</span>`).join(" ");
   const body = !open ? "" : `<div class="rbody">${item.form === "scenario" ? item.lines.slice(1).map(step).join("") : ""}
-    <p class="hint">${item.tests.length ? "test: " + item.tests.map(esc).join(", ") : "no test named"} · <code>${esc(item.key)}</code></p>
+    <p class="hint">${item.tests.length ? "test: " + item.tests.map(t => esc(t) + (h && h.missing.includes(t) ? " <b>— not in the code</b>" : "")).join(", ") : "no test named"} · <code>${esc(item.key)}</code>
+      · ${h && h.delivered_by ? `delivered by ${esc(h.delivered_by.story)}${h.delivered_by.how ? " (" + esc(h.delivered_by.how) + ")" : ""}` : "no delivered story brought it"}</p>
+    ${item.fix ? `<div class="spec-act">${act(item.fix, "s")}</div>` : ""}
     ${item.change ? `<div class="spec-act">${act(item.change, "s")}</div>` : ""}</div>`;
   return `<div class="rrow${open ? " open" : ""}"><button type="button" class="rhead" data-open-scenario="${esc(item.key)}" aria-expanded="${open}">
     <span class="caret" aria-hidden="true">${open ? "▾" : "▸"}</span><span class="rgist">${inline(heading)}</span><span>${changes}</span></button>${body}</div>`;
@@ -823,6 +829,13 @@ function specContext(c) {
       ${c.add ? `<details class="fold" data-fold="addfeature:${esc(c.context)}"${foldOpen("addfeature:" + c.context)}><summary>add a feature</summary><div class="spec-act">${act(c.add, "s")}</div></details>` : ""}</div>`;
 }
 
+// how a context stands over the whole of it: tests gone or missing, criteria no delivered story brought
+function healthCell(h) {
+  if (!h) return "";
+  const bad = [h.orphaned ? `<span class="pend p-gone">${h.orphaned} test gone</span>` : "", h.untested ? `<span class="pend p-gone">${h.untested} no test</span>` : ""].filter(Boolean);
+  return (bad.length ? bad.join(" ") : `<span class="hint">all tested</span>`) + (h.undelivered ? ` <span class="hint" title="adopted, delivered by hand without a story, or written before the factory">· ${h.undelivered} not from a story</span>` : "");
+}
+
 function domainCard() {
   if (!S.spec) { loadSpec(); return card("Domain", "", `<p class="empty">Reading the contexts…</p>`); }
   const open = S.openContexts || (S.openContexts = new Set());
@@ -831,11 +844,12 @@ function domainCard() {
     return `<tr class="epic-row ctx-row${isOpen ? " open" : ""}" data-context="${esc(c.context)}" tabindex="0" aria-expanded="${isOpen}">
       <td><span class="caret" aria-hidden="true">${isOpen ? "▾" : "▸"}</span> <span class="title">${esc(c.context)}</span><div class="id">${esc(c.subdomain)}</div></td>
       <td class="hide-s">${esc(c.purpose)}</td><td class="num">${c.features.length}</td><td class="num">${c.criteria}</td>
-      <td class="num">${pending ? `<span class="pend p-changes">${pending}</span>` : "—"}</td></tr>`
-      + (isOpen ? `<tr class="epic-body"><td colspan="5">${specContext(c)}</td></tr>` : "");
+      <td class="num">${pending ? `<span class="pend p-changes">${pending}</span>` : "—"}</td>
+      <td class="hide-s">${healthCell(c.health)}</td></tr>`
+      + (isOpen ? `<tr class="epic-body"><td colspan="6">${specContext(c)}</td></tr>` : "");
   }).join("");
   return card("Domain", "the contexts as designed, and what holds in each — the model from its glossary, the features as the gate delivered them",
-    rows ? `<table class="epics"><tr><th>context</th><th class="hide-s">what it is for</th><th class="num">features</th><th class="num">criteria</th><th class="num">open changes</th></tr>${rows}</table>`
+    rows ? `<table class="epics"><tr><th>context</th><th class="hide-s">what it is for</th><th class="num">features</th><th class="num">criteria</th><th class="num">open changes</th><th class="hide-s">health</th></tr>${rows}</table>`
       : `<p class="empty">No spec yet — what holds is written by the stories the gate delivers.</p>`);
 }
 document.addEventListener("click", event => {

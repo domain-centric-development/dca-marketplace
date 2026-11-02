@@ -7,7 +7,7 @@ import enum
 import typing
 
 from ....building_blocks import AggregateRoot, Id, Value
-from .criterion import Criterion, CriterionKey, FeatureName, RuleText
+from .criterion import Criterion, CriterionKey, FeatureName, RuleText, Selector
 from .delta import Verdict
 from .living_spec import LivingSpec
 
@@ -136,6 +136,34 @@ class PendingChange(Value):
     verdict: Verdict
 
 
+class Delivery(Value):
+    """A delivered story: the criteria it brought, and how it was delivered — `gate`, `hand:<who>`, `adopt`."""
+
+    story: StoryRef
+    title: Statement
+    context: ContextName
+    at: Statement
+    how: Statement
+    keys: typing.Tuple[CriterionKey, ...]
+
+
+class Proof(enum.Enum):
+    """What stands behind a criterion: a test the code holds, a test it named that the code no longer holds, none."""
+
+    TESTED = "tested"
+    ORPHANED = "orphaned"
+    UNTESTED = "untested"
+
+
+class Health(Value):
+    """A criterion's standing over the whole spec: what proves it, which named test is gone, who delivered it."""
+
+    key: CriterionKey
+    proof: Proof
+    missing: typing.Tuple[Selector, ...]
+    delivered_by: typing.Optional[Delivery]
+
+
 class ContextSpec(AggregateRoot[ContextName]):
     """A bounded context as the spec holds it: what it is for, its subdomain, its domain model and its features. It
     answers which open stories would change what it holds — never changes it: what holds changes only by a story
@@ -183,4 +211,17 @@ class ContextSpec(AggregateRoot[ContextName]):
             for key, verdict in LivingSpec.derived(story.criteria, held).items():
                 if verdict is not Verdict.HOLDS:
                     found.append(PendingChange(story.story, story.title, story.status, key, verdict))
+        return tuple(found)
+
+    def health(self, located: typing.AbstractSet[Selector],
+               deliveries: typing.Sequence[Delivery]) -> typing.Tuple[Health, ...]:
+        """Each criterion it holds with what proves it — every named test found, one gone, none named — and the last
+        delivered story of this context that brought it (none: adopted or written before the factory)."""
+        mine = sorted((d for d in deliveries if d.context == self._name), key=lambda d: d.at.value)
+        found = []
+        for item in self.held():
+            missing = tuple(t for t in item.tests if t not in located)
+            proof = Proof.UNTESTED if not item.tests else Proof.ORPHANED if missing else Proof.TESTED
+            by = next((d for d in reversed(mine) if item.key in d.keys), None)
+            found.append(Health(item.key, proof, missing, by))
         return tuple(found)

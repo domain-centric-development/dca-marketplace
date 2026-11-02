@@ -354,7 +354,8 @@ export type Denial = { stage: string; tool: string; command: string }
 // What holds, as `factory.sh spec --format json` prints it (dca-factory 0.123.0): each context with its purpose, its
 // domain model, its features with their rules and criteria, and the open stories that would change them.
 export type SpecChange = { label: string; request: { kind: string; prefix: string } }
-export type SpecCriterion = { key: string; form: string; lines: string[]; tests: string[]; changed_by: { story: string; title: string; status: string; verdict: string }[]; change?: SpecChange }
+export type SpecCriterion = { key: string; form: string; lines: string[]; tests: string[]; changed_by: { story: string; title: string; status: string; verdict: string }[]; change?: SpecChange; fix?: SpecChange
+  health?: { proof: string; missing: string[]; delivered_by: { story: string; title: string; at: string; how: string } | null } }
 export type SpecContext = {
   context: string
   purpose: string
@@ -364,5 +365,6 @@ export type SpecContext = {
   criteria: number
   coming: { story: string; title: string; status: string; keys: { key: string }[] }[]
   add?: SpecChange
+  health?: { tested: number; orphaned: number; untested: number; undelivered: number }
 }
 export type SpecView = { contexts: SpecContext[] }

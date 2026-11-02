@@ -38,6 +38,17 @@ def addition(context: str, feature: str) -> Model:
                                     f"rule it serves. What should hold, in the person's words:"))
 
 
+def repair(context: str, key: str, health: Model) -> Model:
+    """A wish that becomes a draft task giving a criterion its proof again — its text stays as it holds."""
+    gone = ", ".join(f"`{t}`" for t in health["missing"])
+    why = f"names the test {gone}, which the code no longer holds" if gone else "names no test"
+    return dict(label="fix this", text="Anything to add? (optional)", skill="/factory-backlog", primary=False,
+                request=dict(kind="wish", fields={}, words="", open="words", draft=f"fix:{context}:{key}",
+                             prefix=f"The criterion `{key}` of context `{context}` {why}. Write a draft task that "
+                                    f"proves it again — the criterion's text stays as it holds, its `Test:` line names "
+                                    f"the test that does. The person adds:"))
+
+
 def actions(view: Model) -> Model:
     """The view with what a person can ask from it: each criterion a change, each feature an addition."""
     for context in view["contexts"]:
@@ -46,6 +57,8 @@ def actions(view: Model) -> Model:
             for rule in feature["rules"]:
                 for item in rule["criteria"]:
                     item["change"] = change(context["context"], feature["feature"], rule["rule"], item["key"])
+                    if item.get("health") and item["health"]["proof"] != "tested":
+                        item["fix"] = repair(context["context"], item["key"], item["health"])
         context["add"] = dict(addition(context["context"], ""), label="add a feature",
                               text="Which feature, and what should hold in it?")
     return view
@@ -56,6 +69,10 @@ def markdown(view: Model) -> str:
              "glossaries and the designed domain. Never edit it; what holds changes by a story the gate delivers.", ""]
     for context in view["contexts"]:
         lines += [f"## {context['context']}" + (f" — {context['subdomain']}" if context["subdomain"] else ""), ""]
+        if context.get("health"):
+            h = context["health"]
+            lines += [f"Health: {h['tested']} tested, {h['orphaned']} with a test gone, {h['untested']} untested, "
+                      f"{h['undelivered']} no story delivered.", ""]
         if context["purpose"]:
             lines += [context["purpose"], ""]
         for group in context["model"]:
@@ -68,7 +85,10 @@ def markdown(view: Model) -> str:
                     lines += [f"**Rule:** {rule['rule']}", ""]
                 for item in rule["criteria"]:
                     changed = ", ".join(f"{c['story']} {c['verdict']}" for c in item["changed_by"])
-                    lines.append(f"- `{item['key']}`" + (f" — open: {changed}" if changed else ""))
+                    proof = item.get("health", {}).get("proof", "")
+                    gone = ", ".join(item.get("health", {}).get("missing", []))
+                    lines.append(f"- `{item['key']}`" + (f" [{proof}{': ' + gone if gone else ''}]" if proof and proof != "tested" else "")
+                                 + (f" — open: {changed}" if changed else ""))
                 lines.append("")
         for story in context["coming"]:
             lines.append(f"- coming with `{story['story']}` ({story['status']}): "
@@ -82,7 +102,9 @@ def main(argv: typing.Sequence[str]) -> int:
     parser.add_argument("--spec", action="store_true", required=True)
     parser.add_argument("--context", help="one context by its folder name")
     parser.add_argument("--format", choices=("md", "json"), default="md")
+    parser.add_argument("--health", action="store_true",
+                        help="also how each criterion stands: tested, its test gone, untested; who delivered it")
     args = parser.parse_args(list(argv))
-    view = wiring.show_spec(os.getcwd()).execute(ShowSpecQuery(args.context))
+    view = wiring.show_spec(os.getcwd()).execute(ShowSpecQuery(args.context, args.health))
     sys.stdout.write(json.dumps(actions(view), indent=2) + "\n" if args.format == "json" else markdown(view))
     return 0

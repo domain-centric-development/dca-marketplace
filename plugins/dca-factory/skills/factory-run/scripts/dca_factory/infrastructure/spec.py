@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from ..sharedkernel.adapter.outgoing.profile.profile_files import read_profile, resolve_profile, set_places
 from ..spec.adapter.outgoing.delivery.open_story_files import OpenStoryFiles
+from ..spec.adapter.outgoing.delivery.proof_files import DeliveryFiles, TestSourceFiles
 from ..spec.adapter.outgoing.files.context_spec_files import ContextSpecFiles
 from ..spec.application.showspec.show_spec import ShowSpecUseCase
 
 
 def show_spec(cwd: str) -> ShowSpecUseCase:
     set_places(read_profile(resolve_profile(None, cwd)))
-    return ShowSpecUseCase(ContextSpecFiles(cwd), OpenStoryFiles(cwd))
+    return ShowSpecUseCase(ContextSpecFiles(cwd), OpenStoryFiles(cwd), TestSourceFiles(cwd), DeliveryFiles(cwd))

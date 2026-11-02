@@ -435,7 +435,7 @@ async function showTab($: EngineInterface, id: Tab): Promise<void> {
   await update($, tab, () => id)
   if (id === 'describe' || id === 'spec') {
     const root = await $.session.root()
-    const view = await factoryJson<SpecView>($, root, ['spec', '--format', 'json']).catch(() => null)
+    const view = await factoryJson<SpecView>($, root, ['spec', '--format', 'json', '--health']).catch(() => null)
     await update($, specView, () => (view && Array.isArray(view.contexts) ? view : null))
   }
   if (id === 'rules' && !(await read($, rulesView))) {
@@ -1257,13 +1257,14 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
     return [
       ui.section('Domain', 'the contexts as designed, and what holds in each — Enter opens a context'),
       ui.table(
-        [{ name: 'context', width: 14 }, { name: 'subdomain', width: 12 }, { name: 'features', width: 8, isNumber: true }, { name: 'criteria', width: 8, isNumber: true }, { name: 'open', width: 6, isNumber: true }, { name: 'what it is for', width: 30, isWide: true }],
+        [{ name: 'context', width: 14 }, { name: 'subdomain', width: 12 }, { name: 'features', width: 8, isNumber: true }, { name: 'criteria', width: 8, isNumber: true }, { name: 'open', width: 6, isNumber: true }, { name: 'health', width: 18 }, { name: 'what it is for', width: 30, isWide: true }],
         holds.contexts.map((c): Cell[] => [
           ui.open(`ctx-${c.context}`, c.context, () => void update($, detail, () => ({ kind: 'spec-context', context: c.context, back: null }) as Detail)),
           { text: c.subdomain, color: C.muted },
           { text: String(c.features.length) },
           { text: String(c.criteria) },
           { text: open(c) ? String(open(c)) : '—', color: open(c) ? C.wait : C.muted },
+          { text: !c.health ? '' : c.health.orphaned || c.health.untested ? `${c.health.orphaned} gone · ${c.health.untested} untested` : 'all tested', color: c.health && (c.health.orphaned || c.health.untested) ? C.fail : C.muted },
           { text: c.purpose, color: C.muted },
         ]),
         'No context yet.',
@@ -1410,9 +1411,12 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
               [
                 ...item.lines.filter(line => !line.startsWith('####')).map(line => ({ label: (line.match(/^\s*-\s*(Given|When|Then|And|But)\b/)?.[1] ?? 'holds').toLowerCase(), text: line.replace(/^\s*-\s*(Given|When|Then|And|But)?\s*/, '') })),
                 { label: 'test', text: item.tests.join(', ') || 'no test named', color: C.muted },
+                ...(item.health ? [{ label: 'proof', text: item.health.proof + (item.health.missing.length ? ` — gone: ${item.health.missing.join(', ')}` : ''), color: item.health.proof === 'tested' ? C.done : C.fail },
+                  { label: 'delivered', text: item.health.delivered_by ? `${item.health.delivered_by.story} (${item.health.delivered_by.how || '—'})` : 'no delivered story brought it', color: C.muted }] : []),
                 ...item.changed_by.map(ch => ({ label: ch.verdict, text: `${ch.story} — ${ch.title} (${ch.status})`, color: C.wait })),
               ])
           : <Text color={C.muted}>No such criterion.</Text>,
+        ...(item?.fix ? [asked(`fix-${item.key}`, 'Fix this', 'anything to add — it becomes a draft task', item.fix.request.prefix)] : []),
         ...(item?.change ? [asked(`change-${item.key}`, 'Change this', 'what should hold instead — it becomes a draft story', item.change.request.prefix)] : []),
       ],
       'b back · type a change, Enter writes it as a draft story',

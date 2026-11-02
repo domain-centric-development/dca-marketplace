@@ -12,6 +12,7 @@ import support  # noqa: F401 — puts the package on the path
 
 from dca_factory.sharedkernel.adapter.outgoing.profile.profile_files import set_places
 from dca_factory.spec.adapter.outgoing.delivery.open_story_files import OpenStoryFiles
+from dca_factory.spec.adapter.outgoing.delivery.proof_files import DeliveryFiles, TestSourceFiles
 from dca_factory.spec.adapter.outgoing.files.context_spec_files import ContextSpecFiles, terms_of
 from dca_factory.spec.application.showspec.show_spec import ShowSpecQuery, ShowSpecUseCase
 from dca_factory.spec.domain.model.context_spec import TermKind
@@ -52,7 +53,8 @@ class SpecViewTest(unittest.TestCase):
 
     def view(self, root):
         set_places({})
-        return ShowSpecUseCase(ContextSpecFiles(root), OpenStoryFiles(root)).execute(ShowSpecQuery())
+        return ShowSpecUseCase(ContextSpecFiles(root), OpenStoryFiles(root), TestSourceFiles(root),
+                               DeliveryFiles(root)).execute(ShowSpecQuery())
 
     def test_a_context_shows_its_purpose_its_model_its_features_and_what_open_stories_change(self):
         with tempfile.TemporaryDirectory() as root:
@@ -72,6 +74,29 @@ class SpecViewTest(unittest.TestCase):
             self.assertEqual([("s-1", "changes")], [(c["story"], c["verdict"]) for c in refused["changed_by"]])
             self.assertEqual([{"story": "s-1", "title": "A title names the field", "status": "approved",
                                "keys": [{"key": "a-long-title-is-refused"}]}], tasks["coming"])
+
+    def test_health_names_what_proves_each_criterion_a_test_gone_and_who_delivered_it(self):
+        with tempfile.TemporaryDirectory() as root:
+            plant(root, dict(PROJECT, **{
+                "product/spec/tasks/other/scenarios.md": "# other\n\n#### a-gone-test\n- Given a\n- When b\n- Then c\n"
+                                                         "Test: com.example.GoneTest#vanished\n",
+                "src/test/java/com/example/ListTest.java": "package com.example;\nclass ListTest { void created() {} }\n"}))
+            files = dict(PROJECT)
+            files["product/spec/tasks/listing/scenarios.md"] = files["product/spec/tasks/listing/scenarios.md"].replace(
+                "Test: ListTest#created", "Test: com.example.ListTest#created")
+            plant(root, {"product/spec/tasks/listing/scenarios.md": files["product/spec/tasks/listing/scenarios.md"]})
+            set_places({})
+            view = ShowSpecUseCase(ContextSpecFiles(root), OpenStoryFiles(root), TestSourceFiles(root),
+                                   DeliveryFiles(root)).execute(ShowSpecQuery(health=True))
+            [tasks] = view["contexts"]
+            items = {x["key"]: x["health"] for f in tasks["features"] for r in f["rules"] for x in r["criteria"]}
+            self.assertEqual("tested", items["a-task-is-created"]["proof"])
+            self.assertEqual("s-0", items["a-task-is-created"]["delivered_by"]["story"])
+            self.assertEqual("untested", items["an-empty-title-is-refused"]["proof"])
+            self.assertEqual(("orphaned", ["com.example.GoneTest#vanished"]),
+                             (items["a-gone-test"]["proof"], items["a-gone-test"]["missing"]))
+            self.assertIsNone(items["a-gone-test"]["delivered_by"])
+            self.assertEqual({"tested": 1, "orphaned": 1, "untested": 1, "undelivered": 2}, tasks["health"])
 
     def test_a_term_takes_its_kind_from_its_type_line_and_its_first_paragraph_as_meaning(self):
         with tempfile.TemporaryDirectory() as root:

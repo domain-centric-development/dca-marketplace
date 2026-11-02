@@ -7,10 +7,11 @@ import dataclasses
 import typing
 
 from ....building_blocks import UseCase
-from ...domain.model.context_spec import ContextName, ContextSpec, PendingChange, TermKind
+from ...domain.model.context_spec import ContextName, ContextSpec, Health, PendingChange, Proof, TermKind
 from ...domain.model.criterion import Criterion
 from ..shared.context_specs import ContextSpecs
 from ..shared.open_stories import OpenStories
+from ..shared.proofs import Deliveries, TestSources
 
 Model = typing.Dict[str, typing.Any]
 
@@ -20,6 +21,8 @@ class ShowSpecQuery:
     """`context`: one context by its folder name; None — every one."""
 
     context: typing.Optional[str] = None
+    #: also each criterion's health — what proves it, which test is gone, who delivered it (reads the code: slower)
+    health: bool = False
 
 
 class ShowSpecInputPort(UseCase[ShowSpecQuery, Model], typing.Protocol):
@@ -56,16 +59,43 @@ def context_model(spec: ContextSpec, pending: typing.Sequence[PendingChange]) ->
     )
 
 
-class ShowSpecUseCase:
-    """The contexts the project keeps, with what open stories would do to them."""
+def health_model(found: Health) -> Model:
+    by = found.delivered_by
+    return dict(proof=found.proof.value, missing=[t.value for t in found.missing],
+                delivered_by=dict(story=by.story.value, title=by.title.value, at=by.at.value, how=by.how.value)
+                if by else None)
 
-    def __init__(self, specs: ContextSpecs, stories: OpenStories) -> None:
+
+def with_health(model: Model, spec: ContextSpec, health: typing.Sequence[Health]) -> Model:
+    """The context's model with each criterion's health and the context's count of each proof and of criteria no
+    story delivered."""
+    by_key = {h.key.value: h for h in health}
+    for feature in model["features"]:
+        for rule in feature["rules"]:
+            for item in rule["criteria"]:
+                item["health"] = health_model(by_key[item["key"]])
+    model["health"] = dict({proof.value: sum(1 for h in health if h.proof is proof) for proof in Proof},
+                           undelivered=sum(1 for h in health if h.delivered_by is None))
+    return model
+
+
+class ShowSpecUseCase:
+    """The contexts the project keeps, with what open stories would do to them — and, asked, how each criterion
+    stands."""
+
+    def __init__(self, specs: ContextSpecs, stories: OpenStories, tests: TestSources, deliveries: Deliveries) -> None:
         self._specs = specs
         self._stories = stories
+        self._tests = tests
+        self._deliveries = deliveries
 
     def execute(self, query: ShowSpecQuery) -> Model:
         wanted = ContextName(query.context) if query.context else None
         stories = tuple(self._stories.not_delivered())
         contexts = [spec for spec in self._specs.contexts() if wanted is None or spec.id == wanted]
-        return dict(context=query.context,
-                    contexts=[context_model(spec, spec.pending(stories)) for spec in contexts])
+        models = [context_model(spec, spec.pending(stories)) for spec in contexts]
+        if query.health:
+            named = sorted({t for spec in contexts for item in spec.held() for t in item.tests}, key=lambda t: t.value)
+            located, delivered = self._tests.located(named), tuple(self._deliveries.delivered())
+            models = [with_health(model, spec, spec.health(located, delivered)) for model, spec in zip(models, contexts)]
+        return dict(context=query.context, health=query.health, contexts=models)
