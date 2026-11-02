@@ -99,6 +99,7 @@ class ShowStatusUseCase:
                                 round=facts.story_round(story_id))
             if stage in windows and not interrupted:
                 entry["part"] = facts.window_part(story_id, stage)
+            entry["course"] = self._course(story_id, stories.get(story_id), stage, entry.get("part", ""), windows)
             if live:
                 since = parse_time(started)
                 entry["ago"] = took_text((now - since).total_seconds()) + " ago" if since else ""
@@ -232,6 +233,15 @@ class ShowStatusUseCase:
                 primary: bool = False) -> Action:
         return make_action(self._facts.names_story, text=text, skill=skill, shell=shell, look=look, label=label,
                            primary=primary)
+
+    def _course(self, story_id: str, story: typing.Optional[Model], stage: str, part: str,
+                windows: typing.Mapping[str, typing.Tuple[str, ...]]) -> typing.List[Model]:
+        """The stages of the story's kind, each done, now or open — the stage a shared window is in, or its first."""
+        kind = self._facts.story_kind(story["path"]) if story and story.get("path") else "story"
+        stages = self._facts.stage_course(kind)
+        now = part or (windows[stage][0] if stage in windows else stage)
+        at = stages.index(now) if now in stages else -1
+        return [dict(stage=s, state="done" if n < at else "now" if n == at else "open") for n, s in enumerate(stages)]
 
     def _attention(self, story_id: str, story: Model,
                    profile: typing.Dict[str, str]) -> typing.Tuple[str, str, Action]:

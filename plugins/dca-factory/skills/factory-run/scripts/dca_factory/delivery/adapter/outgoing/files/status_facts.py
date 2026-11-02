@@ -329,6 +329,9 @@ class StatusFactFiles:
     def shared_windows(self) -> typing.Mapping[str, typing.Tuple[str, ...]]:
         return stage_windows()
 
+    def stage_course(self, kind: str) -> typing.Tuple[str, ...]:
+        return stage_order(kind)
+
     def window_part(self, story_id: str, window: str) -> str:
         return window_part_now(self._runs, story_id, window)
 

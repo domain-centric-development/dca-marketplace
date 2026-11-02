@@ -170,7 +170,7 @@ td .acts { margin-top: 0; justify-content: flex-end; }
 .hint { font: 400 12.5px var(--mono); color: var(--muted); }
 .kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin-top: 12px; font-size: 16px; }
 .kv dt { font: 400 12.5px var(--mono); color: var(--muted); padding-top: 3px; }
-pre.out { font: 12.5px/1.5 var(--mono); background: var(--code); border-radius: 8px; padding: 12px; max-height: 460px; overflow: auto;
+pre.out { font: 12.5px/1.5 var(--mono); background: #0f141d; color: #c9ced8; border-radius: 8px; padding: 12px; max-height: 460px; overflow: auto;
   white-space: pre-wrap; word-break: break-word; margin-top: 12px; }
 pre.out:empty { display: none; }
 .step b { font: 600 14px var(--display); color: var(--accent); margin-right: 6px; }
@@ -230,6 +230,89 @@ details.dm-group > summary { justify-content: flex-start; }
 .dm .rhead { padding: 5px 10px 5px 20px; }
 .dm .rrow.open { box-shadow: inset 3px 0 0 var(--teal); background: color-mix(in srgb, var(--teal) 7%, transparent); }
 .dm .spec-act { padding: 6px 10px 10px; }
+
+/* displays every page shares: an outcome event, a state in its colour */
+.event { font: 500 12px var(--mono); padding: 1px 9px 1px 7px; border-radius: 999px; background: color-mix(in srgb, var(--teal) 13%, transparent);
+  color: var(--accent); white-space: nowrap; }
+.event::before { content: "◆"; font-size: 8.5px; margin-right: 5px; vertical-align: 1px; }
+.tone { font: 600 10.5px var(--mono); letter-spacing: .07em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.tone.ok { color: var(--accent); background: color-mix(in srgb, var(--teal) 13%, transparent); }
+.tone.wait { color: var(--wait); background: color-mix(in srgb, var(--wait) 15%, transparent); }
+.tone.bad { color: var(--stop); background: color-mix(in srgb, var(--stop) 15%, transparent); }
+.tone.mute { color: var(--muted); box-shadow: inset 0 0 0 1px var(--line); }
+.small-btn .btn, .btn.small { font-size: 12.5px; padding: 4px 9px; }
+
+/* backlog: an epic as a strip of its stories, opened into lanes by where each stands */
+.erows { display: grid; gap: 8px; margin-top: 12px; }
+.erow { border-radius: 8px; background: var(--soft); }
+.ehead { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; padding: 9px 12px; cursor: pointer; align-items: baseline; }
+.ehead:focus-visible { outline: 2px solid var(--teal); outline-offset: 1px; border-radius: 8px; }
+.ehead .name { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; min-width: 0; }
+.ehead .name b { font: 600 15.5px var(--display); } .ehead .caret { color: var(--muted); font: 400 12px var(--mono); }
+.ehead .meta { display: flex; gap: 8px; align-items: center; font: 400 12.5px var(--mono); color: var(--muted); white-space: nowrap; }
+.strip { display: flex; gap: 2px; grid-column: 1 / -1; } .strip i { flex: 1; height: 5px; border-radius: 1px; background: var(--line); }
+.strip i.l-delivered { background: var(--teal); } .strip i.l-running { background: var(--wait); } .strip i.l-stopped { background: var(--stop); }
+.strip i.l-approved { background: color-mix(in srgb, var(--teal) 40%, var(--line)); }
+.ebody { padding: 0 12px 12px; } .ebody > .about { margin: 0 0 8px; }
+.lanes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 760px) { .lanes { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+.lane { background: var(--bg); border-radius: 8px; padding: 8px; min-width: 0; }
+.lane h4 { font: 600 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); display: flex; justify-content: space-between; margin-bottom: 6px; }
+.scard { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; margin-bottom: 6px; font-size: 14px; line-height: 1.35; }
+.scard .link.title { font: 500 14px var(--display); } .scard .id { margin-top: 3px; }
+.scard.hot { box-shadow: inset 3px 0 0 var(--wait); } .scard.ok { box-shadow: inset 3px 0 0 var(--teal); } .scard.bad { box-shadow: inset 3px 0 0 var(--stop); }
+.scard .acts { margin-top: 6px; } .scard .btn { font-size: 12.5px; padding: 4px 9px; }
+.lane details > summary { cursor: pointer; font: 500 12px var(--mono); color: var(--accent); }
+
+/* run: what waits as tickets, a running story as its course of stages */
+.queue { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+.ticket { border: 1px dashed var(--line); border-radius: 7px; padding: 6px 10px; font-size: 14px; display: grid; gap: 4px; min-width: 0; }
+.ticket .what { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.ticket .what b { font: 600 12px var(--mono); color: var(--accent); }
+.ticket .acts { margin-top: 0; }
+.live { border: 1px solid var(--line); border-radius: 9px; overflow: hidden; margin-top: 12px; }
+.live .top { display: flex; justify-content: space-between; gap: 10px; padding: 9px 12px; align-items: baseline; flex-wrap: wrap; }
+.live .top .right { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.stepper { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 3px; padding: 0 12px 10px; }
+.st { text-align: center; font: 500 11px var(--mono); color: var(--muted); }
+.st i { display: block; height: 8px; border-radius: 4px; background: var(--line); margin-bottom: 4px; }
+.st.done i { background: var(--teal); } .st.now i { background: var(--wait); animation: pulse 1.5s infinite; } .st.now { color: var(--ink); font-weight: 600; }
+@keyframes pulse { 50% { opacity: .45; } } @media (prefers-reduced-motion: reduce) { .st.now i { animation: none; } }
+.live .doing { padding: 6px 12px; font: 400 12.5px var(--mono); color: var(--muted); border-top: 1px solid var(--line); }
+
+/* decide: the question on a tinted head, its answers as tiles, the recommended one framed */
+.card.decision { padding: 0; overflow: hidden; }
+.decision .q { padding: 12px 18px; background: color-mix(in srgb, var(--wait) 12%, var(--panel)); border-bottom: 1px solid var(--line); }
+.decision.accept .q { background: color-mix(in srgb, var(--teal) 10%, var(--panel)); }
+.decision .q b { font: 600 17px/1.3 var(--display); display: block; margin-top: 2px; }
+.decision .dbody { padding: 10px 18px 16px; }
+.opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; margin-top: 10px; }
+.opt { border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; font-size: 15px; display: grid; gap: 8px; align-content: start; }
+.opt.advised { border-color: var(--teal); box-shadow: inset 0 0 0 1px var(--teal); }
+.decision details.more > summary::before { content: "▸ "; color: var(--muted); } .decision details.more[open] > summary::before { content: "▾ "; }
+.decision .id .link.title { font: inherit; }
+.opt .rec-word { font: 600 10.5px var(--mono); color: var(--accent); text-transform: uppercase; letter-spacing: .07em; }
+
+/* delivered: the figures as tiles, the deliveries as a line of days */
+.tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+@media (max-width: 760px) { .tiles { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+.tile { border-radius: 9px; padding: 10px 12px; background: var(--soft); }
+.tile b { font: 700 24px/1.1 var(--display); display: block; } .tile.lead b { color: var(--accent); }
+.tile span { font: 500 11px var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.days { border-left: 2px solid var(--line); margin: 16px 0 0 6px; padding-left: 16px; display: grid; gap: 12px; }
+.day { position: relative; } .day::before { content: ""; position: absolute; left: -22px; top: 5px; width: 10px; height: 10px; border-radius: 50%; background: var(--teal); }
+.day h4 { font: 600 12px var(--mono); color: var(--muted); margin-bottom: 2px; }
+.dl { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; padding: 4px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
+.dl .right { display: flex; gap: 8px; align-items: baseline; white-space: nowrap; }
+
+/* discover: the problem with an amber edge, the proposed epics as cards */
+.report { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 16px; margin-top: 10px; }
+@media (max-width: 860px) { .report { grid-template-columns: minmax(0, 1fr); } }
+.problem { border-left: 4px solid var(--wait); padding: 2px 0 2px 12px; align-self: start; }
+.problem b { font: 600 17px var(--display); display: block; } .problem p { margin: 4px 0 0; font-size: 15px; }
+.proposal { border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; margin-bottom: 8px; display: grid; gap: 5px; }
+.proposal > b { font: 600 15px var(--display); } .proposal .ev { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+.proposal .acts { margin-top: 2px; }
 
 /* the rules: one detail under the drawing, a rule a row that opens where it stands */
 .rgroup { margin-top: 14px; } .rgroup .lbl { font: 500 10.5px var(--mono); letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
@@ -958,12 +1041,16 @@ function describe(st) {
 function discover(st) {
   const topics = (S.discover || {}).topics || [];
   const cards = topics.map(t => {
-    const proposals = t.proposals.map(p => `<tr><td><div class="title">${esc(p.goal || p.intent || p.id)}</div><div class="id">${esc(p.id)}</div></td>
-      <td>${esc(p.metric)}</td><td>${p.epic ? `<span class="hint">epic ${esc(p.epic)}</span>` : `<div class="acts">${acts(p.actions)}</div>`}</td></tr>`).join("");
+    const proposals = t.proposals.map(p => `<div class="proposal"><b>${esc(p.goal || p.intent || p.id)}</b>
+      ${p.goal && p.intent ? `<span>${esc(p.intent)}</span>` : ""}
+      <div class="ev">${p.metric ? `<span class="event">${esc(p.metric)}</span>` : ""}${p.domain_contact ? `<span>asks ${esc(p.domain_contact)}</span>` : ""}<span class="id">${esc(p.id)}</span></div>
+      ${p.epic ? `<div><span class="tone ok">epic ${esc(p.epic)}</span></div>` : `<div class="acts">${acts(p.actions)}</div>`}</div>`).join("");
     const changes = t.description_changes.map(c => `<tr><td><div class="title">${esc(c.target)}</div></td>
       <td>${esc(c.change)}<div class="id">${esc(c.why)}</div></td><td class="act"><div class="acts">${acts(c.actions)}</div></td></tr>`).join("");
-    return card(esc(t.title), esc(t.report),
-      (proposals ? `<table><tr><th>proposal</th><th>outcome event</th><th><span class="sr">actions</span></th></tr>${proposals}</table>` : `<p class="empty">No proposed work.</p>`)
+    const problem = `<div class="problem"><span class="hint">topic · ${esc(t.topic)}</span><b>${esc(t.title)}</b>
+      <p class="hint">${t.proposals.length} proposed · ${t.description_changes.length} description change${t.description_changes.length === 1 ? "" : "s"}</p>
+      <p class="id">${esc(t.report)}</p></div>`;
+    return card("", "", `<div class="report">${problem}<div>${proposals || `<p class="empty">No proposed work.</p>`}</div></div>`
       + (changes ? `<h3>Changes to the description</h3><table>${changes}</table>` : ""));
   }).join("");
   return card("A new discovery", "", act((st.entries || {}).discover))
@@ -977,9 +1064,34 @@ function storyRow(r) {
     <td class="num hide-s">${esc(r.tokens_text)}</td><td class="act"><div class="acts">${acts(r.actions)}</div></td></tr>`;
 }
 
+// where a story stands, as a lane of its epic: its state and its mark, as the factory gives them
+const LANES = ["draft", "approved", "running", "delivered"];
+const laneOf = r => r.state === "draft" ? "draft" : ["delivered", "superseded"].includes(r.state) ? "delivered"
+  : ["running", "stopped", "look", "question"].includes(r.mark) || r.state === "can continue" ? "running" : "approved";
+const heat = r => r.mark === "stopped" ? "bad" : ["running", "look", "question"].includes(r.mark) ? "hot" : r.state === "ready" ? "ok" : "";
+function storyCard(r) {
+  const stage = r.stage && r.stage !== "—" ? ` · ${r.stage}` : "";
+  return `<div class="scard ${heat(r)}">${story(r.story, r.title)}<div class="id">${esc(r.state)}${esc(stage)}${r.delivered_text ? ` · ${esc(r.delivered_text)}` : ""}</div>
+    ${(r.actions || []).length ? `<div class="acts">${acts(r.actions)}</div>` : ""}</div>`;
+}
+function lane(name, rows, order) {
+  if (name === "delivered") rows = rows.slice().sort((a, b) => order.indexOf(a.story) - order.indexOf(b.story));
+  const shown = name === "delivered" ? rows.slice(0, 3) : rows, rest = rows.slice(shown.length);
+  return `<div class="lane"><h4>${name} <span>${rows.length}</span></h4>${shown.map(storyCard).join("")}
+    ${rest.length ? `<details><summary>${rest.length} more</summary>${rest.map(storyCard).join("")}</details>` : ""}</div>`;
+}
+function epicTone(e) {
+  const n = m => e.rows.filter(r => r.mark === m).length, ready = e.rows.filter(r => r.state === "ready").length;
+  if (n("stopped")) return `<span class="tone bad">${n("stopped")} stopped</span>`;
+  if (n("look") + n("question")) return `<span class="tone wait">${n("look") + n("question")} to look at</span>`;
+  if (n("running")) return `<span class="tone wait">running</span>`;
+  if (e.total && e.delivered === e.total) return `<span class="tone ok">delivered</span>`;
+  return ready ? `<span class="tone mute">${ready} ready</span>` : "";
+}
+
 function backlog(st) {
   // the epics as one list, as the cockpit shows them; an epic opens its stories in place, and stays open on a redraw
-  const open = S.openEpics || (S.openEpics = new Set()), filter = S.backlogFilter || "all";
+  const open = S.openEpics || (S.openEpics = new Set()), filter = S.backlogFilter || "all", order = st.delivered_order || [];
   const keep = r => filter === "all" || (filter === "drafts" ? r.state === "draft" : !["delivered", "superseded"].includes(r.state));
   const shown = (st.epics || []).map(e => Object.assign({}, e, {rows: e.rows.filter(keep)}))
     .filter(e => filter === "all" || e.rows.length);
@@ -987,32 +1099,29 @@ function backlog(st) {
     open: (st.epics || []).filter(e => e.rows.some(r => !["delivered", "superseded"].includes(r.state))).length,
     drafts: (st.epics || []).filter(e => e.rows.some(r => r.state === "draft")).length};
   const filters = `<div class="pick"><span class="seg">${["all", "open", "drafts"].map(f => `<button aria-pressed="${f === filter}" data-filter="${f}">${f}<span class="n">${counts[f]}</span></button>`).join("")}</span></div>`;
-  const rows = shown.map(e => {
-    const drafts = e.rows.filter(r => r.state === "draft").length, busy = e.rows.some(r => r.mark === "running");
-    const m = busy ? "running" : e.total && e.delivered === e.total ? "done" : e.rows.some(r => ["look", "question", "stopped"].includes(r.mark)) ? "look" : "none";
-    const share = e.total ? Math.round(100 * e.delivered / e.total) : 0, isOpen = open.has(e.epic) !== (filter !== "all");
-    const head = `<tr class="epic-row${isOpen ? " open" : ""}" data-epic="${esc(e.epic)}" tabindex="0" aria-expanded="${isOpen}">
-      <td>${mark(m)}</td><td><span class="caret" aria-hidden="true">${isOpen ? "▾" : "▸"}</span> <span class="title">${esc(e.title || e.epic)}</span><div class="id">${esc(e.epic)}</div></td>
-      <td class="hide-s"><div class="bar" title="${e.delivered} of ${e.total} delivered"><i style="width:${share}%"></i></div></td>
-      <td class="num nowrap">${e.delivered}/${e.total}</td><td class="num hide-s">${drafts || "—"}</td>
-      <td class="hide-s id">${esc(e.metric || "")}</td></tr>`;
-    const body = !isOpen ? "" : `<tr class="epic-body"><td></td><td colspan="5">`
+  const epics = shown.map(e => {
+    const isOpen = open.has(e.epic) !== (filter !== "all"), full = (st.epics || []).find(x => x.epic === e.epic) || e;
+    const head = `<div class="ehead" data-epic="${esc(e.epic)}" tabindex="0" role="button" aria-expanded="${isOpen}">
+      <div class="name"><span class="caret" aria-hidden="true">${isOpen ? "▾" : "▸"}</span><b>${esc(e.title || e.epic)}</b><span class="id">${esc(e.epic)}</span>${e.metric ? `<span class="event">${esc(e.metric)}</span>` : ""}</div>
+      <div class="meta">${epicTone(full)}<span>${full.delivered}/${full.total}</span></div>
+      <div class="strip" title="${full.delivered} of ${full.total} delivered">${full.rows.map(r => `<i class="l-${r.mark === "stopped" ? "stopped" : laneOf(r)}"></i>`).join("")}</div></div>`;
+    const body = !isOpen ? "" : `<div class="ebody">`
       + (e.goal ? `<p class="about">${esc(e.goal)}</p>` : "")
       + ((st.journeys || []).filter(j => j.epic === e.epic).map(j => `<p class="rec">${esc(j.text)}</p>`).join(""))
-      + (e.rows.length ? `<table><tr><th><span class="sr">mark</span></th><th>story</th><th>state</th><th class="hide-s">stage</th><th class="num hide-s">tokens</th><th><span class="sr">actions</span></th></tr>${e.rows.map(storyRow).join("")}</table>` : `<p class="empty">No story yet.</p>`)
-      + `<div class="acts">${acts(e.actions)}</div></td></tr>`;
-    return head + body;
+      + (e.rows.length ? `<div class="lanes">${LANES.map(name => lane(name, e.rows.filter(r => laneOf(r) === name), order)).join("")}</div>` : `<p class="empty">No story yet.</p>`)
+      + `<div class="acts">${acts(e.actions)}</div></div>`;
+    return `<div class="erow">${head}${body}</div>`;
   }).join("");
   const findings = (st.findings || []).map(f => `<tr><td><span class="state">${esc(f.severity)}</span></td>
     <td>${esc(f.plain || f.defect)}<div class="id">${esc(f.row)} · ${esc(f.where)}</div></td><td class="act"><div class="acts">${act(f.action)}</div></td></tr>`).join("");
   return nextLine(st) + card("A wish", "your words become a story, kept as a draft until you release it", act((st.entries || {}).wish))
-    + (rows || filter !== "all" ? card("Epics", filter === "all" ? "newest first — open one to see its stories" : filter === "drafts" ? "the drafts, waiting for your release" : "what is not delivered yet",
-        filters + (rows ? `<table class="epics"><tr><th><span class="sr">mark</span></th><th>epic</th><th class="hide-s">progress</th><th class="num">delivered</th><th class="num hide-s">drafts</th><th class="hide-s">outcome</th></tr>${rows}</table>` : `<p class="empty">Nothing here.</p>`))
+    + (epics || filter !== "all" ? card("Epics", filter === "all" ? "newest first — open one to see its stories by where they stand" : filter === "drafts" ? "the drafts, waiting for your release" : "what is not delivered yet",
+        filters + (epics ? `<div class="erows">${epics}</div>` : `<p class="empty">Nothing here.</p>`))
       : card("", "", `<p class="empty">The backlog is empty.</p>`))
     + (findings ? `<details class="card more" data-fold="findings"${foldOpen("findings")}><summary><h2>Findings <span class="sub">${(st.findings || []).length} the judge kept open — each to the backlog or done</span></h2></summary><table>${findings}</table></details>` : "");
 }
 document.addEventListener("click", event => {
-  const row = event.target.closest && event.target.closest("tr.epic-row");
+  const row = event.target.closest && event.target.closest(".ehead");
   if (!row || event.target.closest("button, a")) return;
   const open = S.openEpics || (S.openEpics = new Set()), id = row.dataset.epic;
   if (open.has(id)) open.delete(id); else open.add(id);
@@ -1024,7 +1133,7 @@ document.addEventListener("click", event => {
   S.backlogFilter = f.dataset.filter; S.openEpics = new Set(); render();
 });
 document.addEventListener("keydown", event => {
-  const row = event.target.closest && event.target.closest("tr.epic-row");
+  const row = event.target.closest && event.target.closest("tr.epic-row, .ehead");
   if (row && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); row.click(); }
 });
 
@@ -1036,23 +1145,30 @@ function run(st) {
       ${w.alive && !w.stopping ? `<div class="acts"><button class="btn" data-call="down">down — after the running stage</button>
       <button class="btn danger" data-call="down" data-now="1">down now</button></div>` : ""}`
     : `<p class="about">The factory is down. Requests wait in the queue until it is up.</p><div class="acts"><button class="btn primary" data-call="up">up</button></div>`;
-  const ops = r => (r.operations || []).map(op => `<button class="btn${op.name === "drop" ? " danger" : ""}" data-call="${esc(op.name)}"
+  const ops = r => (r.operations || []).map(op => `<button class="btn small${op.name === "drop" ? " danger" : ""}" data-call="${esc(op.name)}"
     data-kind="request" data-id="${esc(r.id)}">${esc(op.label)}</button>`).join("");
-  const requests = reqs.map(r => `<tr><td><span class="state st-${esc(r.state)}">${esc(r.state)}</span></td>
-    <td><span class="title">${esc(r.kind)}</span> ${esc(r.target)}<div class="id">${esc(r.id)} · ${esc(r.by)}</div>
+  const tone = {queued: "mute", running: "wait", waiting: "wait", failed: "bad"};
+  const tickets = reqs.map(r => `<div class="ticket"><div class="what"><b>${esc(r.kind)}</b><span>${esc(r.target)}</span><span class="tone ${tone[r.state] || "mute"}">${esc(r.state)}</span></div>
+    <div class="id">${esc(r.id)} · ${esc(r.by)}</div>
     ${r.error ? `<div class="m-stopped">${esc(r.error)}</div>` : ""}
-    ${r.record ? `<div class="rec">asks: <code>${esc(r.record)}</code> — answer it under Decide</div>` : ""}</td>
-    <td class="act"><div class="acts">${ops(r)}</div></td></tr>`).join("");
-  const running = (st.running || []).map(r => `<tr><td>${mark(r.interrupted ? "stopped" : "running")}</td>
-    <td class="nowrap">${story(r.story)}</td><td class="nowrap">${esc(r.stage)}${r.part ? " · " + esc(r.part) : ""}</td>
-    <td class="hide-s nowrap">${esc(r.ago || "")}</td><td class="hide-s id">${esc(r.activity || "")}</td>
-    <td class="act"><div class="acts"><button class="btn" data-call="follow" data-kind="story" data-id="${esc(r.story)}">follow</button></div></td></tr>`).join("");
+    ${r.record ? `<div class="rec">asks: <code>${esc(r.record)}</code> — answer it under Decide</div>` : ""}
+    ${ops(r) ? `<div class="acts">${ops(r)}</div>` : ""}</div>`).join("");
+  const titles = Object.fromEntries((st.rows || []).map(r => [r.story, r.title]));
+  const live = (st.running || []).map(r => {
+    const where = `${r.part || r.stage}${r.round > 1 ? ` · round ${r.round}` : ""}`;
+    return `<div class="live"><div class="top"><div>${story(r.story, titles[r.story])}<div class="id">${esc(r.story)}</div></div>
+      <div class="right"><span class="tone ${r.interrupted ? "bad" : "wait"}">${r.interrupted ? "interrupted" : esc(where)}</span>
+      <span class="hint">${esc(r.ago || "")}</span><button class="btn small" data-call="follow" data-kind="story" data-id="${esc(r.story)}">follow</button></div></div>
+      ${(r.course || []).length ? `<div class="stepper">${r.course.map(c => `<div class="st ${c.state}"><i></i>${esc(c.stage)}</div>`).join("")}</div>` : ""}
+      ${r.activity ? `<div class="doing">${esc(r.activity)}</div>` : ""}</div>`;
+  }).join("");
   const ready = (st.rows || []).filter(r => st.queue && st.queue.ready.includes(r.story)).map(storyRow).join("");
-  return nextLine(st) + card("The factory", "", factory)
-    + card("Requests", "worked before the next story, oldest first", requests ? `<table>${requests}</table>` : `<p class="empty">No request waits.</p>`)
-    + card("Running", "", (running ? `<table>${running}</table>` : `<p class="empty">No stage runs.</p>`)
-      + (ready ? `<h3>Ready</h3><table>${ready}</table>` : ""))
-    + card("Output", `<span id="follow-title"></span>`, `<div class="acts" id="follow-acts"></div><pre class="out" id="follow-out"></pre>`);
+  return nextLine(st)
+    + card("Running", "a story's course through its stages", live || `<p class="empty">No stage runs.</p>`)
+    + card("Output", `<span id="follow-title"></span>`, `<div class="acts" id="follow-acts"></div><pre class="out" id="follow-out"></pre>`)
+    + card("Requests", "worked before the next story, oldest first", tickets ? `<div class="queue">${tickets}</div>` : `<p class="empty">No request waits.</p>`)
+    + (ready ? card("Next in line", "ready, in the order the factory takes them", `<table>${ready}</table>`) : "")
+    + card("The factory", "", factory);
 }
 
 function follow(kind, id) {
@@ -1084,16 +1200,22 @@ function paintFollow() {
 
 // --- 4 decide ------------------------------------------------------------------------------------------------------
 function recordCard(r) {
-  const offered = (r.actions || []).filter(a => !a.waits_on);
-  const options = offered.filter(a => a.request.open !== "words" && r.kind !== "acceptance");
+  const offered = (r.actions || []).filter(a => !a.waits_on), accept = r.kind === "acceptance";
+  const options = offered.filter(a => a.request.open !== "words" && !accept);
   const words = offered.filter(a => a.request.open === "words");
-  const body = `<p class="hint">${esc(r.path)}${r.story ? ` · ${story(r.story, "the story")}` : ""}</p>`
-    + ((r.sections || []).length ? `<details class="more" data-more="${esc(r.id)}"${S.folded[r.id] ? "" : " open"}><summary>${r.kind === "acceptance" ? "what to look at" : "the question in full"}</summary>${r.sections.map(one => section(one)).join("")}</details>` : "")
-    + (r.kind === "acceptance"
+  const head = `<div class="q"><span class="hint">${accept ? "acceptance" : "question"} · ${esc(r.id)}${r.story ? ` · ${esc(r.stage)}` : ""}</span><b>${inline(r.text)}</b></div>`;
+  // what to look at is the acceptance itself and stands open; a question's full text folds under its answers
+  const isOpen = r.id in S.folded ? !S.folded[r.id] : accept;
+  const full = (r.sections || []).length ? `<details class="more" data-more="${esc(r.id)}"${isOpen ? " open" : ""}><summary>${accept ? "what to look at" : "the question in full"}</summary>${r.sections.map(one => section(one)).join("")}</details>` : "";
+  const body = (accept ? full : "")
+    + (accept
       ? `<div class="acts">${acts(offered.filter(a => a.request.open !== "words"))}</div>`
-      : options.map(a => `<div class="option">${act(a)}<span>${inline(a.text)}${a.note ? ` <span class="hint">— ${esc(a.note)}</span>` : ""}</span></div>`).join(""))
-    + words.map(a => `<h3>${r.kind === "acceptance" ? "or correct it" : options.length ? "or in your words" : "your answer"}</h3>${act(a)}`).join("");
-  return card(`${mark(r.kind === "acceptance" ? "look" : "question")} ${esc(r.text)}`, esc(`${r.story || "project"} · ${r.stage}`), body);
+      : options.length ? `<div class="opts">${options.map(a => `<div class="opt${a.primary ? " advised" : ""}">${a.primary ? `<span class="rec-word">recommended</span>` : ""}
+          <span>${inline(a.text)}${a.note ? ` <span class="hint">— ${esc(a.note)}</span>` : ""}</span><div>${act(a)}</div></div>`).join("")}</div>` : "")
+    + words.map(a => `<h3>${accept ? "or correct it" : options.length ? "or in your words" : "your answer"}</h3>${act(a)}`).join("")
+    + (accept ? "" : full)
+    + `<p class="id" style="margin-top:10px">${r.story ? `${story(r.story, r.story)} · ` : ""}${esc(r.path)}</p>`;
+  return `<section class="card decision${accept ? " accept" : ""}">${head}<div class="dbody">${body}</div></section>`;
 }
 
 function decide(st) {
@@ -1109,13 +1231,19 @@ function decide(st) {
 
 // --- 5 delivered ---------------------------------------------------------------------------------------------------
 function delivered(st) {
-  const rows = Object.fromEntries((st.rows || []).map(r => [r.story, r]));
-  const list = (st.delivered_order || []).map(id => rows[id]).filter(Boolean).map(r => `<tr><td>${mark("done")}</td>
-    <td>${story(r.story, r.title)}<div class="id">${esc(r.epic)} · ${esc(r.story)}</div></td>
-    <td class="hide-s num">${esc(r.delivered_text)}</td><td class="num hide-s">${esc(r.seconds_text)}</td>
-    <td class="num">${esc(r.tokens_text)}</td><td class="num hide-s">${esc(r.cost_text)}</td></tr>`).join("");
-  return card(`${st.delivered} of ${st.total}`, [st.tokens_text && `${st.tokens_text} tokens`, st.seconds_text, st.cost_text].filter(Boolean).map(esc).join(" · "),
-    list ? `<table><tr><th><span class="sr">mark</span></th><th>story</th><th class="hide-s num">delivered (UTC)</th><th class="num hide-s">worked</th><th class="num">tokens</th><th class="num hide-s">cost</th></tr>${list}</table>` : `<p class="empty">Nothing delivered yet.</p>`);
+  const rows = Object.fromEntries((st.rows || []).map(r => [r.story, r])), events = Object.fromEntries((st.epics || []).map(e => [e.epic, e.metric]));
+  const tiles = [[`${st.delivered}`, `of ${st.total} stories delivered`, "lead"], [st.seconds_text, "worked"], [st.tokens_text, "tokens"], [st.cost_text, "cost"]]
+    .filter(([n]) => n).map(([n, label, cls]) => `<div class="tile ${cls || ""}"><b>${esc(n)}</b><span>${esc(label)}</span></div>`).join("");
+  const days = [];
+  for (const r of (st.delivered_order || []).map(id => rows[id]).filter(Boolean)) {
+    const day = (r.delivered_text || "").slice(0, 10) || "undated";
+    if (!days.length || days[days.length - 1].day !== day) days.push({day, rows: []});
+    days[days.length - 1].rows.push(r);
+  }
+  const line = r => `<div class="dl"><span>${story(r.story, r.title)}<span class="id"> ${esc(r.epic)} · ${esc((r.delivered_text || "").slice(11))}</span></span>
+    <span class="right">${events[r.epic] ? `<span class="event">${esc(events[r.epic])}</span>` : ""}<span class="hint">${esc([r.seconds_text, r.cost_text].filter(Boolean).join(" · "))}</span></span></div>`;
+  return card("Delivered", "what is delivered, by day, with the outcome event its epic is measured by",
+    `<div class="tiles">${tiles}</div>` + (days.length ? `<div class="days">${days.map(d => `<div class="day"><h4>${esc(d.day)}</h4>${d.rows.map(line).join("")}</div>`).join("")}</div>` : `<p class="empty">Nothing delivered yet.</p>`));
 }
 
 // --- one story -----------------------------------------------------------------------------------------------------

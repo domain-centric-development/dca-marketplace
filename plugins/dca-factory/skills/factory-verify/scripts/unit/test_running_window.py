@@ -58,3 +58,31 @@ class RunningWindow(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CourseFacts:
+    """Just what a running story's course reads: its kind and the stages of that kind."""
+
+    def story_kind(self, path):
+        return "task"
+
+    def stage_course(self, kind):
+        return {"task": ("plan", "build", "tidy", "judge", "document")}[kind]
+
+
+class TheCourseOfARunningStory(unittest.TestCase):
+    """The page draws a running story as its course: each stage of its kind done, now or open."""
+
+    def course(self, stage, part=""):
+        from dca_factory.delivery.application.status.show_status import ShowStatusUseCase
+        use_case = ShowStatusUseCase(CourseFacts(), None, None)
+        return [(c["stage"], c["state"]) for c in use_case._course("s", {"path": "story.md"}, stage, part,
+                                                                       {"builder": ("test", "build", "tidy")})]
+
+    def test_the_stages_before_the_running_one_are_done_and_the_rest_open(self):
+        self.assertEqual([("plan", "done"), ("build", "done"), ("tidy", "done"), ("judge", "now"), ("document", "open")],
+                         self.course("judge"))
+
+    def test_a_shared_window_is_at_the_part_it_runs_or_at_its_first_stage_of_the_kind(self):
+        self.assertEqual("now", dict(self.course("builder", "tidy"))["tidy"])
+        self.assertEqual("open", dict(self.course("builder"))["build"])     # its first stage, test, is not a task's
