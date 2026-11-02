@@ -368,7 +368,7 @@ details.dm-group > summary { justify-content: flex-start; }
 @media (max-width: 760px) { .tiles { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
 .tile { border-radius: 9px; padding: 10px 12px; background: var(--soft); }
 .tile b { font: 700 24px/1.1 var(--display); display: block; } .tile.lead b { color: var(--accent); }
-.tile span { font: 500 11px var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.tile span { display: block; line-height: 1.4; margin-top: 4px; font: 500 11px/1.4 var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
 .days { border-left: 2px solid var(--line); margin: 16px 0 0 6px; padding-left: 16px; display: grid; gap: 12px; }
 .day { position: relative; } .day::before { content: ""; position: absolute; left: -22px; top: 5px; width: 10px; height: 10px; border-radius: 50%; background: var(--teal); }
 .day h4 { font: 600 12px var(--mono); color: var(--muted); margin-bottom: 2px; }
@@ -406,7 +406,6 @@ details.dm-group > summary { justify-content: flex-start; }
 .qbars { display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content; gap: 6px 12px; align-items: center; margin-top: 8px; }
 .qbars .lbl { font: 500 12.5px var(--mono); color: var(--ink); } .qbars .n { font: 500 12.5px var(--mono); color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
 .qbars .track { height: 8px; } .qbars .track i { display: block; height: 100%; border-radius: 0 4px 4px 0; background: var(--teal); min-width: 2px; }
-.qrules { margin-top: 12px; font-size: 15px; } .qrules .hint { display: block; }
 .qline { display: flex; flex-wrap: wrap; gap: 4px 14px; font: 400 12.5px var(--mono); color: var(--muted); margin: 0 0 10px; }
 .qline b { color: var(--ink); font-weight: 600; } .qline .bad { color: var(--stop); }
 
@@ -1629,13 +1628,12 @@ function qualityCard(q) {
   ].map(([n, label, said, cls]) => `<div class="tile ${cls}"><b>${esc(n)}</b><span>${esc(label)}</span><small>${esc(said)}</small></div>`).join("");
   const found = Object.entries(q.findings || {}).sort((a, b) => b[1] - a[1]), most = found.length ? found[0][1] : 1;
   const bars = found.map(([name, n]) => `<span class="lbl">${esc(name)}</span><span class="track"><i style="width:${Math.round(100 * n / most)}%"></i></span><span class="n">${n}</span>`).join("");
-  const rules = (q.named
-    ? `<b>${q.named}</b> rules named in ${q.measured} measured ${q.measured === 1 ? "story" : "stories"} — killed ${q.killed} · red ${q.red} · survived ${q.survived} · no-break ${q["no-break"]} — kill rate <b>${q.kill_rate.toFixed(2)}</b>, guarded <b>${q.guarded_rate.toFixed(2)}</b>`
-    : q.measured ? `${q.measured} measured ${q.measured === 1 ? "story names" : "stories name"} no rule` : `No rule measured yet`);
+  // the rules a broken implementation was tried against: one tile, the count by kind on hover
+  const counted = `killed ${q.killed} · red ${q.red} · survived ${q.survived} · no-break ${q["no-break"]} — of ${q.stories} stories: ${q.measured} measured, ${q.not_measured} tested before rules were recorded, ${q.without_test || 0} without a test stage, ${q.open || 0} not delivered`;
+  const ruleTile = `<div class="tile${q.survived ? " bad" : ""}" title="${esc(counted)}"><b>${q.named ? `${q.killed}/${q.named}` : "–"}</b><span>rules caught when broken</span><small>${q.measured} of ${q.stories} stories measured</small></div>`;
   return card("Quality", "what the stages asked, what the judge confirmed, what a person corrected — counted over every story, never rated",
-    `<div class="tiles five">${tiles}</div>`
-    + (bars ? `<h3>Findings the judge confirmed, by perspective</h3><div class="qbars">${bars}</div>` : "")
-    + `<p class="qrules">${rules}<span class="hint">of ${q.stories} stories: ${q.measured} measured · ${q.not_measured} tested before rules were recorded, counted as not measured, never as zero · ${q.without_test || 0} delivered without a test stage (a task, an adopted story) — nothing to measure · ${q.open || 0} not delivered</span></p>`);
+    `<div class="tiles five">${tiles}${ruleTile}</div>`
+    + (bars ? `<h3>Findings the judge confirmed, by perspective</h3><div class="qbars">${bars}</div>` : ""));
 }
 // the same figures in one line, for an epic
 function qualityLine(q) {
@@ -1645,7 +1643,7 @@ function qualityLine(q) {
     + `<span>left open by plans <b>${q.plan_open}</b></span>`
     + (found.length ? `<span>findings ${found.map(([n, c]) => `${esc(n)} <b>${c}</b>`).join(" · ")}</span>` : "")
     + `<span>domain <b class="${domain ? "bad" : ""}">${domain ? esc(domainWords(q.domain)) : "0"}</b></span>`
-    + (q.named ? `<span>kill rate <b>${q.kill_rate.toFixed(2)}</b> (${q.named} rules)</span>` : "") + `</div>`;
+    + (q.named ? `<span>rules caught when broken <b class="${q.survived ? "bad" : ""}">${q.killed}/${q.named}</b></span>` : "") + `</div>`;
 }
 
 function delivered(st) {
