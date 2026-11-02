@@ -302,9 +302,11 @@ details.dm-group > summary { justify-content: flex-start; }
 
 /* backlog: an epic as a strip of its stories, opened into lanes by where each stands */
 .erows { display: grid; gap: 8px; margin-top: 12px; }
-.erow { border-radius: 8px; background: var(--soft); }
-.ehead { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; padding: 9px 12px; cursor: pointer; align-items: baseline; }
-.ehead:focus-visible { outline: 2px solid var(--teal); outline-offset: 1px; border-radius: 8px; }
+/* an epic: its head in teal mist, the strip flush along the head's foot as the seam, the body white */
+.erow { border-radius: 8px; background: var(--panel); border: 1px solid var(--line); overflow: hidden; }
+.ehead { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; padding: 9px 12px 0; cursor: pointer; align-items: baseline; background: var(--soft); }
+.ehead:focus-visible { outline: 2px solid var(--teal); outline-offset: -2px; border-radius: 8px; }
+.ehead .strip { margin: 4px -12px 0; } .ehead .strip i { border-radius: 0; }
 .ehead .name { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; min-width: 0; }
 .ehead .name b { font: 600 15.5px var(--display); } .ehead .caret { color: var(--muted); font: 400 12px var(--mono); }
 .ehead .meta { display: flex; gap: 8px; align-items: center; font: 400 12.5px var(--mono); color: var(--muted); white-space: nowrap; }
@@ -317,10 +319,16 @@ details.dm-group > summary { justify-content: flex-start; }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font: 400 12px var(--mono); color: var(--muted); margin-top: 10px; }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
 .legend i { display: inline-block; width: 18px; height: 6px; border-radius: 1px; }
-.ebody { padding: 0 12px 12px; } .ebody > .about { margin: 0 0 8px; }
+.ebody { padding: 14px 12px 12px; } .ebody > .about { margin: 0 0 8px; }
 .lanes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 @media (max-width: 760px) { .lanes { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
-.lane { background: var(--bg); border-radius: 8px; padding: 8px; min-width: 0; }
+/* a lane carries its state's colour as a rule along its top; an empty one says so quietly */
+.lane { background: var(--bg); border-radius: 4px; padding: 8px; min-width: 0; border-top: 3px solid var(--line); }
+.lane.lane-draft { border-top-color: var(--muted); } .lane.lane-approved { border-top-color: color-mix(in srgb, var(--teal) 45%, var(--line)); }
+.lane.lane-running { border-top-color: var(--wait); }
+.lane.lane-delivered { border-top-color: var(--teal); } .lane.lane-delivered:not(.empty) { background: color-mix(in srgb, var(--teal) 7%, var(--bg)); }
+.lane.empty h4 { opacity: .55; }
+.lane-delivered .scard.l-delivered { box-shadow: none; border-color: color-mix(in srgb, var(--teal) 35%, var(--line)); }
 .lane h4 { font: 600 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); display: flex; justify-content: space-between; margin-bottom: 6px; }
 .scard { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; margin-bottom: 6px; font-size: 14px; line-height: 1.35; }
 .scard .link.title { font: 500 14px var(--display); } .scard .id { margin-top: 3px; }
@@ -1375,7 +1383,7 @@ function storyCard(r) {
 function lane(name, rows, order, epic) {
   if (name === "delivered") rows = rows.slice().sort((a, b) => order.indexOf(a.story) - order.indexOf(b.story));
   const shown = name === "delivered" ? rows.slice(0, 3) : rows, rest = rows.slice(shown.length);
-  return `<div class="lane"><h4>${name} <span>${rows.length}</span></h4>${shown.map(storyCard).join("")}
+  return `<div class="lane lane-${name}${rows.length ? "" : " empty"}"><h4>${name} <span>${rows.length}</span></h4>${shown.map(storyCard).join("")}
     ${rest.length ? `<details data-fold="lane:${esc(epic)}:${name}"${foldOpen(`lane:${epic}:${name}`)}><summary>${rest.length} more</summary>${rest.map(storyCard).join("")}</details>` : ""}</div>`;
 }
 // a segment a story, in the lanes' order from left to right — draft, released, on its way, delivered —, the superseded

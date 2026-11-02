@@ -322,3 +322,4 @@ instead of by the model; the table below them names every version and what it ch
 | 0.137.1 | 2026-11-02 | A story's own form (correct) stands apart from its text: space and a line below it |
 | 0.137.2 | 2026-11-02 | Quality: the rules a broken implementation was tried against are one tile — caught when broken, of how many, over how many stories measured —, the count by kind on hover; an epic's line says the same; a tile's label wraps close |
 | 0.137.3 | 2026-11-02 | A story's view carries no mark before its title — its state stands below it |
+| 0.137.4 | 2026-11-02 | Backlog: an epic is a white card with its head in teal mist and the strip flush along the head's foot as the seam; each lane carries its state's colour as a rule along its top, all of one height, an empty one quiet |
