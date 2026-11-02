@@ -25,6 +25,7 @@ from ..delivery.adapter.outgoing.files.epic_files import EpicFiles
 from ..delivery.adapter.outgoing.files.journal_files import StoryJournalFiles
 from ..delivery.adapter.outgoing.files.owned_files import OwnedChangeFiles
 from ..delivery.adapter.outgoing.files.project_files import ProjectFiles
+from ..delivery.adapter.outgoing.files.made_items import MadeItemFiles
 from ..delivery.adapter.outgoing.files.request_files import RequestFiles
 from ..delivery.adapter.outgoing.files.status_facts import StatusFactFiles
 from .schedule import schedule_data
@@ -119,7 +120,7 @@ def retry_request(cwd: str) -> RetryRequestUseCase:
 
 
 def list_requests(cwd: str) -> ListRequestsUseCase:
-    return ListRequestsUseCase(RequestFiles(cwd))
+    return ListRequestsUseCase(RequestFiles(cwd), MadeItemFiles(cwd))
 
 
 def pending_requests(cwd: str) -> PendingRequestsUseCase:

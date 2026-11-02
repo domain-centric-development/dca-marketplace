@@ -21,7 +21,7 @@ import enum
 import re
 import typing
 
-from ....building_blocks import Store, UseCaseException
+from ....building_blocks import OutputPort, Store, UseCaseException
 
 #: A request as the store keeps it: its front keys, `id`, `path`, `words` (the body) and `state` — strings all.
 Request = typing.Dict[str, typing.Any]
@@ -163,4 +163,25 @@ class RequestStore(Store, typing.Protocol):
 
     def journal(self, *fields: str) -> None:
         """One line of the request journal: what happened to a request, when."""
+        ...
+
+    def keep_done(self, request: Request, wrote: str, commit: str, at: str) -> None:
+        """A note of a worked request that wrote something new — its words, who asked, what it wrote and its commit —,
+        kept beside the queue until a person releases what it made or hides it."""
+        ...
+
+    def done(self) -> typing.List[Request]:
+        """The notes of worked requests, newest first, `state: done`."""
+        ...
+
+    def hide_done(self, request_id: str) -> bool:
+        """The note of a worked request gone; False where there is none."""
+        ...
+
+
+class MadeItems(OutputPort, typing.Protocol):
+    """What a request wrote, read back as the backlog's: the stories, tasks, epics and findings at those paths."""
+
+    def at(self, paths: typing.Sequence[str]) -> typing.List[typing.Dict[str, str]]:
+        """Per item it finds: kind (story, task, epic, finding), id, title, status — in the order of the paths."""
         ...

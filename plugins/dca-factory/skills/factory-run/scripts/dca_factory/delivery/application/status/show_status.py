@@ -16,6 +16,7 @@ from ..description.parts import parts_as_they_stand
 from ..shared.description_store import DescriptionStore
 from ..shared.status_facts import StatusFacts
 from .actions import Action, entry_actions, make_action, offered, RUNNER
+from .now_columns import now_columns, places_of
 from .texts import claim_age, figures, newest_first, parse_time, signal_totals, stamp_text, took_text, worker_text
 from ...domain.model.decision_record import WAITING_WORDS
 from ...domain.model.story_state import ENDED_WORDS
@@ -242,6 +243,10 @@ class ShowStatusUseCase:
                     seconds=totals["seconds"], signals=signal_totals(rows, known),
                     entries=entry_actions(facts.names_story),
                     worker_text=worker_text(worker) if live else "",
+                    now=now_columns(rows, queue, data["next"] or "", next_line, running, waiting, journeys,
+                                    bool(worker and worker.get("alive") and (worker.get("how") != "up"
+                                                                            or worker.get("backlog"))),
+                                    places_of(profile), delivered_order),
                     **figures(totals))
 
     def _action(self, text: str = "", skill: str = "", shell: str = "", look: str = "", label: str = "",

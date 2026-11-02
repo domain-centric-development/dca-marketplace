@@ -125,8 +125,9 @@ class WorkRequestUseCase:
                                 f"answered."))
             return RequestWorked(3, said, commit)
         self._records.applied(request["id"])
+        wrote = self._wrote(request, before)
         if kind.name in ("wish", "stories"):
-            self._records.questioned(self._wrote(request, before).split(), request["id"])
+            self._records.questioned(wrote.split(), request["id"])
         # gone before its commit: a crash between the two leaves what it wrote uncommitted — never a request that
         # would run its skill a second time
         self._remove(request)
@@ -138,6 +139,7 @@ class WorkRequestUseCase:
                                wrote=self._wrote(request, before), worked=self._now())
             self._store.journal("request-end", kind.name, request["id"], "exit=0", "state=failed", "commit=refused")
             return RequestWorked(1, said)
+        self._keep(request, kind, wrote, commit)
         self._store.journal("request-end", kind.name, request["id"], "exit=0", "state=done", f"commit={commit or '-'}")
         said.append(("out", f"factory: request {request['id']} done"
                             + (f" — committed {commit}" if commit else " — nothing to commit")))
@@ -187,9 +189,18 @@ class WorkRequestUseCase:
             said.append(("err", f"factory: request {request['id']}: {why}"))
             return RequestWorked(1, said)
         self._remove(request)
+        self._keep(request, kind, str(request.get("wrote") or ""), commit)
         self._store.journal("request-end", kind.name, request["id"], "exit=0", "state=done", f"commit={commit}")
         said.append(("out", f"factory: request {request['id']} done — committed {commit}"))
         return RequestWorked(0, said, commit)
+
+    def _keep(self, request: Request, kind: Kind, wrote: str, commit: str) -> None:
+        """A request that has an agent write something new leaves a note of what it made, for the person who asked."""
+        if kind.creates:
+            try:
+                self._store.keep_done(request, wrote, commit, self._now())
+            except OSError:
+                pass
 
     def _remove(self, request: Request) -> None:
         try:

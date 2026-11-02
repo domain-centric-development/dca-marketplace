@@ -6,7 +6,8 @@ import dataclasses
 import typing
 
 from ....building_blocks import UseCase
-from ..shared.requests import KINDS, operations_of, Request, RequestStore, STATES
+from ..shared.requests import KINDS, MadeItems, operations_of, place_of, Request, RequestStore, STATES
+from ..status.actions import make_action
 
 #: The word on a request's button for each operation.
 OPERATION_LABELS = {"follow": "follow", "retry": "retry", "drop": "take back"}
@@ -17,7 +18,8 @@ class ListRequestsQuery:
     pass
 
 
-#: The view's model: `requests` (rows), `counts` by state, `counts_text`, the `kinds` a request can be, the `store`.
+#: The view's model: `requests` (rows), `counts` by state, `counts_text`, the `kinds` a request can be, the `store`,
+#: and `wishes` — the trail under a wish field: every wish, newest first, with what became of it.
 RequestList = typing.Dict[str, typing.Any]
 
 
@@ -26,10 +28,12 @@ class ListRequestsInputPort(UseCase[ListRequestsQuery, RequestList], typing.Prot
 
 
 class ListRequestsUseCase:
-    """`factory.sh requests`, the page's request view: each request with what a person can do with it."""
+    """`factory.sh requests`, the page's request view: each request with what a person can do with it, and the trail of
+    the wishes — one waiting, writing, asking back or failed, and one done until what it made is released or hidden."""
 
-    def __init__(self, store: RequestStore) -> None:
+    def __init__(self, store: RequestStore, made: typing.Optional[MadeItems] = None) -> None:
         self._store = store
+        self._made = made
 
     def execute(self, query: ListRequestsQuery) -> RequestList:
         rows = []
@@ -47,7 +51,41 @@ class ListRequestsUseCase:
                     counts_text=", ".join(f"{n} {'asking' if s == 'waiting' else s}" for s, n in counted.items() if n),
                     kinds=[dict(kind=k.name, keys=list(k.keys), words=k.words, option=k.option, about=k.about)
                            for k in KINDS],
-                    store=self._store.where() + "/")
+                    store=self._store.where() + "/", wishes=self._wishes())
+
+    def _wishes(self) -> typing.List[typing.Dict[str, typing.Any]]:
+        trail = [wish_entry(r, []) for r in self._store.all() if r.get("kind") == "wish"]
+        if self._made is not None:
+            for note in self._store.done():
+                if note.get("kind") != "wish":
+                    continue
+                made = self._made.at(str(note.get("wrote") or "").split())
+                drafts = [m for m in made if m["status"] == "draft"]
+                if made and not drafts:
+                    continue                          # released: it lives in the backlog now, not under the field
+                trail.append(wish_entry(note, drafts))
+        return sorted(trail, key=lambda w: w["asked"], reverse=True)
+
+
+def wish_entry(request: Request, drafts: typing.List[typing.Dict[str, str]]) -> typing.Dict[str, typing.Any]:
+    """One wish as its trail shows it: its words, who and when, its state in words and what a person can do there."""
+    state = request["state"]
+    first = drafts[0] if drafts else None
+    if state == "done":
+        text = (f"became a draft {first['kind']}: {first['title']}" + (f" — and {len(drafts) - 1} more" if len(drafts) > 1
+                else "")) if first else "wrote nothing new"
+    else:
+        text = {"queued": "waits its turn", "running": "writing",
+                "waiting": f"asks you back — answer it on {place_of(request['id'])}"}.get(state) \
+            or " ".join(str(request.get("error") or "failed").split())[:160]
+    release = [make_action(lambda word: True, skill=f"/factory-backlog release {d['id']}", label="release",
+                           primary=True) for d in drafts[:1]]
+    return dict(id=request["id"], words=str(request.get("words") or ""), by=str(request.get("by") or ""),
+                asked=str(request.get("asked") or ""), started=str(request.get("started") or ""), state=state,
+                tone={"done": "ok", "waiting": "ask", "failed": "bad"}.get(state, "wait"), text=text,
+                place=place_of(request["id"]), made=drafts, actions=release,
+                operations=[dict(name="hide", label="✕")] if state == "done"
+                else [dict(name=o, label=OPERATION_LABELS[o]) for o in operations_of(state) if o != "follow"])
 
 
 def target_text(request: Request) -> str:

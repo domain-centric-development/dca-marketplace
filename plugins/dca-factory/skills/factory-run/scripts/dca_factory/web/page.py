@@ -79,6 +79,8 @@ code { background: var(--code); padding: 1px 5px; border-radius: 4px; overflow-w
 .brand { display: flex; align-items: center; gap: 1ex; font: 700 19px var(--display); letter-spacing: -.3px; color: var(--mist); }
 .brand svg { width: 2.13ex; height: 2.4ex; overflow: visible; transform: translateY(.1ex); }
 .brand .tld { color: var(--teal); }
+a.brand { text-decoration: none; border-radius: 6px; padding: 2px 6px; margin: -2px -6px; }
+a.brand:hover > span:first-of-type { color: var(--teal); } a.brand:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
 .brand .project { font: 400 13px var(--mono); color: rgba(232, 234, 240, .62); letter-spacing: .3px; margin-left: 4px; }
 .tabs { display: flex; gap: 4px; margin-left: auto; overflow-x: auto; scrollbar-width: none; }
 .tabs button { font: 400 13px var(--mono); letter-spacing: .4px; color: rgba(232, 234, 240, .72); background: none; border: 0;
@@ -91,6 +93,41 @@ code { background: var(--code); padding: 1px 5px; border-radius: 4px; overflow-w
 .tsep { flex: none; width: 1px; height: 16px; margin: 0 8px; background: rgba(232, 234, 240, .2); }
 .tabs .arrow { color: rgba(232, 234, 240, .35); font: 400 12px var(--mono); }
 /* the keys show while the bar is worked by keyboard, never for a mouse */
+/* now: the cycle as four columns, the actions at their foot on one line */
+.board { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 26px; align-items: stretch; }
+.colw { display: flex; align-items: stretch; } .colw + .colw::before { content: "→"; align-self: center; padding: 0 6px; color: var(--muted); font: 400 18px var(--mono); }
+.col { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+.col.hot { border-color: #c9922e; box-shadow: inset 0 3px 0 #c9922e; }
+.col h3 { font: 700 17px var(--display); display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.col h3 .link { font: inherit; color: inherit; text-decoration: none; } .col h3 .link:hover { color: var(--accent); }
+.col .one .title { font: inherit; color: var(--text); text-decoration: none; } .col .one .title:hover { color: var(--accent); } .col h3 .c { font: 700 26px var(--display); } .col .of { font: 500 14px var(--mono); color: var(--muted); }
+.col .sub2 { font: 400 12px/16px var(--mono); color: var(--muted); height: 16px; margin-top: 2px; }
+.col .prog { display: flex; align-items: center; gap: 8px; } .col .prog .thin { flex: 1; height: 4px; border-radius: 2px; background: var(--soft); overflow: hidden; }
+.col .prog .thin i { display: block; height: 100%; background: var(--done); }
+.col .one { margin-top: 12px; font-size: 15px; } .col .one + .one { margin-top: 8px; } .col .one .id { display: block; font: 400 12px var(--mono); color: var(--muted); }
+.col .acts { margin-top: auto; padding-top: 14px; flex-wrap: nowrap; align-items: center; } .col .acts .to { margin-left: auto; }
+.btn.primary.nogo::after { content: none; }
+.inflow { display: flex; gap: 14px; align-items: center; margin-top: 22px; }
+.inflow .lab { font: 500 11px var(--mono); text-transform: uppercase; letter-spacing: .08em; color: var(--accent); white-space: nowrap; }
+.list { list-style: none; margin-top: 12px; } .list li { display: flex; gap: 10px; align-items: baseline; padding: 8px 0; border-top: 1px solid var(--line); }
+.list li:first-child { border-top: 0; } .list .what { flex: 1; min-width: 0; } .list .id { font: 400 12.5px var(--mono); color: var(--muted); display: block; }
+.list .r { font: 400 13px var(--mono); color: var(--muted); white-space: nowrap; text-align: right; }
+button.link.to { display: inline-block; margin-top: 12px; font: 500 13px var(--mono); color: var(--accent); text-decoration: none; }
+.col button.link.to { margin-top: 0; } .quietline button.link { text-decoration: none; }
+.quietline { margin-top: 14px; font: 400 13px var(--mono); color: var(--muted); } .quietline .link { font: inherit; color: var(--accent); }
+/* the wish's trail: each wish in its state, what became of it */
+.trail { list-style: none; margin-top: 14px; border-top: 1px solid var(--line); }
+.trail li { display: grid; grid-template-columns: 1.4em minmax(0, 1fr) auto; gap: 4px 10px; align-items: baseline; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.trail li:last-child { border-bottom: 0; } .trail .g { color: var(--accent); } .trail .w { min-width: 0; } .trail q { font-style: italic; }
+.trail .s { display: block; font: 400 12.5px var(--mono); color: var(--muted); margin-top: 2px; } .trail .s.ok { color: var(--done); }
+.trail .s.ask { color: #b07a1e; } .trail .s.bad { color: var(--stop); } .trail .a { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.spin { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #c9922e; margin-right: 6px; animation: pulse 1.2s infinite; }
+@keyframes pulse { 50% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+@media (max-width: 860px) {
+  .board { grid-template-columns: 1fr; } .colw { flex-direction: column; }
+  .colw + .colw::before { content: "↓"; padding: 4px 0; }
+}
 .tabs .key { display: none; margin-right: 6px; color: var(--teal); font-size: 11px; }
 .tabs:has(:focus-visible) .key { display: inline; }
 .tabs .n { display: inline-block; min-width: 18px; margin-left: 6px; padding: 0 5px; border-radius: 9px; background: var(--fill);
@@ -459,7 +496,7 @@ details.more > summary h2::before { content: "▸ "; color: var(--muted); } deta
 <body>
 <header class="topbar" id="topbar">
   <div class="wrap nav">
-    <div class="brand">__MARK__<span>factory<span class="tld">.</span></span><span class="project" id="project"></span></div>
+    <a class="brand" id="home" href="#now" data-tab="now" aria-label="now — where the factory stands" title="now — where the factory stands">__MARK__<span>factory<span class="tld">.</span></span><span class="project" id="project"></span></a>
     <nav class="tabs" id="tabs" role="tablist" aria-label="the factory's views"></nav>
     <div class="status">
       <span id="worker"><span class="dot"></span>…</span>
@@ -485,18 +522,20 @@ const TABS = [
   ["describe", "The project description", "What is built, how, and in which domain — and in each context what holds today. You write the description; what holds changes by a story the gate delivers."],
   ["discover", "Discovery", "Which problem is worth solving — a report with its sources and the epics it proposes."],
   ["backlog", "Backlog", "Epics and their stories, newest first — from a discovery, a wish, a judge's finding or a delivered epic's journey. A story runs once released."],
-  ["run", "The factory at work", "Your requests at once, while this page is open; the backlog's stories while `up` has it on — one stage after the other, a gate between them."],
+  ["run", "The factory at work", "Your requests at once, while this page is open; the backlog's stories while it is started — one stage after the other, a gate between them."],
   ["decide", "Waiting for you", "A question a stage may not decide alone, or a result to look at."],
   ["delivered", "Delivered", "What the factory delivered, the newest first."],
   ["rules", "The rules", "What the gate checks, what the runner decides and what each stage is told — per stage of a story, the gates between them. Pick a rule to read it; pick a story to see which fired."]];
+const NOW = ["now", "Where it stands", "The cycle a story turns through — how many stand where, and the one that matters most in each."];
 const MARKS = {look: "!", question: "?", stopped: "✗", running: "▶", done: "✓", none: "·", next: "→"};
-const S = {tab: "backlog", help: null, status: null, decisions: null, discover: null, requests: null, follow: null, followSource: null,
+const S = {tab: "now", help: null, status: null, decisions: null, discover: null, requests: null, follow: null, followSource: null,
            followLines: [], drawer: null, opener: null, drafts: {}, folded: {},
            rules: null, rulesFor: null, ruleKind: "story", rule: null, ruleStory: "", flowPick: null};
 const stored = key => { try { return localStorage.getItem(key) || ""; } catch (e) { return ""; } };
 const store = (key, value) => { try { localStorage.setItem(key, value); } catch (e) {} };
-S.tab = stored("factory.tab") || S.tab;
-if (TABS.some(([id]) => id === location.hash.slice(1))) S.tab = location.hash.slice(1);
+// the page opens where it stands; a link to a view opens that view
+const known = id => id === "now" || TABS.some(([t]) => t === id);
+if (known(location.hash.slice(1))) S.tab = location.hash.slice(1);
 if (location.hash === "#spec" || S.tab === "spec") S.tab = "describe";                // what holds is part of the description
 // `#rules:<story>[:<rule>]` opens the rules with that story's gate runs marked, and the rule read
 if (location.hash.startsWith("#rules:")) {
@@ -622,7 +661,8 @@ async function press(button) {
   }
   try {
     const data = await api("/api/request", Object.assign({kind: r.kind, words, by: by()}, fields));
-    toast(data.duplicate ? `queued already: ${data.id}` : `request written: ${data.id}`);
+    toast(data.duplicate ? `queued already: ${data.id}`
+      : r.kind === "wish" ? "✦ your wish is being written as a draft — it shows below the field" : `request written: ${data.id}`);
     if (box) { box.querySelector("textarea").value = ""; delete S.drafts[r.draft || action.skill]; }
     refresh();
     if (S.drawer) openStory(S.drawer);
@@ -651,6 +691,7 @@ const CALLS = {
     await api("/api/requests/drop", {id: node.dataset.id}); toast("taken back");
   },
   async retry(node) { await api("/api/requests/retry", {id: node.dataset.id}); toast("queued again"); },
+  async hide(node) { await api("/api/requests/drop", {id: node.dataset.id}); toast("hidden — the draft stays in the backlog"); },
   async follow(node) { follow(node.dataset.kind, node.dataset.id); },
   async unfollow() { follow(null); },
   async close() { S.drawer = null; $("drawer").hidden = true; forget("d"); if (S.opener && document.contains(S.opener)) S.opener.focus(); S.opener = null; },
@@ -723,7 +764,7 @@ function renderFrame() {
   document.title = (st.project ? st.project + " — " : "") + "factory";
   // the dot is the backlog's, the one thing a person switches here: a person's requests are worked while this page is
   // open, and that goes without saying (WP-177)
-  const backlog = !!(w && w.alive && (w.how !== "up" || w.backlog));
+  const backlog = backlogOn(st);
   const dot = !backlog ? "down" : w.stopping ? "stopping" : "up";
   const queued = (S.requests || {}).counts_text;
   $("worker").innerHTML = `<span class="dot ${dot}"></span>${esc(st.worker_text || "…")}${queued ? ` · ${esc(queued)}` : ""}`;
@@ -734,15 +775,15 @@ function renderFrame() {
   const asking = place => (st.waiting || []).filter(w => (w.place || "decide") === place).length;
   const tab = id => {
     const n = ["decide", "discover", "describe"].includes(id) ? asking(id) : id === "run" ? (counts.failed || 0) : 0;
-    const key = TABS.findIndex(([t]) => t === id), on = S.tab === id;
-    return `<button role="tab" id="tab-${id}" data-tab="${id}" aria-selected="${on}" tabindex="${on ? 0 : -1}" aria-controls="main" aria-keyshortcuts="${key}"><span class="key" aria-hidden="true">${key}</span>${esc(id)}${n ? `<span class="n">${n}</span>` : ""}</button>`;
+    const key = TABS.findIndex(([t]) => t === id), on = S.tab === id, first = S.tab === "now" && key === 0;
+    return `<button role="tab" id="tab-${id}" data-tab="${id}" aria-selected="${on}" tabindex="${on || first ? 0 : -1}" aria-controls="main" aria-keyshortcuts="${key}"><span class="key" aria-hidden="true">${key}</span>${esc(id)}${n ? `<span class="n">${n}</span>` : ""}</button>`;
   };
   // the parts side by side, the cycle's views with an arrow between them: the order a story turns through
   const parts = (S.help || {}).parts || [{tabs: TABS.map(([id]) => id)}];
   morph($("tabs"), parts.map(p => `<span class="tgroup" role="presentation">${p.tabs.map((id, i) =>
     (i && p.ordered ? `<span class="arrow" aria-hidden="true">→</span>` : "") + tab(id)).join("")}</span>`)
     .join(`<span class="tsep" aria-hidden="true"></span>`));
-  $("main").setAttribute("aria-labelledby", "tab-" + S.tab);
+  $("main").setAttribute("aria-labelledby", S.tab === "now" ? "home" : "tab-" + S.tab);
 }
 const partOf = id => ((S.help || {}).parts || []).find(p => p.tabs.includes(id));
 
@@ -791,9 +832,9 @@ function render() {
     && $("main").contains(document.activeElement);
   if (editing) return;                                   // a person typing is not redrawn under their hands
   forget("m"); forget("s");
-  const [, title, lede] = TABS.find(([id]) => id === S.tab) || TABS[2];
-  const eyebrow = (partOf(S.tab) || {}).eyebrow || "";
-  const view = {describe, discover, backlog, run, decide, delivered, rules: rulesTab}[S.tab] || backlog;
+  const [, title, lede] = S.tab === "now" ? NOW : TABS.find(([id]) => id === S.tab) || NOW;
+  const eyebrow = S.tab === "now" ? "Now" : (partOf(S.tab) || {}).eyebrow || "";
+  const view = {now, describe, discover, backlog, run, decide, delivered, rules: rulesTab}[S.tab] || now;
   morph($("main"), `<div class="eyebrow">${esc(eyebrow)}</div><h1>${esc(title)}</h1><p class="lede">${esc(lede)}</p>`
     + (S.status ? endedLine(S.status) + view(S.status) : `<section class="card"><p class="empty">Reading the factory…</p></section>`));
   if (S.tab === "run") paintFollow();
@@ -1160,18 +1201,63 @@ document.addEventListener("click", event => {
 function endedLine(st) {
   const gone = st.ended;
   return gone ? `<div class="next ended"><div class="text"><span class="arrow">!</span>${esc(gone.text)}${gone.log ? ` <span class="hint">${esc(gone.log)}</span>` : ""}</div>
-    <button class="btn primary" data-call="up">up</button></div>` : "";
+    <button class="btn primary nogo" data-call="up">▶ start the backlog</button></div>` : "";
 }
 
-function nextLine(st) {
-  const nx = st.next;
-  if (!nx) return "";
-  return `<div class="next"><div class="text"><span class="arrow">→</span>${esc(nx.text)}</div>${act(nx.action)}</div>`;
-}
+// whether the backlog runs: a runner from a terminal or a session's, or the factory's worker with the backlog on
+const backlogOn = st => { const w = st.worker; return !!(w && w.alive && (w.how !== "up" || w.backlog)); };
 
 function card(title, sub, body) {
   const head = title ? `<h2>${title}${sub ? ` <span class="sub">${sub}</span>` : ""}</h2>` : "";
   return `<section class="card">${head}${body}</section>`;
+}
+
+// --- now: where it stands --------------------------------------------------------------------------------------------
+// The cycle as four columns, each as the factory says it: its count, one line, the one item that matters most there and
+// the one action at its foot. Then the inflow — the wish part —, the last deliveries and what may wait.
+const when = text => {
+  const day = String(text || "").slice(0, 10), today = new Date().toISOString().slice(0, 10);
+  return !day ? "" : day === today ? `today ${String(text).slice(11)}` : day;
+};
+function column(c) {
+  const count = c.column === "delivered" ? `${c.count}<small class="of"> / ${c.total}</small>` : `${c.count}`;
+  const line = c.column === "delivered"
+    ? `<div class="sub2 prog" role="img" aria-label="${c.count} of ${c.total} stories delivered, ${c.percent} percent"><span class="thin"><i style="width:${c.percent}%"></i></span>${esc(c.line)}</div>`
+    : `<div class="sub2">${esc(c.line)}</div>`;
+  const item = c.title ? `<div class="one">${c.story ? story(c.story, c.title) : esc(c.title)}${c.sub ? `<span class="id">${esc(c.sub)}</span>` : ""}</div>` : "";
+  const last = c.last_text ? `<div class="one">last ${esc(when(c.last_text))}</div>` : "";
+  const press = !c.action ? "" : c.action.call ? `<button class="btn primary nogo" data-call="${esc(c.action.call)}">${esc(c.action.label)}</button>` : act(c.action);
+  const all = c.column === "delivered" ? `<button class="link to" data-tab="delivered">all →</button>` : "";
+  return `<div class="colw"><div class="col${c.hot ? " hot" : ""}"><h3><button class="link" data-tab="${esc(c.column)}">${esc(c.column)}</button><span class="c">${count}</span></h3>
+    ${line}${last}${item}<div class="acts">${press}${all}</div></div></div>`;
+}
+function now(st) {
+  const rows = Object.fromEntries((st.rows || []).map(r => [r.story, r]));
+  const recent = (st.delivered_order || []).slice(0, 3).map(id => rows[id]).filter(Boolean).map(r => `<li><span class="mark m-done" aria-hidden="true">✓</span>
+    <span class="what">${story(r.story, r.title)}<span class="id">${esc(r.epic)}</span></span><span class="r">${esc(when(r.delivered_text))}<br>${esc(r.cost_text || "")}</span></li>`).join("");
+  const sums = [st.cost_text, st.seconds_text].filter(Boolean).join(" · ");
+  const findings = (st.findings || []).length;
+  return `<div class="board">${(st.now || []).map(column).join("")}</div>`
+    + `<div class="inflow"><span class="lab">Inflow →</span><span class="hint">a wish, a discovery, a finding, an epic's journey fill the backlog</span></div>`
+    + wishCard(st, true)
+    + (recent ? card("Last delivered", sums ? `${esc(sums)} in all` : "", `<ul class="list">${recent}</ul><button class="link to" data-tab="delivered">delivered →</button>`) : "")
+    + (findings ? `<p class="quietline">Beside that: <button class="link" data-tab="backlog">${findings} open finding${findings > 1 ? "s" : ""} beside their stories →</button></p>` : "");
+}
+
+// --- the wish: one part wherever it stands, the field and the trail of what became of each wish ------------------------
+function wishCard(st, tight) {
+  const trail = ((S.requests || {}).wishes || []).map(w => {
+    const since = w.state === "running" && w.started ? ` — ${Math.max(0, Math.round((Date.now() - Date.parse(w.started)) / 1000))} s` : "";
+    const ops = (w.operations || []).map(op => `<button class="btn small${op.name === "drop" ? " danger" : ""}" data-call="${esc(op.name)}" data-kind="request" data-id="${esc(w.id)}"${op.name === "hide" ? ` title="hide it here; the draft stays in the backlog" aria-label="hide"` : ""}>${esc(op.label)}</button>`).join("");
+    const answer = w.state === "waiting" ? `<button class="btn small primary" data-tab="${esc(w.place)}">answer</button>` : "";
+    const open = (w.made || []).slice(0, 1).map(m => `<button class="btn small" data-story="${esc(m.id)}">open</button>`).join("");
+    const glyph = {ok: "✓ ", ask: "? ", bad: "✗ "}[w.tone] || "";
+    return `<li><span class="g" aria-hidden="true">✦</span><span class="w"><q>${esc(w.words)}</q>
+      <span class="s ${esc(w.tone)}">${w.tone === "wait" ? `<span class="spin" aria-hidden="true"></span>` : ""}${esc(glyph + w.text + since)}${w.by ? ` · ${esc(w.by)}` : ""}</span></span>
+      <span class="a">${answer}${acts(w.actions, "s")}${open}${ops}</span></li>`;
+  }).join("");
+  return `<section class="card wish"${tight ? ` style="margin-top:12px"` : ""}><h2>A wish <span class="sub">your words become a story, a task or a finding settled — a draft until you release it</span></h2>`
+    + act((st.entries || {}).wish) + (trail ? `<ul class="trail" aria-label="the wishes">${trail}</ul>` : "") + `</section>`;
 }
 
 // --- 0 describe ----------------------------------------------------------------------------------------------------
@@ -1337,7 +1423,7 @@ function backlog(st) {
   }).join("");
   const findings = (st.findings || []).map(f => `<tr><td><span class="state">${esc(f.severity)}</span></td>
     <td>${esc(f.plain || f.defect)}<div class="id">${esc(f.row)} · ${esc(f.where)}</div></td><td class="act"><div class="acts">${act(f.action)}</div></td></tr>`).join("");
-  return nextLine(st) + card("A wish", "your words become a story, kept as a draft until you release it", act((st.entries || {}).wish))
+  return wishCard(st)
     + (epics || filter !== "all" ? card("Epics", filter === "all" ? "newest first — open one to see its stories by where they stand" : filter === "drafts" ? "the drafts, waiting for your release" : "what is not delivered yet",
         filters + STRIP_KEY + (epics ? `<div class="erows">${epics}</div>` : `<p class="empty">Nothing here.</p>`))
       : card("", "", `<p class="empty">The backlog is empty.</p>`))
@@ -1363,11 +1449,13 @@ document.addEventListener("keydown", event => {
 // --- 3 run ---------------------------------------------------------------------------------------------------------
 function run(st) {
   const w = st.worker, reqs = (S.requests || {}).requests || [];
-  const factory = w ? `<dl class="kv"><dt>worker</dt><dd>${esc(w.owner)}</dd><dt>state</dt><dd>${esc(st.worker_text)}</dd>
-      <dt>since</dt><dd>${esc(w.since_text)}</dd>${w.log ? `<dt>log</dt><dd><code>${esc(w.log)}</code></dd>` : ""}</dl>
-      ${w.alive && !w.stopping ? `<div class="acts"><button class="btn" data-call="down">down — after the running stage</button>
-      <button class="btn danger" data-call="down" data-now="1">down now</button></div>` : ""}`
-    : `<p class="about">The factory is down. Requests wait in the queue until it is up.</p><div class="acts"><button class="btn primary" data-call="up">up</button></div>`;
+  // the backlog is the one thing switched here: a person's requests are worked while this page is open (WP-177)
+  const factory = (backlogOn(st) ? (w.stopping ? `<p class="about">Stopping after the running stage.</p>`
+      : `<div class="acts"><button class="btn" data-call="down">■ stop the backlog — after the running stage</button>
+      <button class="btn danger" data-call="down" data-now="1">■ stop now</button></div>`)
+    : `<div class="acts"><button class="btn primary nogo" data-call="up">▶ start the backlog</button></div>`)
+    + (w ? `<details class="more" data-fold="worker"${foldOpen("worker")}><summary class="hint">the worker</summary><dl class="kv"><dt>worker</dt><dd>${esc(w.owner)}</dd>
+      <dt>since</dt><dd>${esc(w.since_text)}</dd>${w.log ? `<dt>log</dt><dd><code>${esc(w.log)}</code></dd>` : ""}</dl></details>` : "");
   const ops = r => (r.operations || []).map(op => `<button class="btn small${op.name === "drop" ? " danger" : ""}" data-call="${esc(op.name)}"
     data-kind="request" data-id="${esc(r.id)}">${esc(op.label)}</button>`).join("");
   const tone = {queued: "mute", running: "wait", waiting: "wait", failed: "bad"};
@@ -1390,12 +1478,13 @@ function run(st) {
       .map(w => course(w.story, "bad", "stopped", {course: w.course, doing: (w.action && w.action.text) || w.what},
         `${act(w.action)}${follows(w.story)}`)).join("");
   const ready = (st.rows || []).filter(r => st.queue && st.queue.ready.includes(r.story)).map(storyRow).join("");
-  return nextLine(st)
+  return card("The backlog", backlogOn(st) ? "on — the released stories one after the other"
+        : `off — ${(st.queue || {ready: []}).ready.length} released stories would run`, factory)
+    + wishCard(st)
     + card("Running", "a story's course through its stages — running, or stopped where it goes on", live || `<p class="empty">No stage runs.</p>`)
     + card("Output", `<span id="follow-title" data-own></span>`, `<div class="acts" id="follow-acts" data-own></div><pre class="out" id="follow-out" data-own></pre>`)
-    + card("Requests", "worked before the next story, oldest first", tickets ? `<div class="queue">${tickets}</div>` : `<p class="empty">No request waits.</p>`)
-    + (ready ? card("Next in line", "ready, in the order the factory takes them", `<table>${ready}</table>`) : "")
-    + card("The factory", "", factory);
+    + card("Requests", "everything asked of the factory, oldest first", tickets ? `<div class="queue">${tickets}</div>` : `<p class="empty">No request waits.</p>`)
+    + (ready ? card("Next in line", "ready, in the order the factory takes them", `<table>${ready}</table>`) : "");
 }
 
 function follow(kind, id) {
@@ -1638,7 +1727,7 @@ document.addEventListener("keydown", event => {
 });
 window.addEventListener("hashchange", () => {
   const tab = location.hash.slice(1);
-  if (tab !== S.tab && TABS.some(([id]) => id === tab)) show(tab);
+  if (tab !== S.tab && known(tab)) show(tab);
 });
 theme(stored("factory.theme") || "auto");
 (async () => {

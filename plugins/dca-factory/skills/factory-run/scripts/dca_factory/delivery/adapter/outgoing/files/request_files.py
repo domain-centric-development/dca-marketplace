@@ -19,11 +19,14 @@ from ....application.shared.requests import ID_WORD, KIND, Request, RequestRefus
 REQUESTS = "requests"
 REQUEST_JOURNAL = "journal.tsv"
 REQUEST_OUT = "out"
+REQUEST_DONE = "done"
+#: How long the note of a worked request stays, in days, when nobody released what it made nor hid it.
+DONE_DAYS = 7
 
 #: The keys a request's front matter may carry, in the order they are written.
 FRONT_KEYS = ("kind", "story", "epic", "record", "topic", "proposal", "report", "option", "from", "by", "asked",
               "state", "worker", "started", "attempts", "record_file", "error", "answered", "wrote",
-              "worked")
+              "worked", "commit")
 
 
 def factory_dir() -> str:
@@ -175,8 +178,47 @@ def journal_lines(limit: int = 50) -> typing.List[typing.List[str]]:
         return [line.rstrip("\n").split("\t") for line in handle.readlines()[-limit:]]
 
 
+def done_path(request_id: str) -> str:
+    return os.path.join(requests_dir(), REQUEST_DONE, f"{request_id}.md")
+
+
+def keep_done(request: Request, wrote: str, commit: str, at: str) -> None:
+    """The note of a worked request: its front keys and words, `state: done`, what it wrote, its commit, when."""
+    front = {k: v for k, v in request.items() if k in FRONT_KEYS and k not in ("worker", "started", "error", "record_file")}
+    front.update(state="done", wrote=wrote, commit=commit, worked=at)
+    words = str(request.get("words") or "")
+    write_atomic(done_path(request["id"]), front_text(front) + (f"\n{words}\n" if words else ""))
+
+
+def list_done() -> typing.List[Request]:
+    folder = os.path.join(requests_dir(), REQUEST_DONE)
+    if not os.path.isdir(folder):
+        return []
+    notes = [read_request(os.path.join(folder, name)) for name in sorted(os.listdir(folder), reverse=True)
+             if name.endswith(".md") and not name.startswith(".")]
+    for note in notes:
+        note["state"] = "done"
+    return notes
+
+
+def hide_done(request_id: str) -> bool:
+    path = done_path(request_id)
+    if not ID_WORD.match(request_id) or not os.path.isfile(path):
+        return False
+    os.remove(path)
+    return True
+
+
 def prune_outputs(days: int = 7, now: typing.Optional[float] = None) -> None:
-    """The raw outputs of requests that ended more than <days> ago — protocol, kept for a look, not forever."""
+    """The raw outputs of requests that ended more than <days> ago — protocol, kept for a look, not forever —, and the
+    notes of worked requests older than `DONE_DAYS`."""
+    done = os.path.join(requests_dir(), REQUEST_DONE)
+    if os.path.isdir(done):
+        old = (now or time.time()) - DONE_DAYS * 86400
+        for name in os.listdir(done):
+            with contextlib.suppress(OSError):
+                if os.path.getmtime(os.path.join(done, name)) < old:
+                    os.remove(os.path.join(done, name))
     folder = os.path.join(requests_dir(), REQUEST_OUT)
     if not os.path.isdir(folder):
         return
@@ -218,3 +260,12 @@ class RequestFiles:
 
     def journal(self, *fields: str) -> None:
         journal(*fields)
+
+    def keep_done(self, request: Request, wrote: str, commit: str, at: str) -> None:
+        keep_done(request, wrote, commit, at)
+
+    def done(self) -> typing.List[Request]:
+        return list_done()
+
+    def hide_done(self, request_id: str) -> bool:
+        return hide_done(request_id)
