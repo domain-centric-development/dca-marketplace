@@ -90,18 +90,23 @@ def gate(x: float, name: str, checks: typing.List[str]) -> str:
             f'<path d="M{x - 4.5:.1f},{Y + .5} l3,3 l6,-6.5"/></g>')
 
 
+def sign(x: float, y: float, way: str) -> str:
+    """A stop's cross or a wait's bars in a circle."""
+    inner = (f"M{x - 2.6:.1f},{y - 2.6:.1f} l5.2,5.2 M{x + 2.6:.1f},{y - 2.6:.1f} l-5.2,5.2" if way == "stop"
+             else f"M{x - 1.8:.1f},{y - 3:.1f} v6 M{x + 1.8:.1f},{y - 3:.1f} v6")
+    return f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{MARK}"/><path d="{inner}"/>'
+
+
 def mark(x: float, y: float, way: str, edge: Model, source: str) -> str:
-    sign = (f"M{x - 2.6:.1f},{y - 2.6:.1f} l5.2,5.2 M{x + 2.6:.1f},{y - 2.6:.1f} l-5.2,5.2" if way == "stop"
-            else f"M{x - 1.8:.1f},{y - 3:.1f} v6 M{x + 1.8:.1f},{y - 3:.1f} v6")
     return (f'<g class="way mark mark-{way}" data-source="{esc(source)}" data-target="{way}" data-way="{way}" '
             f'data-rules="{esc(ruled(edge))}"><title>{esc(source)} → {way}: {esc(said(edge))}</title>'
-            f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{MARK}"/><path d="{sign}"/></g>')
+            f'{sign(x, y, way)}</g>')
 
 
 def svg(graph: Model, kind: str, titles: typing.Optional[typing.Mapping[str, str]] = None, one_at_a_time: bool = False) -> str:
     """The kind's flow; `graph` as the rulebook's json view gives it (`flow.<kind>.graph`); `titles` names a rule
-    by its title where a way back is labelled — its id where it has none. `one_at_a_time`: a page shows one way back
-    at a time, so every way back takes the lane nearest the line and the drawing is only as tall as its longest label."""
+    by its title where a way back is labelled — its id where it has none. `one_at_a_time`: a page shows only the ways
+    back of one step at a time, so they nest per step that takes them, and the drawing is only as tall as one step's."""
     titles = titles or {}
     steps = graph["steps"]
     at, line, width = placed(steps)
@@ -110,11 +115,23 @@ def svg(graph: Model, kind: str, titles: typing.Optional[typing.Mapping[str, str
     backs = sorted((e for e in edges if e["way"] == "back"),
                    key=lambda e: (abs(at[e["source"]].x - at[e["target"]].x), at[e["source"]].x))
     named = [list(dict.fromkeys(titles.get(r["rule"]) or r["rule"] for r in e["rules"])) for e in backs]
-    depths, depth = [], 26.0
-    for names in named:                      # each lane below the label of the one above it, or all on the first
-        depths.append(26.0 if one_at_a_time else depth)
-        depth = max(depth, 26.0 + 22 + 13 * (len(names) + 1)) if one_at_a_time else depth + 22 + 13 * (len(names) + 1)
-    height = Y + 40 + depth + 24 * 2 + 10
+    depths: typing.List[float] = []          # each lane below the label of the one above it
+    below: typing.Dict[str, float] = {}
+    for edge, names in zip(backs, named):
+        nest = edge["source"] if one_at_a_time else ""
+        depths.append(below.get(nest, 26.0))
+        below[nest] = depths[-1] + 22 + 13 * (len(names) + 1)
+    depth = max(below.values(), default=26.0)
+    legend = []                              # a rule a line, with each way it takes (a rule may stop or wait)
+    for source, label in (("every_gate", "at every gate"), ("anywhere", "anywhere in a run")):
+        ways: typing.Dict[str, typing.List[str]] = {}
+        for edge in (e for e in graph[source] if e["way"] in ("stop", "waits")):
+            for rule in dict.fromkeys(r["rule"] for r in edge["rules"]):
+                ways.setdefault(rule, []).append(edge["way"])
+        legend.append((source, label, list(ways.items())))
+    legend = [group for group in legend if group[2]]
+    rows = sum((len(lines) + 1) // 2 for _, _, lines in legend)
+    height = Y + 54 + depth + 18 * rows + 12 * len(legend) + 10
     out = [f'<svg xmlns="http://www.w3.org/2000/svg" class="f" viewBox="0 0 __WIDTH__ {height:.0f}" '
            f'role="img" aria-label="the {esc(kind)} flow: its steps, gates, rounds and ways back">',
            f"<style>{STYLE}</style>",
@@ -142,7 +159,7 @@ def svg(graph: Model, kind: str, titles: typing.Optional[typing.Mapping[str, str
             out.append(f'<text class="step" data-stage="{esc(name)}" x="{place.x:.1f}" y="{Y + 8}" '
                        f'text-anchor="middle">{esc(name)}</text>')
             if gated[name]["gate"] == "none":
-                out.append(f'<text class="small" x="{place.x:.1f}" y="{Y + 56}" text-anchor="middle">decides, '
+                out.append(f'<text class="small" x="{place.x:.1f}" y="{Y + 47}" text-anchor="middle">decides, '
                            f'no gate</text>')
     # the rounds: from the gate after a step (or the step) up and back into it
     for edge in (e for e in edges if e["way"] == "again"):
@@ -163,7 +180,7 @@ def svg(graph: Model, kind: str, titles: typing.Optional[typing.Mapping[str, str
     # the title of each rule that takes it, one a line
     for lane, edge in enumerate(backs):
         a, b = at[edge["source"]], at[edge["target"]]
-        top, low = Y + 40, Y + 40 + depths[lane]
+        top, low = Y + 54, Y + 54 + depths[lane]
         bend = top + (low - top) / .75           # a cubic with both handles here bottoms out at `low`
         d = f"M{a.x:.1f},{top} C{a.x:.1f},{bend:.1f} {b.x:.1f},{bend:.1f} {b.x:.1f},{top + 4}"
         mid = (a.x + b.x) / 2
@@ -180,21 +197,21 @@ def svg(graph: Model, kind: str, titles: typing.Optional[typing.Mapping[str, str
         step = at[edge["source"]]
         offset = -9 if edge["way"] == "stop" else 9
         out.append(mark(step.x + offset, Y + 30, edge["way"], edge, edge["source"]))
-    # what every gate and the whole run share, said once
-    y, footer = height - 24 * 2 + 4, 0.0
-    for source, label in (("every_gate", "at every gate"), ("anywhere", "anywhere in a run")):
-        shared = [e for e in graph[source] if e["way"] in ("stop", "waits")]
-        if not shared:
-            continue
-        x = 24.0
-        out.append(f'<text class="small" x="{x}" y="{y + 4}">{label}</text>')
-        x += 140
-        for edge in shared:
-            out.append(mark(x, y, edge["way"], edge, source.replace("_", "-")))
-            words = ", ".join(dict.fromkeys(r["rule"] for r in edge["rules"]))
-            out.append(f'<text class="small" x="{x + 14}" y="{y + 4}">{esc(words)}</text>')
-            x += 28 + len(words) * 6.7
-        footer = max(footer, x + 16)
-        y += 24
+    # what every gate and the whole run share, said once: a rule a line, by its title, in two columns
+    y, column = Y + 54 + depth + 8, max((width - 164) / 2, 300.0)
+    for source, label, lines in legend:
+        out.append(f'<text class="small" x="24" y="{y + 4}">{label}</text>')
+        for n, (rule, taken) in enumerate(lines):
+            half = (len(lines) + 1) // 2      # down the first column, then the second
+            x, row = 164 + column * (n // half), y + 18 * (n % half)
+            words = titles.get(rule) or rule
+            fits = int((column - 30) / 6.7)
+            shown = words if len(words) <= fits else words[:fits - 1].rstrip() + "…"
+            out.append(f'<g class="way mark" data-source="{source.replace("_", "-")}" '
+                       f'data-target="{taken[0]}" data-way="{taken[0]}" data-rules="{esc(rule)}">'
+                       f'<title>{esc(rule)}: {esc(words)}</title>'
+                       + "".join(f'<g class="mark-{way}">{sign(x + 16 * i, row, way)}</g>' for i, way in enumerate(taken))
+                       + f'<text class="small" x="{x + 14 + 16 * (len(taken) - 1)}" y="{row + 4}">{esc(shown)}</text></g>')
+        y += 18 * ((len(lines) + 1) // 2) + 12
     out.append("</svg>")
-    return "\n".join(out).replace("__WIDTH__", f"{max(width, footer):.0f}") + "\n"
+    return "\n".join(out).replace("__WIDTH__", f"{width:.0f}") + "\n"
