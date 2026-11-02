@@ -163,6 +163,7 @@ h1 { font: 700 clamp(28px, 4vw, 38px)/1.1 var(--display); letter-spacing: -1px; 
 h3 { font: 600 15px var(--display); margin: 18px 0 6px; }
 .drawer h2 { font: 600 16px var(--display); margin: 20px 0 6px; }
 .drawer > .acts { margin: 16px 0 22px; }
+.drawer > .ask { margin: 8px 0 24px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
 .sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .prose { font-size: 16px; }
 .prose p, .prose ul, .prose ol { margin: 0 0 8px; }
