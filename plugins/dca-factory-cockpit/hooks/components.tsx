@@ -708,19 +708,22 @@ export function components({ Box, Text, Button, Input, Svg = null, Markdown = nu
       </Box>
     ),
 
-    // The phases as a flow: the foundation, then the cycle with an arrow between its steps. The open phase sits in
-    // a teal frame; a phase that needs the person carries a mark (what waits, what runs).
-    phases: (
-      foundation: Phase[],
-      cycle: Phase[],
-    ) => {
+    // The phases as a flow: the foundation once, the inflow to the backlog, then the cycle every story turns through
+    // with an arrow between its steps, and what is there to look up beside them. The open phase sits in a teal frame;
+    // a phase that needs the person carries a mark (what waits, what runs).
+    phases: (foundation: Phase[], inflow: Phase[], cycle: Phase[], aside: Phase[]) => {
       return (
         <Box flexWrap="wrap" alignItems="center" columnGap={1} rowGap={1}>
           <Text color={C.accent}>ONCE</Text>
           {foundation.map(step)}
           <Text color={C.line}> ┃ </Text>
+          <Text color={C.accent}>INFLOW</Text>
+          {inflow.map(step)}
+          <Text color={C.line}> ┃ </Text>
           <Text color={C.accent}>CYCLE</Text>
           {cycle.flatMap((phase, index) => [...(index > 0 ? [<Text color={C.line}>›</Text>] : []), step(phase)])}
+          <Text color={C.line}> ┃ </Text>
+          {aside.map(step)}
         </Box>
       )
     },

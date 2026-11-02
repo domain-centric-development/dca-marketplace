@@ -47,23 +47,27 @@ exists, written after the code by people and by the document stage. Where the tw
 `product/domain.md` against a map generated from the code — a difference is a finding, not a
 duplicate.
 
-## A foundation once, then the cycle
+## A foundation, an inflow, the cycle
 
 ```
-foundation   describe · set up                         once, and when something moves
-cycle        discover → backlog → run → decide → delivered      with every body of work
-                         └ plan → test → build → tidy → judge → document
+foundation   describe · set up                              once, and when something moves
+inflow       discover — beside it a wish, a finding, a journey     when there is new work
+cycle        backlog → run → decide → delivered             with every story
+                      └ plan → test → build → tidy → judge → document
 ```
 
 | Part | Step | Agent | What it does |
 |---|---|---|---|
 | foundation | describe | `/dca-describe`, `/dca-describe <change>` | the project description; a change in your words later |
 | foundation | set up | `/factory-setup`, `/factory-update` | runner, gate, hook and stack profile — only what is missing |
-| cycle | discover | `/factory-discover <topic>` | optional: the problem worth solving, proposed epics with their outcome events |
+| inflow | discover | `/factory-discover <topic>` | the problem worth solving, proposed epics with their outcome events — one way into the backlog beside a wish (`/factory-run <your words>`), a finding and a journey |
 | cycle | backlog | `/factory-backlog epic <id> --from <report>` · `stories <epic>` · `release <story> …` · `journey <epic>` | an epic from a released proposal, its stories as drafts, their release, the journey that guards a delivered epic |
 | cycle | run | `/factory-run [<story>]` | the six stages with a gate between them |
 | cycle | decide | `/factory-decisions [<story>]` | questions a stage may not decide, acceptances |
 | cycle | delivered | `/factory-status` | what is delivered — stories, epics, outcome events; delivered is not shipped |
+
+Above the cycle, slower: an epic names its outcome event, delivered shows whether it happens, and that can start
+the next discovery. The rulebook (`factory.sh rules`) stands beside the three parts, to look up.
 
 The description is not part of the cycle: it is amended in parts by the step that found the reason — a
 structural answer (`/factory-decisions`), the document stage (glossary, map), a released description change

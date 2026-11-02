@@ -21,8 +21,14 @@ from .terminal import (
 SHELL_NAME = "factory.sh"          # the help's tables name the runner short; the view says its full path once
 
 
-#: The two parts of the flow: the foundation is written once and changed when things move; the cycle recurs.
-PART_WORDS = {"foundation": "once", "cycle": "↻ cycle"}
+#: The parts of the flow: the foundation is written once and changed when things move; the inflow fills the backlog
+#: when there is new work to find; the cycle recurs with every story.
+PART_WORDS = {"foundation": "once", "inflow": "inflow", "cycle": "↻ cycle"}
+
+FLOW_TITLE = "The flow — a foundation once, an inflow to the backlog, the cycle every story turns — and where this " \
+             "project is now"
+LOOP_NOTE = "Above the cycle, slower: an epic names its outcome event, delivered shows whether it happens, and that " \
+            "can start the next discovery."
 
 
 NOW_WORDS = {"done": "done", "next": "you are here", "look": "waits for your look", "question": "waits for your answer",
@@ -35,11 +41,12 @@ def shell_form(command: typing.Optional[str]) -> str:
 
 def render_help_text(model: typing.Mapping[str, typing.Any], colour: bool = False) -> str:
     out = [""] + heading(f"Factory help — {model['project']}", colour, "═")
-    out += section("The flow — a foundation once, then the cycle — and where this project is now", colour)
-    rows = [[f"{f['number']}  {f['step']}", PART_WORDS[f["part"]], NOW_WORDS.get(f["mark"], ""), f["skill"],
+    out += section(FLOW_TITLE, colour)
+    rows = [[f["step"], PART_WORDS[f["part"]], NOW_WORDS.get(f["mark"], ""), f["skill"],
              shell_form(f["shell"]) or "— needs an agent session", f["what"]] for f in model["flow"]]
     out += table_text(["step", "part", "now", "agent", "shell", "what it is"], rows,
                       marks=[f["mark"] if f["mark"] != "none" else None for f in model["flow"]], colour=colour, painted=3)
+    out += ["", "    " + dim(LOOP_NOTE, colour)]
     out += section("Commands", colour)
     out += table_text(["to see", "agent", "shell", "what it shows"],
                       [[c["name"], c["skill"], shell_form(c["shell"]) or "— needs an agent session", c["what"]]
@@ -58,13 +65,13 @@ def render_help_text(model: typing.Mapping[str, typing.Any], colour: bool = Fals
 
 def render_help_md(model: typing.Mapping[str, typing.Any]) -> str:
     out = [f"### Factory help — {model['project']}", "",
-           "**The flow — a foundation once, then the cycle — and where this project is now**", ""]
+           f"**{FLOW_TITLE}**", ""]
     out += table_md(["step", "part", "now", "agent", "shell", "what it is"],
-                    [[f"{f['number']} {f['step']}", PART_WORDS[f["part"]], f"**{NOW_WORDS[f['mark']]}**" if f["mark"] in NOW_WORDS else "",
+                    [[f["step"], PART_WORDS[f["part"]], f"**{NOW_WORDS[f['mark']]}**" if f["mark"] in NOW_WORDS else "",
                       f"`{f['skill']}`",
                       f"`{shell_form(f['shell'])}`" if f["shell"] else "— needs an agent session", commands(f["what"], False, md=True)]
                      for f in model["flow"]])
-    out += ["", "**Commands**", ""]
+    out += ["", LOOP_NOTE, "", "**Commands**", ""]
     out += table_md(["to see", "agent", "shell", "what it shows"],
                     [[c["name"], f"`{c['skill']}`", f"`{shell_form(c['shell'])}`" if c["shell"] else "— needs an agent session",
                       c["what"]] for c in model["commands"]],

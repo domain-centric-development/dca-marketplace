@@ -7896,9 +7896,9 @@ def run_groups(args):
              "`/factory-run <your words>` | — needs an agent session" in help_md, help_md[:600]),
         ]
         expectations += [
-            ("help: the flow in a fixed order — a foundation once, then the cycle — one place marked: an open question",
+            ("help: the flow in a fixed order — a foundation once, an inflow, the cycle — one place marked: an open question",
              [f["step"] for f in flow] == ["describe", "set up", "discover", "backlog", "run", "decide", "delivered"]
-             and [f["part"] for f in flow] == ["foundation"] * 2 + ["cycle"] * 5
+             and [f["part"] for f in flow] == ["foundation"] * 2 + ["inflow"] + ["cycle"] * 4
              and [f["mark"] for f in flow if f["mark"] not in ("none", "done")] == ["question"]
              and {f["step"]: f["mark"] for f in flow}["set up"] == "done"
              and {f["step"]: f["mark"] for f in flow}["decide"] == "question", flow),
@@ -9493,7 +9493,7 @@ def run_groups(args):
                              shown.returncode == 0 and fresh
                              and [f["mark"] for f in fresh["flow"]] == ["next"] + ["none"] * 6
                              and fresh["next"]["action"]["skill"] == "/dca-new project"
-                             and [f["number"] for f in fresh["flow"]] == [1, 2, 3, 4, 5, 6, 7]
+                             and [p["part"] for p in fresh["parts"]] == ["foundation", "inflow", "cycle", "rules"]
                              and {f["step"]: f["shell"] for f in fresh["flow"]}["set up"] == "setup",
                              f"exit {shown.returncode}; {shown.stdout[:200]} {shown.stderr[:200]}"))
     for root in throwaway():

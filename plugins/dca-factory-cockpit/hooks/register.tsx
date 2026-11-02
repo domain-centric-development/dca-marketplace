@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, HookStream, ProcessSpawnChunk, ProcessSpawnResult, Register, RenderElement, RenderInput } from 'claude-code'
 
 import type { Action, Cockpit, DecisionRecord, Detail, EpicView, FactoryStatus, Glance, JournalEvent, Row, Rule, RulesView, SpecContext, SpecDelta, SpecView, StageOutput, StoryView, Tab, Topic, Worker } from '../types'
-import { C, COL, MARK_COLOR, MARK_GLYPH, applyPalette, components, epicCells, fmt, outcomeCell, type Cell } from './components'
+import { C, COL, MARK_COLOR, MARK_GLYPH, applyPalette, components, epicCells, fmt, outcomeCell, type Cell, type Phase } from './components'
 import { appendLines, clock, createLatch, day, exitWord, factoryNote, gateBy, glanceId, glanceText, isHistory, isRefusal, isShownProcess, keepRefresh, moment, parseJournal, rowSignature, seenOf, signalFields, sinceSeen, stagesOf, touchesFactory, waitingCount, waitPress, claimNeedsPerson, type RefreshWish, type Seen } from './parse'
 
 // The cockpit over the whole product flow: describe beside the cycle discover, backlog, run, decide, delivered.
@@ -32,9 +32,10 @@ const ruleKind = atom({ plugin: 'dca-factory-cockpit', key: 'ruleKind' } as cons
 const told = atom({ plugin: 'dca-factory-cockpit', key: 'told' } as const, '')
 const glances = atom({ plugin: 'dca-factory-cockpit', key: 'glances' } as const, {} as Record<string, Glance>)
 
-// The recurring cycle; Describe sits beside it with set up and update — written once, changed when things move.
-const TABS: { id: Tab; label: string; key: string }[] = [
-  { id: 'discover', label: 'Discover', key: '1' },
+// Discover, the inflow that fills the backlog, then the cycle every story turns through; Describe sits before them with
+// set up and update — written once, changed when things move —, Rules beside them to look up.
+const INFLOW: { id: Tab; label: string; key: string }[] = [{ id: 'discover', label: 'Discover', key: '1' }]
+const CYCLE: { id: Tab; label: string; key: string }[] = [
   { id: 'backlog', label: 'Backlog', key: '2' },
   { id: 'run', label: 'Run', key: '3' },
   { id: 'decide', label: 'Decide', key: '4' },
@@ -776,6 +777,7 @@ async function band($: EngineInterface, e: RenderInput<'AbovePrompt'>, now: Cock
     status.running.length + (isWorker ? 1 : 0) > 0 && `${status.running.length + (isWorker ? 1 : 0)} running`,
     shown.length < total && `${total - shown.length} more in the cockpit`,
   ].filter(Boolean)
+
   return (
     // a border's glyphs take the colour of the box around it: the frame stands on the page's colour, not the terminal's
     <Box backgroundColor={C.bg} width={e.props.bodyColumns}>
@@ -807,6 +809,22 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
   const rows = e.viewport?.rows ?? 40
   const status = now.status
   const isFocused = Boolean(e.props.isFocused)
+  // a view of the inflow or the cycle as a phase: its key, what waits or runs there
+  const tabPhase = (one: (typeof CYCLE)[number]): Phase => ({
+    key: `tab-${one.id}`,
+    label: one.label,
+    hotkey: one.key,
+    isOpen: one.id === current && !open,
+    mark:
+      one.id === 'decide' && waitingCount(status) > 0
+        ? { text: String(waitingCount(status)), color: C.wait }
+        : one.id === 'run' && (isRunning() || status.running.length > 0)
+          ? { text: '▶', color: C.accent }
+          : one.id === 'delivered' && status.delivered > 0
+            ? { text: String(status.delivered), color: C.done }
+            : undefined,
+    onPress: () => void showTab($, one.id),
+  })
 
   // The links every view shares — one way to open a story, a record, a file.
   const storyCell = (row: Row): Cell => ({ node: ui.marked(row.mark, `story-${row.story}`, row.story, () => void openStory($, row.story)) })
@@ -937,23 +955,10 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
             { key: 'tab-describe', label: 'Describe', hotkey: '0', isOpen: current === 'describe' && !open, onPress: () => void showTab($, 'describe') },
             { key: 'setup', label: '✦ setup', isOpen: false, onPress: () => send($, '/factory-setup') },
             { key: 'update', label: '✦ update', isOpen: false, onPress: () => send($, '/factory-update') },
-            { key: 'tab-rules', label: 'Rules', hotkey: '6', isOpen: current === 'rules' && !open, onPress: () => void showTab($, 'rules') },
           ],
-          TABS.map(one => ({
-            key: `tab-${one.id}`,
-            label: one.label,
-            hotkey: one.key,
-            isOpen: one.id === current && !open,
-            mark:
-              one.id === 'decide' && waitingCount(status) > 0
-                ? { text: String(waitingCount(status)), color: C.wait }
-                : one.id === 'run' && (isRunning() || status.running.length > 0)
-                  ? { text: '▶', color: C.accent }
-                  : one.id === 'delivered' && status.delivered > 0
-                    ? { text: String(status.delivered), color: C.done }
-                    : undefined,
-            onPress: () => void showTab($, one.id),
-          })),
+          INFLOW.map(tabPhase),
+          CYCLE.map(tabPhase),
+          [{ key: 'tab-rules', label: 'Rules', hotkey: '6', isOpen: current === 'rules' && !open, onPress: () => void showTab($, 'rules') }],
         )}
       </Box>
       {status.waiting.length > 0 && ui.banner(C.wait, status.waiting.map(wait => `${MARK_GLYPH[wait.mark] ?? '?'} ${wait.story} — ${wait.what}`))}

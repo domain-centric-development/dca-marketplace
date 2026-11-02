@@ -14,6 +14,17 @@ from ...domain.model.story_state import ENDED_WORDS
 
 Model = typing.Dict[str, typing.Any]
 
+#: The parts the flow falls into, in their order, and the views' tabs in each: the foundation once, the inflow that
+#: fills the backlog — a discovery's epics, and beside it a wish, a judge's finding, a delivered epic's journey —, the
+#: cycle every story turns through in order, and the rulebook beside them to look up.
+PARTS: typing.Tuple[Model, ...] = (
+    dict(part="foundation", eyebrow="Once", steps=["describe", "set up"], tabs=["describe"], ordered=False),
+    dict(part="inflow", eyebrow="Inflow", steps=["discover"], tabs=["discover"], ordered=False),
+    dict(part="cycle", eyebrow="Cycle", steps=["backlog", "run", "decide", "delivered"],
+         tabs=["backlog", "run", "decide", "delivered"], ordered=True),
+    dict(part="rules", eyebrow="To look up", steps=[], tabs=["rules"], ordered=False),
+)
+
 HELP_COMMANDS = (
     ("deliver a wish", "your words become a backlog story — which epic, the criteria — and it runs at once",
      "/factory-run <your words>", ""),
@@ -110,9 +121,9 @@ class ShowHelpUseCase:
             here = "backlog"
         else:
             here = "run"
-        # A foundation, done once and changed when the product or the stack moves, and a cycle that recurs with
-        # every body of work. The foundation's steps can be done; the cycle's never are — there the flow marks
-        # only where the project is now (waiting, running, next).
+        # A foundation, done once and changed when the product or the stack moves; an inflow that fills the backlog
+        # when there is new work to find; and a cycle every story turns through. The foundation's steps can be done;
+        # the inflow's and the cycle's never are — there the flow marks only where the project is now.
         flow: typing.List[Model] = [
             dict(step="describe", part="foundation",
                  what="product, technical decisions, designed domain — a new project with its skeleton: /dca-new project",
@@ -120,11 +131,12 @@ class ShowHelpUseCase:
             dict(step="set up", part="foundation",
                  what="the stack profile: build, test, format and browser commands, the carriers",
                  skill="/factory-setup", shell="setup --check" if profile_file else "setup", done=bool(profile_file)),
-            dict(step="discover", part="cycle", what="optional: which problem is worth solving — a report with sources "
+            dict(step="discover", part="inflow", what="which problem is worth solving — a report with sources "
                                                      "and proposed epics, each with its outcome event",
                  skill="/factory-discover <topic>", shell="discover --list"),
             dict(step="backlog", part="cycle",
-                 what="epics and stories with acceptance criteria; a story runs once released",
+                 what="epics and stories with acceptance criteria — from a discovery, a wish, a judge's finding "
+                      "or an epic's journey; a story runs once released",
                  skill="/factory-backlog", shell="backlog"),
             dict(step="run", part="cycle", what="plan → test → build → tidy → judge → document, a gate between the stages",
                  skill="/factory-run [<story>]", shell="run [--story <story>]"),
@@ -135,8 +147,7 @@ class ShowHelpUseCase:
                                                       "epic without a journey test shows as unguarded",
                  skill="/factory-status", shell="status"),
         ]
-        for n, f in enumerate(flow, 1):
-            f["number"] = n
+        for f in flow:
             if f["step"] == here:
                 f["mark"] = waiting_mark if here == "decide" else \
                     "running" if here == "run" and status_view["running"] else "next"
@@ -170,7 +181,8 @@ class ShowHelpUseCase:
                   "one record per question or acceptance, in its story's folder"),
                  ("a story's run", f"{place('runs')}/<story>/", "hand-overs, marks, the journal — protocol, disposable")]
         return dict(project=status_view["project"],
-                    flow=flow, commands=[dict(zip(("name", "what", "skill", "shell"), c)) for c in HELP_COMMANDS],
+                    flow=flow, parts=[dict(p) for p in PARTS],
+                    commands=[dict(zip(("name", "what", "skill", "shell"), c)) for c in HELP_COMMANDS],
                     marks=[dict(mark=m, meaning=t) for m, t in HELP_MARKS],
                     files=[dict(name=n, where=w, holds=h) for n, w, h in files],
                     runner=RUNNER, next=nxt)

@@ -173,6 +173,8 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await pane.find({ text: 'FACTORY COCKPIT' })).toBeDefined()
     expect(await pane.find({ text: /add-book — plan asks a question/ })).toBeDefined()
     expect(await pane.find({ text: /Keep track of books/ })).toBeDefined()
+    // the phases: the foundation once, discover the inflow, the cycle a story turns through, the rules beside them
+    for (const part of ['ONCE', 'INFLOW', 'CYCLE']) expect(await pane.find({ text: part })).toBeDefined()
     expect(await pane.find({ text: 'BookAdded' })).toBeDefined()
 
     // backlog: an epic from a discovery without stories, and the button that cuts them

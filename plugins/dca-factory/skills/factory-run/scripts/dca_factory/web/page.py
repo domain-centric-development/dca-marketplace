@@ -85,6 +85,14 @@ code { background: var(--code); padding: 1px 5px; border-radius: 4px; overflow-w
   padding: 8px 10px; cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; }
 .tabs button:hover { color: var(--teal); }
 .tabs button[aria-selected="true"] { color: var(--mist); border-bottom-color: var(--teal); }
+.tabs button:focus-visible { outline: 2px solid var(--teal); outline-offset: -2px; }
+/* the parts side by side, a hairline between them; the cycle's views joined by arrows */
+.tabs { align-items: center; } .tgroup { display: flex; align-items: center; }
+.tsep { flex: none; width: 1px; height: 16px; margin: 0 8px; background: rgba(232, 234, 240, .2); }
+.tabs .arrow { color: rgba(232, 234, 240, .35); font: 400 12px var(--mono); }
+/* the keys show while the bar is worked by keyboard, never for a mouse */
+.tabs .key { display: none; margin-right: 6px; color: var(--teal); font-size: 11px; }
+.tabs:has(:focus-visible) .key { display: inline; }
 .tabs .n { display: inline-block; min-width: 18px; margin-left: 6px; padding: 0 5px; border-radius: 9px; background: var(--fill);
   color: #fff; font-size: 11px; text-align: center; }
 .status { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font: 400 13px var(--mono); color: rgba(232, 234, 240, .8); }
@@ -452,11 +460,11 @@ details.more > summary h2::before { content: "▸ "; color: var(--muted); } deta
 <header class="topbar" id="topbar">
   <div class="wrap nav">
     <div class="brand">__MARK__<span>factory<span class="tld">.</span></span><span class="project" id="project"></span></div>
-    <nav class="tabs" id="tabs" role="tablist" aria-label="the cycle"></nav>
+    <nav class="tabs" id="tabs" role="tablist" aria-label="the factory's views"></nav>
     <div class="status">
       <span id="worker"><span class="dot"></span>…</span>
-      <button class="bar-btn primary" data-call="up" id="up" hidden>up</button>
-      <button class="bar-btn" data-call="down" id="down" hidden>down</button>
+      <button class="bar-btn primary" data-call="up" id="up" title="work the released stories off, one after the other — factory.sh up" hidden>▶ start the backlog</button>
+      <button class="bar-btn" data-call="down" id="down" title="no next story from the backlog; what runs ends its stage — factory.sh down" hidden>■ stop the backlog</button>
       <label>as <input class="by" id="by" type="text" autocomplete="name" aria-label="your name"></label>
       <span class="theme" role="group" aria-label="theme">
         <button data-pick="light" aria-pressed="false">light</button><button data-pick="auto" aria-pressed="false">auto</button><button data-pick="dark" aria-pressed="false">dark</button>
@@ -465,22 +473,24 @@ details.more > summary h2::before { content: "▸ "; color: var(--muted); } deta
   </div>
 </header>
 <div class="banner" id="banner" role="alert"><div class="wrap" id="banner-text"></div></div>
-<main class="wrap" id="main"></main>
+<main class="wrap" id="main" role="tabpanel"></main>
 <div id="toasts" aria-live="polite"></div>
 <aside class="drawer" id="drawer" aria-label="story" tabindex="-1" hidden></aside>
 <script>
 "use strict";
 const TOKEN = new URLSearchParams(location.search).get("t") || "";
+// the views in the order of their keys (0 … 6, the cockpit's); which part each sits in — once, inflow, the cycle, to look
+// up — comes from the factory (`help`'s parts)
 const TABS = [
-  ["describe", "0 describe", "Once", "The project description", "What is built, how, and in which domain — and in each context what holds today. You write the description; what holds changes by a story the gate delivers."],
-  ["discover", "1 discover", "Cycle", "Discovery", "Which problem is worth solving — a report with its sources and the epics it proposes."],
-  ["backlog", "2 backlog", "Cycle", "Backlog", "Epics and their stories, newest first. A story runs once released."],
-  ["run", "3 run", "Cycle", "The factory at work", "Your requests at once, while this page is open; the backlog's stories while `up` has it on — one stage after the other, a gate between them."],
-  ["decide", "4 decide", "Cycle", "Waiting for you", "A question a stage may not decide alone, or a result to look at."],
-  ["delivered", "5 delivered", "Cycle", "Delivered", "What the factory delivered, the newest first."],
-  ["rules", "rules", "Always", "The rules", "What the gate checks, what the runner decides and what each stage is told — per stage of a story, the gates between them. Pick a rule to read it; pick a story to see which fired."]];
+  ["describe", "The project description", "What is built, how, and in which domain — and in each context what holds today. You write the description; what holds changes by a story the gate delivers."],
+  ["discover", "Discovery", "Which problem is worth solving — a report with its sources and the epics it proposes."],
+  ["backlog", "Backlog", "Epics and their stories, newest first — from a discovery, a wish, a judge's finding or a delivered epic's journey. A story runs once released."],
+  ["run", "The factory at work", "Your requests at once, while this page is open; the backlog's stories while `up` has it on — one stage after the other, a gate between them."],
+  ["decide", "Waiting for you", "A question a stage may not decide alone, or a result to look at."],
+  ["delivered", "Delivered", "What the factory delivered, the newest first."],
+  ["rules", "The rules", "What the gate checks, what the runner decides and what each stage is told — per stage of a story, the gates between them. Pick a rule to read it; pick a story to see which fired."]];
 const MARKS = {look: "!", question: "?", stopped: "✗", running: "▶", done: "✓", none: "·", next: "→"};
-const S = {tab: "backlog", status: null, decisions: null, discover: null, requests: null, follow: null, followSource: null,
+const S = {tab: "backlog", help: null, status: null, decisions: null, discover: null, requests: null, follow: null, followSource: null,
            followLines: [], drawer: null, opener: null, drafts: {}, folded: {},
            rules: null, rulesFor: null, ruleKind: "story", rule: null, ruleStory: "", flowPick: null};
 const stored = key => { try { return localStorage.getItem(key) || ""; } catch (e) { return ""; } };
@@ -628,7 +638,7 @@ document.addEventListener("change", event => {
   loadRules();
 });
 
-// what the page itself calls: the factory up and down, a request taken back or queued again, an output followed
+// what the page itself calls: the backlog started and stopped, a request taken back or queued again, an output followed
 const CALLS = {
   async up() { const d = await api("/api/up", {by: by()}); toast(d.output || "up"); },
   async down(node) {
@@ -711,21 +721,30 @@ function renderFrame() {
   const st = S.status || {}, w = st.worker, counts = (S.requests || {}).counts || {};
   $("project").textContent = st.project || "";
   document.title = (st.project ? st.project + " — " : "") + "factory";
-  const dot = !w || !w.alive ? "down" : w.stopping ? "stopping" : "up";
+  // the dot is the backlog's, the one thing a person switches here: a person's requests are worked while this page is
+  // open, and that goes without saying (WP-177)
+  const backlog = !!(w && w.alive && (w.how !== "up" || w.backlog));
+  const dot = !backlog ? "down" : w.stopping ? "stopping" : "up";
   const queued = (S.requests || {}).counts_text;
   $("worker").innerHTML = `<span class="dot ${dot}"></span>${esc(st.worker_text || "…")}${queued ? ` · ${esc(queued)}` : ""}`;
   $("worker").title = w ? `${w.owner} since ${w.since_text}` : "nobody holds the checkout";
-  // up and down are the backlog's: the worker of a person's requests runs while this page does (WP-177)
-  const backlog = !!(w && w.alive && (w.how !== "up" || w.backlog));
   $("up").hidden = backlog;
   $("down").hidden = !backlog || w.stopping;
-  $("tabs").innerHTML = TABS.map(([id, label]) => {
-    // a record waits where it is answered: a discovery's on discover, the description's on describe, the rest decide
-    const asking = place => (st.waiting || []).filter(w => (w.place || "decide") === place).length;
+  // a record waits where it is answered: a discovery's on discover, the description's on describe, the rest decide
+  const asking = place => (st.waiting || []).filter(w => (w.place || "decide") === place).length;
+  const tab = id => {
     const n = ["decide", "discover", "describe"].includes(id) ? asking(id) : id === "run" ? (counts.failed || 0) : 0;
-    return `<button role="tab" data-tab="${id}" aria-selected="${S.tab === id}">${esc(label)}${n ? `<span class="n">${n}</span>` : ""}</button>`;
-  }).join("");
+    const key = TABS.findIndex(([t]) => t === id), on = S.tab === id;
+    return `<button role="tab" id="tab-${id}" data-tab="${id}" aria-selected="${on}" tabindex="${on ? 0 : -1}" aria-controls="main" aria-keyshortcuts="${key}"><span class="key" aria-hidden="true">${key}</span>${esc(id)}${n ? `<span class="n">${n}</span>` : ""}</button>`;
+  };
+  // the parts side by side, the cycle's views with an arrow between them: the order a story turns through
+  const parts = (S.help || {}).parts || [{tabs: TABS.map(([id]) => id)}];
+  morph($("tabs"), parts.map(p => `<span class="tgroup" role="presentation">${p.tabs.map((id, i) =>
+    (i && p.ordered ? `<span class="arrow" aria-hidden="true">→</span>` : "") + tab(id)).join("")}</span>`)
+    .join(`<span class="tsep" aria-hidden="true"></span>`));
+  $("main").setAttribute("aria-labelledby", "tab-" + S.tab);
 }
+const partOf = id => ((S.help || {}).parts || []).find(p => p.tabs.includes(id));
 
 // --- drawing: the new page is matched against the one on screen, never put in its place -------------------------------
 // An element that stays the same element keeps what the browser holds for the person — where a box is scrolled, what
@@ -772,7 +791,8 @@ function render() {
     && $("main").contains(document.activeElement);
   if (editing) return;                                   // a person typing is not redrawn under their hands
   forget("m"); forget("s");
-  const [, , eyebrow, title, lede] = TABS.find(([id]) => id === S.tab) || TABS[2];
+  const [, title, lede] = TABS.find(([id]) => id === S.tab) || TABS[2];
+  const eyebrow = (partOf(S.tab) || {}).eyebrow || "";
   const view = {describe, discover, backlog, run, decide, delivered, rules: rulesTab}[S.tab] || backlog;
   morph($("main"), `<div class="eyebrow">${esc(eyebrow)}</div><h1>${esc(title)}</h1><p class="lede">${esc(lede)}</p>`
     + (S.status ? endedLine(S.status) + view(S.status) : `<section class="card"><p class="empty">Reading the factory…</p></section>`));
@@ -1599,11 +1619,22 @@ document.addEventListener("toggle", event => {
   if (more) S.folded[more.dataset.more] = !more.open;
 }, true);
 
+// The tab bar by keyboard (WAI-ARIA tabs): while a tab has the focus, the arrows, Home and End move between the views
+// and a digit jumps to its view — the cockpit's keys, shown as hints then. Outside the bar a digit is a digit
+// (WCAG 2.1.4: a one-key shortcut acts only where its element has the focus).
 document.addEventListener("keydown", event => {
   if (event.target.closest("textarea, input, select")) return;
-  const tab = TABS.find(([, label]) => label[0] === event.key);
-  if (tab) show(tab[0]);
-  if (event.key === "Escape") CALLS.close();
+  if (event.key === "Escape") return CALLS.close();
+  const at = event.target.closest('[role="tab"]');
+  if (!at) return;
+  const ids = [...$("tabs").querySelectorAll('[role="tab"]')].map(b => b.dataset.tab), i = ids.indexOf(at.dataset.tab);
+  const to = /^[0-9]$/.test(event.key) ? (TABS[+event.key] || [])[0]
+    : {ArrowRight: ids[(i + 1) % ids.length], ArrowLeft: ids[(i - 1 + ids.length) % ids.length],
+       Home: ids[0], End: ids[ids.length - 1]}[event.key];
+  if (!to) return;
+  event.preventDefault();
+  if (to !== S.tab) show(to);
+  $("tab-" + to).focus();
 });
 window.addEventListener("hashchange", () => {
   const tab = location.hash.slice(1);
@@ -1614,6 +1645,7 @@ theme(stored("factory.theme") || "auto");
   if (!TOKEN) { banner("This page needs the token `factory.sh serve` printed — open that URL."); return; }
   try { $("by").value = stored("factory.by") || (await api("/api/meta")).by || ""; } catch (e) { banner(e.message); }
   $("by").addEventListener("change", () => store("factory.by", by()));
+  load("help", "/api/view/help").then(ok => ok && render());   // the parts: once, inflow, the cycle, to look up
   await refresh();
   setInterval(() => { if (!document.hidden) refresh(); }, 5000);
 })();

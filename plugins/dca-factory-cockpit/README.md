@@ -5,7 +5,7 @@ plugin ("mod"). It draws what `factory.sh` prints and the project's files hold; 
 factory works the same without it, in Claude Code, Codex or OpenCode.
 
 ```
-[0 Describe]  setup  update  [6 Rules]  │ cycle ›  [1 Discover] [2 Backlog] [3 Run] [4 Decide] [5 Delivered]
+ONCE [0 Describe] setup update ┃ INFLOW [1 Discover] ┃ CYCLE [2 Backlog] › [3 Run] › [4 Decide] › [5 Delivered] ┃ [6 Rules]
 ```
 
 | Tab | Shows | Acts |
@@ -115,7 +115,7 @@ hand-overs are read again only when its row changed or a stage of it runs.
 /factory-cockpit
 ```
 
-`0` opens Describe, `1`–`5` the cycle, ↑↓, Tab and Shift+Tab move, `b` goes back, `q` or `ctrl+x x` closes the pane (`/factory-cockpit close` from the prompt; `/factory-cockpit status` prints where it stands), `Esc` returns to the prompt. ← and → are Claude Code's own — a mod receives no left or right arrow. The pane has the keyboard after
+`0` opens Describe, `1` Discover, `2`–`5` the cycle, `6` Rules, ↑↓, Tab and Shift+Tab move, `b` goes back, `q` or `ctrl+x x` closes the pane (`/factory-cockpit close` from the prompt; `/factory-cockpit status` prints where it stands), `Esc` returns to the prompt. ← and → are Claude Code's own — a mod receives no left or right arrow. The pane has the keyboard after
 `/factory-cockpit`, a click into it, or `ctrl+x tab` — the last two only while the prompt is empty.
 
 ## Terminal and Desktop

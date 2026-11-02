@@ -45,7 +45,7 @@ Only for working *on* these plugins — a clone, so edits take effect without a 
 | start a DCA project from nothing, or add DCA to an existing one | `dca-core` (`/dca-new`, `/dca-init`) |
 | TDD, Clean Code, ADRs, end-user tests, a glossary, a context map and an outside review — with or without DCA | `dca-craft` |
 | deliver stories through plan → test → build → tidy → judge → document with a gate between | `dca-factory` (+ `dca-core` for the method) |
-| see and steer that cycle in a Claude Code pane and a band above the prompt — discover, backlog, run, decide, delivered | `dca-factory-cockpit` (optional, Claude Code only) |
+| see and steer that cycle in a Claude Code pane and a band above the prompt — discover feeding backlog, run, decide, delivered | `dca-factory-cockpit` (optional, Claude Code only) |
 
 `dca-core` and `dca-craft` are what a developer invokes directly. `dca-craft` knows no DCA
 artifact: it reads what any project has — code, glossary, context map, `AGENTS.md` — which makes its
@@ -90,8 +90,10 @@ Details, skill by skill: **[dca-core/README.md](plugins/dca-core/README.md)**.
 /dca-describe <change>    # change one statement of the description, in your words
 /factory-setup            # git, the runner, the stack profile — only what is missing
 
-# the cycle — discover → backlog → run → decide → delivered
+# the inflow — new work for the backlog, when there is some to find
 /factory-discover <topic> # which problem is worth solving: a report with sources, proposed epics
+
+# the cycle — backlog → run → decide → delivered, with every story
 /factory-backlog          # write the epic and the story, in the contract the gate reads
                           # (epic <id> --from <report> · stories <epic> · release <story> …
                           #  · journey <epic>)
