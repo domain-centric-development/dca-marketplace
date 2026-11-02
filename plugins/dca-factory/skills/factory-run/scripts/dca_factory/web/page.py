@@ -535,7 +535,7 @@ const TABS = [
   ["delivered", "Delivered", "What the factory delivered, the newest first."],
   ["rules", "The rules", "What the gate checks, what the runner decides and what each stage is told — per stage of a story, the gates between them. Pick a rule to read it; pick a story to see which fired."]];
 const NOW = ["now", "Where it stands", "The cycle a story turns through — how many stand where, and the one that matters most in each."];
-const MARKS = {look: "!", question: "?", stopped: "✗", running: "▶", done: "✓", none: "·", next: "→"};
+const MARKS = {look: "!", question: "?", stopped: "✗", running: "▶", done: "✓", none: "", next: "→"};             // no state is no mark
 const S = {tab: "now", help: null, status: null, decisions: null, discover: null, requests: null, follow: null, followSource: null,
            followLines: [], drawer: null, opener: null, drafts: {}, folded: {},
            rules: null, rulesFor: null, ruleKind: "story", rule: null, ruleStory: "", flowPick: null};
@@ -554,7 +554,7 @@ if (location.hash.startsWith("#rules:")) {
 // --- helpers -------------------------------------------------------------------------------------------------------
 const $ = id => document.getElementById(id);
 const esc = v => String(v == null ? "" : v).replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
-const mark = m => `<span class="mark m-${esc(m)}" aria-hidden="true">${esc(MARKS[m] || "·")}</span>`;
+const mark = m => `<span class="mark m-${esc(m)}" aria-hidden="true">${esc(MARKS[m] || "")}</span>`;
 // a section's markdown as the website sets it: paragraphs, lists, `code` and **strong** — escaped first
 // code first, as markdown reads it — `x`, and ``x`` that may hold a backtick —, bold only outside it
 const inline = text => String(text == null ? "" : text).split(/(``.+?``|`[^`]+`)/).map((part, i) => i % 2
