@@ -357,6 +357,9 @@ class CliTest(unittest.TestCase):
                          [s["stage"] for s in view["flow"]["task"]["steps"]])
         self.assertTrue(all(not r["kinds"] or "task" in r["kinds"] for r in view["rules"]))
         self.assertTrue(view["flow"]["task"]["svg"].startswith("<svg"))
+        # a page shows one way back at a time: every way back on the first lane, the drawing no taller than all nested
+        height = lambda drawing: float(re.search(r'viewBox="0 0 \S+ (\S+)"', drawing).group(1))
+        self.assertLessEqual(height(view["flow"]["task"]["svg_one_at_a_time"]), height(view["flow"]["task"]["svg"]))
         drawn = self.cli("--format", "svg", "--kind", "journey").stdout
         self.assertTrue(drawn.startswith("<svg"), drawn[:200])
         self.assertIn('data-stage="judge"', drawn)

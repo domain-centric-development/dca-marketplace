@@ -98,9 +98,10 @@ def mark(x: float, y: float, way: str, edge: Model, source: str) -> str:
             f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{MARK}"/><path d="{sign}"/></g>')
 
 
-def svg(graph: Model, kind: str, titles: typing.Optional[typing.Mapping[str, str]] = None) -> str:
+def svg(graph: Model, kind: str, titles: typing.Optional[typing.Mapping[str, str]] = None, one_at_a_time: bool = False) -> str:
     """The kind's flow; `graph` as the rulebook's json view gives it (`flow.<kind>.graph`); `titles` names a rule
-    by its title where a way back is labelled — its id where it has none."""
+    by its title where a way back is labelled — its id where it has none. `one_at_a_time`: a page shows one way back
+    at a time, so every way back takes the lane nearest the line and the drawing is only as tall as its longest label."""
     titles = titles or {}
     steps = graph["steps"]
     at, line, width = placed(steps)
@@ -110,9 +111,9 @@ def svg(graph: Model, kind: str, titles: typing.Optional[typing.Mapping[str, str
                    key=lambda e: (abs(at[e["source"]].x - at[e["target"]].x), at[e["source"]].x))
     named = [list(dict.fromkeys(titles.get(r["rule"]) or r["rule"] for r in e["rules"])) for e in backs]
     depths, depth = [], 26.0
-    for names in named:                      # each lane below the label of the one above it
-        depths.append(depth)
-        depth += 22 + 13 * (len(names) + 1)
+    for names in named:                      # each lane below the label of the one above it, or all on the first
+        depths.append(26.0 if one_at_a_time else depth)
+        depth = max(depth, 26.0 + 22 + 13 * (len(names) + 1)) if one_at_a_time else depth + 22 + 13 * (len(names) + 1)
     height = Y + 40 + depth + 24 * 2 + 10
     out = [f'<svg xmlns="http://www.w3.org/2000/svg" class="f" viewBox="0 0 __WIDTH__ {height:.0f}" '
            f'role="img" aria-label="the {esc(kind)} flow: its steps, gates, rounds and ways back">',

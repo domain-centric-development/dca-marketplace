@@ -198,20 +198,17 @@ pre.out:empty { display: none; }
 .flowsvg [data-stage].has-back:hover { fill: var(--teal); }
 @media (prefers-reduced-motion: reduce) { .flowsvg .way-back { transition: none; } }
 
-/* the domain: an ink head, a teal course with numbered nodes, the model as a profile, features as cards */
+/* the domain: the open context's row as an ink head, a teal course with numbered nodes, the model as a profile, features as cards */
 .dm { margin: 4px 0 8px; }
-.dm-head { background: var(--ink); color: var(--bg); border-top: 4px solid var(--teal); border-radius: 4px 4px 9px 9px; padding: 10px 14px 12px; }
-.dm-head[data-context] { cursor: pointer; } .dm-head:focus-visible { outline: 3px solid var(--teal); outline-offset: 2px; }
-.dm-head .caret { font: 400 13px var(--mono); color: color-mix(in srgb, var(--bg) 60%, transparent); }
-table.epics tr.ctx-body > td { padding-top: 10px; }
-.dm-head .top { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; } .dm-head .top b { font: 700 22px var(--display); }
-.dm-head p { margin: 2px 0 8px; color: color-mix(in srgb, var(--bg) 75%, transparent); font-size: 14px; }
-.dm-head .nums { display: flex; flex-wrap: wrap; gap: 6px 16px; font: 500 12px var(--mono); color: color-mix(in srgb, var(--bg) 70%, transparent); }
-.dm-head .nums b { font: 700 16px var(--display); color: var(--teal); margin-right: 4px; } .dm-head .nums b.warn { color: var(--wait); } .dm-head .nums b.bad { color: var(--stop); }
+table.epics tr.ctx-row.open td, table.epics tr.ctx-row.open:hover td { background: var(--ink); color: var(--bg); border-bottom: 0;
+  box-shadow: inset 0 4px 0 var(--teal); }
+table.epics tr.ctx-row.open td:first-child { border-radius: 4px 0 0 0; } table.epics tr.ctx-row.open td:last-child { border-radius: 0 4px 0 0; }
+table.epics tr.ctx-row.open .id, table.epics tr.ctx-row.open .hint, table.epics tr.ctx-row.open .caret { color: color-mix(in srgb, var(--bg) 70%, transparent); }
+table.epics tr.ctx-row.open .title { font-weight: 700; }
 .pill { font: 600 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
 .pill.core { background: color-mix(in srgb, var(--teal) 28%, transparent); box-shadow: inset 0 0 0 1.5px var(--teal); color: var(--teal); }
 .pill.sup { box-shadow: inset 0 0 0 1.5px var(--teal); color: var(--teal); }
-.pill.gen { box-shadow: inset 0 0 0 1.5px currentColor; opacity: .7; }
+.pill.gen { box-shadow: inset 0 0 0 1.5px currentColor; opacity: .7; } .sd { margin: 4px 0 0 18px; }
 .dm-track { border-left: 2px solid var(--line); margin: 10px 0 0 12px; padding-left: 20px; }
 .dm-node { position: relative; margin: 16px 0 8px; font: 600 15px var(--display); }
 .dm-node .n { position: absolute; left: -33px; top: -1px; width: 22px; height: 22px; border-radius: 50%; background: var(--teal); color: var(--on-accent); font: 600 12px var(--mono); display: grid; place-items: center; }
@@ -747,7 +744,7 @@ function rulesTab(st) {
   const stories = (st.rows || []).map(r => r.story);
   const picks = `<div class="pick"><span class="seg">${kinds.map(k => `<button aria-pressed="${k === kind}" data-kind="${esc(k)}">${esc(k)}</button>`).join("")}</span>
     <select data-overlay aria-label="a story's gate runs"><option value="">no story</option>${stories.map(id => `<option${id === S.ruleStory ? " selected" : ""}>${esc(id)}</option>`).join("")}</select></div>`;
-  return card(`${esc(kind)}`, `${(v.rules || []).length} rules`, picks + storyLine(st, flow, story) + (flow.svg ? `<div class="flowsvg">${flow.svg}</div>` : ""))
+  return card(`${esc(kind)}`, `${(v.rules || []).length} rules`, picks + storyLine(st, flow, story) + (flow.svg_one_at_a_time ? `<div class="flowsvg">${flow.svg_one_at_a_time}</div>` : ""))
     + picked(flow, rules, story)
     + folded("At every gate", "the checks each gate of this flow runs as well", flow.every_gate, rules, story)
     + folded("Anywhere in a run", "what stops a run or waits for a person at any step",
@@ -866,12 +863,6 @@ const KIND_LABEL = {"aggregate": "aggregate", "entity": "entities", "value objec
 const subdomainClass = sd => /core/i.test(sd) ? "core" : /generic/i.test(sd) ? "gen" : "sup";
 
 function specContext(c) {
-  const h = c.health || {}, open = c.features.reduce((n, f) => n + f.rules.reduce((m, r) => m + r.criteria.filter(x => x.changed_by.length).length, 0), 0) + c.coming.length;
-  const proof = h.orphaned || h.untested ? `<span><b class="bad">${(h.orphaned || 0) + (h.untested || 0)}</b>without a test</span>` : `<span><b>✓</b>all tested</span>`;
-  const head = `<div class="dm-head" data-context="${esc(c.context)}" tabindex="0" role="button" aria-expanded="true"><div class="top"><span class="caret" aria-hidden="true">▾</span><b>${esc(c.context)}</b>${c.subdomain ? `<span class="pill ${subdomainClass(c.subdomain)}">${esc(c.subdomain)}</span>` : ""}</div>
-    ${c.purpose ? `<p>${esc(c.purpose)}</p>` : ""}
-    <div class="nums"><span><b>${c.features.length}</b>features</span><span><b>${c.criteria}</b>criteria</span>${c.health ? proof : ""}<span><b${open ? ' class="warn"' : ""}>${open}</b>open changes</span>
-    ${h.undelivered ? `<span title="adopted, delivered by hand without a story, or written before the factory"><b>${h.undelivered}</b>not from a story</span>` : ""}</div></div>`;
   const facts = c.model.map(g => `<dt>${esc(KIND_LABEL[g.kind] || g.kind)}</dt><dd>${g.terms.map(t =>
     `<span class="chip${["concept", "other"].includes(g.kind) ? " minor" : ""}" title="${esc(t.meaning)}">${esc(t.name)}</span>`).join("")}</dd>`).join("");
   const features = c.features.map(f => {
@@ -884,7 +875,7 @@ function specContext(c) {
   }).join("");
   const coming = c.coming.length ? `<div class="rgroup"><div class="lbl">coming — new criteria of open stories</div>${c.coming.map(s =>
     `<p class="said"><span class="pend p-adds">${esc(s.status)}</span> ${story(s.story)} — ${s.keys.map(k => `<code>${esc(k.key)}</code>`).join(", ")}</p>`).join("")}</div>` : "";
-  return `<div class="dm">${head}<div class="dm-track">
+  return `<div class="dm"><div class="dm-track">
     <div class="dm-node"><span class="n">1</span>Domain model<span class="hint">from its glossary</span></div>
     ${facts ? `<dl class="dm-facts">${facts}</dl>` : `<p class="hint">The glossary names no term of a model.</p>`}
     <div class="dm-node"><span class="n">2</span>Features<span class="hint">what holds, by rule</span></div>
@@ -905,20 +896,19 @@ function domainCard() {
   const open = S.openContexts || (S.openContexts = new Set());
   const rows = (S.spec.contexts || []).map(c => {
     const isOpen = open.has(c.context), pending = c.features.reduce((n, f) => n + f.rules.reduce((m, r) => m + r.criteria.filter(x => x.changed_by.length).length, 0), 0) + c.coming.length;
-    // an open context is its head alone: the ink head carries the name, the purpose and the numbers the row had
-    if (isOpen) return `<tr class="epic-body ctx-body"><td colspan="6">${specContext(c)}</td></tr>`;
-    return `<tr class="epic-row ctx-row" data-context="${esc(c.context)}" tabindex="0" aria-expanded="${isOpen}">
-      <td><span class="caret" aria-hidden="true">▸</span> <span class="title">${esc(c.context)}</span><div class="id">${esc(c.subdomain)}</div></td>
+    return `<tr class="epic-row ctx-row${isOpen ? " open" : ""}" data-context="${esc(c.context)}" tabindex="0" aria-expanded="${isOpen}">
+      <td><span class="caret" aria-hidden="true">${isOpen ? "▾" : "▸"}</span> <span class="title">${esc(c.context)}</span>${c.subdomain ? `<div class="sd"><span class="pill ${subdomainClass(c.subdomain)}">${esc(c.subdomain)}</span></div>` : ""}</td>
       <td class="hide-s">${esc(c.purpose)}</td><td class="num">${c.features.length}</td><td class="num">${c.criteria}</td>
       <td class="num">${pending ? `<span class="pend p-changes">${pending}</span>` : "—"}</td>
-      <td class="hide-s">${healthCell(c.health)}</td></tr>`;
+      <td class="hide-s">${healthCell(c.health)}</td></tr>`
+      + (isOpen ? `<tr class="epic-body"><td colspan="6">${specContext(c)}</td></tr>` : "");
   }).join("");
   return card("Domain", "the contexts as designed, and what holds in each — the model from its glossary, the features as the gate delivered them",
     rows ? `<table class="epics"><tr><th>context</th><th class="hide-s">what it is for</th><th class="num">features</th><th class="num">criteria</th><th class="num">open changes</th><th class="hide-s">health</th></tr>${rows}</table>`
       : `<p class="empty">No spec yet — what holds is written by the stories the gate delivers.</p>`);
 }
 document.addEventListener("click", event => {
-  const row = event.target.closest && event.target.closest("tr.ctx-row, .dm-head[data-context]");
+  const row = event.target.closest && event.target.closest("tr.ctx-row");
   if (row && !event.target.closest("button, a")) {
     event.stopPropagation();
     const open = S.openContexts || (S.openContexts = new Set()), id = row.dataset.context;
@@ -1034,7 +1024,7 @@ document.addEventListener("click", event => {
   S.backlogFilter = f.dataset.filter; S.openEpics = new Set(); render();
 });
 document.addEventListener("keydown", event => {
-  const row = event.target.closest && event.target.closest("tr.epic-row, .dm-head[data-context]");
+  const row = event.target.closest && event.target.closest("tr.epic-row");
   if (row && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); row.click(); }
 });
 
