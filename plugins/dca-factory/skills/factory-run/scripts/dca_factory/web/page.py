@@ -36,7 +36,7 @@ PAGE = r"""<!doctype html>
 @font-face { font-family: "JetBrains Mono"; font-weight: 100 800; font-display: swap; src: url(/fonts/jetbrains-mono-latin.woff2) format("woff2"); }
 :root {
   --teal: #148f96; --deep: #171d29; --mist: #e8eaf0;
-  --bg: #f7f6f3; --panel: #ffffff; --ink: #1c2433; --muted: #5b6472; --line: #dedbd3; --soft: #eef4f4; --code: #f0eee9;
+  --bg: #f7f6f3; --panel: #ffffff; --ink: #1c2433; --muted: #5b6472; --line: #dedbd3; --soft: #eef4f4; --group: #e4efef; --group-line: #cfe0e0; --code: #f0eee9;
   --accent: #0d6b70; --accent-hover: #0b5b60; --on-accent: #ffffff; --fill: #0d6b70; --fill-hover: #0b5b60;
   --done: #0d6b70; --wait: #93600f; --stop: #c96a5a; --run: #148f96;
   --shadow: 0 6px 24px rgba(28, 36, 51, .10);
@@ -47,14 +47,14 @@ PAGE = r"""<!doctype html>
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #12171f; --panel: #1a2130; --ink: #e8eaf0; --muted: #9aa3b2; --line: #2b3445; --soft: #172a30; --code: #222a39;
+    --bg: #12171f; --panel: #1a2130; --ink: #e8eaf0; --muted: #9aa3b2; --line: #2b3445; --soft: #172a30; --group: #233d45; --group-line: #33545d; --code: #222a39;
     --accent: #3cbcc3; --accent-hover: #5fcdd3; --on-accent: #ffffff; --fill: #0d6b70; --fill-hover: #0b5b60;
     --done: #3cbcc3; --wait: #e2ab55; --stop: #d9826f; --run: #3cbcc3; --shadow: 0 6px 24px rgba(0, 0, 0, .35);
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #12171f; --panel: #1a2130; --ink: #e8eaf0; --muted: #9aa3b2; --line: #2b3445; --soft: #172a30; --code: #222a39;
+  --bg: #12171f; --panel: #1a2130; --ink: #e8eaf0; --muted: #9aa3b2; --line: #2b3445; --soft: #172a30; --group: #233d45; --group-line: #33545d; --code: #222a39;
   --accent: #3cbcc3; --accent-hover: #5fcdd3; --on-accent: #ffffff; --fill: #0d6b70; --fill-hover: #0b5b60;
   --done: #3cbcc3; --wait: #e2ab55; --stop: #d9826f; --run: #3cbcc3; --shadow: 0 6px 24px rgba(0, 0, 0, .35);
   color-scheme: dark;
@@ -205,8 +205,8 @@ pre.out:empty { display: none; }
 .dm-facts dd { margin: 0; display: flex; flex-wrap: wrap; gap: 4px; }
 .chip { font: 500 12px var(--mono); padding: 2px 8px; border-radius: 4px; background: var(--teal); color: var(--on-accent); white-space: nowrap; cursor: help; }
 .chip.minor { background: transparent; color: var(--accent); box-shadow: inset 0 0 0 1px var(--teal); }
-details.dm-group { border: 1px solid var(--line); border-radius: 6px; margin-top: 6px; background: var(--panel); }
-details.dm-group > summary { display: flex; justify-content: space-between; align-items: baseline; padding: 6px 10px; background: var(--soft); border-radius: 6px; cursor: pointer; list-style: none; font: 600 15px var(--display); }
+details.dm-group { border: 1px solid var(--group-line); border-radius: 6px; margin-top: 6px; background: var(--panel); }
+details.dm-group > summary { display: flex; justify-content: space-between; align-items: baseline; padding: 6px 10px; background: var(--group); border-radius: 6px; cursor: pointer; list-style: none; font: 600 15px var(--display); }
 details.dm-group > summary::-webkit-details-marker { display: none; } details.dm-group > summary::before { content: "▸"; color: var(--muted); font: 400 12px var(--mono); margin-right: 8px; }
 details.dm-group[open] > summary { border-radius: 6px 6px 0 0; } details.dm-group[open] > summary::before { content: "▾"; color: var(--accent); }
 details.dm-group > summary span { font: 400 12px var(--mono); color: var(--muted); margin-left: auto; }
