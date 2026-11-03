@@ -94,7 +94,7 @@ tr:last-child td { border-bottom: 0; }
 .link--title { font: 500 var(--text-base) var(--display); text-decoration: none; }
 .link--title:hover { text-decoration: underline; }
 .link--to { display: inline-block; margin-top: var(--space-3); font: 500 var(--text-sm) var(--mono); text-decoration: none; }
-.link--way { font: 500 var(--text-sm) var(--mono); padding: 2px 0; }
+.link--way { font: 500 var(--text-sm) var(--mono); padding: 2px 0; white-space: nowrap; }
 .link--plain { font: inherit; color: inherit; text-decoration: none; }
 .link--plain:hover { color: var(--brand-text); }
 .switch { display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius-control); overflow: hidden; background: var(--panel); }
@@ -437,10 +437,18 @@ div.id { margin-top: 2px; }
 .rule-group__row > .accordion--row { border: 0; }
 .rule-group__label { font: 500 var(--text-xs) var(--mono); letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-bottom: var(--space-1); }
 .rule-group__n { color: var(--ink); margin-left: var(--space-1); }
-.part { border-left: 2px solid var(--line); padding: 2px 0 var(--space-2) var(--space-4); margin-top: var(--space-4); }
+/* a stage's parts as the domain's rule blocks: a line between two, no rail at the side */
+.part { padding: var(--space-4) 0 var(--space-2); }
+.part + .part { border-top: 1px solid var(--line); }
+.part--aside > .part__head { font-size: var(--text-md); color: var(--muted); }
 .part__head { font: 600 var(--text-base) var(--display); display: flex; gap: var(--space-2); align-items: baseline; flex-wrap: wrap; margin: 0; }
 .part__head .hint { font: 400 var(--text-sm) var(--body); }
 .part .rule-group:first-of-type { margin-top: var(--space-2); }
+/* a rule's caret under its group's label, its title a step in — as a scenario under its rule */
+.rule-group .accordion--row { --fold-inset: var(--space-2); margin-left: calc(-1 * var(--space-2)); }
+.ways { list-style: none; }
+.ways__row { display: flex; gap: var(--space-3); align-items: baseline; flex-wrap: wrap; padding: var(--space-1) 0; }
+.ways__rules { font: 400 var(--text-base) var(--body); color: var(--muted); }
 .part--branch { border-left: 0; padding: var(--space-3) 0 var(--space-1); margin-top: 0; min-width: 0; }
 .part--branch + .part--branch { border-top: 1px solid var(--line); }
 .part--branch > .part__head { font-size: var(--text-md); }

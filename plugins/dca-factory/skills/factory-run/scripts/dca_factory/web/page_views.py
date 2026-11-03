@@ -498,10 +498,10 @@ function picked(flow, rules, story) {
     return ui.card(esc(p.stage), esc((step.window || "") + (step.gate === "none" ? " · decides with its verdict, no gate" : "")),
       ui.part(`Before ${ui.hint("— the gate before the stage asks; a refusal keeps it from starting")}`, ruleGroup("", step.gate_before, rules, story, p.stage))
       + ui.part(`While it runs ${ui.hint(`— it is told ${(step.told || []).length} instructions`)}`, foldGroup(`told:${p.stage}`, "show what it is told", step.told, rules, story, p.stage))
-      + ui.part(`After ${ui.hint(step.gate === "none" ? "— its verdict decides, no gate" : `— the gate asks ${(step.gate_after || []).length} checks, each can refuse`)}`,
+      + ui.part(`After ${ui.hint(step.gate === "none" ? "— its verdict decides, no gate" : (step.gate_after || []).length ? `— the gate asks ${(step.gate_after || []).length} checks, each can refuse` : "— the gate after it asks no checks")}`,
           foldGroup(`checks:${p.stage}`, "show the checks", step.gate_after, rules, story, p.stage) + ui.branches(passes, refuses) || " ")
-      + ui.part("The runner also decides here", ruleGroup("", rest, rules, story, p.stage))
-      + (into.length ? ui.part("Ways back to this stage", waysLine(into, "", rules)) : ""));
+      + ui.part("The runner also decides here", ruleGroup("", rest, rules, story, p.stage), {aside: true})
+      + (into.length ? ui.part("Ways back to this stage", waysLine(into, "", rules), {aside: true}) : ""));
   }
   if (p.type === "gate") {
     const [where, stage] = p.gate.split(":"), step = flow.steps.find(s => s.stage === stage) || {};
