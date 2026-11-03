@@ -162,7 +162,7 @@ ui.accordion = o => {
     + (o.level ? `<h${o.level} class="accordion__heading">${head}</h${o.level}>` : head) + `${body}</div>`;
 };
 // rows that fold, on shared columns: a head row of labels, each row one accordion whose cells take the columns
-ui.foldTable = (cols, rows) => `<div class="fold-table" style="--fold-cols: 14px ${cols.map(c => c.num ? "max-content" : c.width || "minmax(0, 1fr)").join(" ")}">`
+ui.foldTable = (cols, rows) => `<div class="fold-table" style="--fold-cols: calc(var(--space-2) + 14px) ${cols.map(c => c.num ? "max-content" : c.width || "minmax(0, 1fr)").join(" ")}">`
   + `<div class="fold-table__head" aria-hidden="true"><span></span>${cols.map(c => `<span class="${mods("fold-table__label", [c.num && "num"])}${c.hide ? " hide-narrow" : ""}">${esc(c.label)}</span>`).join("")}</div>`
   + rows.map(r => ui.accordion(Object.assign({variant: "ink"}, r, {cells: r.cells.map((html, i) => ({html, num: cols[i].num, hide: cols[i].hide}))}))).join("") + `</div>`;
 ui.tabs = parts => parts.map(p => `<span class="tabs__group" role="presentation">${p.tabs.map((t, i) =>

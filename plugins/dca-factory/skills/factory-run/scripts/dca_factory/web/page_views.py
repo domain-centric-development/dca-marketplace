@@ -162,7 +162,7 @@ function domainCard() {
     const key = `context:${c.context}`;
     const pending = c.features.reduce((n, f) => n + f.rules.reduce((m, r) => m + r.criteria.filter(x => x.changed_by.length).length, 0), 0) + c.coming.length;
     return {key, open: opened(key), body: () => specContext(c), cells: [
-      `<b>${esc(c.context)}</b>${c.subdomain ? ui.pill(c.subdomain, subdomainKind(c.subdomain)) : ""}`, esc(c.purpose),
+      `<b>${esc(c.context)}</b> ${c.subdomain ? ui.pill(c.subdomain, subdomainKind(c.subdomain)) : ""}`, esc(c.purpose),
       `${c.features.length}`, `${c.criteria}`, pending ? ui.flag(`${pending}`, "changes") : "—", healthCell(c.health)]};
   });
   const kernel = S.spec.shared_kernel ? ui.kernel(modelFacts(S.spec.shared_kernel.model)) : "";
