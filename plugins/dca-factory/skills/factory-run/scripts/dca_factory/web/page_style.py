@@ -302,14 +302,16 @@ div.id { margin-top: 2px; }
 .card--wish .ask { margin-top: var(--space-4); }
 /* the one fold: a button over its region — a row, a quiet line, a group, an ink row, an epic's panel, a whole card */
 .accordion__heading { font: inherit; margin: 0; }
+/* the caret's column and the gap after it: the body starts where the title does, clear of an open row's edge */
+.accordion { --fold-inset: var(--space-2); --fold-indent: calc(var(--fold-inset) + 14px + var(--space-3)); }
 .accordion__head { display: grid; grid-template-columns: 14px minmax(0, 1fr) max-content; gap: var(--space-1) var(--space-3); align-items: baseline; width: 100%;
-  background: none; border: 0; padding: var(--space-2) 2px; text-align: left; color: var(--ink); cursor: pointer; font: 400 var(--text-base) var(--body); }
+  background: none; border: 0; padding: var(--space-2) var(--space-1) var(--space-2) var(--fold-inset); text-align: left; color: var(--ink); cursor: pointer; font: 400 var(--text-base) var(--body); }
 .accordion__head:hover .accordion__title { color: var(--brand-text); }
 .accordion__head:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; border-radius: var(--radius-control); }
 .accordion__title { min-width: 0; display: flex; gap: var(--space-2); align-items: baseline; flex-wrap: wrap; }
 .accordion__meta { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; justify-content: flex-end; font: 400 var(--text-sm) var(--mono); color: var(--muted); }
 .accordion__below { grid-column: 2 / -1; display: flex; gap: var(--space-2); flex-wrap: wrap; }
-.accordion__body { padding: 2px var(--space-1) var(--space-3) var(--space-5); }
+.accordion__body { padding: 2px var(--space-1) var(--space-3) var(--fold-indent); }
 .accordion--row { border-top: 1px solid var(--line); }
 .accordion--row:last-child { border-bottom: 1px solid var(--line); }
 .accordion--row[data-open] { box-shadow: inset 3px 0 0 var(--brand); background: color-mix(in srgb, var(--brand) 5%, transparent); }
@@ -322,7 +324,8 @@ div.id { margin-top: 2px; }
 .accordion--group[data-open] > .accordion__head .caret { color: var(--brand-text); }
 .accordion--group > .accordion__body { padding: 0 0 var(--space-2); }
 .accordion--group .accordion--row { border-top: 0; } .accordion--group .accordion--row + .accordion--row { border-top: 1px solid var(--line); }
-.accordion--group .accordion--row > .accordion__head { padding: var(--space-1) var(--space-3) var(--space-1) var(--space-5); }
+.accordion--group .accordion--row { --fold-inset: var(--space-5); }
+.accordion--group .accordion--row > .accordion__head { padding-top: var(--space-1); padding-bottom: var(--space-1); }
 .accordion--group .actions { padding: 0 var(--space-3) var(--space-1); }
 .accordion--ink { border-bottom: 1px solid var(--line); }
 .accordion--ink > .accordion__head { padding: var(--space-3) var(--space-2); font-size: var(--text-base); }
