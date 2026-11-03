@@ -353,12 +353,25 @@ skills_mode() {                             # skills_mode <target dir>
 # runner's, not this copy's: a release that adds a file the project needs must be able to put it
 # there, even when the project's runner predates it — so a project's copy hands over to it (`exec`).
 update_project() {                          # update_project <explicit skill folder or "">
-  local src=${1:-} before before_contract after after_contract tool target mode declared updated=0
-  [ -n "$src" ] || src=$(plugin_skills) || {
+  local src=${1:-} before before_contract after after_contract tool target mode declared updated=0 found=""
+  [ -n "$src" ] || { src=$(plugin_skills) && found=1; } || {
     echo "factory: no pipeline found to update from — pass --from <the plugin's skills folder>" >&2; return 2; }
   [ -f "$src/factory-run/scripts/story-gate.py" ] || {
     echo "factory: $src is not the pipeline's skills folder (no factory-run/scripts/story-gate.py)" >&2; return 2; }
   src=$(cd "$src" && pwd -P)
+  # The newest pipeline found can still be older than the installed one — an old plugin cache on a machine
+  # whose project was installed from a checkout. Updating to it is a silent downgrade, so a source found
+  # is refused there; a source the person names with --from is what they asked for.
+  local have source_version
+  have=$(sed -n 's/^version:[[:space:]]*//p' "$STAMP" 2>/dev/null | head -1)
+  source_version=$(gate_field "$src/factory-run/scripts/story-gate.py" VERSION)
+  if [ -n "$found" ] && [ -n "$have" ] && [ -n "$source_version" ] && [ "$have" != "$source_version" ] \
+     && [ "$(printf '%s\n%s\n' "$have" "$source_version" | sort -V | tail -1)" = "$have" ]; then
+    echo "factory: the newest pipeline found is $source_version ($src), older than the installed $have —" >&2
+    echo "factory:   an update would go back. Name the source: --from <the dca-factory $have or newer>/skills" >&2
+    echo "factory:   (or FACTORY_PLUGIN_DIR); nothing was changed" >&2
+    return 2
+  fi
   # The project's own skills are what an update replaces, never where it comes from: linked onto
   # themselves they become loops, and a copy updated from itself stays what it was. A folder of links
   # (what an older runner hands over) names the pipeline through its factory-run link.

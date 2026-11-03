@@ -3864,6 +3864,16 @@ def verify_setup(runner, verbose=False):
         check("setup --write: an older pipeline in the plugin cache is no source — refused, named, nothing changed",
               code == 2 and "0.0.1" in output and "older than the" in output and tree_digest(root) == before,
               f"exit {code}; {output.strip()[-300:]}")
+        # TODO #185: `update` without --from does not go back to it either; named with --from, it is what was asked
+        code, output = run_runner(project_runner(root), root, "update",
+                                  env={"HOME": home, "FACTORY_PLUGIN_DIR": ""})
+        check("update: an older pipeline in the plugin cache is no source — refused, named, nothing changed",
+              code == 2 and "0.0.1" in output and "older than the" in output and tree_digest(root) == before,
+              f"exit {code}; {output.strip()[-300:]}")
+        code, output = run_runner(project_runner(root), root, "update", "--from",
+                                  shell_path(os.path.join(old, "skills")), env={"HOME": home, "FACTORY_PLUGIN_DIR": ""})
+        check("update: an older pipeline named with --from is installed — the person asked for it",
+              code == 0 and "→ 0.0.1" in output, f"exit {code}; {output.strip()[-300:]}")
 
     # formatFix beside every detected format; covers.* only while its command is the detected one
     for root in throwaway():
