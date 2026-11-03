@@ -489,9 +489,8 @@ function picked(flow, rules, story) {
     const named = new Set([round, on, ...out, ...stops].filter(Boolean).flatMap(e => e.rules.map(r => r.rule)));
     const rest = (step.decided || []).filter(id => !named.has(id));
     // a stage told as it runs: before it, while it runs, after it — where a pass and a refusal part ways —, and what else
-    const passes = ui.part(step.gate === "none" ? "if its verdict is yes" : "if the gate passes",
-      ruleGroup("", [...(step.passed || []), ...(on ? on.rules.map(r => r.rule) : [])], rules, story, p.stage)
-      + ui.hint(`→ on to <b>${esc(next)}</b>`, {block: true, html: true}), {branch: true, level: 4});
+    const passes = ui.part(`${step.gate === "none" ? "if its verdict is yes" : "if the gate passes"} ${ui.hint(`→ on to <b>${esc(next)}</b>`, {html: true})}`,
+      ruleGroup("", [...(step.passed || []), ...(on ? on.rules.map(r => r.rule) : [])], rules, story, p.stage) || " ", {branch: true, level: 4});
     const refuses = ui.part(step.gate === "none" ? "if it asks for changes" : "if a check refuses",
       (round ? ruleGroup("once more into this stage", ids([round]), rules, story, p.stage) : "")
       + waysLine(out, "back to an earlier stage", rules) + (stops.length ? ruleGroup("stop, or wait for a person", ids(stops), rules, story, p.stage) : ""),
@@ -502,7 +501,7 @@ function picked(flow, rules, story) {
       + ui.part(`After ${ui.hint(step.gate === "none" ? "— its verdict decides, no gate" : `— the gate asks ${(step.gate_after || []).length} checks, each can refuse`)}`,
           foldGroup(`checks:${p.stage}`, "show the checks", step.gate_after, rules, story, p.stage) + ui.branches(passes, refuses) || " ")
       + ui.part("The runner also decides here", ruleGroup("", rest, rules, story, p.stage))
-      + (into.length ? ui.part("Ways back to this stage", waysLine(into, "ways back to this stage", rules)) : ""));
+      + (into.length ? ui.part("Ways back to this stage", waysLine(into, "", rules)) : ""));
   }
   if (p.type === "gate") {
     const [where, stage] = p.gate.split(":"), step = flow.steps.find(s => s.stage === stage) || {};

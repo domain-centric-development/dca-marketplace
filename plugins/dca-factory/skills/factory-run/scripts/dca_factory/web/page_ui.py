@@ -197,10 +197,10 @@ ui.ruleGroup = (label, rows) => rows.length ? `<div class="rule-group">${label ?
 // a rule with the scenarios it holds: the rule a heading, its scenarios a list beneath it, one block per rule
 ui.ruleBlock = (rule, rows) => `<section class="rule-block">${rule ? `<h4 class="rule-block__rule"><span class="rule-block__label">Rule</span>${rule}</h4>` : ""}`
   + `<ul class="rule-block__rows">${rows.map(r => `<li>${r}</li>`).join("")}</ul></section>`;
-ui.ways = (title, ways) => ways.length ? `<div class="rule-group"><div class="rule-group__label">${esc(title)}</div>${ways.map(w =>
+ui.ways = (title, ways) => ways.length ? `<div class="rule-group">${title ? `<div class="rule-group__label">${esc(title)}</div>` : ""}${ways.map(w =>
   `${ui.link(`${w.source} → ${w.target}`, {way: true, attrs: {"data-edge": w.key}})} ${ui.hint(w.rules)}`).join("<br>")}</div>` : "";
 ui.part = (title, body, o = {}) => body ? `<section class="${mods("part", [o.branch && "branch"])}"><h${o.level || 3} class="part__head">${title}</h${o.level || 3}>${body}</section>` : "";
-// two ways a moment can go, side by side where there is room — a gate that passes, a gate that refuses
+// the ways a moment can go — a gate that passes, a gate that refuses —, each a block of its own, one under the other
 ui.branches = (left, right) => left || right ? `<div class="branches">${left}${right}</div>` : "";
 ui.flow = svg => `<div class="flow">${svg}</div>`;
 ui.table = (cols, rows, o = {}) => {

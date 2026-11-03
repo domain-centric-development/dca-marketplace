@@ -433,18 +433,19 @@ div.id { margin-top: 2px; }
 .kernel__title { margin: 0; font: 700 var(--text-lg) var(--display); color: var(--shared); }
 .proposals { list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-2); }
 .rule-group { margin-top: var(--space-4); }
-.rule-group__rows { list-style: none; border-top: 1px solid var(--line); }
-.rule-group__row > .accordion--row { border-top: 0; border-bottom: 1px solid var(--line); }
+.rule-group__rows { list-style: none; }
+.rule-group__row > .accordion--row { border: 0; }
 .rule-group__label { font: 500 var(--text-xs) var(--mono); letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-bottom: var(--space-1); }
 .rule-group__n { color: var(--ink); margin-left: var(--space-1); }
 .part { border-left: 2px solid var(--line); padding: 2px 0 var(--space-2) var(--space-4); margin-top: var(--space-4); }
 .part__head { font: 600 var(--text-base) var(--display); display: flex; gap: var(--space-2); align-items: baseline; flex-wrap: wrap; margin: 0; }
 .part__head .hint { font: 400 var(--text-sm) var(--body); }
 .part .rule-group:first-of-type { margin-top: var(--space-2); }
-.part--branch { border-left: 0; padding: 0; margin-top: var(--space-3); min-width: 0; }
-.part--branch > .part__head { font-size: var(--text-md); color: var(--muted); }
-.branches { display: grid; grid-template-columns: repeat(var(--grid-columns), minmax(0, 1fr)); gap: 0 var(--space-5); }
-.branches > .part { grid-column: span 6; }
+.part--branch { border-left: 0; padding: var(--space-3) 0 var(--space-1); margin-top: 0; min-width: 0; }
+.part--branch + .part--branch { border-top: 1px solid var(--line); }
+.part--branch > .part__head { font-size: var(--text-md); }
+.part--branch > .part__head .hint { font: 400 var(--text-md) var(--body); color: var(--brand-text); }
+.branches { margin-top: var(--space-2); }
 .table { margin-top: var(--space-3); }
 .table__num { text-align: right; font-family: var(--mono); font-size: var(--text-sm); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .table__act .actions { margin-top: 0; }
@@ -526,7 +527,6 @@ div.id { margin-top: 2px; }
   .board__slot { grid-column: span 12; flex-direction: column; }
   .board__slot + .board__slot::before { content: "↓"; padding: var(--space-1) 0; }
   .lanes > .lane, .tiles > .tile { grid-column: span 6; }
-  .branches > .part { grid-column: span 12; }
   .hide-narrow { display: none; }
   .fold-table__head { display: none; }
   td, th { padding: var(--space-2) var(--space-1); }
