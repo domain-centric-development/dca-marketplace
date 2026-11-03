@@ -64,7 +64,7 @@ ui.select = o => `<select class="select" id="${esc(o.id)}"${attrs(o.attrs)}>${(o
 ui.field = o => o.multiline
   ? `<textarea class="${mods("field", ["area"])}" id="${esc(o.id)}"${attrs(o.attrs)}>${esc(o.value || "")}</textarea>`
   : `<input class="${mods("field", [o.bar && "bar"])}" id="${esc(o.id)}" type="${esc(o.type || "text")}" value="${esc(o.value || "")}"${attrs(o.attrs)}>`;
-ui.caret = open => `<span class="caret" aria-hidden="true">${open ? "▾" : "▸"}</span>`;
+ui.caret = open => `<svg class="caret" viewBox="0 0 12 12" aria-hidden="true"${open ? " data-open" : ""}><path d="M4.25 2.5 7.75 6l-3.5 3.5"/></svg>`;
 ui.label = (text, forId, o = {}) => `<label class="${mods("label", [o.quiet && "quiet"])}" for="${esc(forId)}">${esc(text)}</label>`;
 ui.hint = (text, o = {}) => `<${o.block ? "p" : "span"} class="${mods("hint", [o.block && "block"])}"${o.id ? ` id="${esc(o.id)}"` : ""}${o.title ? ` title="${esc(o.title)}"` : ""}>${o.html ? text : esc(text)}</${o.block ? "p" : "span"}>`;
 ui.error = (text, o = {}) => `<${o.block ? "p" : "span"} class="error"${o.id ? ` id="${esc(o.id)}"` : ""}>✗ ${esc(text)}</${o.block ? "p" : "span"}>`;

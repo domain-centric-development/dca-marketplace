@@ -112,7 +112,10 @@ tr:last-child td { border-bottom: 0; }
 .field--area { min-height: 72px; resize: vertical; font: var(--text-read)/1.5 var(--body); padding: var(--space-3) var(--space-3); }
 .field[aria-invalid="true"] { border-color: var(--stop); }
 .field--bar { font: 400 var(--text-sm) var(--mono); color: var(--bar-ink); background: var(--bar-rule); border-color: var(--bar-faint); border-radius: var(--radius-control); padding: var(--space-1) var(--space-2); width: 170px; }
-.caret { color: var(--muted); font: 400 var(--text-sm) var(--mono); }
+/* the fold's caret: a drawn chevron, as large as its row's text wants, turned down when open */
+.caret { width: var(--caret); height: var(--caret); fill: none; stroke: var(--muted); stroke-width: 1.8; stroke-linecap: round;
+  stroke-linejoin: round; align-self: start; margin-top: calc((1lh - var(--caret)) / 2); transition: transform .15s; }
+.caret[data-open] { transform: rotate(90deg); stroke: currentColor; }
 .label { display: block; font: 600 var(--text-md) var(--display); color: var(--ink); margin-bottom: var(--space-1); }
 .label--quiet { font: 400 var(--text-sm) var(--mono); color: var(--muted); }
 .hint { font: 400 var(--text-sm) var(--mono); color: var(--muted); }
@@ -304,7 +307,7 @@ div.id { margin-top: 2px; }
 .accordion__heading { font: inherit; margin: 0; }
 /* the caret's column and the gap after it: the body starts where the title does, clear of an open row's edge */
 .accordion { --fold-inset: var(--space-2); --fold-indent: calc(var(--fold-inset) + 14px + var(--space-3)); }
-.accordion__head { display: grid; grid-template-columns: 14px minmax(0, 1fr) max-content; gap: var(--space-1) var(--space-3); align-items: baseline; width: 100%;
+.accordion__head { display: grid; grid-template-columns: minmax(14px, max-content) minmax(0, 1fr) max-content; gap: var(--space-1) var(--space-3); align-items: baseline; width: 100%;
   background: none; border: 0; padding: var(--space-2) var(--space-1) var(--space-2) var(--fold-inset); text-align: left; color: var(--ink); cursor: pointer; font: 400 var(--text-base) var(--body); }
 .accordion__head:hover .accordion__title { color: var(--brand-text); }
 .accordion__head:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; border-radius: var(--radius-control); }
@@ -316,12 +319,12 @@ div.id { margin-top: 2px; }
 .accordion--row:last-child { border-bottom: 1px solid var(--line); }
 .accordion--row[data-open] { box-shadow: inset 3px 0 0 var(--brand); background: color-mix(in srgb, var(--brand) 5%, transparent); }
 .accordion--quiet > .accordion__head { display: inline-flex; width: auto; padding: 2px 0; font: 500 var(--text-sm) var(--mono); color: var(--brand-text); margin-top: var(--space-2); }
-.accordion--quiet > .accordion__head .caret { color: inherit; }
+.accordion--quiet > .accordion__head .caret { stroke: currentColor; }
 .accordion--quiet > .accordion__body { padding: var(--space-1) 0 0; }
 .accordion--group { border: 1px solid var(--group-line); border-radius: var(--radius-control); margin-top: var(--space-2); background: var(--panel); }
 .accordion--group > .accordion__head { padding: var(--space-2) var(--space-3); background: var(--group); border-radius: var(--radius-control); font: 600 var(--text-base) var(--display); }
 .accordion--group[data-open] > .accordion__head { border-radius: var(--radius-control) var(--radius-control) 0 0; }
-.accordion--group[data-open] > .accordion__head .caret { color: var(--brand-text); }
+.accordion--group[data-open] > .accordion__head .caret { stroke: var(--brand-text); }
 .accordion--group > .accordion__body { padding: 0 0 var(--space-2); }
 .accordion--group .accordion--row { border-top: 0; } .accordion--group .accordion--row + .accordion--row { border-top: 1px solid var(--line); }
 .accordion--group .accordion--row { --fold-inset: var(--space-5); }
@@ -333,7 +336,8 @@ div.id { margin-top: 2px; }
 .accordion--ink .accordion__title b { font: 500 var(--text-base) var(--display); }
 .accordion--ink[data-open] > .accordion__head { background: var(--ink); color: var(--paper); border-radius: var(--radius-label) var(--radius-label) 0 0; box-shadow: inset 0 4px 0 var(--brand); }
 .accordion--ink[data-open] > .accordion__head .accordion__title b { font-weight: 700; color: var(--paper); }
-.accordion--ink[data-open] > .accordion__head :is(.id, .hint, .caret, .accordion__meta) { color: color-mix(in srgb, var(--paper) 70%, transparent); }
+.accordion--ink[data-open] > .accordion__head :is(.id, .hint, .accordion__meta) { color: color-mix(in srgb, var(--paper) 70%, transparent); }
+.accordion--ink[data-open] > .accordion__head .caret { stroke: color-mix(in srgb, var(--paper) 70%, transparent); }
 .accordion--ink > .accordion__body { padding: var(--space-1) 0 var(--space-2); }
 /* a fold table: the rows share the table's columns through subgrid, the head row's labels above them (WP-181) */
 .fold-table { display: grid; grid-template-columns: var(--fold-cols); margin-top: var(--space-3); }
@@ -344,6 +348,7 @@ div.id { margin-top: 2px; }
 .fold-table__label { font: 500 var(--text-xs) var(--mono); letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); }
 .fold-table__label--num, .accordion__cell--num { text-align: right; }
 .accordion__cell { min-width: 0; font: 400 var(--text-base)/1.45 var(--body); }
+.fold-table > .accordion > .accordion__head { line-height: 1.45; }
 .accordion__cell--num { font: 400 var(--text-sm) var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .accordion__cell b { font: 500 var(--text-base) var(--display); }
 .accordion--ink[data-open] > .accordion__head .accordion__cell { color: var(--paper); }
@@ -496,7 +501,7 @@ div.id { margin-top: 2px; }
 .gallery__show > .accordion--card:first-child, .gallery__show > .notice:first-child { margin-top: 0; }
 
 /* === the narrow screen ======================================================================================== */
-@media (prefers-reduced-motion: reduce) { .spinner, .stepper__step[data-state="now"] .stepper__bar { animation: none; } .flow .way-back { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .caret { transition: none; } .spinner, .stepper__step[data-state="now"] .stepper__bar { animation: none; } .flow .way-back { transition: none; } }
 /* the frame answers the window; a component answers the place it stands in — the main region, the drawer, a column
    of the pattern library — so one placed in the drawer takes the narrow layout on a wide screen too (WP-181) */
 @media (max-width: 760px) {
