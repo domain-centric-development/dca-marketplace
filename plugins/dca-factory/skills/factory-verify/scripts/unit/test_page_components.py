@@ -168,6 +168,24 @@ class PageComponentsTest(unittest.TestCase):
         for selector in re.findall(r"([^{}]+)\{[^{}]*\}", style):
             self.assertEqual(selector.count("("), selector.count(")"), selector.strip()[:80])
 
+    def test_a_place_places_a_component_and_never_restyles_it(self):
+        # where one block's selector reaches into another's, it may say where the other stands — its column, its
+        # margin, how it aligns —, never how it looks: a look that differs is a variant of its own (`block--variant`)
+        placing = re.compile(r"(grid-column|grid-row|grid-template-columns|display|margin(-[a-z]+)?|align-[a-z]+|"
+                             r"justify-[a-z]+|flex(-[a-z]+)?|order|width|min-width|max-width|gap|column-gap|row-gap)$")
+        restyled = []
+        for selector, body in re.findall(r"([^{}]+)\{([^{}]*)\}", re.sub(r"/\*.*?\*/", "", page_style.STYLE, flags=re.S)):
+            for one in selector.split(","):
+                one = one.strip()
+                if not one or one.startswith("@") or re.match(r"\.flow\b", one):
+                    continue
+                blocks = {re.split(r"__|--", c)[0] for c in re.findall(r"\.([a-z][\w-]*)", one)}
+                if len(blocks) < 2:
+                    continue
+                props = [d.split(":")[0].strip() for d in body.split(";") if ":" in d]
+                restyled += [f"{one} {{{p}}}" for p in props if not placing.match(p)]
+        self.assertEqual([], restyled)
+
     def test_the_public_tokens_are_declared_and_listed_in_the_example(self):
         declared = set(re.findall(r"^\s*(--[a-z0-9-]+):", page_tokens.TOKENS, re.M))
         self.assertEqual([], sorted(set(page_tokens.PUBLIC) - declared))

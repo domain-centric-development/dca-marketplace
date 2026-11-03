@@ -56,7 +56,7 @@ function curveSvg(curve) {
 ui.btn = (label, o = {}) => `<button type="button" class="${mods("btn", [o.primary && "primary", o.write && "write",
   o.danger && "danger", o.small && "small", o.plain && "plain", o.bar && "bar"])}"${o.title ? ` title="${esc(o.title)}"` : ""}${attrs(o.attrs)}>${esc(label)}</button>`;
 ui.link = (label, o = {}) => `<button type="button" class="${mods("link", [o.title && "title", o.to && "to", o.way && "way",
-  o.plain && "plain"])}"${attrs(o.attrs)}>${o.html ? label : esc(label)}</button>`;
+  o.plain && "plain", o.quiet && "quiet", o.compact && "compact", o.ink && "ink"])}"${attrs(o.attrs)}>${o.html ? label : esc(label)}</button>`;
 ui.switch = (items, o = {}) => `<span class="${mods("switch", [o.bar && "bar"])}" role="group"${o.label ? ` aria-label="${esc(o.label)}"` : ""}>${items.map(i =>
   `<button type="button" class="switch__opt" aria-pressed="${!!i.pressed}"${attrs(i.attrs)}>${esc(i.label)}${i.n != null ? `<span class="switch__n">${esc(i.n)}</span>` : ""}</button>`).join("")}</span>`;
 ui.select = o => `<select class="select" id="${esc(o.id)}"${attrs(o.attrs)}>${(o.options || []).map(p =>
@@ -64,30 +64,32 @@ ui.select = o => `<select class="select" id="${esc(o.id)}"${attrs(o.attrs)}>${(o
 ui.field = o => o.multiline
   ? `<textarea class="${mods("field", ["area"])}" id="${esc(o.id)}"${attrs(o.attrs)}>${esc(o.value || "")}</textarea>`
   : `<input class="${mods("field", [o.bar && "bar"])}" id="${esc(o.id)}" type="${esc(o.type || "text")}" value="${esc(o.value || "")}"${attrs(o.attrs)}>`;
+// the one caption: what names a column, a group, a kind — small capitals in the mono face, muted or in the brand's ink
+ui.caption = (text, o = {}) => `<span class="${mods("caption", [o.brand && "brand"])}">${esc(text)}</span>`;
 ui.caret = open => `<svg class="caret" viewBox="0 0 12 12" aria-hidden="true"${open ? " data-open" : ""}><path d="M4.25 2.5 7.75 6l-3.5 3.5"/></svg>`;
-ui.label = (text, forId, o = {}) => `<label class="${mods("label", [o.quiet && "quiet"])}" for="${esc(forId)}">${esc(text)}</label>`;
-ui.hint = (text, o = {}) => `<${o.block ? "p" : "span"} class="${mods("hint", [o.block && "block"])}"${o.id ? ` id="${esc(o.id)}"` : ""}${o.title ? ` title="${esc(o.title)}"` : ""}>${o.html ? text : esc(text)}</${o.block ? "p" : "span"}>`;
+ui.label = (text, forId, o = {}) => `<label class="${mods("label", [o.quiet && "quiet", o.bar && "bar"])}" for="${esc(forId)}">${esc(text)}</label>`;
+ui.hint = (text, o = {}) => `<${o.block ? "p" : "span"} class="${mods("hint", [o.block && "block", o.prose && "prose"])}"${o.id ? ` id="${esc(o.id)}"` : ""}${o.title ? ` title="${esc(o.title)}"` : ""}>${o.html ? text : esc(text)}</${o.block ? "p" : "span"}>`;
 ui.error = (text, o = {}) => `<${o.block ? "p" : "span"} class="error"${o.id ? ` id="${esc(o.id)}"` : ""}>✗ ${esc(text)}</${o.block ? "p" : "span"}>`;
 ui.term = (name, o = {}) => `<span class="${mods("term", [o.minor && "minor", o.shared && "shared"])}"${o.title ? ` title="${esc(o.title)}"` : ""}>${esc(name)}</span>`;
-ui.event = (text, o = {}) => `<span class="event"${o.title ? ` title="${esc(o.title)}"` : ""}>${esc(text)}</span>`;
+ui.event = (text, o = {}) => `<span class="${mods("event", [o.wrap && "wrap"])}"${o.title ? ` title="${esc(o.title)}"` : ""}>${esc(text)}</span>`;
 ui.state = (word, state, o = {}) => `<span class="state" data-state="${esc(state || word)}"${o.title ? ` title="${esc(o.title)}"` : ""}>${esc(word)}</span>`;
 ui.mark = m => `<span class="mark" data-state="${esc(m)}" aria-hidden="true">${esc(MARKS[m] || "")}</span>`;
-ui.icon = state => ICONS[state] ? `<svg class="icon" data-state="${esc(state)}" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10"/>${ICONS[state]}</svg>`
+ui.icon = (state, o = {}) => ICONS[state] ? `<svg class="${mods("icon", [o.large && "large"])}" data-state="${esc(state)}" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10"/>${ICONS[state]}</svg>`
   : `<svg class="icon" data-state="minor" viewBox="0 0 20 20" aria-hidden="true"><path d="M6 10h8"/></svg>`;
-ui.num = (figure, unit) => `<span class="num">${esc(figure)}${unit ? `<span class="num__unit">${esc(unit)}</span>` : ""}</span>`;
-ui.id = (text, o = {}) => `<${o.block ? "div" : "span"} class="id">${o.html ? text : esc(text)}</${o.block ? "div" : "span"}>`;
+ui.num = (figure, unit, o = {}) => `<span class="${mods("num", [o.lead && "lead", o.alert && "alert"])}">${esc(figure)}${unit ? `<span class="num__unit">${esc(unit)}</span>` : ""}</span>`;
+ui.id = (text, o = {}) => `<${o.block ? "div" : "span"} class="${mods("id", [o.line && "line"])}">${o.html ? text : esc(text)}</${o.block ? "div" : "span"}>`;
 ui.dot = state => `<span class="dot" data-state="${esc(state)}"></span>`;
 ui.spinner = () => `<span class="spinner" aria-hidden="true"></span>`;
 ui.meter = (percent, o = {}) => `<span class="${mods("meter", [o.thin && "thin"])}"><i class="meter__fill" style="width:${Math.max(0, Math.min(100, +percent || 0))}%"></i></span>`;
 ui.flag = (text, state, o = {}) => `<span class="flag" data-state="${esc(state)}"${o.title ? ` title="${esc(o.title)}"` : ""}>${esc(text)}</span>`;
-ui.pill = (text, kind) => `<span class="${mods("pill", [kind])}">${esc(text)}</span>`;
+ui.pill = (text, kind, o = {}) => `<span class="${mods("pill", [kind, o.line && "line"])}">${esc(text)}</span>`;
 ui.empty = text => `<p class="empty">${esc(text)}</p>`;
 ui.intro = (text, o = {}) => `<p class="intro">${o.html ? text : esc(text)}</p>`;
 ui.note = (text, o = {}) => `<div class="note"${o.state ? ` data-state="${esc(o.state)}"` : ""}>${o.html ? text : esc(text)}</div>`;
 ui.ruleId = (id, enforcement, state, refused) => `<span class="${mods("rule-id", [enforcement])}"${state ? ` data-state="${esc(state)}"` : ""}>${esc(id)}${refused ? `<span class="rule-id__refused">×${esc(refused)}</span>` : ""}</span>`;
 
 // --- molecules
-ui.story = (id, title) => ui.link(title || id, {title: true, attrs: {"data-story": id}});
+ui.story = (id, title, o = {}) => ui.link(title || id, {title: true, compact: o.compact, ink: o.ink, attrs: {"data-story": id}});
 // the only way a field is set: its label, the field, what it takes and what was wrong — tied by for, id and describedby
 ui.formRow = o => {
   const hintId = o.hint ? `${o.id}-hint` : "", errorId = o.error ? `${o.id}-error` : "";
@@ -104,8 +106,8 @@ ui.ask = o => `<div class="ask" data-ask="${esc(o.id)}">`
   + ((o.choices || []).length ? ui.formRow({id: `why-${slug(o.draft || o.id)}`, label: "why? (optional)", quiet: true,
       options: [{value: "", label: "—"}, ...o.choices.map(c => ({value: c}))]}) : "")
   + `<div class="ask__go">${ui.btn(o.label, {primary: o.primary, write: o.write, title: o.title, attrs: {"data-press": o.id}})}</div></div>`;
-ui.actions = (inner, o = {}) => inner ? `<div class="${mods("actions", [o.end && "end", o.tight && "tight", o.foot && "foot"])}"${o.id ? ` id="${esc(o.id)}"` : ""}${o.own ? " data-own" : ""}>${inner}</div>` : "";
-ui.tile = (figure, label, o = {}) => `<div class="${mods("tile", [o.lead && "lead", o.bad && "alert"])}"${o.title ? ` title="${esc(o.title)}"` : ""}>${ui.num(figure)}<span class="tile__label">${esc(label)}</span>${o.said ? `<small class="tile__said">${esc(o.said)}</small>` : ""}</div>`;
+ui.actions = (inner, o = {}) => inner ? `<div class="${mods("actions", [o.end && "end", o.tight && "tight", o.foot && "foot", o.indent && "indent"])}"${o.id ? ` id="${esc(o.id)}"` : ""}${o.own ? " data-own" : ""}>${inner}</div>` : "";
+ui.tile = (figure, label, o = {}) => `<div class="${mods("tile", [o.lead && "lead", o.bad && "alert"])}"${o.title ? ` title="${esc(o.title)}"` : ""}>${ui.num(figure, "", {lead: o.lead, alert: o.bad})}${ui.caption(label)}${o.said ? `<small class="tile__said">${esc(o.said)}</small>` : ""}</div>`;
 ui.kv = pairs => `<dl class="kv">${pairs.filter(Boolean).map(([k, v]) => `<dt class="kv__key">${esc(k)}</dt><dd class="kv__value">${v}</dd>`).join("")}</dl>`;
 ui.toast = (text, isError) => `<div class="${mods("toast", [isError && "error"])}" role="status">${esc(text)}</div>`;
 ui.legend = items => `<ul class="legend">${items.map(([state, label]) => `<li class="legend__item"><i class="legend__key" data-state="${esc(state)}"></i>${esc(label)}</li>`).join("")}</ul>`;
@@ -114,25 +116,25 @@ ui.said = (keyword, html, o = {}) => `<p class="said"${o.state ? ` data-state="$
 ui.figures = items => `<div class="figures">${items.filter(Boolean).map(([label, value, bad]) => `<span class="figures__item">${esc(label)} <b class="${mods("figures__value", [bad && "alert"])}">${value}</b></span>`).join("")}</div>`;
 ui.bars = rows => `<div class="bars">${rows.map(([label, n, percent]) => `<span class="bars__label">${esc(label)}</span>${ui.meter(percent)}<span class="bars__n">${esc(n)}</span>`).join("")}</div>`;
 ui.toolbar = inner => `<div class="toolbar">${inner}</div>`;
-ui.inflow = (label, hint) => `<div class="inflow"><span class="inflow__label">${esc(label)}</span>${ui.hint(hint)}</div>`;
+ui.inflow = (label, hint) => `<div class="inflow">${ui.caption(label, {brand: true})}${ui.hint(hint)}</div>`;
 ui.quietLine = html => `<p class="quiet-line">${html}</p>`;
 ui.notice = (html, o = {}) => `<div class="${mods("notice", [o.ended && "ended"])}"><div class="notice__text"><span class="notice__arrow">${o.ended ? "!" : "→"}</span>${html}</div>${o.action || ""}</div>`;
-ui.storyCard = o => `<li class="story-card" data-state="${esc(o.state)}">${ui.story(o.id, o.title)}${ui.id(o.line, {block: true})}${ui.actions(o.actions, {tight: true})}</li>`;
+ui.storyCard = o => `<li class="story-card" data-state="${esc(o.state)}">${ui.story(o.id, o.title, {compact: true})}${ui.id(o.line, {block: true})}${ui.actions(o.actions, {tight: true})}</li>`;
 ui.ticket = o => `<li class="ticket"><div class="ticket__what"><b class="ticket__kind">${esc(o.kind)}</b>${o.target ? `<span>${esc(o.target)}</span>` : ""}${ui.state(o.word, o.state)}${o.words ? `<span>${esc(o.words)}</span>` : ""}</div>`
   + (o.id ? ui.id(o.id, {block: true}) : "") + (o.error ? ui.error(o.error, {block: true}) : "") + (o.note ? ui.note(o.note, {html: true, state: "wait"}) : "")
   + ui.actions(o.actions, {tight: true}) + `</li>`;
-ui.option = o => `<li class="${mods("option", [o.advised && "advised"])}"><div class="option__pick">${o.pick}</div>${o.advised ? `<span class="option__advised">recommended</span>` : ""}<span class="option__text">${o.text}</span></li>`;
+ui.option = o => `<li class="${mods("option", [o.advised && "advised"])}"><div class="option__pick">${o.pick}</div>${o.advised ? `${ui.caption("recommended", {brand: true})}` : ""}<span class="option__text">${o.text}</span></li>`;
 ui.listItem = o => `<li class="list__item">${o.mark ? ui.mark(o.mark) : ""}<span class="list__what">${o.what}</span>${o.aside ? `<span class="list__aside">${o.aside}</span>` : ""}</li>`;
 ui.delivery = o => o.head
   ? `<div class="${mods("delivery", ["head"])}" aria-hidden="true">${["at", "story", "epic", "outcome event", "time", "tokens", "cost"].map((label, i) =>
-      `<span class="${mods("delivery__label", [i > 3 && "num"])}${i === 2 || i === 5 ? " hide-narrow" : ""}">${label}</span>`).join("")}</div>`
+      `<span class="${mods("delivery__label", [i > 3 && "num"])}${i === 2 || i === 5 ? " hide-narrow" : ""}">${ui.caption(label)}</span>`).join("")}</div>`
   : `<div class="delivery"><div class="delivery__at">${esc(o.at)}</div><div class="delivery__what">${ui.story(o.story, o.title)}</div>
   <div class="delivery__epic" title="${esc(o.epic)}">${esc(o.epic)}</div><div class="delivery__event">${o.event ? ui.event(o.event, {title: o.event}) : ""}</div>
   <div class="delivery__fig">${esc(o.seconds || "")}</div><div class="delivery__fig delivery__fig--tokens hide-narrow">${esc(o.tokens || "")}</div><div class="delivery__fig">${esc(o.cost || "")}</div></div>`;
-ui.domainNode = (title, hint) => `<h3 class="domain-node"><span class="domain-node__dot" aria-hidden="true"></span>${esc(title)}${hint ? ` ${ui.hint(hint)}` : ""}</h3>`;
-ui.facts = groups => `<dl class="facts">${groups.map(g => `<dt class="facts__kind">${esc(g.kind)}</dt><dd class="facts__terms">${g.terms.map(t => ui.term(t.name, t)).join("")}</dd>`).join("")}</dl>`;
+ui.domainNode = (title, hint) => `<h3 class="domain-node"><span class="domain-node__dot" aria-hidden="true"></span>${esc(title)}${hint ? ` ${ui.hint(hint, {prose: true})}` : ""}</h3>`;
+ui.facts = groups => `<dl class="facts">${groups.map(g => `<dt class="facts__kind">${ui.caption(g.kind)}</dt><dd class="facts__terms">${g.terms.map(t => ui.term(t.name, t)).join("")}</dd>`).join("")}</dl>`;
 ui.proposal = o => `<li class="proposal"><b class="proposal__goal">${esc(o.goal)}</b>${o.intent ? `<span>${esc(o.intent)}</span>` : ""}
-  <div class="proposal__facts">${o.metric ? ui.event(o.metric) : ""}${o.contact ? `<span>asks ${esc(o.contact)}</span>` : ""}${ui.id(o.id)}</div>
+  <div class="proposal__facts">${o.metric ? ui.event(o.metric, {wrap: true}) : ""}${o.contact ? `<span>asks ${esc(o.contact)}</span>` : ""}${ui.id(o.id)}</div>
   ${o.epic ? `<div>${ui.state("epic " + o.epic, "ok")}</div>` : ui.actions(o.actions, {tight: true})}</li>`;
 ui.aside = (heading, html, h = 3) => `<div class="aside"><h${h} class="aside__heading">${esc(heading)}</h${h}>${html}</div>`;
 ui.trailItem = o => `<li class="trail__item"><span class="trail__glyph" aria-hidden="true">✦</span><span class="trail__words"><q>${esc(o.words)}</q>
@@ -162,7 +164,7 @@ ui.accordion = o => {
 };
 // rows that fold, on shared columns: a head row of labels, each row one accordion whose cells take the columns
 ui.foldTable = (cols, rows) => `<div class="fold-table" style="--fold-cols: calc(var(--space-2) + 14px) ${cols.map(c => c.num ? "max-content" : c.width || "minmax(0, 1fr)").join(" ")}">`
-  + `<div class="fold-table__head" aria-hidden="true"><span></span>${cols.map(c => `<span class="${mods("fold-table__label", [c.num && "num"])}${c.hide ? " hide-narrow" : ""}">${esc(c.label)}</span>`).join("")}</div>`
+  + `<div class="fold-table__head" aria-hidden="true"><span></span>${cols.map(c => `<span class="${mods("fold-table__label", [c.num && "num"])}${c.hide ? " hide-narrow" : ""}">${ui.caption(c.label)}</span>`).join("")}</div>`
   + rows.map(r => ui.accordion(Object.assign({variant: "ink"}, r, {cells: r.cells.map((html, i) => ({html, num: cols[i].num, hide: cols[i].hide}))}))).join("") + `</div>`;
 ui.tabs = parts => parts.map(p => `<span class="tabs__group" role="presentation">${p.tabs.map((t, i) =>
   (i && p.ordered ? `<span class="tabs__arrow" aria-hidden="true">→</span>` : "") + ui.tab(t)).join("")}</span>`)
@@ -175,7 +177,7 @@ ui.trail = items => items.length ? `<ul class="trail" aria-label="the wishes">${
 ui.wish = (entry, items) => ui.card("A wish", "your words become a story, a task or a finding settled — a draft until you release it",
   entry + ui.trail(items), {wish: true});
 ui.list = items => `<ul class="list">${items.map(ui.listItem).join("")}</ul>`;
-ui.lane = o => `<section class="lane" data-state="${esc(o.name)}"${o.cards.length + o.more.length ? "" : " data-bare"}><h4 class="lane__head">${esc(o.label || o.name)} <span>${o.cards.length + o.more.length}</span></h4>`
+ui.lane = o => `<section class="lane" data-state="${esc(o.name)}"${o.cards.length + o.more.length ? "" : " data-bare"}><h4 class="lane__head">${ui.caption(o.label || o.name)}${ui.caption(String(o.cards.length + o.more.length))}</h4>`
   + (o.cards.length ? `<ul class="lane__cards">${o.cards.map(ui.storyCard).join("")}</ul>` : "")
   + (o.more.length ? ui.accordion({key: o.key, variant: "quiet", head: `${o.more.length} more`, open: o.open, body: () => `<ul class="lane__cards">${o.more.map(ui.storyCard).join("")}</ul>`}) : "") + `</section>`;
 ui.lanes = lanes => `<div class="lanes">${lanes.map(ui.lane).join("")}</div>`;
@@ -193,15 +195,15 @@ ui.days = days => `${ui.delivery({head: true})}<div class="days">${days.map(d =>
 ui.domain = inner => `<div class="domain"><div class="domain__track">${inner}</div></div>`;
 ui.kernel = groups => `<div class="kernel"><div class="kernel__top"><h3 class="kernel__title">Shared kernel</h3>${ui.hint("what every context shares, the same in each — no context of its own")}</div>${ui.facts(groups)}</div>`;
 ui.proposals = items => `<ul class="proposals">${items.map(ui.proposal).join("")}</ul>`;
-ui.ruleGroup = (label, rows, o = {}) => rows.length ? `<div class="rule-group">${label ? `<div class="${mods("rule-group__label", [o.plain && "plain"])}">${esc(label)} <span class="rule-group__n">${rows.length}</span></div>` : ""}<ul class="rule-group__rows">${rows.map(r => `<li class="rule-group__row">${r}</li>`).join("")}</ul></div>` : "";
+ui.ruleGroup = (label, rows, o = {}) => rows.length ? `<div class="rule-group">${label ? `<div class="rule-group__label">${o.plain ? ui.hint(label, {prose: true}) : ui.caption(label)} <span class="rule-group__n">${rows.length}</span></div>` : ""}<ul class="rule-group__rows">${rows.map(r => `<li class="rule-group__row">${r}</li>`).join("")}</ul></div>` : "";
 // a rule with the scenarios it holds: the rule a heading, its scenarios a list beneath it, one block per rule
-ui.ruleBlock = (rule, rows) => `<section class="rule-block">${rule ? `<h4 class="rule-block__rule"><span class="rule-block__label">Rule</span>${rule}</h4>` : ""}`
+ui.ruleBlock = (rule, rows) => `<section class="rule-block">${rule ? `<h4 class="rule-block__rule">${ui.caption("Rule", {brand: true})} ${rule}</h4>` : ""}`
   + `<ul class="rule-block__rows">${rows.map(r => `<li>${r}</li>`).join("")}</ul></section>`;
-ui.ways = (title, ways, o = {}) => ways.length ? `<div class="rule-group">${title ? `<div class="${mods("rule-group__label", [o.plain && "plain"])}">${esc(title)}</div>` : ""}<ul class="ways">${ways.map(w =>
+ui.ways = (title, ways, o = {}) => ways.length ? `<div class="rule-group">${title ? `<div class="rule-group__label">${o.plain ? ui.hint(title, {prose: true}) : ui.caption(title)}</div>` : ""}<ul class="ways">${ways.map(w =>
   `<li class="ways__row">${ui.link(`${w.source} → ${w.target}`, {way: true, attrs: {"data-edge": w.key}})}<span class="ways__rules">${esc(w.rules)}</span></li>`).join("")}</ul></div>` : "";
 ui.part = (title, body, o = {}) => body ? `<section class="${mods("part", [o.aside && "aside"])}"><h${o.level || 3} class="part__head">${title}</h${o.level || 3}>${body}</section>` : "";
 // how a check ends: a mark in the state's colour, where the story goes in plain words, what happens then beneath
-ui.outcome = (state, head, body) => `<section class="outcome" data-state="${esc(state)}"><h4 class="outcome__head">${ui.icon(state)}<span>${head}</span></h4>${body}</section>`;
+ui.outcome = (state, head, body) => `<section class="outcome" data-state="${esc(state)}"><h4 class="outcome__head">${ui.icon(state, {large: true})}<span>${head}</span></h4>${body}</section>`;
 ui.flow = svg => `<div class="flow">${svg}</div>`;
 ui.table = (cols, rows, o = {}) => {
   const cls = c => [c.num && "table__num", c.act && "table__act", c.hide && "hide-narrow", c.mark && "table__mark"].filter(Boolean).join(" ");

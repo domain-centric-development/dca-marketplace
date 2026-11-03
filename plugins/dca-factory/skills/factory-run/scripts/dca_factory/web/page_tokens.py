@@ -110,6 +110,7 @@ TOKENS = """
   --radius-round: 999px;
   --measure: 1100px;
   --grid-columns: 12;
+  --fold-title: calc(var(--space-3) + 14px + var(--space-3));  /* where a fold's title starts, after its caret's column */
   --caret: max(11px, .75em);                    /* a fold's chevron: as large as its row's text, never below 11 px */
   /* internal — derived from the public ones */
   --brand-fill-hover: color-mix(in srgb, var(--brand-fill), black 15%);

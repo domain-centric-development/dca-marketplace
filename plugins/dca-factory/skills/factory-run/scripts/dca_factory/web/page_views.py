@@ -24,7 +24,7 @@ function endedLine(st) {
 function column(c) {
   const delivered = c.column === "delivered", items = [];
   if (c.last_text) items.push(`last ${esc(when(c.last_text))}`);
-  if (c.title) items.push((c.story ? ui.story(c.story, c.title) : esc(c.title)) + (c.sub ? ui.id(c.sub, {block: true}) : ""));
+  if (c.title) items.push((c.story ? ui.story(c.story, c.title, {ink: true}) : esc(c.title)) + (c.sub ? ui.id(c.sub, {block: true}) : ""));
   const press = !c.action ? "" : c.action.call ? ui.btn(c.action.label, {primary: true, plain: true, attrs: {"data-call": c.action.call}}) : act(c.action);
   const all = delivered ? ui.link("all →", {to: true, attrs: {"data-tab": "delivered"}}) : "";
   return ui.column({name: c.column, count: c.count, of: delivered ? c.total : null, line: c.line, hot: c.hot, items,
@@ -41,7 +41,7 @@ function now(st) {
     + ui.inflow("Inflow →", "a wish, a discovery, a finding, an epic's journey fill the backlog")
     + wishPart(st)
     + (recent.length ? ui.card("Last delivered", sums ? `${esc(sums)} in all` : "", ui.list(recent) + ui.link("delivered →", {to: true, attrs: {"data-tab": "delivered"}})) : "")
-    + (findings ? ui.quietLine(`Beside that: ${ui.link(`${findings} open finding${findings > 1 ? "s" : ""} beside their stories →`, {attrs: {"data-tab": "backlog"}})}`) : "");
+    + (findings ? ui.quietLine(`Beside that: ${ui.link(`${findings} open finding${findings > 1 ? "s" : ""} beside their stories →`, {quiet: true, attrs: {"data-tab": "backlog"}})}`) : "");
 }
 
 // --- the wish: one part wherever it stands, the field and the trail of what became of each wish ------------------------
@@ -81,7 +81,7 @@ function describe(st) {
   const parts = (st.description || []).map(p => {
     const key = `part:${p.part}`;
     return {key, open: opened(key), body: () => partBody(p.part), cells: [
-      `${ui.mark(p.mark)}<b>${esc(p.part)}</b>${ui.id(p.path)}`,
+      `${ui.mark(p.mark)}<b>${esc(p.part)}</b>${ui.id(p.path, {line: true})}`,
       (p.present ? esc((p.sections || []).join(" · ")) : ui.flag("missing", "gone"))
         + ((p.missing || []).length ? ` ${ui.flag("missing: " + p.missing.join(", "), "changes")}` : "")
         + ((p.empty || []).length ? ` ${ui.flag("empty: " + p.empty.join(", "), "changes")}` : "")]};
@@ -136,7 +136,7 @@ function specContext(c) {
     const pending = f.rules.reduce((n, r) => n + r.criteria.filter(x => x.changed_by.length).length, 0);
     return ui.accordion({key, variant: "group", open: opened(key), head: `<b>${esc(f.feature || "the context itself")}</b>`,
       meta: `${total}${pending ? ` · ${pending} changed` : ""}`,
-      body: () => f.rules.map(r => ui.ruleBlock(r.rule ? inline(r.rule) : "", r.criteria.map(scenario))).join("") + ui.actions(act(f.add, "s"))});
+      body: () => f.rules.map(r => ui.ruleBlock(r.rule ? inline(r.rule) : "", r.criteria.map(scenario))).join("") + ui.actions(act(f.add, "s"), {indent: true})});
   }).join("");
   const coming = ui.ruleGroup("coming — new criteria of open stories", c.coming.map(s =>
     `<p>${ui.flag(s.status, "adds")} ${ui.story(s.story)} — ${s.keys.map(k => `<code>${esc(k.key)}</code>`).join(", ")}</p>`));
@@ -162,7 +162,7 @@ function domainCard() {
     const key = `context:${c.context}`;
     const pending = c.features.reduce((n, f) => n + f.rules.reduce((m, r) => m + r.criteria.filter(x => x.changed_by.length).length, 0), 0) + c.coming.length;
     return {key, open: opened(key), body: () => specContext(c), cells: [
-      `<b>${esc(c.context)}</b> ${c.subdomain ? ui.pill(c.subdomain, subdomainKind(c.subdomain)) : ""}`, esc(c.purpose),
+      `<b>${esc(c.context)}</b> ${c.subdomain ? ui.pill(c.subdomain, subdomainKind(c.subdomain), {line: true}) : ""}`, esc(c.purpose),
       `${c.features.length}`, `${c.criteria}`, pending ? ui.flag(`${pending}`, "changes") : "—", healthCell(c.health)]};
   });
   const kernel = S.spec.shared_kernel ? ui.kernel(modelFacts(S.spec.shared_kernel.model)) : "";
@@ -193,7 +193,7 @@ function discover(st) {
   const topics = (S.discover || {}).topics || [];
   const rows = topics.map(t => {
     const key = `topic:${t.topic}`, made = t.proposals.filter(p => p.epic).length;
-    return {key, open: opened(key), body: () => discoveryBody(t), cells: [`<b>${esc(t.title)}</b>${ui.id(t.topic)}`,
+    return {key, open: opened(key), body: () => discoveryBody(t), cells: [`<b>${esc(t.title)}</b>${ui.id(t.topic, {line: true})}`,
       `${t.proposals.length}`, `${made}`, `${t.description_changes.length}`]};
   });
   // a discovery on its way: where it stands and its output, until its report stands below
@@ -498,9 +498,9 @@ function picked(flow, rules, story) {
       + waysLine(out, "it goes back to an earlier stage", rules, plain)
       + (stops.length ? ruleGroup("it stops and waits for a person", ids(stops), rules, story, p.stage, plain) : ""));
     return ui.card(esc(p.stage), esc((step.window || "") + (verdict ? " · decides with its verdict, no gate" : "")),
-      ui.part(`Checked before it starts ${ui.hint("— a failing check keeps it from starting")}`, ruleGroup("", step.gate_before, rules, story, p.stage))
-      + ui.part(`While it works ${ui.hint(`— it is told ${(step.told || []).length} instructions`)}`, foldGroup(`told:${p.stage}`, "show what it is told", step.told, rules, story, p.stage))
-      + ui.part(`Checked afterwards ${ui.hint(verdict ? "— its verdict decides, no gate" : checks ? `— ${checks} checks the work must pass` : "— nothing is checked")}`,
+      ui.part(`Checked before it starts ${ui.hint("— a failing check keeps it from starting", {prose: true})}`, ruleGroup("", step.gate_before, rules, story, p.stage))
+      + ui.part(`While it works ${ui.hint(`— it is told ${(step.told || []).length} instructions`, {prose: true})}`, foldGroup(`told:${p.stage}`, "show what it is told", step.told, rules, story, p.stage))
+      + ui.part(`Checked afterwards ${ui.hint(verdict ? "— its verdict decides, no gate" : checks ? `— ${checks} checks the work must pass` : "— nothing is checked", {prose: true})}`,
           foldGroup(`checks:${p.stage}`, "show the checks", step.gate_after, rules, story, p.stage) + passes + fails)
       + ui.part("The runner also decides here", ruleGroup("", rest, rules, story, p.stage), {aside: true})
       + (into.length ? ui.part("Ways back to this stage", waysLine(into, "", rules), {aside: true}) : ""));
@@ -664,7 +664,7 @@ function components() {
       ["said", ui.said("Given", "a reader with no loan") + ui.said("Fails when", "the tests are red.", {icon: "fail", state: "fail", goes: "→ once more"})],
       ["figures · bars", ui.figures([["questions", "3/4"], ["domain", "2", true]]) + ui.bars([["ddd", 4, 100], ["hexagonal", 1, 25]])],
       ["toolbar", ui.toolbar(ui.switch([{label: "story", pressed: true}, {label: "task"}]))],
-      ["inflow · quiet-line", ui.inflow("Inflow →", "a wish, a discovery, a finding fill the backlog") + ui.quietLine(`Beside that: ${ui.link("2 open findings →")}`)],
+      ["inflow · quiet-line", ui.inflow("Inflow →", "a wish, a discovery, a finding fill the backlog") + ui.quietLine(`Beside that: ${ui.link("2 open findings →", {quiet: true})}`)],
       ["notice", ui.notice("What comes next stands here.") + ui.notice("The factory ended on its own.", {ended: true, action: ui.btn("▶ start", {primary: true, plain: true})})],
       ["story-card", `<ul>${["draft", "approved", "running", "stopped", "delivered", "superseded"].map(s => ui.storyCard(Object.assign({}, card, {state: s}))).join("")}</ul>`],
       ["ticket", `<ul>${ui.ticket({kind: "wish", target: "", word: "running", state: "running", id: "r-12 · Ann", actions: ui.btn("take back", {small: true, danger: true})})}</ul>`],
