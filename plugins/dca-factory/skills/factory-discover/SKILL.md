@@ -61,12 +61,17 @@ Write `.gitignore` with the line `originals/` before anything lands in the folde
    someone, named as the glossary names it, or a new name marked as such) and `- domain_contact:`
    (`open` where nobody is named yet). For every one ask how its effect will be recognised — the
    question a list of deliverables does not ask. A target goes into `goal:` only where the person can
-   measure it. Where the findings change what the project description says — other users, a new "what it is
+   measure it. The `goal:` is the epic's title: the outcome and for whom, in at most 20 words — how it is
+   built, a protocol, a second implementation are constraints under `## Risks and open questions`. Where
+   the metric's event is also recorded for cases the work does not touch (every order, not only the ones
+   it makes possible), ask the person what tells them apart — a field on the event, the surface it came
+   through — and write the answer into `metric:`; while nobody has answered, the question stands under
+   `## Risks and open questions` and the metric says it cannot yet tell the cases apart. Where the findings change what the project description says — other users, a new "what it is
    not", a new quality — add `## Proposed description changes` before `## Sources`: one
    `### <overview.md | tech.md | domain.md> — <section>` per change, with `- change:` (cited) and `- why:`.
    Leave the section out when nothing changes.
 6. **Check it with the gate:** `bash .agents/factory/factory.sh discover --check <topic>` — the
-   sections, every citation listed, every source resolving, every proposal with intent, goal and metric,
+   sections, every citation listed, every source resolving, every proposal with intent, goal and metric, every goal at most 20 words,
    `originals/` ignored. Fix every finding before you hand the report over. Report what it said.
 7. **The person decides.** Show the proposals; write nothing into the backlog until the person releases
    one. A released proposal becomes an epic through `factory-backlog` —

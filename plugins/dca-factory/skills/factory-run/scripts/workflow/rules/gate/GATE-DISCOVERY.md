@@ -14,4 +14,4 @@ fail: the report's shape or a source it cites does not hold
 
 **When:** `story-gate.py --check-discovery <topic>` runs after a discovery
 
-**Why:** a report proposes epics with an outcome, and its sources are there
+**Why:** a report proposes epics with an outcome and a goal short enough to be the epic's title, and its sources are there

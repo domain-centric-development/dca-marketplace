@@ -52,6 +52,11 @@ class Count(Value):
     value: int
 
 
+#: The most words a goal takes: it names the outcome and for whom, and the view shows it as the epic's title; how the
+#: work is built, a protocol, a second implementation are constraints under `## Risks and open questions`.
+GOAL_WORDS = Count(20)
+
+
 class Item(Value):
     """One `### <name>` block of a section: its name and its `- <field>: <text>` lines."""
 
@@ -81,7 +86,7 @@ class Problem(Value):
 
 class ReportRules(DomainService):
     """What a report must hold: its sections in order, a source for every citation, every proposed body of work with
-    intent, goal and metric, every description change naming its part and the change."""
+    intent, metric and a goal short enough to be its title, every description change naming its part and the change."""
 
     @staticmethod
     def sections(report: Report) -> typing.List[Problem]:
@@ -112,6 +117,11 @@ class ReportRules(DomainService):
                        or item.field(Text(f)).value.lower() == "open" or "{{" in item.field(Text(f)).value]
             if lacking:
                 problems.append(Problem(f"proposed `{item.name.value}` lacks {', '.join(lacking)}"))
+            words = Count(len(item.field(Text("goal")).value.split()))
+            if words.value > GOAL_WORDS.value:
+                problems.append(Problem(f"proposed `{item.name.value}`: the goal takes {words.value} words — say the "
+                                        f"outcome and for whom in at most {GOAL_WORDS.value}; how it is built goes "
+                                        "under `## Risks and open questions`"))
         if DESCRIPTION_CHANGES in headings:
             # the position is a finding only when both neighbours are there — a missing one is reported above
             if PROPOSED_WORK in headings and "Sources" in headings and \

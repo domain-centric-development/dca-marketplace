@@ -362,9 +362,10 @@ details.dm-group > summary { justify-content: flex-start; }
 .decision .q b { font: 600 17px/1.3 var(--display); display: block; margin-top: 2px; }
 .decision .dbody { padding: 10px 18px 16px; }
 /* the options as rows, each its button first and what it means beside it — long words read across, not down */
-.opts { display: grid; gap: 6px; margin-top: 10px; }
+/* the buttons' column as wide as the widest button, shared by every option so their texts start in one line */
+.opts { display: grid; grid-template-columns: minmax(64px, max-content) minmax(0, 1fr); gap: 6px; margin-top: 10px; }
 .opt { border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; font-size: 15px; display: grid;
-  grid-template-columns: 64px minmax(0, 1fr); gap: 4px 12px; align-items: start; }
+  grid-column: 1 / -1; grid-template-columns: subgrid; gap: 4px 12px; align-items: start; }
 .opt > .pick-it { grid-row: 1 / span 2; } .opt .rec-word { grid-column: 2; }
 .opt.advised { border-color: var(--teal); box-shadow: inset 0 0 0 1px var(--teal); }
 .decision details.more > summary::before { content: "▸ "; color: var(--muted); } .decision details.more[open] > summary::before { content: "▾ "; }
@@ -418,8 +419,9 @@ details.dm-group > summary { justify-content: flex-start; }
 .qline b { color: var(--ink); font-weight: 600; } .qline .bad { color: var(--stop); }
 
 /* discover: the problem with an amber edge, the proposed epics as cards */
-.proposals { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px; }
-.proposal { border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; margin-bottom: 8px; display: grid; gap: 5px; }
+.proposals { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 8px; }
+.proposal { border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; margin-bottom: 8px; display: grid; gap: 5px; min-width: 0; }
+.proposal .event { white-space: normal; overflow-wrap: anywhere; }
 .proposal > b { font: 600 15px var(--display); } .proposal .ev { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
 .proposal .acts { margin-top: 2px; }
 
@@ -1325,7 +1327,7 @@ function discoveryBody(t) {
   return `<div class="dm"><div class="dm-track">
     <div class="dm-node"><span class="n">1</span>The report<span class="hint">${esc(t.report)}</span></div>
     ${report || `<p class="empty">The report says nothing beyond what it proposes.</p>`}
-    <div class="dm-node"><span class="n">2</span>Proposed epics<span class="hint">${t.proposals.length}, each an epic once you make it one</span></div>
+    <div class="dm-node"><span class="n">2</span>Proposed epics<span class="hint">${t.proposals.length} proposed — each becomes an epic when you make it one</span></div>
     ${proposals ? `<div class="proposals">${proposals}</div>` : `<p class="empty">No proposed work.</p>`}
     ${changes ? `<div class="dm-node"><span class="n">3</span>Changes to the description<span class="hint">applied one by one, through the description</span></div><table>${changes}</table>` : ""}
     <div class="dm-node"><span class="n">${changes ? 4 : 3}</span>Continue this discovery<span class="hint">a question, a document, a wish — the report grows</span></div>
