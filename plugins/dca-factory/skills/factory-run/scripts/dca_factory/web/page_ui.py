@@ -203,7 +203,7 @@ ui.ways = (title, ways, o = {}) => ways.length ? `<div class="rule-group">${titl
   `<li class="ways__row">${ui.link(`${w.source} → ${w.target}`, {way: true, attrs: {"data-edge": w.key}})}<span class="ways__rules">${esc(w.rules)}</span></li>`).join("")}</ul></div>` : "";
 ui.part = (title, body, o = {}) => body ? `<section class="${mods("part", [o.aside && "aside"])}"><h${o.level || 3} class="part__head">${title}</h${o.level || 3}>${body}</section>` : "";
 // how a check ends: a mark in the state's colour, where the story goes in plain words, what happens then beneath
-ui.outcome = (state, head, body) => `<section class="outcome" data-state="${esc(state)}"><h4 class="outcome__head">${ui.icon(state, {large: true})}<span>${head}</span></h4>${body}</section>`;
+ui.outcome = (state, head, body) => `<section class="outcome" data-state="${esc(state)}"><h4 class="outcome__head">${ui.icon(state, {large: true})}<span>${head}</span></h4>${body ? `<div class="outcome__body">${body}</div>` : ""}</section>`;
 ui.flow = svg => `<div class="flow">${svg}</div>`;
 ui.table = (cols, rows, o = {}) => {
   const cls = c => [c.num && "table__num", c.act && "table__act", c.hide && "hide-narrow", c.mark && "table__mark"].filter(Boolean).join(" ");

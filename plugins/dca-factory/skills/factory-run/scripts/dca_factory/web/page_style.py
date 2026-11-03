@@ -260,9 +260,9 @@ div.id { margin-top: 2px; }
 .domain-node { position: relative; margin: var(--space-4) 0 var(--space-2); font: 600 var(--text-base) var(--display); }
 .domain-node__dot { position: absolute; left: -27px; top: .45em; width: 10px; height: 10px; border-radius: var(--radius-round); background: var(--brand); box-shadow: 0 0 0 3px var(--panel); }
 .hint--prose { font: 400 var(--text-sm) var(--body); }
-.facts { display: grid; grid-template-columns: max-content 1fr; gap: var(--space-2) var(--space-3); margin: 2px 0 0; }
-.facts__kind { padding-top: var(--space-1); }
-.facts__terms { margin: 0; display: flex; flex-wrap: wrap; gap: var(--space-1); }
+/* a kind and its terms on one baseline; a term as tall as its words, never the row */
+.facts { display: grid; grid-template-columns: max-content 1fr; gap: var(--space-2) var(--space-3); margin: 2px 0 0; align-items: baseline; }
+.facts__terms { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1); }
 .proposal { border: 1px solid var(--line); border-radius: var(--radius-control); padding: var(--space-2) var(--space-3); margin-bottom: var(--space-2); display: grid; gap: var(--space-1); min-width: 0; }
 .proposal__goal { font: 600 var(--text-base) var(--display); }
 .proposal__facts { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; font-size: var(--text-sm); color: var(--muted); }
@@ -445,7 +445,9 @@ div.id { margin-top: 2px; }
 .outcome { margin-top: var(--space-4); }
 .outcome__head { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; margin: 0; font: 600 var(--text-base) var(--display); }
 .outcome__head b { color: var(--brand-text); }
-.icon--large { width: 18px; height: 18px; margin: 0; }
+.icon--large { width: var(--mark-large); height: var(--mark-large); margin: 0; }
+/* what follows an outcome stands under its words, after its mark: the outcome reads as the heading it is */
+.outcome__body { padding-left: calc(var(--mark-large) + var(--space-2)); }
 .outcome .rule-group { margin-top: var(--space-2); }
 .table { margin-top: var(--space-3); }
 .table__num { text-align: right; font-family: var(--mono); font-size: var(--text-sm); white-space: nowrap; font-variant-numeric: tabular-nums; }
