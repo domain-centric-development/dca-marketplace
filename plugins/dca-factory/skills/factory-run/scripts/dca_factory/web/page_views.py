@@ -136,7 +136,7 @@ function specContext(c) {
     const pending = f.rules.reduce((n, r) => n + r.criteria.filter(x => x.changed_by.length).length, 0);
     return ui.accordion({key, variant: "group", open: opened(key), head: `<b>${esc(f.feature || "the context itself")}</b>`,
       meta: `${total}${pending ? ` · ${pending} changed` : ""}`,
-      body: () => f.rules.map(r => (r.rule ? ui.ruleLine(inline(r.rule)) : "") + r.criteria.map(scenario).join("")).join("") + ui.actions(act(f.add, "s"))});
+      body: () => f.rules.map(r => ui.ruleBlock(r.rule ? inline(r.rule) : "", r.criteria.map(scenario))).join("") + ui.actions(act(f.add, "s"))});
   }).join("");
   const coming = ui.ruleGroup("coming — new criteria of open stories", c.coming.map(s =>
     `<p>${ui.flag(s.status, "adds")} ${ui.story(s.story)} — ${s.keys.map(k => `<code>${esc(k.key)}</code>`).join(", ")}</p>`));
@@ -670,9 +670,9 @@ function components() {
       ["option", `<ul>${ui.option({advised: true, pick: ui.btn("a", {primary: true}), text: "the recommended answer"}) + ui.option({pick: ui.btn("b"), text: "another answer"})}</ul>`],
       ["list-item", ui.list([{mark: "done", what: ui.story(sample.story, sample.title), aside: "today 10:12<br>$3.10"}])],
       ["delivery", ui.delivery({head: true}) + ui.delivery({at: "10:12", story: sample.story, title: sample.title, epic: sample.epic, event: "BookLent", seconds: "14 min", tokens: "4.1 M", cost: "$3.10"})],
-      ["domain-node · facts · rule-line", ui.domainNode("Domain model", "from its glossary")
+      ["domain-node · facts · rule-block", ui.domainNode("Domain model", "from its glossary")
         + ui.facts([{kind: "aggregate", terms: [{name: "Loan"}]}, {kind: "values", terms: [{name: "Due date"}, {name: "Money", shared: true}]}])
-        + ui.ruleLine("A reader holds three loans at most.")],
+        + ui.ruleBlock("A reader holds three loans at most.", [ui.accordion({key: "gallery:scenario", variant: "row", open: false, head: "a fourth loan is refused"})])],
       ["proposal", `<ul>${ui.proposal({goal: "Readers find a free copy", intent: "fewer empty shelves", metric: "CopyFound", contact: "the desk", id: "p-1", actions: ui.btn("✦ make it an epic", {write: true})})}</ul>`],
       ["aside · section · prose", ui.aside("Why it is not built", ui.prose("It **waits** for `a-reader-joins`.")) + ui.section({heading: "Scope", text: "- one\n- two"})],
       ["trail · trail-item", ui.trail([{words: "readers may reserve", tone: "wait", text: "writing", by: "Ann", actions: ""}, {words: "a due-date reminder", tone: "ok", text: "✓ became the draft story x", actions: ui.btn("open", {small: true})}]) + `<ul>${ui.trailItem({words: "fines in another currency", tone: "bad", text: "✗ failed", actions: ""})}</ul>`],

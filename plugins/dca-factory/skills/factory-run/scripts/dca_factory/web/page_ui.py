@@ -131,7 +131,6 @@ ui.delivery = o => o.head
   <div class="delivery__fig">${esc(o.seconds || "")}</div><div class="delivery__fig delivery__fig--tokens hide-narrow">${esc(o.tokens || "")}</div><div class="delivery__fig">${esc(o.cost || "")}</div></div>`;
 ui.domainNode = (title, hint) => `<h3 class="domain-node"><span class="domain-node__dot" aria-hidden="true"></span>${esc(title)}${hint ? ` ${ui.hint(hint)}` : ""}</h3>`;
 ui.facts = groups => `<dl class="facts">${groups.map(g => `<dt class="facts__kind">${esc(g.kind)}</dt><dd class="facts__terms">${g.terms.map(t => ui.term(t.name, t)).join("")}</dd>`).join("")}</dl>`;
-ui.ruleLine = html => `<div class="rule-line">${html}</div>`;
 ui.proposal = o => `<li class="proposal"><b class="proposal__goal">${esc(o.goal)}</b>${o.intent ? `<span>${esc(o.intent)}</span>` : ""}
   <div class="proposal__facts">${o.metric ? ui.event(o.metric) : ""}${o.contact ? `<span>asks ${esc(o.contact)}</span>` : ""}${ui.id(o.id)}</div>
   ${o.epic ? `<div>${ui.state("epic " + o.epic, "ok")}</div>` : ui.actions(o.actions, {tight: true})}</li>`;
@@ -195,6 +194,9 @@ ui.domain = inner => `<div class="domain"><div class="domain__track">${inner}</d
 ui.kernel = groups => `<div class="kernel"><div class="kernel__top"><h3 class="kernel__title">Shared kernel</h3>${ui.hint("what every context shares, the same in each — no context of its own")}</div>${ui.facts(groups)}</div>`;
 ui.proposals = items => `<ul class="proposals">${items.map(ui.proposal).join("")}</ul>`;
 ui.ruleGroup = (label, rows) => rows.length ? `<div class="rule-group">${label ? `<div class="rule-group__label">${esc(label)} <span class="rule-group__n">${rows.length}</span></div>` : ""}<ul class="rule-group__rows">${rows.map(r => `<li class="rule-group__row">${r}</li>`).join("")}</ul></div>` : "";
+// a rule with the scenarios it holds: the rule a heading, its scenarios a list beneath it, one block per rule
+ui.ruleBlock = (rule, rows) => `<section class="rule-block">${rule ? `<h4 class="rule-block__rule"><span class="rule-block__label">Rule</span>${rule}</h4>` : ""}`
+  + `<ul class="rule-block__rows">${rows.map(r => `<li>${r}</li>`).join("")}</ul></section>`;
 ui.ways = (title, ways) => ways.length ? `<div class="rule-group"><div class="rule-group__label">${esc(title)}</div>${ways.map(w =>
   `${ui.link(`${w.source} → ${w.target}`, {way: true, attrs: {"data-edge": w.key}})} ${ui.hint(w.rules)}`).join("<br>")}</div>` : "";
 ui.part = (title, body, o = {}) => body ? `<section class="${mods("part", [o.branch && "branch"])}"><h${o.level || 3} class="part__head">${title}</h${o.level || 3}>${body}</section>` : "";

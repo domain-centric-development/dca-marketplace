@@ -261,8 +261,6 @@ div.id { margin-top: 2px; }
 .facts { display: grid; grid-template-columns: max-content 1fr; gap: var(--space-2) var(--space-3); margin: 2px 0 0; }
 .facts__kind { font: 600 var(--text-xs) var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: .06em; padding-top: var(--space-1); }
 .facts__terms { margin: 0; display: flex; flex-wrap: wrap; gap: var(--space-1); }
-.rule-line { padding: var(--space-2) var(--space-3) 2px var(--group-indent, var(--space-3)); font: italic 500 var(--text-md) var(--body); color: var(--muted); }
-.rule-line::before { content: "Rule"; font: normal 600 var(--text-xs) var(--mono); color: var(--brand-text); letter-spacing: .06em; text-transform: uppercase; margin-right: var(--space-2); }
 .proposal { border: 1px solid var(--line); border-radius: var(--radius-control); padding: var(--space-2) var(--space-3); margin-bottom: var(--space-2); display: grid; gap: var(--space-1); min-width: 0; }
 .proposal__goal { font: 600 var(--text-base) var(--display); }
 .proposal__facts { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; font-size: var(--text-sm); color: var(--muted); }
@@ -326,8 +324,14 @@ div.id { margin-top: 2px; }
 .accordion--group[data-open] > .accordion__head { border-radius: var(--radius-control) var(--radius-control) 0 0; }
 .accordion--group[data-open] > .accordion__head .caret { stroke: var(--brand-text); }
 .accordion--group > .accordion__body { padding: 0 0 var(--space-2); }
-.accordion--group .accordion--row { border-top: 0; } .accordion--group .accordion--row + .accordion--row { border-top: 1px solid var(--line); }
-.accordion--group .accordion--row { --fold-inset: var(--space-3); }
+/* a rule and its scenarios: one block, the rule a heading on the group's line, its scenarios beneath it — their carets
+   under the rule's words, no line between them; a line between two rules */
+.rule-block { padding: var(--space-3) 0 var(--space-2); }
+.rule-block + .rule-block { border-top: 1px solid var(--line); }
+.rule-block__rule { margin: 0 0 var(--space-2); padding: 0 var(--space-3) 0 var(--group-indent, var(--space-3)); font: italic 500 var(--text-md)/1.45 var(--body); color: var(--muted); }
+.rule-block__label { font: normal 600 var(--text-xs) var(--mono); color: var(--brand-text); letter-spacing: .06em; text-transform: uppercase; margin-right: var(--space-2); }
+.rule-block__rows { list-style: none; }
+.rule-block .accordion--row { border: 0; --fold-inset: var(--group-indent, var(--space-3)); }
 .accordion--group .accordion--row > .accordion__head { padding-top: var(--space-1); padding-bottom: var(--space-1); }
 .accordion--group > .accordion__body > .actions { padding: 0 var(--space-3) var(--space-1) var(--group-indent); }
 .accordion--ink { border-bottom: 1px solid var(--line); }
