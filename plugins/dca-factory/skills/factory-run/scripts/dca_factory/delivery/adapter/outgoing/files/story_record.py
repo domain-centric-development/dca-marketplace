@@ -152,11 +152,16 @@ def journal_ignore_lines(evidence: str) -> typing.List[str]:
     """The .gitignore lines that keep the pipeline's protocol out of git and every story's journal in: git does not
     look into a folder it ignores, so the folders on the way are let in and their contents ignored again."""
     top = evidence.strip("/").split("/")[0]
-    lines, path = [f"/{top}/*"], top
+    lines, path = [f"/{top}/*", theme_line(top)], top
     for part in evidence.strip("/").split("/")[1:]:
         path += "/" + part
         lines += [f"!/{path}/", f"/{path}/*"]
     return lines + [f"!/{path}/*/", f"/{path}/*/*", f"!/{path}/*/journal.tsv"]
+
+
+def theme_line(top: str) -> str:
+    """The page's theme is the project's own work, not protocol (WP-180): `.dca-factory/theme/` is let into git."""
+    return f"!/{top}/theme/"
 
 
 def ignore_journals_in(cwd: str, evidence: str) -> bool:
@@ -169,9 +174,16 @@ def ignore_journals_in(cwd: str, evidence: str) -> bool:
     text = read_text(path)
     lines = text.splitlines()
     wanted = journal_ignore_lines(evidence)
-    if wanted[-1] in lines:
-        return False
     top = evidence.strip("/").split("/")[0]
+    if wanted[-1] in lines:
+        # the journals are in already; a project that let them in before WP-180 gets the theme's line beside them
+        if theme_line(top) in lines or f"/{top}/*" not in lines:
+            return False
+        at = lines.index(f"/{top}/*")
+        lines[at + 1:at + 1] = [theme_line(top)]
+        with open(path, "w", encoding="utf-8", newline="") as handle:
+            handle.write("\n".join(lines) + "\n")
+        return True
     whole = [i for i, l in enumerate(lines) if l.strip().rstrip("/") in (f"/{top}", top)]
     if not whole:
         return False

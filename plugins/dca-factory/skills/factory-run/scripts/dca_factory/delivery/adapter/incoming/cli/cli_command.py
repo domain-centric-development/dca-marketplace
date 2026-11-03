@@ -895,8 +895,12 @@ def serve_command(argv: typing.Sequence[str]) -> int:
     parser.add_argument("--stop", action="store_true",
                         help="end the page that runs here; its requests' worker ends too unless the backlog is on")
     parser.add_argument("--by-up", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--fixture", metavar="NAME",
+                        help="the page against canned views that hold every state — all-states or empty; writes nothing")
     args = parser.parse_args(argv)
     placed()
+    if args.fixture:
+        return web.serve_here(os.getcwd(), args.port, args.open, fixture=args.fixture)
     if args.stop:
         return wiring.end_page().execute(EndPageCommand())
     if args.by_up:
@@ -1233,8 +1237,8 @@ def main(argv: typing.Sequence[str]) -> int:
     if args.ignore_journals:
         journals = wiring.let_journals_into_git(cwd).execute(LetJournalsIntoGitCommand())
         if journals:
-            print(f"journals: .gitignore lets the story journals ({journals}/<story>/journal.tsv) into git — the "
-                  f"rest of the pipeline's folder stays out")
+            print(f"journals: .gitignore lets the story journals ({journals}/<story>/journal.tsv) and the page's theme "
+                  f"(.dca-factory/theme/) into git — the rest of the pipeline's folder stays out")
         return 0
     if args.status and args.brief:
         try:

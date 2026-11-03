@@ -1,0 +1,65 @@
+/* The factory page's theme — copy this file to .dca-factory/theme/theme.css in your project and change what you need.
+ *
+ * `factory.sh serve` links it after the page's own style, so a plain :root { … } wins. Every colour that comes in a
+ * light and a dark value is one declaration with light-dark(light, dark); a value that light-dark() cannot carry —
+ * the logo, a length — goes into a second block under :root[data-scheme="dark"], which the page always resolves to
+ * light or dark. Images and fonts the theme names lie beside it in .dca-factory/theme/ and are named
+ * url(/theme/<file>): .svg, .png, .webp or .woff2, a flat name. A favicon.svg there becomes the tab's icon.
+ *
+ * Check it with `factory.sh serve --fixture all-states` — every state on the real page — and its #components view.
+ * The tokens below are the public ones; any other is the page's own and may change.
+ */
+:root {
+  /* the accent: the mark's core, focus rings, the primary button, links — the rest derives from it */
+  --brand: #148f96;
+  /* --brand-text: light-dark(#0d6b70, #3cbcc3);   the accent as text and links (derived from --brand)   */
+  /* --brand-fill: #0d6b70;                         the primary button's ground (derived from --brand)    */
+  --brand-ink: #ffffff;                          /* text on --brand-fill */
+
+  --ink: light-dark(#1c2433, #e8eaf0);           /* text */
+  --paper: light-dark(#f7f6f3, #12171f);         /* the page's ground */
+  --panel: light-dark(#ffffff, #1a2130);         /* cards and panels */
+  --line: light-dark(#dedbd3, #2b3445);          /* rules and borders */
+  --muted: light-dark(#5b6472, #9aa3b2);         /* secondary text */
+
+  /* the top bar — dark in both schemes here; a theme may make it light (see below) */
+  --bar: #171d29;
+  --bar-ink: #e8eaf0;
+
+  /* the palette of meanings — a state, not the brand: keep it apart from a brand colour that reads as one of them */
+  --success: light-dark(#0d6b70, #3cbcc3);       /* what went well */
+  --warning: light-dark(#93600f, #e2ab55);       /* what waits or needs a look */
+  --danger: light-dark(#c96a5a, #d9826f);        /* what was refused or stopped */
+  --info: light-dark(#148f96, #3cbcc3);          /* what is under way, a neutral notice */
+
+  /* the uses — each defaults to the palette; override one alone where it should differ */
+  --ok: var(--success);                          /* a story done or delivered */
+  --pass: var(--success);                        /* a gate that passed: its dot in the flow, a rule that passed */
+  --wait: var(--warning);                        /* a story that waits for a person, or runs */
+  --stop: var(--danger);                         /* a story refused or stopped */
+  --fail: var(--danger);                         /* a gate that refused: its mark in the flow, a rule that failed */
+  --run: var(--info);                            /* a stage that runs */
+  --shared: light-dark(#4b47b8, #b3b0f2);        /* the shared kernel's terms */
+
+  /* faces: the page ships these three; a system stack works, or a font of your own — its .woff2 beside this file:
+     @font-face { font-family: "Acme Sans"; src: url(/theme/acme-sans.woff2) format("woff2"); } at the top of the file */
+  --display: "Space Grotesk", "Avenir Next", "Trebuchet MS", sans-serif;
+  --body: "Newsreader", Georgia, "Times New Roman", serif;
+  --mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+
+  /* the logo in the bar: none keeps the mark */
+  --logo: none;
+  --logo-width: 2.13ex;
+}
+
+/* A light bar with a logo of your own, a dark one in the dark scheme:
+
+:root {
+  --brand: #c8102e;
+  --bar: light-dark(#ffffff, #1b1b1f);
+  --bar-ink: light-dark(#1c1c1c, #f2f2f2);
+  --logo: url(/theme/logo.svg);
+  --logo-width: 7ex;
+}
+:root[data-scheme="dark"] { --logo: url(/theme/logo-dark.svg); }
+*/

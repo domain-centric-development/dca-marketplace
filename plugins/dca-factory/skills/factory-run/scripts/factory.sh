@@ -27,9 +27,11 @@
 #   factory.sh down [--now] [--no-wait]      the backlog off — no further story of it starts; with a page open its
 #                                            requests go on, without one the worker ends after its running stage;
 #                                            --now interrupts the running stage and ends the worker too
-#   factory.sh serve [--port <n>] [--open] [--background] [--stop]   the factory's page on 127.0.0.1 — a URL with a
-#                    token of this start; every press writes a request, worked while the page is open. Each checkout
-#                    takes a port of its own (8700–8899); --stop ends a page that runs in the background
+#   factory.sh serve [--port <n>] [--open] [--background] [--stop] [--fixture <name>]   the factory's page on
+#                    127.0.0.1 — a URL with a token of this start; every press writes a request, worked while the page
+#                    is open. Each checkout takes a port of its own (8700–8899); --stop ends a page that runs in the
+#                    background; --fixture all-states|empty serves it against canned views, writing nothing. A project's
+#                    look: .dca-factory/theme/theme.css (and the images it names), `#components` shows it
 #   factory.sh request <kind> [<target>…] [<words>…|-] [--by <who>] [--option <key>] [--from <stage>]
 #                    one request the factory's worker runs at once, beside any running story: wish, release,
 #                    stories, journey, describe, discover, epic-from, answer, accept, correct, run, stop

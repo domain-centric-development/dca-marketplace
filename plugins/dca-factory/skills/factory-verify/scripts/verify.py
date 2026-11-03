@@ -3385,11 +3385,13 @@ exit 0
         ignored_ = lambda rel: subprocess.run(["git", "check-ignore", "-q", rel], cwd=root).returncode == 0
         protocol = ignored_(".dca-factory/evidence/STORY-1/builder.101500.out") and ignored_(".dca-factory/runs/STORY-1/plan.md")
         journal = not ignored_(".dca-factory/evidence/STORY-1/journal.tsv")
+        write_file(root, ".dca-factory/theme/theme.css", ":root {}\n")
+        theme = not ignored_(".dca-factory/theme/theme.css")
         check("install: `.gitignore` keeps the pipeline's own protocol (`.dca-factory/`) out of git and lets the story "
-              "journals in (WP-150) — once",
-              ignores.count("/.dca-factory/*") == 1 and "/.dca-factory" not in ignores and protocol and journal
-              and "own protocol" not in output and "journals" not in output,
-              f"{ignores} | protocol ignored: {protocol}, journal in git: {journal}")
+              "journals (WP-150) and the page's theme (WP-180) in — once",
+              ignores.count("/.dca-factory/*") == 1 and "/.dca-factory" not in ignores and protocol and journal and theme
+              and ignores.count("!/.dca-factory/theme/") == 1 and "own protocol" not in output and "journals" not in output,
+              f"{ignores} | protocol ignored: {protocol}, journal in git: {journal}, theme in git: {theme}")
     for root in throwaway():
         build_project(root)
         in_git(root)

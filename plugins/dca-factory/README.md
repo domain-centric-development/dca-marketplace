@@ -258,6 +258,25 @@ a session would run, headless, and commits what it wrote. A skill that has to as
 — beside the story, or under `product/decisions/` — and the request waits until it is answered on the page or in
 any session. `reference/requests.md` in the `factory-run` skill has the details.
 
+### Your own theme
+
+The page comes in the factory's look; a project gives it its own by overriding a few variables. Copy
+`templates/theme/theme.example.css` from the `factory-run` skill to `.dca-factory/theme/theme.css` and change what
+you need — `--brand` alone recolours the page, the states keep their own colours in two tiers — a palette of meanings
+(`--success`, `--warning`, `--danger`, `--info`) and the uses that default to it (`--ok`, `--pass`, `--wait`, `--stop`,
+`--fail`, `--run`), so one place changes alone where it should — `--bar` and `--bar-ink` make the top bar light or dark per scheme,
+`--logo: url(/theme/logo.svg)` puts your logo in the bar (a second one under `:root[data-scheme="dark"]`), a
+`favicon.svg` beside it becomes the tab's icon, and `--display`, `--body`, `--mono` take a system face or one of your
+own (`@font-face` with `url(/theme/<face>.woff2)` beside it). The page links the file after its own style, so a plain
+`:root { … }` wins; each light/dark colour is one `light-dark()` declaration. The folder is committed — setup lets it
+into git beside the story journals — and survives `factory.sh update`.
+
+`factory.sh serve --fixture all-states` serves the real page against canned views that hold every state — draft,
+running, waiting, stopped, delivered, superseded, a wish in each of its states — and writes nothing; `#components`
+on any page is its pattern library: every component in its variants, by level, in your theme. The page is built from
+those components alone (`web/page_ui.py`, one BEM block each, a factory state as `data-state`), and
+`unit/test_page_components.py` holds it so.
+
 ## One entry point
 
 `factory.sh setup` puts the runner next to the gate, so everything a person does with the pipeline
@@ -274,7 +293,7 @@ in a project goes through one script. Its verbs mirror the skills — `/factory-
 | `factory.sh decisions [--story <id>]` | `factory-decisions` | the decision inbox |
 | `factory.sh rules [--stage <s>] [--kind <k>] [--story <id>] [--format md\|json] [--check]` | *(the page, the cockpit)* | every rule the gate checks, the runner decides and a stage is told, by id, in each kind's flow — where an outcome sends the story, and with `--story` which rules its last gate runs reported; generated from where each rule is written, `--check` holds the rulebook itself |
 | `factory.sh up [--serve] [--port <n>]` · `down [--now]` | *(the page, the cockpit)* | the factory as a process of its own, until `down` · `--serve` the page too |
-| `factory.sh serve [--port <n>] [--open]` | *(the page)* | the factory in a browser on this machine alone, every press a request |
+| `factory.sh serve [--port <n>] [--open] [--fixture <name>]` | *(the page)* | the factory in a browser on this machine alone, every press a request · `--fixture all-states\|empty` against canned views, writing nothing |
 | `factory.sh request <kind> …` · `requests [--retry\|--drop <id>]` | every skill a request runs | one request the factory works before its next story · what was asked and where it stands |
 | `factory.sh help [--format md\|json]` | `factory-help` | the flow and where this project stands in it, every command in its agent and its shell form, the marks, the files — before the pipeline is installed too |
 | `factory.sh update [--from <dir>] [--copy\|--link] [--adopt <skill>,…\|all]` | `factory-update` | the newest pipeline found, same tools; the mode the project has, or the one named; `--adopt` takes over a method skill's copy the install did not make, which every later update then refreshes |

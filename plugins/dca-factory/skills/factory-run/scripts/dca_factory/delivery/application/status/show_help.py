@@ -179,7 +179,10 @@ class ShowHelpUseCase:
                   "the project's commands and the skills each stage uses"),
                  ("decisions", f"{epics}/<epic>/<story>/{place('decisions')}/",
                   "one record per question or acceptance, in its story's folder"),
-                 ("a story's run", f"{place('runs')}/<story>/", "hand-overs, marks, the journal — protocol, disposable")]
+                 ("a story's run", f"{place('runs')}/<story>/", "hand-overs, marks, the journal — protocol, disposable"),
+                 ("the page's theme", f"{own_folder(place('runs'))}/theme/theme.css",
+                  "the page in your colours and with your logo — from the plugin's theme.example.css; committed; "
+                  "serve --fixture all-states shows it in every state")]
         return dict(project=status_view["project"],
                     flow=flow, parts=[dict(p) for p in PARTS],
                     commands=[dict(zip(("name", "what", "skill", "shell"), c)) for c in HELP_COMMANDS],
@@ -189,3 +192,9 @@ class ShowHelpUseCase:
 
     def _action(self, skill: str = "", shell: str = "") -> typing.Any:
         return make_action(self._facts.names_story, skill=skill, shell=shell)
+
+
+def own_folder(runs: str) -> str:
+    """The factory's own folder, the run folder's parent: `.dca-factory` by default."""
+    parent = runs.rstrip("/").rpartition("/")[0]
+    return parent or ".dca-factory"

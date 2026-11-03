@@ -12,6 +12,7 @@ import http.server
 import json
 import os
 import queue
+import re
 import secrets
 import signal
 import socket
@@ -24,7 +25,7 @@ import zlib
 
 from ..building_blocks import UseCaseException
 from ..sharedkernel.adapter.outgoing.markdown.front_matter import GateError
-from ..delivery.adapter.outgoing.files.request_files import default_by, stamp_utc
+from ..delivery.adapter.outgoing.files.request_files import default_by, factory_dir, stamp_utc
 from ..delivery.adapter.outgoing.process.factory_process import (
     cli_path, own_file, read_json, say, SERVE_FILE, write_json)
 from ..delivery.application.requests.retry_request import RetryRequestCommand
@@ -32,9 +33,15 @@ from ..delivery.application.requests.take_back_request import TakeBackRequestCom
 from ..delivery.application.requests.write_request import WriteRequestCommand
 from ..delivery.application.shared.requests import DuplicateRequest, ID_WORD, KINDS, RequestRefused
 from ..infrastructure import delivery as wiring
+from . import fixtures
 from .page import FAVICON, PAGE, SCRIPT_HASH
 
 PORT_BASE, PORT_SPAN = 8700, 200    # where a project's page looks for its port, a stable one per project first
+
+#: A file of the project's theme (WP-180): a flat name, one of five kinds — no path, nothing that runs.
+THEME_FILE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,80}\.(css|svg|png|webp|woff2)$")
+THEME_KINDS = {"css": "text/css; charset=utf-8", "svg": "image/svg+xml", "png": "image/png", "webp": "image/webp",
+               "woff2": "font/woff2"}
 
 
 # --- serve ---------------------------------------------------------------------------------------------------------------
@@ -75,7 +82,9 @@ def requests_worker(project, by=""):
                                             + (["--by", by] if by else []), timeout=60), daemon=True).start()
 
 
-def serve_here(cwd, port=None, open_browser=False, by_up=False):
+def serve_here(cwd, port=None, open_browser=False, by_up=False, fixture=None):
+    if fixture:
+        return serve_fixture(cwd, fixture, port, open_browser)
     chosen = free_port(cwd, port)
     if not chosen:
         say(f"port {port} is taken — name another with --port" if port else
@@ -84,6 +93,7 @@ def serve_here(cwd, port=None, open_browser=False, by_up=False):
     token = secrets.token_hex(20)        # letters and digits only: a link pasted into markdown stays whole
     server = Server(("127.0.0.1", chosen), Handler)
     server.project, server.token, server.port = os.path.realpath(cwd), token, chosen
+    server.theme, server.fixture = theme_dir(), None
     url = f"http://127.0.0.1:{chosen}/?t={token}"
     write_json(own_file(SERVE_FILE), dict(pid=os.getpid(), port=chosen, url=url, started=stamp_utc(), by_up=by_up),
                private=True)
@@ -110,6 +120,42 @@ def serve_here(cwd, port=None, open_browser=False, by_up=False):
         if (read_json(own_file(SERVE_FILE)) or {}).get("pid") == os.getpid():
             with contextlib.suppress(OSError):
                 os.remove(own_file(SERVE_FILE))
+    return 0
+
+
+def theme_dir():
+    """The project's theme: `.dca-factory/theme/` beside the factory's other own files, resolved at the start."""
+    return os.path.abspath(os.path.join(factory_dir(), "theme"))
+
+
+def serve_fixture(cwd, fixture, port=None, open_browser=False):
+    """The real page against canned views (WP-180): every state on screen without a running factory. Nothing is
+    written — no serve file, no worker —, so it stands beside the project's own page; every press is refused."""
+    if fixture not in fixtures.FIXTURES:
+        say(f"no fixture {fixture!r} — one of {', '.join(sorted(fixtures.FIXTURES))}")
+        return 2
+    chosen = free_port(cwd, port) if port else free_port(os.path.join(cwd, ".fixture"))
+    if not chosen:
+        say("no free port — name one with --port")
+        return 2
+    token = secrets.token_hex(20)
+    server = Server(("127.0.0.1", chosen), Handler)
+    server.project, server.token, server.port = os.path.realpath(cwd), token, chosen
+    server.theme, server.fixture = theme_dir(), fixture
+    url = f"http://127.0.0.1:{chosen}/?t={token}"
+    say(f"the fixture {fixture!r}: {url}")
+    say(f"its components, in this project's theme: {url}#components")
+    say("canned views, every press refused — Ctrl-C ends it")
+    if open_browser:
+        import webbrowser
+        with contextlib.suppress(Exception):
+            webbrowser.open(url)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
     return 0
 
 
@@ -226,7 +272,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_header("Connection", "close")
         if kind.startswith("text/html"):
             self.send_header("Content-Security-Policy",
-                             f"default-src 'none'; script-src '{SCRIPT_HASH}'; style-src 'unsafe-inline'; "
+                             f"default-src 'none'; script-src '{SCRIPT_HASH}'; style-src 'self' 'unsafe-inline'; "
                              "font-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; "
                              "form-action 'none'; "
                              "frame-ancestors 'none'")
@@ -254,16 +300,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
         query = urllib.parse.parse_qs(url.query)
         # what the page is drawn with — the same for everyone, no project's data in it: no token
         if url.path in ("/favicon.ico", "/favicon.svg"):
-            return self.answer(200, FAVICON, "image/svg+xml")
+            own = self.theme_file("favicon.svg")
+            return self.answer(200, own if own is not None else FAVICON, "image/svg+xml")
         if url.path.startswith("/fonts/"):
             return self.font(url.path[len("/fonts/"):])
+        if url.path.startswith("/theme/"):
+            return self.theme(url.path[len("/theme/"):])
         if not self.guarded(query):
             return None
         if url.path == "/":
             return self.answer(200, PAGE, "text/html; charset=utf-8")
         if url.path == "/api/meta":
             return self.json(200, dict(project=os.path.basename(self.server.project), port=self.server.port,
-                                       by=default_by(self.server.project),
+                                       by=default_by(self.server.project), fixture=self.server.fixture,
                                        kinds=[dict(kind=k.name, keys=list(k.keys), words=k.words, option=k.option,
                                                    about=k.about) for k in KINDS]))
         if url.path.startswith("/api/view/"):
@@ -286,6 +335,40 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(data)
         return None
 
+    def theme_file(self, name):
+        """A file of the project's theme as bytes, or None: a flat name of five kinds, inside the theme folder."""
+        if not THEME_FILE.match(name):
+            return None
+        path = os.path.join(self.server.theme, name)
+        if os.path.dirname(os.path.abspath(path)) != self.server.theme or not os.path.isfile(path):
+            return None
+        try:
+            with open(path, "rb") as handle:
+                return handle.read()
+        except OSError:
+            return None
+
+    def theme(self, name):
+        """The project's theme (WP-180) — no secret, served without the token like the fonts: its stylesheet (an
+        empty one where it has none, so the page's link costs nothing) and the images it names. An image is only
+        ever drawn from CSS, and opened by itself it runs nothing: its own policy forbids a script."""
+        if not THEME_FILE.match(name):
+            return self.refuse(404, "a theme file is a flat name: .css, .svg, .png, .webp or .woff2")
+        data = self.theme_file(name)
+        if data is None:
+            if name == "theme.css":
+                data = b"/* this project gives the page no theme: .dca-factory/theme/theme.css */\n"
+            else:
+                return self.refuse(404, f"no theme file {name}")
+        self.send_response(200)
+        self.send_header("Content-Type", THEME_KINDS[name.rsplit(".", 1)[1]])
+        self.send_header("Content-Length", str(len(data)))
+        self.common_headers()
+        self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox")
+        self.end_headers()
+        self.wfile.write(data)
+        return None
+
     def view(self, name, query):
         if name not in VIEWS:
             return self.refuse(404, f"no view {name}")
@@ -295,6 +378,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.refuse(400, f"{key}: {value!r} is no id")
         if name in ("story", "epic", "spec-delta") and not values.get("id"):
             return self.refuse(400, f"the {name} view names an id")
+        if self.server.fixture and name not in fixtures.LIVE_VIEWS:
+            canned = fixtures.view(self.server.fixture, name)
+            return self.json(200, canned) if canned is not None else self.refuse(404, f"the fixture has no view {name}")
         code, out, error = run_cli(self.server.project, VIEWS[name](values))
         start = out.find("{")
         if start < 0:
@@ -311,6 +397,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
         for key, value in values.items():
             if not ID_WORD.match(value):
                 return self.refuse(400, f"{key}: {value!r} is no id")
+        if self.server.fixture:
+            body = b'data: "a fixture runs nothing"\n\nevent: end\ndata: \n\n'
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.common_headers()
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return None
         argv = [sys.executable, cli_path(), "--follow"] + (["--story", values["story"]] if values.get("story") else []) \
             + (["--process", values["process"]] if values.get("process") else []) \
             + (["--request", values["request"]] if values.get("request") else [])
@@ -363,6 +458,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.refuse(403, "a write comes from this page alone")
         if not self.headers.get("Content-Type", "").startswith("application/json"):
             return self.refuse(415, "a write sends JSON")
+        if self.server.fixture:
+            return self.refuse(409, f"the fixture {self.server.fixture!r} is canned — a press writes nothing")
         try:
             length = int(self.headers.get("Content-Length") or 0)
         except ValueError:
