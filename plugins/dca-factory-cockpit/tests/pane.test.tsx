@@ -589,3 +589,31 @@ test('the rules tab draws the flow, a stage opens its rules, a rule what it says
   await pane.press({ key: 'kind-task' })
   expect(await pane.find({ text: /every gate: GATE-STORY/ })).toBeUndefined()
 })
+
+// A tall pane gives the row cap no bite: long findings wrap over dozens of lines each, and every line costs nodes.
+test('a tall pane with long findings and records still draws the decide tab', async ($, on) => {
+  const long = (index: number) => `finding ${index} `.repeat(80)
+  const many = Array.from({ length: 300 }, (_, index) => ({ ...STATUS.findings[0], where: `src/Book.java:${index}`, plain: long(index), defect: long(index), fix: long(index) }))
+  const record = DECISIONS.records[0] as Record<string, unknown>
+  const answered = Array.from({ length: 200 }, (_, index) => ({ ...record, id: `r-${index}`, state: 'answered', text: `record ${index} `.repeat(60) }))
+  on('session.root', async () => ({ value: ROOT }))
+  on('fs.exists', async () => ({ value: true }))
+  on('fs.list', async () => ({ value: [] }))
+  on('fs.read', async () => ({ deny: 'missing' }))
+  on('process.run', async (_: unknown, e: { argv: readonly string[] }) => {
+    const out = e.argv.includes('decisions') ? { ...DECISIONS, records: answered } : e.argv.includes('--list') ? { topics: [] } : { ...STATUS, findings: many }
+    return { value: { exitCode: 0, stdout: JSON.stringify(out), stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+  })
+  on('clock.now', async () => ({ value: Date.parse('2026-09-23T17:30:00Z') }))
+  on('clock.every', async () => ({ value: { cancel: () => {} } }) as never)
+  on('ui.open', async () => ({ value: { isPlaced: true } }) as never)
+  on('ui.status', async () => ({ value: undefined }) as never)
+  on('command.list', async () => ({ value: [] }) as never)
+
+  await $.command.run({ command: 'factory-cockpit', args: '' } as never)
+  const pane = await $.ui.mount({ plugin: 'dca-factory-cockpit', surface: 'desktop', component: 'Pane', requestId: 'factory-cockpit', viewport: { rows: 400, columns: 120 }, props: { title: 'Factory', isFocused: true } as never } as never)
+  await pane.press({ key: 'tab-decide' })
+  expect(await pane.find({ text: /300 from the judge · the first \d+ shown/ })).toBeDefined()
+  expect(await pane.find({ text: /finding 299 / })).toBeUndefined()
+  expect(await pane.find({ text: /200 records · the first \d+ shown/ })).toBeDefined()
+})

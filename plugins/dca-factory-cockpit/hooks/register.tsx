@@ -14,6 +14,10 @@ const PANE = 'factory-cockpit'
 const EPIC_PRESS: Record<string, string> = { stories: 'stories', release: 'release-all', journey: 'guard-epic' }
 const STATUS_MS = 20_000
 const LIVE_MS = 5_000
+// the lines the decide tab gives its open findings and its answered records: each line of a table costs a node per
+// cell and per bar, and the engine refuses a pane of more than 20000 nodes
+const FINDING_LINES = 160
+const ANSWERED_LINES = 40
 
 const cockpit = atom({ plugin: 'dca-factory-cockpit', key: 'cockpit' } as const, null)
 const storyView = atom({ plugin: 'dca-factory-cockpit', key: 'story' } as const, null as StoryView | null)
@@ -896,18 +900,35 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
   const ask = (key: string, label: string, placeholder: string, command: string) =>
     ui.ask(key, label, placeholder, value => send($, `${command} ${value}`.trim()), () => void $.prompt.fill({ text: `${command} ` }))
   const idWidth = Math.max(8, ...status.rows.map(row => row.story.length)) + 4
-  const recordTable = (list: DecisionRecord[], back: Detail | null) =>
-    ui.table(
-      [COL.mark, { name: 'state', width: 9 }, COL.record, COL.asked, COL.what],
-      list.map(record => [
-        ui.mark(record.kind === 'acceptance' ? 'acceptance' : 'question'),
-        { text: record.state, color: record.state === 'open' ? C.wait : C.muted },
-        recordCell(record, back),
-        { text: fmt.when(record.asked), color: C.muted },
-        { text: record.text, color: C.muted },
-      ]),
-      'No record.',
-    )
+  const RECORD_COLUMNS = [COL.mark, { name: 'state', width: 9 }, COL.record, COL.asked, COL.what]
+  const recordRow = (record: DecisionRecord, back: Detail | null = null): Cell[] => [
+    ui.mark(record.kind === 'acceptance' ? 'acceptance' : 'question'),
+    { text: record.state, color: record.state === 'open' ? C.wait : C.muted },
+    recordCell(record, back),
+    { text: fmt.when(record.asked), color: C.muted },
+    { text: record.text, color: C.muted },
+  ]
+  const recordTable = (list: DecisionRecord[], back: Detail | null) => ui.table(RECORD_COLUMNS, list.map(record => recordRow(record, back)), 'No record.')
+  // The judge's confirmed minors: a story's findings stand together, the story named once — its name opens the file.
+  const FINDING_COLUMNS = [COL.mark, COL.story(idWidth), { name: 'finding', width: 30, isWide: true, weight: 3 }, { name: 'seen by · in detail → fix', width: 30, isWide: true, weight: 2 }, { name: 'where', width: 16 }, COL.act]
+  const findingRow = (finding: FactoryStatus['findings'][number], index: number, list: FactoryStatus['findings']): Cell[] => [
+    ui.mark('finding'),
+    index > 0 && list[index - 1]?.story === finding.story
+      ? {}
+      : ui.open(`finding-file-${index}`, finding.story, () => void openFile($, `${now.root}/${finding.file}`, `${finding.story} / findings`, null)),
+    // the sentence a person understands at once leads (dca-factory 0.84.0); a row without it shows the defect there
+    { text: finding.plain || finding.defect, color: C.bright },
+    // who saw it, the reviewer's own account where the sentence stands in front, and the fix
+    {
+      text: [[finding.perspective, finding.plain ? finding.defect : ''].filter(Boolean).join(' · '), finding.fix && finding.fix !== '—' ? `→ ${finding.fix}` : '']
+        .filter(Boolean)
+        .join(' '),
+      color: C.muted,
+    },
+    // the file's name and line; the path stands in the findings file the story's name opens
+    { text: finding.where.split('/').pop() ?? finding.where, color: C.muted },
+    ui.offerCell(`finding-story-${index}`, finding.action, () => press($, finding.action), { byClaude: true }, 'to backlog'),
+  ]
 
   const head = (
     <Box flexDirection="column">
@@ -1657,11 +1678,14 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
     const claims = status.claims ?? []
     const findings = status.findings ?? []
     const pending = now.decisions.filter(record => record.state === 'open' || record.state === 'draft')
-    const answered = now.decisions.filter(record => !pending.includes(record)).slice(0, Math.max(3, rows - 26))
-    // the engine draws at most 20000 nodes: a long-running backlog holds more findings than one pane can carry
+    // the engine draws at most 20000 nodes: a long-running backlog holds more findings and records than one pane can
+    // carry, and a long finding wraps over dozens of lines — so both lists are cut by the lines they take, not by rows
+    const answeredAll = now.decisions.filter(record => !pending.includes(record)).slice(0, Math.max(3, rows - 26))
+    const answered = answeredAll.slice(0, ui.within(RECORD_COLUMNS, answeredAll.map(recordRow), ANSWERED_LINES))
     // a story's findings stand together, the story named once: its name opens the findings file
     const storyOrder = [...new Set(findings.map(finding => finding.story))]
-    const shownFindings = [...findings].sort((a, b) => storyOrder.indexOf(a.story) - storyOrder.indexOf(b.story)).slice(0, Math.max(5, rows - 30))
+    const sortedFindings = [...findings].sort((a, b) => storyOrder.indexOf(a.story) - storyOrder.indexOf(b.story)).slice(0, Math.max(5, rows - 30))
+    const shownFindings = sortedFindings.slice(0, ui.within(FINDING_COLUMNS, sortedFindings.map(findingRow), FINDING_LINES))
     return page(
       [
         ui.section('Waiting for you', 'questions a stage may not decide alone, results to look at'),
@@ -1704,30 +1728,10 @@ async function draw($: EngineInterface, e: RenderInput<'Pane'>, now: Cockpit) {
         ...(findings.length > 0
           ? [
               ui.section('Open findings', `${findings.length} from the judge${shownFindings.length < findings.length ? ` · the first ${shownFindings.length} shown` : ''} · close one in its file, or hand it to the backlog`),
-              ui.table(
-                [COL.mark, COL.story(idWidth), { name: 'finding', width: 30, isWide: true, weight: 3 }, { name: 'seen by · in detail → fix', width: 30, isWide: true, weight: 2 }, { name: 'where', width: 16 }, COL.act],
-                shownFindings.map((finding, index) => [
-                  ui.mark('finding'),
-                  index > 0 && shownFindings[index - 1]?.story === finding.story
-                    ? {}
-                    : ui.open(`finding-file-${index}`, finding.story, () => void openFile($, `${now.root}/${finding.file}`, `${finding.story} / findings`, null)),
-                  // the sentence a person understands at once leads (dca-factory 0.84.0); a row without it shows the defect there
-                  { text: finding.plain || finding.defect, color: C.bright },
-                  // who saw it, the reviewer's own account where the sentence stands in front, and the fix
-                  {
-                    text: [[finding.perspective, finding.plain ? finding.defect : ''].filter(Boolean).join(' · '), finding.fix && finding.fix !== '—' ? `→ ${finding.fix}` : '']
-                      .filter(Boolean)
-                      .join(' '),
-                    color: C.muted,
-                  },
-                  // the file's name and line; the path stands in the findings file the story's name opens
-                  { text: finding.where.split('/').pop() ?? finding.where, color: C.muted },
-                  ui.offerCell(`finding-story-${index}`, finding.action, () => press($, finding.action), { byClaude: true }, 'to backlog'),
-                ]),
-              ),
+              ui.table(FINDING_COLUMNS, shownFindings.map(findingRow)),
             ]
           : []),
-        ui.section('Answered', `${now.decisions.length - pending.length} records`),
+        ui.section('Answered', `${now.decisions.length - pending.length} records${answered.length < now.decisions.length - pending.length ? ` · the first ${answered.length} shown` : ''}`),
         recordTable(answered, null),
       ],
       'Enter on a record opens it',

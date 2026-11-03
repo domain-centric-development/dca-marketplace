@@ -500,6 +500,21 @@ export function components({ Box, Text, Button, Input, Svg = null, Markdown = nu
       )
     },
 
+    // How many of `rows`, from the first, the table draws within `lines` lines of the pane — at least one. A row's
+    // height is its longest wrapped cell, and every line of it costs a node per cell and per bar: the engine draws at
+    // most 20000 nodes, so a view of long texts is cut by its height, not by its count of rows.
+    within: (given: Column[], rows: Cell[][], lines: number) => {
+      const columns = sized(given, rows)
+      let used = 0
+      let count = 0
+      for (const row of rows) {
+        used += Math.max(1, ...columns.map((column, index) => cellLines(column, row[index] ?? {}).length))
+        if (used > lines && count > 0) break
+        count += 1
+      }
+      return count
+    },
+
     // A word that opens something: a story, a record, a file, a topic.
     link,
 
