@@ -440,13 +440,15 @@ const sentence = t => { const s = String(t || "").trim(); return s ? s[0].toUppe
 const clause = t => { const s = String(t || "").trim(); return s + (/[.!?)]$/.test(s) ? "" : "."); };
 const going = goes => (goes || []).length ? `→ ${goes.map(g => g === "stop" ? "stop" : g === "again" ? "once more" : "back to " + g).join(" or ")}` : "";
 
-function ruleRow(id, rules, story, stage) {
-  const r = rules[id] || {id, enforcement: "", outcomes: []}, key = `rule:${id}`;
+// a rule's row is keyed by where it stands — the same rule in two groups opens on its own —; a link to a rule
+// (`#rules:<story>:<rule>`) opens it wherever it stands
+function ruleRow(id, rules, story, stage, scope) {
+  const r = rules[id] || {id, enforcement: "", outcomes: []}, key = `rule:${scope || "rules"}:${id}`;
   const fired = story && story.fired[id] ? story.fired[id].filter(f => !stage || f.stage === stage) : [];
   const state = fired.some(f => f.state === "fail") ? "fail" : fired.length ? fired[fired.length - 1].state : "";
   const refused = story && story.refused[id];
   const head = r.title ? sentence(r.title).replace(/\.$/, "") : r.text ? r.text.replace(/\s+/g, " ").slice(0, 140) + (r.text.length > 140 ? "…" : "") : sentence(r.why || r.when);
-  return ui.accordion({key, variant: "row", open: opened(key), head: inline(head), meta: ui.ruleId(id, r.enforcement, state, refused),
+  return ui.accordion({key, variant: "row", open: opened(key, opened(`rule:${id}`)), head: inline(head), meta: ui.ruleId(id, r.enforcement, state, refused),
     body: () => (r.text ? ui.said("Where", inline(clause(r.when))) + ui.prose(r.text)
       : (r.why ? ui.intro(inline(sentence(r.why)), {html: true}) : "") + ui.said("When", inline(clause(r.when)))
         + (r.outcomes || []).map(o => ui.said(SAYS[o.state] || o.state, inline(clause(o.said)), {icon: o.state, state: o.state, goes: going(o.goes)})).join(""))
@@ -454,7 +456,8 @@ function ruleRow(id, rules, story, stage) {
       + ui.accordion({key: `src:${id}`, variant: "quiet", open: opened(`src:${id}`), head: "source",
           body: () => ui.hint(`${r.source || ""}${r.bound ? (r.part === "instruction" ? " · placed in " : " · bound in ") + r.bound : ""}`, {block: true})})});
 }
-const ruleGroup = (label, ids, rules, story, stage, o) => ui.ruleGroup(label, (ids || []).map(id => ruleRow(id, rules, story, stage)), o);
+const ruleGroup = (label, ids, rules, story, stage, o = {}) => ui.ruleGroup(label,
+  (ids || []).map(id => ruleRow(id, rules, story, stage, o.scope || `${stage || "flow"}:${label || "rules"}`)), o);
 const waysLine = (edges, title, rules, o) => {
   const named = id => (rules && rules[id] && rules[id].title) || id;
   return ui.ways(title, edges.map(e => ({source: e.source, target: e.target, key: `${e.source}>${e.target}>${e.way}`,
@@ -462,12 +465,12 @@ const waysLine = (edges, title, rules, o) => {
 };
 function foldGroup(key, label, ids, rules, story, stage) {
   if (!ids || !ids.length) return "";
-  return ui.accordion({key, variant: "quiet", open: opened(key), head: `${esc(label)} (${ids.length})`, body: () => ruleGroup("", ids, rules, story, stage)});
+  return ui.accordion({key, variant: "quiet", open: opened(key), head: `${esc(label)} (${ids.length})`, body: () => ruleGroup("", ids, rules, story, stage, {scope: key})});
 }
 function folded(key, title, sub, ids, rules, story) {
   if (!ids || !ids.length) return "";
   return ui.accordion({key, variant: "card", level: 2, open: opened(key), head: `${esc(title)} ${ui.hint(`${ids.length} rules — ${sub}`)}`,
-    body: () => ruleGroup("", ids, rules, story)});
+    body: () => ruleGroup("", ids, rules, story, "", {scope: key})});
 }
 
 function picked(flow, rules, story) {
@@ -498,11 +501,11 @@ function picked(flow, rules, story) {
       + waysLine(out, "it goes back to an earlier stage", rules, plain)
       + (stops.length ? ruleGroup("it stops and waits for a person", ids(stops), rules, story, p.stage, plain) : ""));
     return ui.card(esc(p.stage), esc((step.window || "") + (verdict ? " · decides with its verdict, no gate" : "")),
-      ui.part(`Checked before it starts ${ui.hint("— a failing check keeps it from starting", {prose: true})}`, ruleGroup("", step.gate_before, rules, story, p.stage))
+      ui.part(`Checked before it starts ${ui.hint("— a failing check keeps it from starting", {prose: true})}`, ruleGroup("", step.gate_before, rules, story, p.stage, {scope: `${p.stage}:before`}))
       + ui.part(`While it works ${ui.hint(`— it is told ${(step.told || []).length} instructions`, {prose: true})}`, foldGroup(`told:${p.stage}`, "show what it is told", step.told, rules, story, p.stage))
       + ui.part(`Checked afterwards ${ui.hint(verdict ? "— its verdict decides, no gate" : checks ? `— ${checks} checks the work must pass` : "— nothing is checked", {prose: true})}`,
           foldGroup(`checks:${p.stage}`, "show the checks", step.gate_after, rules, story, p.stage) + passes + fails)
-      + ui.part("The runner also decides here", ruleGroup("", rest, rules, story, p.stage), {aside: true})
+      + ui.part("The runner also decides here", ruleGroup("", rest, rules, story, p.stage, {scope: `${p.stage}:runner`}), {aside: true})
       + (into.length ? ui.part("Ways back to this stage", waysLine(into, "", rules), {aside: true}) : ""));
   }
   if (p.type === "gate") {

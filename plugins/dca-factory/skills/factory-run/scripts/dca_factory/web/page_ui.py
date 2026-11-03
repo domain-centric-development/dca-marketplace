@@ -195,7 +195,7 @@ ui.days = days => `${ui.delivery({head: true})}<div class="days">${days.map(d =>
 ui.domain = inner => `<div class="domain"><div class="domain__track">${inner}</div></div>`;
 ui.kernel = groups => `<div class="kernel"><div class="kernel__top"><h3 class="kernel__title">Shared kernel</h3>${ui.hint("what every context shares, the same in each — no context of its own")}</div>${ui.facts(groups)}</div>`;
 ui.proposals = items => `<ul class="proposals">${items.map(ui.proposal).join("")}</ul>`;
-ui.ruleGroup = (label, rows, o = {}) => rows.length ? `<div class="rule-group">${label ? `<div class="rule-group__label">${o.plain ? ui.hint(label, {prose: true}) : ui.caption(label)} <span class="rule-group__n">${rows.length}</span></div>` : ""}<ul class="rule-group__rows">${rows.map(r => `<li class="rule-group__row">${r}</li>`).join("")}</ul></div>` : "";
+ui.ruleGroup = (label, rows, o = {}) => rows.length ? `<div class="rule-group">${label ? `<div class="rule-group__label">${o.plain ? ui.hint(label, {prose: true}) : `${ui.caption(label)} <span class="rule-group__n">${rows.length}</span>`}</div>` : ""}<ul class="rule-group__rows">${rows.map(r => `<li class="rule-group__row">${r}</li>`).join("")}</ul></div>` : "";
 // a rule with the scenarios it holds: the rule a heading, its scenarios a list beneath it, one block per rule
 ui.ruleBlock = (rule, rows) => `<section class="rule-block">${rule ? `<h4 class="rule-block__rule">${ui.caption("Rule", {brand: true})} ${rule}</h4>` : ""}`
   + `<ul class="rule-block__rows">${rows.map(r => `<li>${r}</li>`).join("")}</ul></section>`;
