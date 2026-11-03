@@ -329,7 +329,7 @@ div.id { margin-top: 2px; }
 .accordion--group .accordion--row { border-top: 0; } .accordion--group .accordion--row + .accordion--row { border-top: 1px solid var(--line); }
 .accordion--group .accordion--row { --fold-inset: var(--space-3); }
 .accordion--group .accordion--row > .accordion__head { padding-top: var(--space-1); padding-bottom: var(--space-1); }
-.accordion--group .actions { padding: 0 var(--space-3) var(--space-1) var(--group-indent); }
+.accordion--group > .accordion__body > .actions { padding: 0 var(--space-3) var(--space-1) var(--group-indent); }
 .accordion--ink { border-bottom: 1px solid var(--line); }
 .accordion--ink > .accordion__head { padding: var(--space-3) var(--space-2); font-size: var(--text-base); }
 .accordion--ink > .accordion__head:hover { background: var(--soft); }
