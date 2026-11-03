@@ -121,6 +121,8 @@ tr:last-child td { border-bottom: 0; }
 .caret[data-open] { transform: rotate(90deg); stroke: var(--caret-open, currentColor); }
 .label { display: block; font: 600 var(--text-md) var(--display); color: var(--ink); margin-bottom: var(--space-1); }
 .label--quiet { font: 400 var(--text-sm) var(--mono); color: var(--muted); }
+/* a label the field's example already explains: read out, not shown */
+.label--hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; margin: 0; }
 .hint { font: 400 var(--text-sm) var(--mono); color: var(--muted); }
 .hint--block { display: block; margin: var(--space-2) 0; font: 400 var(--text-md) var(--body); }
 .error { display: inline-block; font: 400 var(--text-md) var(--body); color: var(--stop); }

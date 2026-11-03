@@ -62,12 +62,12 @@ ui.switch = (items, o = {}) => `<span class="${mods("switch", [o.bar && "bar"])}
 ui.select = o => `<select class="select" id="${esc(o.id)}"${attrs(o.attrs)}>${(o.options || []).map(p =>
   `<option value="${esc(p.value)}"${p.selected ? " selected" : ""}>${esc(p.label == null ? p.value : p.label)}</option>`).join("")}</select>`;
 ui.field = o => o.multiline
-  ? `<textarea class="${mods("field", ["area"])}" id="${esc(o.id)}"${attrs(o.attrs)}>${esc(o.value || "")}</textarea>`
-  : `<input class="${mods("field", [o.bar && "bar"])}" id="${esc(o.id)}" type="${esc(o.type || "text")}" value="${esc(o.value || "")}"${attrs(o.attrs)}>`;
+  ? `<textarea class="${mods("field", ["area"])}" id="${esc(o.id)}"${o.placeholder ? ` placeholder="${esc(o.placeholder)}"` : ""}${attrs(o.attrs)}>${esc(o.value || "")}</textarea>`
+  : `<input class="${mods("field", [o.bar && "bar"])}" id="${esc(o.id)}" type="${esc(o.type || "text")}" value="${esc(o.value || "")}"${o.placeholder ? ` placeholder="${esc(o.placeholder)}"` : ""}${attrs(o.attrs)}>`;
 // the one caption: what names a column, a group, a kind — small capitals in the mono face, muted or in the brand's ink
 ui.caption = (text, o = {}) => `<span class="${mods("caption", [o.brand && "brand"])}">${esc(text)}</span>`;
 ui.caret = open => `<svg class="caret" viewBox="0 0 12 12" aria-hidden="true"${open ? " data-open" : ""}><path d="M4.25 2.5 7.75 6l-3.5 3.5"/></svg>`;
-ui.label = (text, forId, o = {}) => `<label class="${mods("label", [o.quiet && "quiet", o.bar && "bar"])}" for="${esc(forId)}">${esc(text)}</label>`;
+ui.label = (text, forId, o = {}) => `<label class="${mods("label", [o.quiet && "quiet", o.bar && "bar", o.hidden && "hidden"])}" for="${esc(forId)}">${esc(text)}</label>`;
 ui.hint = (text, o = {}) => `<${o.block ? "p" : "span"} class="${mods("hint", [o.block && "block", o.prose && "prose"])}"${o.id ? ` id="${esc(o.id)}"` : ""}${o.title ? ` title="${esc(o.title)}"` : ""}>${o.html ? text : esc(text)}</${o.block ? "p" : "span"}>`;
 ui.error = (text, o = {}) => `<${o.block ? "p" : "span"} class="error"${o.id ? ` id="${esc(o.id)}"` : ""}>✗ ${esc(text)}</${o.block ? "p" : "span"}>`;
 ui.term = (name, o = {}) => `<span class="${mods("term", [o.minor && "minor", o.shared && "shared"])}"${o.title ? ` title="${esc(o.title)}"` : ""}>${esc(name)}</span>`;
@@ -96,13 +96,13 @@ ui.formRow = o => {
   const described = [hintId, errorId].filter(Boolean).join(" ");
   const own = Object.assign({}, o.attrs, described ? {"aria-describedby": described} : {}, o.error ? {"aria-invalid": "true"} : {});
   const field = o.options ? ui.select({id: o.id, options: o.options, attrs: own})
-    : ui.field({id: o.id, multiline: o.multiline, value: o.value, type: o.type, bar: o.bar, attrs: own});
-  return `<div class="${mods("form-row", [o.inline && "inline", o.bar && "bar"])}">${ui.label(o.label, o.id, {quiet: o.quiet})}${field}`
+    : ui.field({id: o.id, multiline: o.multiline, value: o.value, type: o.type, bar: o.bar, placeholder: o.placeholder, attrs: own});
+  return `<div class="${mods("form-row", [o.inline && "inline", o.bar && "bar"])}">${ui.label(o.label, o.id, {quiet: o.quiet, hidden: o.labelHidden})}${field}`
     + (o.hint ? ui.hint(o.hint, {id: hintId}) : "") + (o.error ? ui.error(o.error, {id: errorId}) : "") + `</div>`;
 };
 // the person's words for an action: the field, an optional why, the button — kept by its draft until written
 ui.ask = o => `<div class="ask" data-ask="${esc(o.id)}">`
-  + ui.formRow({id: `ask-${slug(o.draft || o.id)}`, label: o.text || o.label, multiline: true, value: o.value, attrs: {"data-draft": o.draft}})
+  + ui.formRow({id: `ask-${slug(o.draft || o.id)}`, label: o.label, labelHidden: !!o.text, placeholder: o.text, multiline: true, value: o.value, attrs: {"data-draft": o.draft}})
   + ((o.choices || []).length ? ui.formRow({id: `why-${slug(o.draft || o.id)}`, label: "why? (optional)", quiet: true,
       options: [{value: "", label: "—"}, ...o.choices.map(c => ({value: c}))]}) : "")
   + `<div class="ask__go">${ui.btn(o.label, {primary: o.primary, write: o.write, title: o.title, attrs: {"data-press": o.id}})}</div></div>`;
