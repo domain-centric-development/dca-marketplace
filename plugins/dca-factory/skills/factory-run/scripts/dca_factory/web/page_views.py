@@ -454,11 +454,11 @@ function ruleRow(id, rules, story, stage) {
       + ui.accordion({key: `src:${id}`, variant: "quiet", open: opened(`src:${id}`), head: "source",
           body: () => ui.hint(`${r.source || ""}${r.bound ? (r.part === "instruction" ? " · placed in " : " · bound in ") + r.bound : ""}`, {block: true})})});
 }
-const ruleGroup = (label, ids, rules, story, stage) => ui.ruleGroup(label, (ids || []).map(id => ruleRow(id, rules, story, stage)));
-const waysLine = (edges, title, rules) => {
+const ruleGroup = (label, ids, rules, story, stage, o) => ui.ruleGroup(label, (ids || []).map(id => ruleRow(id, rules, story, stage)), o);
+const waysLine = (edges, title, rules, o) => {
   const named = id => (rules && rules[id] && rules[id].title) || id;
   return ui.ways(title, edges.map(e => ({source: e.source, target: e.target, key: `${e.source}>${e.target}>${e.way}`,
-    rules: [...new Set(e.rules.map(r => named(r.rule)))].join(" · ")})));
+    rules: [...new Set(e.rules.map(r => named(r.rule)))].join(" · ")})), o);
 };
 function foldGroup(key, label, ids, rules, story, stage) {
   if (!ids || !ids.length) return "";
@@ -488,18 +488,20 @@ function picked(flow, rules, story) {
     const stops = graph.edges.filter(e => own(e) && (e.way === "stop" || e.way === "waits"));
     const named = new Set([round, on, ...out, ...stops].filter(Boolean).flatMap(e => e.rules.map(r => r.rule)));
     const rest = (step.decided || []).filter(id => !named.has(id));
-    // a stage told as it runs: before it, while it runs, after it — where a pass and a refusal part ways —, and what else
-    const passes = ui.part(`${step.gate === "none" ? "if its verdict is yes" : "if the gate passes"} ${ui.hint(`→ on to <b>${esc(next)}</b>`, {html: true})}`,
-      ruleGroup("", [...(step.passed || []), ...(on ? on.rules.map(r => r.rule) : [])], rules, story, p.stage) || " ", {branch: true, level: 4});
-    const refuses = ui.part(step.gate === "none" ? "if it asks for changes" : "if a check refuses",
-      (round ? ruleGroup("once more into this stage", ids([round]), rules, story, p.stage) : "")
-      + waysLine(out, "back to an earlier stage", rules) + (stops.length ? ruleGroup("stop, or wait for a person", ids(stops), rules, story, p.stage) : ""),
-      {branch: true, level: 4});
-    return ui.card(esc(p.stage), esc((step.window || "") + (step.gate === "none" ? " · decides with its verdict, no gate" : "")),
-      ui.part(`Before ${ui.hint("— the gate before the stage asks; a refusal keeps it from starting")}`, ruleGroup("", step.gate_before, rules, story, p.stage))
-      + ui.part(`While it runs ${ui.hint(`— it is told ${(step.told || []).length} instructions`)}`, foldGroup(`told:${p.stage}`, "show what it is told", step.told, rules, story, p.stage))
-      + ui.part(`After ${ui.hint(step.gate === "none" ? "— its verdict decides, no gate" : (step.gate_after || []).length ? `— the gate asks ${(step.gate_after || []).length} checks, each can refuse` : "— the gate after it asks no checks")}`,
-          foldGroup(`checks:${p.stage}`, "show the checks", step.gate_after, rules, story, p.stage) + ui.branches(passes, refuses) || " ")
+    // a stage told as it runs: checked before it starts, what it is told while it works, checked afterwards — and how
+    // that ends: all pass and the story goes on, or one fails and it tries once more, goes back or stops —, then the rest
+    const verdict = step.gate === "none", checks = (step.gate_after || []).length, plain = {plain: true};
+    const passes = ui.outcome("pass", `${verdict ? "It says yes" : checks ? "All pass" : "It passes"} → on to <b>${esc(next)}</b>`,
+      ruleGroup("then also", [...(step.passed || []), ...(on ? on.rules.map(r => r.rule) : [])], rules, story, p.stage, plain));
+    const fails = ui.outcome("fail", `${verdict ? "It asks for changes" : "One fails"} → what happens next`,
+      (round ? ruleGroup("it tries once more", ids([round]), rules, story, p.stage, plain) : "")
+      + waysLine(out, "it goes back to an earlier stage", rules, plain)
+      + (stops.length ? ruleGroup("it stops and waits for a person", ids(stops), rules, story, p.stage, plain) : ""));
+    return ui.card(esc(p.stage), esc((step.window || "") + (verdict ? " · decides with its verdict, no gate" : "")),
+      ui.part(`Checked before it starts ${ui.hint("— a failing check keeps it from starting")}`, ruleGroup("", step.gate_before, rules, story, p.stage))
+      + ui.part(`While it works ${ui.hint(`— it is told ${(step.told || []).length} instructions`)}`, foldGroup(`told:${p.stage}`, "show what it is told", step.told, rules, story, p.stage))
+      + ui.part(`Checked afterwards ${ui.hint(verdict ? "— its verdict decides, no gate" : checks ? `— ${checks} checks the work must pass` : "— nothing is checked")}`,
+          foldGroup(`checks:${p.stage}`, "show the checks", step.gate_after, rules, story, p.stage) + passes + fails)
       + ui.part("The runner also decides here", ruleGroup("", rest, rules, story, p.stage), {aside: true})
       + (into.length ? ui.part("Ways back to this stage", waysLine(into, "", rules), {aside: true}) : ""));
   }
@@ -706,8 +708,8 @@ function components() {
       ["days", ui.days([{day: "2026-10-15", rows: [{at: "10:12", story: sample.story, title: sample.title, epic: sample.epic, event: "BookLent", seconds: "14 min", cost: "$3.10"}]}])],
       ["domain · kernel", ui.domain(ui.domainNode("Domain model", "") + ui.facts([{kind: "aggregate", terms: [{name: "Loan"}]}])) + ui.kernel([{kind: "values", terms: [{name: "Money", shared: true}]}])],
       ["proposals", ui.proposals([{goal: "one goal", id: "p-1", epic: "lending"}, {goal: "another goal", id: "p-2", actions: ui.btn("make it an epic")}])],
-      ["rule-group · ways · part · branches", ui.branches(ui.part("if the gate passes", ui.hint("→ on to <b>test</b>", {block: true, html: true}), {branch: true, level: 4}), ui.part("if a check refuses", ui.ruleGroup("its checks", [ui.accordion({key: "gallery:rule", variant: "row", open: false, head: "The tests are red", meta: ui.ruleId("GATE-TESTS", "gate", "fail")})])
-        + ui.ways("back to an earlier stage", [{source: "build", target: "plan", key: "build>plan>back", rules: "a plan gap"}]), {branch: true, level: 4}))],
+      ["rule-group · ways · part · outcome", ui.part("Checked afterwards", ui.outcome("pass", "All pass → on to <b>test</b>", "") + ui.outcome("fail", "One fails → what happens next", ui.ruleGroup("its checks", [ui.accordion({key: "gallery:rule", variant: "row", open: false, head: "The tests are red", meta: ui.ruleId("GATE-TESTS", "gate", "fail")})])
+        + ui.ways("back to an earlier stage", [{source: "build", target: "plan", key: "build>plan>back", rules: "a plan gap"}], {plain: true})))],
       ["flow", ui.flow(`<svg viewBox="0 0 880 60" role="img" aria-label="a drawing the factory gives"><text x="10" y="36">the factory draws the flow</text></svg>`)],
       ["table", ui.table([{label: "story"}, {label: "state"}, {label: "tokens", num: true}, {act: true}], [[ui.story(sample.story, sample.title), "ready", "1.2 M", ui.btn("run it", {small: true})]])],
       ["terminal", ui.terminal()],

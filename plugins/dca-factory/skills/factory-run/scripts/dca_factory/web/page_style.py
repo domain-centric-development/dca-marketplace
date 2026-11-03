@@ -449,11 +449,13 @@ div.id { margin-top: 2px; }
 .ways { list-style: none; }
 .ways__row { display: flex; gap: var(--space-3); align-items: baseline; flex-wrap: wrap; padding: var(--space-1) 0; }
 .ways__rules { font: 400 var(--text-base) var(--body); color: var(--muted); }
-.part--branch { border-left: 0; padding: var(--space-3) 0 var(--space-1); margin-top: 0; min-width: 0; }
-.part--branch + .part--branch { border-top: 1px solid var(--line); }
-.part--branch > .part__head { font-size: var(--text-md); }
-.part--branch > .part__head .hint { font: 400 var(--text-md) var(--body); color: var(--brand-text); }
-.branches { margin-top: var(--space-2); }
+/* how a check ends: the pass and the fail, each its mark and where the story goes, what happens then beneath */
+.outcome { margin-top: var(--space-4); }
+.outcome__head { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; margin: 0; font: 600 var(--text-base) var(--display); }
+.outcome__head b { color: var(--brand-text); }
+.outcome__head .icon { width: 18px; height: 18px; margin: 0; }
+.outcome .rule-group { margin-top: var(--space-2); }
+.rule-group__label--plain { font: italic 400 var(--text-md) var(--body); letter-spacing: 0; text-transform: none; }
 .table { margin-top: var(--space-3); }
 .table__num { text-align: right; font-family: var(--mono); font-size: var(--text-sm); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .table__act .actions { margin-top: 0; }

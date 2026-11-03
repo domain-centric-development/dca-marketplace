@@ -193,15 +193,15 @@ ui.days = days => `${ui.delivery({head: true})}<div class="days">${days.map(d =>
 ui.domain = inner => `<div class="domain"><div class="domain__track">${inner}</div></div>`;
 ui.kernel = groups => `<div class="kernel"><div class="kernel__top"><h3 class="kernel__title">Shared kernel</h3>${ui.hint("what every context shares, the same in each — no context of its own")}</div>${ui.facts(groups)}</div>`;
 ui.proposals = items => `<ul class="proposals">${items.map(ui.proposal).join("")}</ul>`;
-ui.ruleGroup = (label, rows) => rows.length ? `<div class="rule-group">${label ? `<div class="rule-group__label">${esc(label)} <span class="rule-group__n">${rows.length}</span></div>` : ""}<ul class="rule-group__rows">${rows.map(r => `<li class="rule-group__row">${r}</li>`).join("")}</ul></div>` : "";
+ui.ruleGroup = (label, rows, o = {}) => rows.length ? `<div class="rule-group">${label ? `<div class="${mods("rule-group__label", [o.plain && "plain"])}">${esc(label)} <span class="rule-group__n">${rows.length}</span></div>` : ""}<ul class="rule-group__rows">${rows.map(r => `<li class="rule-group__row">${r}</li>`).join("")}</ul></div>` : "";
 // a rule with the scenarios it holds: the rule a heading, its scenarios a list beneath it, one block per rule
 ui.ruleBlock = (rule, rows) => `<section class="rule-block">${rule ? `<h4 class="rule-block__rule"><span class="rule-block__label">Rule</span>${rule}</h4>` : ""}`
   + `<ul class="rule-block__rows">${rows.map(r => `<li>${r}</li>`).join("")}</ul></section>`;
-ui.ways = (title, ways) => ways.length ? `<div class="rule-group">${title ? `<div class="rule-group__label">${esc(title)}</div>` : ""}<ul class="ways">${ways.map(w =>
+ui.ways = (title, ways, o = {}) => ways.length ? `<div class="rule-group">${title ? `<div class="${mods("rule-group__label", [o.plain && "plain"])}">${esc(title)}</div>` : ""}<ul class="ways">${ways.map(w =>
   `<li class="ways__row">${ui.link(`${w.source} → ${w.target}`, {way: true, attrs: {"data-edge": w.key}})}<span class="ways__rules">${esc(w.rules)}</span></li>`).join("")}</ul></div>` : "";
-ui.part = (title, body, o = {}) => body ? `<section class="${mods("part", [o.branch && "branch", o.aside && "aside"])}"><h${o.level || 3} class="part__head">${title}</h${o.level || 3}>${body}</section>` : "";
-// the ways a moment can go — a gate that passes, a gate that refuses —, each a block of its own, one under the other
-ui.branches = (left, right) => left || right ? `<div class="branches">${left}${right}</div>` : "";
+ui.part = (title, body, o = {}) => body ? `<section class="${mods("part", [o.aside && "aside"])}"><h${o.level || 3} class="part__head">${title}</h${o.level || 3}>${body}</section>` : "";
+// how a check ends: a mark in the state's colour, where the story goes in plain words, what happens then beneath
+ui.outcome = (state, head, body) => `<section class="outcome" data-state="${esc(state)}"><h4 class="outcome__head">${ui.icon(state)}<span>${head}</span></h4>${body}</section>`;
 ui.flow = svg => `<div class="flow">${svg}</div>`;
 ui.table = (cols, rows, o = {}) => {
   const cls = c => [c.num && "table__num", c.act && "table__act", c.hide && "hide-narrow", c.mark && "table__mark"].filter(Boolean).join(" ");
