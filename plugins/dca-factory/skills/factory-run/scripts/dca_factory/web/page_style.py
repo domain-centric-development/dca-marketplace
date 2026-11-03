@@ -352,6 +352,8 @@ div.id { margin-top: 2px; }
 .accordion__cell--num { font: 400 var(--text-sm) var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .accordion__cell b { font: 500 var(--text-base) var(--display); }
 .accordion__cell .id { display: block; }
+/* a context's subdomain on a line of its own, under its name, at the name's edge — every row alike */
+.accordion__cell .pill { display: block; width: fit-content; margin: var(--space-1) 0 0; }
 .accordion--ink[data-open] > .accordion__head .accordion__cell { color: var(--paper); }
 .accordion--ink[data-open] > .accordion__head :is(.accordion__cell--num, .accordion__cell .id) { color: color-mix(in srgb, var(--paper) 70%, transparent); }
 .accordion--panel { border-radius: var(--radius-control); background: var(--panel); border: 1px solid var(--line); overflow: hidden; margin-top: var(--space-2); }
