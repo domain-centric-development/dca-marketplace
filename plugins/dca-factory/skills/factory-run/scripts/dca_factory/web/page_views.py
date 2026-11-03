@@ -80,14 +80,14 @@ function partBody(name) {
 function describe(st) {
   const parts = (st.description || []).map(p => {
     const key = `part:${p.part}`;
-    return ui.accordion({key, variant: "ink", open: opened(key),
-      head: `${ui.mark(p.mark)}<b>${esc(p.part)}</b>${ui.id(p.path)}`,
-      below: (p.present ? ui.hint((p.sections || []).join(" · ")) : ui.flag("missing", "gone"))
+    return {key, open: opened(key), body: () => partBody(p.part), cells: [
+      `${ui.mark(p.mark)}<b>${esc(p.part)}</b>${ui.id(p.path, {block: true})}`,
+      (p.present ? esc((p.sections || []).join(" · ")) : ui.flag("missing", "gone"))
         + ((p.missing || []).length ? ` ${ui.flag("missing: " + p.missing.join(", "), "changes")}` : "")
-        + ((p.empty || []).length ? ` ${ui.flag("empty: " + p.empty.join(", "), "changes")}` : ""),
-      body: () => partBody(p.part)});
-  }).join("");
-  return ui.card("The parts", "written by you, through the description — what is built, how, and in which domain; open one to read it", parts)
+        + ((p.empty || []).length ? ` ${ui.flag("empty: " + p.empty.join(", "), "changes")}` : "")]};
+  });
+  return ui.card("The parts", "written by you, through the description — what is built, how, and in which domain; open one to read it",
+      ui.foldTable([{label: "part", width: "minmax(0, 14em)"}, {label: "sections"}], parts))
     + domainCard()
     + ui.card("Change the description", "", ui.intro(`In your words — <code>&lt;part&gt;: &lt;change&gt;</code> where it is one part. Where it needs a decision of yours, it asks here.`, {html: true})
       + act((st.entries || {}).describe))
@@ -161,14 +161,15 @@ function domainCard() {
   const rows = (S.spec.contexts || []).map(c => {
     const key = `context:${c.context}`;
     const pending = c.features.reduce((n, f) => n + f.rules.reduce((m, r) => m + r.criteria.filter(x => x.changed_by.length).length, 0), 0) + c.coming.length;
-    return ui.accordion({key, variant: "ink", open: opened(key),
-      head: `<b>${esc(c.context)}</b>${c.subdomain ? ui.pill(c.subdomain, subdomainKind(c.subdomain)) : ""}`,
-      meta: [ui.hint(`${c.features.length} features · ${c.criteria} criteria`), pending ? ui.flag(`${pending} open changes`, "changes") : "", healthCell(c.health)].filter(Boolean).join(" "),
-      below: c.purpose ? ui.hint(c.purpose) : "", body: () => specContext(c)});
-  }).join("");
+    return {key, open: opened(key), body: () => specContext(c), cells: [
+      `<b>${esc(c.context)}</b>${c.subdomain ? ui.pill(c.subdomain, subdomainKind(c.subdomain)) : ""}`, esc(c.purpose),
+      `${c.features.length}`, `${c.criteria}`, pending ? ui.flag(`${pending}`, "changes") : "—", healthCell(c.health)]};
+  });
   const kernel = S.spec.shared_kernel ? ui.kernel(modelFacts(S.spec.shared_kernel.model)) : "";
   return ui.card("Domain", "the contexts as designed, and what holds in each — the model from its glossary, the features as the gate delivered them",
-    kernel + (rows || ui.empty("No spec yet — what holds is written by the stories the gate delivers.")));
+    kernel + (rows.length ? ui.foldTable([{label: "context", width: "minmax(0, 12em)"}, {label: "what it is for", hide: true}, {label: "features", num: true},
+        {label: "criteria", num: true}, {label: "open changes", num: true}, {label: "health", width: "minmax(0, 12em)", hide: true}], rows)
+      : ui.empty("No spec yet — what holds is written by the stories the gate delivers.")));
 }
 
 // --- 1 discover ----------------------------------------------------------------------------------------------------
@@ -183,7 +184,7 @@ function discoveryBody(t) {
     + ui.domainNode(2, "Proposed epics", `${t.proposals.length} proposed — each becomes an epic when you make it one`)
     + (proposals.length ? ui.proposals(proposals) : ui.empty("No proposed work."))
     + (changes.length ? ui.domainNode(3, "Changes to the description", "applied one by one, through the description")
-        + ui.table([{}, {}, {act: true}], changes) : "")
+        + ui.table([{label: "part"}, {label: "change"}, {act: true}], changes) : "")
     + ui.domainNode(changes.length ? 4 : 3, "Continue this discovery", "a question, a document, a wish — the report grows")
     + acts(t.actions, "s"));
 }
@@ -192,10 +193,9 @@ function discover(st) {
   const topics = (S.discover || {}).topics || [];
   const rows = topics.map(t => {
     const key = `topic:${t.topic}`, made = t.proposals.filter(p => p.epic).length;
-    return ui.accordion({key, variant: "ink", open: opened(key), head: `<b>${esc(t.title)}</b>${ui.id(t.topic)}`,
-      meta: ui.hint(`${t.proposals.length} proposed · ${made} epics made · ${t.description_changes.length} description changes`),
-      body: () => discoveryBody(t)});
-  }).join("");
+    return {key, open: opened(key), body: () => discoveryBody(t), cells: [`<b>${esc(t.title)}</b>${ui.id(t.topic, {block: true})}`,
+      `${t.proposals.length}`, `${made}`, `${t.description_changes.length}`]};
+  });
   // a discovery on its way: where it stands and its output, until its report stands below
   const working = ((S.discover || {}).working || []).map(r => ui.ticket({kind: r.topic || "new", word: r.state === "waiting" ? "asks you" : r.state,
     state: r.state, words: r.words, actions: ui.btn("follow", {small: true, attrs: {"data-call": "follow", "data-kind": "request", "data-id": r.id}})})).join("");
@@ -206,7 +206,8 @@ function discover(st) {
   return ui.card("A new discovery", "a problem worth solving, or what should exist — the report and the epics it proposes", act((st.entries || {}).discover)
       + (working ? `<h3>In progress</h3>${ui.queue(working)}` : "") + asking)
     + ui.card("Discoveries", "each topic with its report — open one to read it, act on what it proposes, or continue it",
-      rows || ui.empty(`No discovery yet — it goes to ${(S.discover || {}).store || ""}.`));
+      rows.length ? ui.foldTable([{label: "topic"}, {label: "proposed", num: true}, {label: "epics made", num: true},
+        {label: "description changes", num: true, hide: true}], rows) : ui.empty(`No discovery yet — it goes to ${(S.discover || {}).store || ""}.`));
 }
 
 // --- 2 backlog -----------------------------------------------------------------------------------------------------
@@ -271,7 +272,7 @@ function backlog(st) {
       : ui.card("", "", ui.empty("The backlog is empty.")))
     + (findings.length ? ui.accordion({key: "findings", variant: "card", level: 2, open: opened("findings"),
         head: `Findings ${ui.hint(`${findings.length} the judge kept open — each to the backlog or done`)}`,
-        body: () => ui.table([{}, {}, {act: true}], findings)}) : "");
+        body: () => ui.table([{label: "severity"}, {label: "finding"}, {act: true}], findings)}) : "");
 }
 
 // --- 3 run ---------------------------------------------------------------------------------------------------------
@@ -363,7 +364,7 @@ function decide(st) {
   const waiting = (st.waiting || []).filter(w => !w.record), waitMarked = marked(waiting);
   const others = waiting.map(w => [...(waitMarked ? [ui.mark(w.mark)] : []), ui.story(w.story), esc(w.what),
     act(w.action) || ui.hint(w.action.text || w.action.skill || w.action.shell || "")]);
-  const cols = [...(waitMarked ? [{mark: true}] : []), {}, {}, {act: true}];
+  const cols = [...(waitMarked ? [{label: "state", sr: true, mark: true}] : []), {label: "story"}, {label: "what waits"}, {act: true}];
   return records.map(recordCard).join("")
     + (others.length ? ui.card(records.length ? "Also waiting for you" : "", "", ui.table(cols, others)) : "")
     + (!records.length && !others.length ? ui.card("", "", ui.empty("Nothing waits for you.")) : "");
@@ -419,7 +420,7 @@ function delivered(st) {
     const day = (r.delivered_text || "").slice(0, 10) || "undated";
     if (!days.length || days[days.length - 1].day !== day) days.push({day, rows: []});
     days[days.length - 1].rows.push({at: (r.delivered_text || "").slice(11), story: r.story, title: r.title, epic: r.epic,
-      event: events[r.epic], seconds: r.seconds_text, cost: r.cost_text});
+      event: events[r.epic], seconds: r.seconds_text, tokens: r.tokens_text, cost: r.cost_text});
   }
   return ui.card("Delivered", "what is delivered, and what it cost as it summed up", ui.tiles(tiles) + curveCard(st))
     + qualityCard(st.signals)
@@ -667,7 +668,7 @@ function components() {
       ["ticket", ui.ticket({kind: "wish", target: "", word: "running", state: "running", id: "r-12 · Ann", actions: ui.btn("take back", {small: true, danger: true})})],
       ["option", ui.option({advised: true, pick: ui.btn("a", {primary: true}), text: "the recommended answer"}) + ui.option({pick: ui.btn("b"), text: "another answer"})],
       ["list-item", ui.list([{mark: "done", what: ui.story(sample.story, sample.title), aside: "today 10:12<br>$3.10"}])],
-      ["delivery", ui.delivery({at: "10:12", story: sample.story, title: sample.title, epic: sample.epic, event: "BookLent", seconds: "14 min", cost: "$3.10"})],
+      ["delivery", ui.delivery({head: true}) + ui.delivery({at: "10:12", story: sample.story, title: sample.title, epic: sample.epic, event: "BookLent", seconds: "14 min", tokens: "4.1 M", cost: "$3.10"})],
       ["domain-node · facts · rule-line", ui.domainNode(1, "Domain model", "from its glossary")
         + ui.facts([{kind: "aggregate", terms: [{name: "Loan"}]}, {kind: "values", terms: [{name: "Due date"}, {name: "Money", shared: true}]}])
         + ui.ruleLine("A reader holds three loans at most.")],
@@ -680,6 +681,9 @@ function components() {
       ["card", ui.card("A card", "what it holds", ui.intro("Its body."))],
       ["accordion", ["row", "quiet", "group", "ink", "panel", "card"].map(variant => ui.accordion({key: `gallery:${variant}`, variant, open: opened(`gallery:${variant}`, variant === "row"),
         level: variant === "card" ? 3 : 0, head: `the ${variant} fold`, meta: ui.hint("meta"), body: () => ui.intro("What it folds.")})).join("")],
+      ["fold-table", ui.foldTable([{label: "context"}, {label: "features", num: true}, {label: "criteria", num: true}],
+        [{key: "gallery:ft:lending", open: opened("gallery:ft:lending"), cells: ["<b>lending</b>", "1", "2"], body: () => ui.intro("What it folds.")},
+         {key: "gallery:ft:catalogue", open: false, cells: ["<b>catalogue</b>", "3", "14"], body: ""}])],
       ["tabs", ui.tabs([{tabs: [{id: "gallery-c", key: 1}, {id: "gallery-d", key: 2, on: true}], ordered: true}])],
       ["board · column", ui.board([ui.column({name: "backlog", count: 4, line: "released — 2 more blocked", items: [ui.story(sample.story, sample.title)], actions: ui.btn("run it", {primary: true})}),
         ui.column({name: "decide", count: 1, line: "waits for you", hot: true, items: ["a question"]}),

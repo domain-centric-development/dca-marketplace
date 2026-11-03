@@ -50,6 +50,33 @@
   /* the logo in the bar: none keeps the mark */
   --logo: none;
   --logo-width: 2.13ex;
+
+  /* the rhythm: how dense the page sits — .85 compact, 1.15 airy; every space below is its step times this */
+  --density: 1;
+  --space-1: calc(4px * var(--density));
+  --space-2: calc(8px * var(--density));
+  --space-3: calc(12px * var(--density));
+  --space-4: calc(16px * var(--density));
+  --space-5: calc(24px * var(--density));
+  --space-6: calc(32px * var(--density));
+  --space-7: calc(48px * var(--density));
+  --space-8: calc(72px * var(--density));
+  /* type: eight steps, and the reading size of running text — a face with another x-height may shift them */
+  --text-xs: 11px;
+  --text-sm: 12.5px;
+  --text-md: 14px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+  --text-3xl: 38px;
+  --text-read: 17px;
+  /* corners, by what they round */
+  --radius-label: 3px;
+  --radius-control: 7px;
+  --radius-card: 12px;
+  --radius-round: 999px;
+  --measure: 1100px;                             /* the page's width */
 }
 
 /* A light bar with a logo of your own, a dark one in the dark scheme:

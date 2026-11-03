@@ -34,6 +34,17 @@ PUBLIC = {
     "--display": "the face of headings and controls",
     "--body": "the face of running text",
     "--mono": "the face of displays: states, ids, figures",
+    "--density": "how dense the page sits: every space is a step of the scale times this — .85 compact, 1.15 airy",
+    **{f"--space-{n}": f"the space scale, a 4 px rhythm: step {n}, {px} px times --density"
+       for n, px in enumerate((4, 8, 12, 16, 24, 32, 48, 72), 1)},
+    **{f"--text-{step}": f"the type scale: {px} px"
+       for step, px in (("xs", 11), ("sm", 12.5), ("md", 14), ("base", 16), ("lg", 18), ("xl", 20), ("2xl", 24), ("3xl", 38))},
+    "--text-read": "the reading size of running text — the body face's, apart from the scale",
+    "--radius-label": "a label's corner: a term, a flag (3 px)",
+    "--radius-control": "a control's corner: a button, a field (7 px)",
+    "--radius-card": "a card's corner (12 px)",
+    "--radius-round": "a state, an event, a dot: round",
+    "--measure": "the page's width",
     "--logo": "the logo in the bar, an url(); none keeps the mark — per scheme under :root[data-scheme=\"dark\"]",
     "--logo-width": "the logo's width in the bar",
 }
@@ -74,6 +85,31 @@ TOKENS = """
   --mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
   --logo: none;
   --logo-width: 2.13ex;
+  /* the rhythm — space a 4 px scale times the density, type eight steps, a corner by what it rounds (WP-181) */
+  --density: 1;
+  --space-1: calc(4px * var(--density));
+  --space-2: calc(8px * var(--density));
+  --space-3: calc(12px * var(--density));
+  --space-4: calc(16px * var(--density));
+  --space-5: calc(24px * var(--density));
+  --space-6: calc(32px * var(--density));
+  --space-7: calc(48px * var(--density));
+  --space-8: calc(72px * var(--density));
+  --text-xs: 11px;
+  --text-sm: 12.5px;
+  --text-md: 14px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+  --text-3xl: 38px;
+  --text-read: 17px;
+  --radius-label: 3px;
+  --radius-control: 7px;
+  --radius-card: 12px;
+  --radius-round: 999px;
+  --measure: 1100px;
+  --grid-columns: 12;
   /* internal — derived from the public ones */
   --brand-fill-hover: color-mix(in srgb, var(--brand-fill), black 15%);
   --tint: color-mix(in srgb, var(--brand) 14%, transparent);

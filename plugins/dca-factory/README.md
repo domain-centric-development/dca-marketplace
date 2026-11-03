@@ -268,7 +268,8 @@ you need — `--brand` alone recolours the page, the states keep their own colou
 `--logo: url(/theme/logo.svg)` puts your logo in the bar (a second one under `:root[data-scheme="dark"]`), a
 `favicon.svg` beside it becomes the tab's icon, and `--display`, `--body`, `--mono` take a system face or one of your
 own (`@font-face` with `url(/theme/<face>.woff2)` beside it). The page links the file after its own style, so a plain
-`:root { … }` wins; each light/dark colour is one `light-dark()` declaration. The folder is committed — setup lets it
+`:root { … }` wins; each light/dark colour is one `light-dark()` declaration. `--density` makes the page denser
+(`.85`) or airier (`1.15`): every space is a step of a 4 px scale times it. The folder is committed — setup lets it
 into git beside the story journals — and survives `factory.sh update`.
 
 `factory.sh serve --fixture all-states` serves the real page against canned views that hold every state — draft,

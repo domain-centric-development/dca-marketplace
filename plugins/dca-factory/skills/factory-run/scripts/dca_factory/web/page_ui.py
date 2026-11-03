@@ -123,9 +123,12 @@ ui.ticket = o => `<div class="ticket"><div class="ticket__what"><b class="ticket
   + ui.actions(o.actions, {tight: true}) + `</div>`;
 ui.option = o => `<div class="${mods("option", [o.advised && "advised"])}"><div class="option__pick">${o.pick}</div>${o.advised ? `<span class="option__advised">recommended</span>` : ""}<span class="option__text">${o.text}</span></div>`;
 ui.listItem = o => `<li class="list__item">${o.mark ? ui.mark(o.mark) : ""}<span class="list__what">${o.what}</span>${o.aside ? `<span class="list__aside">${o.aside}</span>` : ""}</li>`;
-ui.delivery = o => `<div class="delivery"><div class="delivery__at">${esc(o.at)}</div><div class="delivery__what">${ui.story(o.story, o.title)}</div>
+ui.delivery = o => o.head
+  ? `<div class="${mods("delivery", ["head"])}" aria-hidden="true">${["at", "story", "epic", "outcome event", "time", "tokens", "cost"].map((label, i) =>
+      `<span class="${mods("delivery__label", [i > 3 && "num"])}${i === 2 || i === 5 ? " hide-narrow" : ""}">${label}</span>`).join("")}</div>`
+  : `<div class="delivery"><div class="delivery__at">${esc(o.at)}</div><div class="delivery__what">${ui.story(o.story, o.title)}</div>
   <div class="delivery__epic" title="${esc(o.epic)}">${esc(o.epic)}</div><div class="delivery__event">${o.event ? ui.event(o.event, {title: o.event}) : ""}</div>
-  <div class="delivery__fig">${esc(o.seconds || "")}</div><div class="delivery__fig">${esc(o.cost || "")}</div></div>`;
+  <div class="delivery__fig">${esc(o.seconds || "")}</div><div class="delivery__fig delivery__fig--tokens hide-narrow">${esc(o.tokens || "")}</div><div class="delivery__fig">${esc(o.cost || "")}</div></div>`;
 ui.domainNode = (n, title, hint) => `<div class="domain-node"><span class="domain-node__n">${esc(n)}</span>${esc(title)}${hint ? ui.hint(hint) : ""}</div>`;
 ui.facts = groups => `<dl class="facts">${groups.map(g => `<dt class="facts__kind">${esc(g.kind)}</dt><dd class="facts__terms">${g.terms.map(t => ui.term(t.name, t)).join("")}</dd>`).join("")}</dl>`;
 ui.ruleLine = html => `<div class="rule-line">${html}</div>`;
@@ -148,13 +151,20 @@ ui.card = (title, sub, body, o = {}) => `<section class="${mods("card", [o.wish 
 // the one fold of the page: a button with aria-expanded over its region, its caret, kept across a redraw by its key
 ui.accordion = o => {
   const open = !!o.open, id = "fold-" + slug(o.key);
+  // in a fold table the head is the row's cells, on the table's columns; else a title, its meta and what stands below
+  const inner = o.cells ? o.cells.map(c => `<span class="${mods("accordion__cell", [c.num && "num"])}${c.hide ? " hide-narrow" : ""}">${c.html}</span>`).join("")
+    : `<span class="accordion__title">${o.head}</span>${o.meta ? `<span class="accordion__meta">${o.meta}</span>` : ""}`
+      + `${o.below ? `<span class="accordion__below">${o.below}</span>` : ""}`;
   const head = `<button type="button" class="accordion__head" data-fold-toggle="${esc(o.key)}" aria-expanded="${open}" aria-controls="${id}">`
-    + `${ui.caret(open)}<span class="accordion__title">${o.head}</span>${o.meta ? `<span class="accordion__meta">${o.meta}</span>` : ""}`
-    + `${o.below ? `<span class="accordion__below">${o.below}</span>` : ""}</button>`;
+    + `${ui.caret(open)}${inner}</button>`;
   const body = open ? `<div class="accordion__body" id="${id}" role="region">${typeof o.body === "function" ? o.body() : o.body || ""}</div>` : "";
   return `<div class="${mods("accordion", [o.variant])}" data-fold="${esc(o.key)}"${open ? " data-open" : ""}>`
     + (o.level ? `<h${o.level} class="accordion__heading">${head}</h${o.level}>` : head) + `${body}</div>`;
 };
+// rows that fold, on shared columns: a head row of labels, each row one accordion whose cells take the columns
+ui.foldTable = (cols, rows) => `<div class="fold-table" style="--fold-cols: 14px ${cols.map(c => c.num ? "max-content" : c.width || "minmax(0, 1fr)").join(" ")}">`
+  + `<div class="fold-table__head" aria-hidden="true"><span></span>${cols.map(c => `<span class="${mods("fold-table__label", [c.num && "num"])}${c.hide ? " hide-narrow" : ""}">${esc(c.label)}</span>`).join("")}</div>`
+  + rows.map(r => ui.accordion(Object.assign({variant: "ink"}, r, {cells: r.cells.map((html, i) => ({html, num: cols[i].num, hide: cols[i].hide}))}))).join("") + `</div>`;
 ui.tabs = parts => parts.map(p => `<span class="tabs__group" role="presentation">${p.tabs.map((t, i) =>
   (i && p.ordered ? `<span class="tabs__arrow" aria-hidden="true">→</span>` : "") + ui.tab(t)).join("")}</span>`)
   .join(`<span class="tabs__sep" aria-hidden="true"></span>`);
@@ -180,7 +190,7 @@ ui.queue = inner => `<div class="queue">${inner}</div>`;
 ui.record = o => `<section class="${mods("record", [o.accept && "accept"])}"><div class="record__question">${ui.hint(o.about)}<b class="record__text">${o.text}</b></div><div class="record__body">${o.body}</div></section>`;
 ui.options = items => `<div class="options">${items.map(ui.option).join("")}</div>`;
 ui.tiles = (inner, o = {}) => `<div class="${mods("tiles", [o.many && "many"])}">${inner}</div>`;
-ui.days = days => `<div class="days">${days.map(d => `<div class="days__day"><h4 class="days__date">${esc(d.day)}</h4>${d.rows.map(ui.delivery).join("")}</div>`).join("")}</div>`;
+ui.days = days => `${ui.delivery({head: true})}<div class="days">${days.map(d => `<div class="days__day"><h4 class="days__date">${esc(d.day)}</h4>${d.rows.map(ui.delivery).join("")}</div>`).join("")}</div>`;
 ui.domain = inner => `<div class="domain"><div class="domain__track">${inner}</div></div>`;
 ui.kernel = groups => `<div class="kernel"><div class="kernel__top"><b class="kernel__title">Shared kernel</b>${ui.hint("what every context shares, the same in each — no context of its own")}</div>${ui.facts(groups)}</div>`;
 ui.proposals = items => `<div class="proposals">${items.map(ui.proposal).join("")}</div>`;

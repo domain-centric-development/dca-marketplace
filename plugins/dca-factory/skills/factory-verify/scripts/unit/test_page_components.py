@@ -133,12 +133,39 @@ class PageComponentsTest(unittest.TestCase):
                              ("fail", "danger"), ("run", "info")):
             self.assertIn(f"--{use}: var(--{meaning});", page_tokens.TOKENS)
 
+    def test_space_type_and_corners_are_steps_of_their_scales(self):
+        # a hairline (1 or 2 px), an em and the factory's drawing under `.flow` are the named exceptions (WP-181)
+        raw = []
+        for selector, body in re.findall(r"([^{}]*)\{([^{}]*)\}", page_style.STYLE):
+            if re.match(r"\s*\.flow\b", selector.split(",")[0]) and " " in selector.strip():
+                continue
+            for declaration in body.split(";"):
+                prop, _, value = declaration.partition(":")
+                if re.fullmatch(r"(margin|padding)(-[a-z]+)?|gap|row-gap|column-gap|font|font-size|border-radius", prop.strip()):
+                    raw += [f"{selector.strip()[:40]} {prop.strip()}: {px}" for px in re.findall(r"-?\d*\.?\d+px", value)
+                            if abs(float(px[:-2])) > 2]
+        self.assertEqual([], raw)
+
+    def test_side_by_side_stands_on_the_twelve_columns(self):
+        for block in ("board", "lanes", "tiles"):
+            rule = re.search(r"^\." + block + r" \{([^}]*)\}", page_style.STYLE, re.M).group(1)
+            self.assertIn("repeat(var(--grid-columns), minmax(0, 1fr))", rule, block)
+        self.assertIn("--grid-columns: 12;", page_tokens.TOKENS)
+
+    def test_one_width_narrows_the_page_the_frame_by_the_window_a_component_by_its_place(self):
+        widths = re.findall(r"@(media|container) \((?:max-width: |width < )([0-9]+px)\)", page_style.STYLE)
+        self.assertEqual({page_style.NARROW}, {w for _kind, w in widths})
+        self.assertEqual({"media", "container"}, {kind for kind, _w in widths})
+        frame = re.search(r"@media \(max-width: [0-9]+px\) \{(.*?)\n\}", page_style.STYLE, re.S).group(1)
+        blocks = {re.split(r"__|--", c)[0] for c in re.findall(r"\.([a-z][\w-]*)", frame)}
+        self.assertLessEqual(blocks, set(page_style.FRAME_BLOCKS) | {"field"})
+
     def test_the_public_tokens_are_declared_and_listed_in_the_example(self):
-        declared = set(re.findall(r"^\s*(--[a-z-]+):", page_tokens.TOKENS, re.M))
+        declared = set(re.findall(r"^\s*(--[a-z0-9-]+):", page_tokens.TOKENS, re.M))
         self.assertEqual([], sorted(set(page_tokens.PUBLIC) - declared))
         with open(EXAMPLE, encoding="utf-8") as handle:
             example = handle.read()
-        listed = set(re.findall(r"(--[a-z-]+):", example.split("A light bar")[0]))
+        listed = set(re.findall(r"(--[a-z0-9-]+):", example.split("A light bar")[0]))
         self.assertEqual(set(page_tokens.PUBLIC), listed)
 
     def test_the_mark_and_the_icon_take_the_brand(self):
