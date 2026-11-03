@@ -160,6 +160,14 @@ class PageComponentsTest(unittest.TestCase):
         blocks = {re.split(r"__|--", c)[0] for c in re.findall(r"\.([a-z][\w-]*)", frame)}
         self.assertLessEqual(blocks, set(page_style.FRAME_BLOCKS) | {"field"})
 
+    def test_the_stylesheet_parses_braces_and_parentheses_balanced_in_every_rule(self):
+        # an open parenthesis in a selector swallows every rule after it — the browser drops them without a word
+        style = re.sub(r"/\*.*?\*/", "", page_style.STYLE + page_tokens.TOKENS, flags=re.S)
+        self.assertEqual(style.count("{"), style.count("}"))
+        self.assertEqual(style.count("("), style.count(")"))
+        for selector in re.findall(r"([^{}]+)\{[^{}]*\}", style):
+            self.assertEqual(selector.count("("), selector.count(")"), selector.strip()[:80])
+
     def test_the_public_tokens_are_declared_and_listed_in_the_example(self):
         declared = set(re.findall(r"^\s*(--[a-z0-9-]+):", page_tokens.TOKENS, re.M))
         self.assertEqual([], sorted(set(page_tokens.PUBLIC) - declared))

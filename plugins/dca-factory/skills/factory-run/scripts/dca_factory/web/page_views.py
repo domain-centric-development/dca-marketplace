@@ -81,7 +81,7 @@ function describe(st) {
   const parts = (st.description || []).map(p => {
     const key = `part:${p.part}`;
     return {key, open: opened(key), body: () => partBody(p.part), cells: [
-      `${ui.mark(p.mark)}<b>${esc(p.part)}</b>${ui.id(p.path, {block: true})}`,
+      `${ui.mark(p.mark)}<b>${esc(p.part)}</b>${ui.id(p.path)}`,
       (p.present ? esc((p.sections || []).join(" · ")) : ui.flag("missing", "gone"))
         + ((p.missing || []).length ? ` ${ui.flag("missing: " + p.missing.join(", "), "changes")}` : "")
         + ((p.empty || []).length ? ` ${ui.flag("empty: " + p.empty.join(", "), "changes")}` : "")]};
@@ -140,9 +140,9 @@ function specContext(c) {
   }).join("");
   const coming = ui.ruleGroup("coming — new criteria of open stories", c.coming.map(s =>
     `<p>${ui.flag(s.status, "adds")} ${ui.story(s.story)} — ${s.keys.map(k => `<code>${esc(k.key)}</code>`).join(", ")}</p>`));
-  return ui.domain(ui.domainNode(1, "Domain model", "from its glossary")
+  return ui.domain(ui.domainNode("Domain model", "from its glossary")
     + (facts.length ? ui.facts(facts) : ui.hint("The glossary names no term of a model.", {block: true}))
-    + ui.domainNode(2, "Features", "what holds, by rule")
+    + ui.domainNode("Features", "what holds, by rule")
     + (features || ui.hint("No criterion holds yet.", {block: true})) + coming
     + (c.add ? ui.accordion({key: `addfeature:${c.context}`, variant: "quiet", open: opened(`addfeature:${c.context}`), head: "add a feature",
         body: () => act(c.add, "s")}) : ""));
@@ -179,13 +179,13 @@ function discoveryBody(t) {
     contact: p.domain_contact, id: p.id, epic: p.epic, actions: acts(p.actions)}));
   const changes = t.description_changes.map(c => [`<b>${esc(c.target)}</b>`, `${esc(c.change)}${ui.id(c.why, {block: true})}`, acts(c.actions)]);
   const report = (t.sections || []).filter(sec => !/^proposed /i.test(sec.heading)).map(sec => `<h3>${esc(sec.heading)}</h3>${ui.prose(sec.text)}`).join("");
-  return ui.domain(ui.domainNode(1, "The report", t.report)
+  return ui.domain(ui.domainNode("The report", t.report)
     + (report || ui.empty("The report says nothing beyond what it proposes."))
-    + ui.domainNode(2, "Proposed epics", `${t.proposals.length} proposed — each becomes an epic when you make it one`)
+    + ui.domainNode("Proposed epics", `${t.proposals.length} proposed — each becomes an epic when you make it one`)
     + (proposals.length ? ui.proposals(proposals) : ui.empty("No proposed work."))
-    + (changes.length ? ui.domainNode(3, "Changes to the description", "applied one by one, through the description")
+    + (changes.length ? ui.domainNode("Changes to the description", "applied one by one, through the description")
         + ui.table([{label: "part"}, {label: "change"}, {act: true}], changes) : "")
-    + ui.domainNode(changes.length ? 4 : 3, "Continue this discovery", "a question, a document, a wish — the report grows")
+    + ui.domainNode("Continue this discovery", "a question, a document, a wish — the report grows")
     + acts(t.actions, "s"));
 }
 
@@ -193,7 +193,7 @@ function discover(st) {
   const topics = (S.discover || {}).topics || [];
   const rows = topics.map(t => {
     const key = `topic:${t.topic}`, made = t.proposals.filter(p => p.epic).length;
-    return {key, open: opened(key), body: () => discoveryBody(t), cells: [`<b>${esc(t.title)}</b>${ui.id(t.topic, {block: true})}`,
+    return {key, open: opened(key), body: () => discoveryBody(t), cells: [`<b>${esc(t.title)}</b>${ui.id(t.topic)}`,
       `${t.proposals.length}`, `${made}`, `${t.description_changes.length}`]};
   });
   // a discovery on its way: where it stands and its output, until its report stands below
@@ -488,28 +488,29 @@ function picked(flow, rules, story) {
     const stops = graph.edges.filter(e => own(e) && (e.way === "stop" || e.way === "waits"));
     const named = new Set([round, on, ...out, ...stops].filter(Boolean).flatMap(e => e.rules.map(r => r.rule)));
     const rest = (step.decided || []).filter(id => !named.has(id));
-    let n = 0;
-    const part = (title, body) => body ? ui.part(++n, title, body) : "";
+    // a stage told as it runs: before it, while it runs, after it — where a pass and a refusal part ways —, and what else
+    const passes = ui.part(step.gate === "none" ? "if its verdict is yes" : "if the gate passes",
+      ruleGroup("", [...(step.passed || []), ...(on ? on.rules.map(r => r.rule) : [])], rules, story, p.stage)
+      + ui.hint(`→ on to <b>${esc(next)}</b>`, {block: true, html: true}), {branch: true, level: 4});
+    const refuses = ui.part(step.gate === "none" ? "if it asks for changes" : "if a check refuses",
+      (round ? ruleGroup("once more into this stage", ids([round]), rules, story, p.stage) : "")
+      + waysLine(out, "back to an earlier stage", rules) + (stops.length ? ruleGroup("stop, or wait for a person", ids(stops), rules, story, p.stage) : ""),
+      {branch: true, level: 4});
     return ui.card(esc(p.stage), esc((step.window || "") + (step.gate === "none" ? " · decides with its verdict, no gate" : "")),
-      part("Before it — the gate before the stage asks; a refusal keeps it from starting", ruleGroup("", step.gate_before, rules, story, p.stage))
-      + part(`It is told ${ui.hint(`— ${(step.told || []).length} instructions`)}`, foldGroup(`told:${p.stage}`, "show what it is told", step.told, rules, story, p.stage))
-      + part(`The gate after it asks ${ui.hint(`— ${(step.gate_after || []).length} checks, each can refuse`)}`, foldGroup(`checks:${p.stage}`, "show the checks", step.gate_after, rules, story, p.stage))
-      + part(step.gate === "none" ? "Its verdict decides" : "When the gate passes",
-          ruleGroup("", [...(step.passed || []), ...(on ? on.rules.map(r => r.rule) : [])], rules, story, p.stage)
-          + ui.hint(`→ on to <b>${esc(next)}</b>`, {block: true, html: true}))
-      + part(step.gate === "none" ? "When it asks for changes" : "When a check refuses",
-          (round ? ruleGroup("once more into this stage", ids([round]), rules, story, p.stage) : "")
-          + waysLine(out, "back to an earlier stage", rules) + (stops.length ? ruleGroup("stop, or wait for a person", ids(stops), rules, story, p.stage) : ""))
-      + part("The runner also decides here", ruleGroup("", rest, rules, story, p.stage))
-      + (into.length ? part("Ways back to this stage", waysLine(into, "ways back to this stage", rules)) : ""));
+      ui.part(`Before ${ui.hint("— the gate before the stage asks; a refusal keeps it from starting")}`, ruleGroup("", step.gate_before, rules, story, p.stage))
+      + ui.part(`While it runs ${ui.hint(`— it is told ${(step.told || []).length} instructions`)}`, foldGroup(`told:${p.stage}`, "show what it is told", step.told, rules, story, p.stage))
+      + ui.part(`After ${ui.hint(step.gate === "none" ? "— its verdict decides, no gate" : `— the gate asks ${(step.gate_after || []).length} checks, each can refuse`)}`,
+          foldGroup(`checks:${p.stage}`, "show the checks", step.gate_after, rules, story, p.stage) + ui.branches(passes, refuses) || " ")
+      + ui.part("The runner also decides here", ruleGroup("", rest, rules, story, p.stage))
+      + (into.length ? ui.part("Ways back to this stage", waysLine(into, "ways back to this stage", rules)) : ""));
   }
   if (p.type === "gate") {
     const [where, stage] = p.gate.split(":"), step = flow.steps.find(s => s.stage === stage) || {};
     const round = graph.edges.find(e => e.source === stage && e.target === stage && e.way === "again");
     return ui.card(`gate ${esc(where === "gate-before" ? "before" : "after")} ${esc(stage)}`,
       where === "gate-before" ? "a refused check keeps the stage from starting" : "a refused check sends the story once more into its step",
-      ruleGroup("1 · its checks — each can refuse", (where === "gate-before" ? step.gate_before : step.gate_after) || [], rules, story, stage)
-      + (where === "gate-after" && round ? ruleGroup("2 · when one refuses — what decides where the story goes", ids([round]), rules, story, stage) : "")
+      ruleGroup("its checks — each can refuse", (where === "gate-before" ? step.gate_before : step.gate_after) || [], rules, story, stage)
+      + (where === "gate-after" && round ? ruleGroup("when one refuses — what decides where the story goes", ids([round]), rules, story, stage) : "")
       + ruleGroup("also at every gate", flow.every_gate, rules, story, stage));
   }
   const edge = graph.edges.concat(graph.every_gate || [], graph.anywhere || []).find(e => `${e.source}>${e.target}>${e.way}` === p.key);
@@ -664,15 +665,15 @@ function components() {
       ["toolbar", ui.toolbar(ui.switch([{label: "story", pressed: true}, {label: "task"}]))],
       ["inflow · quiet-line", ui.inflow("Inflow →", "a wish, a discovery, a finding fill the backlog") + ui.quietLine(`Beside that: ${ui.link("2 open findings →")}`)],
       ["notice", ui.notice("What comes next stands here.") + ui.notice("The factory ended on its own.", {ended: true, action: ui.btn("▶ start", {primary: true, plain: true})})],
-      ["story-card", ["draft", "approved", "running", "stopped", "delivered", "superseded"].map(s => ui.storyCard(Object.assign({}, card, {state: s}))).join("")],
-      ["ticket", ui.ticket({kind: "wish", target: "", word: "running", state: "running", id: "r-12 · Ann", actions: ui.btn("take back", {small: true, danger: true})})],
-      ["option", ui.option({advised: true, pick: ui.btn("a", {primary: true}), text: "the recommended answer"}) + ui.option({pick: ui.btn("b"), text: "another answer"})],
+      ["story-card", `<ul>${["draft", "approved", "running", "stopped", "delivered", "superseded"].map(s => ui.storyCard(Object.assign({}, card, {state: s}))).join("")}</ul>`],
+      ["ticket", `<ul>${ui.ticket({kind: "wish", target: "", word: "running", state: "running", id: "r-12 · Ann", actions: ui.btn("take back", {small: true, danger: true})})}</ul>`],
+      ["option", `<ul>${ui.option({advised: true, pick: ui.btn("a", {primary: true}), text: "the recommended answer"}) + ui.option({pick: ui.btn("b"), text: "another answer"})}</ul>`],
       ["list-item", ui.list([{mark: "done", what: ui.story(sample.story, sample.title), aside: "today 10:12<br>$3.10"}])],
       ["delivery", ui.delivery({head: true}) + ui.delivery({at: "10:12", story: sample.story, title: sample.title, epic: sample.epic, event: "BookLent", seconds: "14 min", tokens: "4.1 M", cost: "$3.10"})],
-      ["domain-node · facts · rule-line", ui.domainNode(1, "Domain model", "from its glossary")
+      ["domain-node · facts · rule-line", ui.domainNode("Domain model", "from its glossary")
         + ui.facts([{kind: "aggregate", terms: [{name: "Loan"}]}, {kind: "values", terms: [{name: "Due date"}, {name: "Money", shared: true}]}])
         + ui.ruleLine("A reader holds three loans at most.")],
-      ["proposal", ui.proposal({goal: "Readers find a free copy", intent: "fewer empty shelves", metric: "CopyFound", contact: "the desk", id: "p-1", actions: ui.btn("✦ make it an epic", {write: true})})],
+      ["proposal", `<ul>${ui.proposal({goal: "Readers find a free copy", intent: "fewer empty shelves", metric: "CopyFound", contact: "the desk", id: "p-1", actions: ui.btn("✦ make it an epic", {write: true})})}</ul>`],
       ["aside · section · prose", ui.aside("Why it is not built", ui.prose("It **waits** for `a-reader-joins`.")) + ui.section({heading: "Scope", text: "- one\n- two"})],
       ["trail · trail-item", ui.trail([{words: "readers may reserve", tone: "wait", text: "writing", by: "Ann", actions: ""}, {words: "a due-date reminder", tone: "ok", text: "✓ became the draft story x", actions: ui.btn("open", {small: true})}]) + `<ul>${ui.trailItem({words: "fines in another currency", tone: "bad", text: "✗ failed", actions: ""})}</ul>`],
       ["tab", ui.tab({id: "gallery-a", key: 9, n: 2, on: true}) + ui.tab({id: "gallery-b", key: 8})],
@@ -704,10 +705,10 @@ function components() {
         + ui.record({accept: true, about: "acceptance · a-1", text: "Look at the lending page.", body: ui.actions(ui.btn("accept", {primary: true}))})],
       ["tiles", ui.tiles([1, 2, 3, 4, 5].map(n => ui.tile(`${n}`, `figure ${n}`)).join(""), {many: true})],
       ["days", ui.days([{day: "2026-10-15", rows: [{at: "10:12", story: sample.story, title: sample.title, epic: sample.epic, event: "BookLent", seconds: "14 min", cost: "$3.10"}]}])],
-      ["domain · kernel", ui.domain(ui.domainNode(1, "Domain model", "") + ui.facts([{kind: "aggregate", terms: [{name: "Loan"}]}])) + ui.kernel([{kind: "values", terms: [{name: "Money", shared: true}]}])],
+      ["domain · kernel", ui.domain(ui.domainNode("Domain model", "") + ui.facts([{kind: "aggregate", terms: [{name: "Loan"}]}])) + ui.kernel([{kind: "values", terms: [{name: "Money", shared: true}]}])],
       ["proposals", ui.proposals([{goal: "one goal", id: "p-1", epic: "lending"}, {goal: "another goal", id: "p-2", actions: ui.btn("make it an epic")}])],
-      ["rule-group · ways · part", ui.part(1, "When a check refuses", ui.ruleGroup("its checks", [ui.accordion({key: "gallery:rule", variant: "row", open: false, head: "The tests are red", meta: ui.ruleId("GATE-TESTS", "gate", "fail")})])
-        + ui.ways("back to an earlier stage", [{source: "build", target: "plan", key: "build>plan>back", rules: "a plan gap"}]))],
+      ["rule-group · ways · part · branches", ui.branches(ui.part("if the gate passes", ui.hint("→ on to <b>test</b>", {block: true, html: true}), {branch: true, level: 4}), ui.part("if a check refuses", ui.ruleGroup("its checks", [ui.accordion({key: "gallery:rule", variant: "row", open: false, head: "The tests are red", meta: ui.ruleId("GATE-TESTS", "gate", "fail")})])
+        + ui.ways("back to an earlier stage", [{source: "build", target: "plan", key: "build>plan>back", rules: "a plan gap"}]), {branch: true, level: 4}))],
       ["flow", ui.flow(`<svg viewBox="0 0 880 60" role="img" aria-label="a drawing the factory gives"><text x="10" y="36">the factory draws the flow</text></svg>`)],
       ["table", ui.table([{label: "story"}, {label: "state"}, {label: "tokens", num: true}, {act: true}], [[ui.story(sample.story, sample.title), "ready", "1.2 M", ui.btn("run it", {small: true})]])],
       ["terminal", ui.terminal()],
