@@ -8,6 +8,8 @@ under `.flow` select the drawing the factory makes of a flow: its classes are th
 
 #: The one width at which the page narrows — the frame for the window, a component for its container (WP-181).
 NARROW = "760px"
+#: The one wider width (WP-183): the main region's content from which a view takes two columns.
+WIDE = "1500px"
 
 #: The blocks of the page's frame — the bar, the main region, the drawer — written in the page itself, not by a
 #: component; and the few utilities a component may add beside its block.
@@ -27,7 +29,7 @@ th { text-align: left; font: 500 var(--text-xs) var(--mono); letter-spacing: .08
   border-bottom: 1px solid var(--line); padding: var(--space-2) var(--space-2); }
 td { border-bottom: 1px solid var(--line); padding: var(--space-3) var(--space-2); vertical-align: top; }
 tr:last-child td { border-bottom: 0; }
-.wrap { max-width: var(--measure); margin: 0 auto; padding: 0 var(--space-5); }
+.wrap { max-width: var(--measure); margin: 0 auto; padding: 0 clamp(var(--space-5), 3vw, var(--space-7)); }
 .sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
 /* a state the factory names, as the one tone every display of it takes — and the palette by its own names */
@@ -237,6 +239,7 @@ div.id { margin-top: 2px; }
 .bars__n { font: 500 var(--text-sm) var(--mono); color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
 .toolbar { display: flex; gap: var(--space-2) var(--space-4); flex-wrap: wrap; align-items: center; margin-top: var(--space-3); }
 .inflow { display: flex; gap: var(--space-4); align-items: baseline; margin-top: var(--space-5); }
+.inflow > .caption { flex: none; }
 .quiet-line { margin-top: var(--space-4); font: 400 var(--text-sm) var(--mono); color: var(--muted); }
 .link--quiet { font: inherit; text-decoration: none; }
 .notice { margin-top: var(--space-5); display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap; padding: var(--space-4) var(--space-4);
@@ -538,6 +541,33 @@ div.id { margin-top: 2px; }
 .page-head__eyebrow { font: 400 var(--text-sm) var(--mono); letter-spacing: 2.5px; text-transform: uppercase; color: var(--brand-text); margin-bottom: var(--space-3); }
 .page-head__title { font: 700 clamp(var(--text-2xl), 4vw, var(--text-3xl))/1.1 var(--display); letter-spacing: -1px; }
 .page-head__lede { margin-top: var(--space-3); color: var(--muted); max-width: 44em; font-size: var(--text-lg); }
+/* the templates of a wide window (WP-183): stacked as one column, side by side from the wide width */
+.split, .master, .reader { display: grid; gap: var(--space-5); align-items: start; }
+/* each column is a place of its own: what stands in it takes the form its column's width gives it */
+.split__main, .split__side, .master__list, .master__detail, .reader__text { min-width: 0; container-type: inline-size; }
+.split__main > :first-child, .split__side > :first-child, .master__list > :first-child, .master__detail > :first-child { margin-top: 0; }
+.split { margin-top: var(--space-5); }
+.master__detail { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-card); padding: var(--space-5); }
+.master--bare > .master__detail { background: none; border: 0; padding: 0; }
+.reader__toc { border-bottom: 1px solid var(--line); padding-bottom: var(--space-3); }
+.reader__sections { list-style: none; margin: var(--space-2) 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); }
+.reader__goto { font: 400 var(--text-sm) var(--mono); color: var(--muted); background: none; border: 0; padding: var(--space-1) 0; cursor: pointer; text-align: left; }
+.reader__goto:hover { color: var(--brand-text); }
+.reader__goto:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.reader__text { max-width: var(--read-measure); }
+.reader__text > section { scroll-margin-top: calc(var(--bar-height, 0px) + var(--space-4)); padding-top: var(--space-2); }
+.reader__text h2 { font: 600 var(--text-xl) var(--display); margin: var(--space-5) 0 var(--space-2); }
+@container (width >= 1500px) {
+  .split, .master[data-open], .reader { grid-template-columns: repeat(var(--grid-columns), minmax(0, 1fr)); gap: var(--space-6); }
+  .split__main { grid-column: span 8; } .split__side { grid-column: span 4; }
+  .master__list { grid-column: span 5; } .master__detail { grid-column: span 7; }
+  .master--narrow-list > .master__list { grid-column: span 4; } .master--narrow-list > .master__detail { grid-column: span 8; }
+  .master__detail, .reader__toc { position: sticky; top: calc(var(--bar-height, 0px) + var(--space-4));
+    max-height: calc(100vh - var(--bar-height, 0px) - 2 * var(--space-4)); overflow-y: auto; }
+  .reader__toc { grid-column: span 3; border-bottom: 0; padding-bottom: 0; }
+  .reader__sections { flex-direction: column; flex-wrap: nowrap; }
+  .reader__text { grid-column: span 9; }
+}
 .drawer-frame h2 { font: 600 var(--text-base) var(--display); margin: var(--space-5) 0 var(--space-2); }
 .drawer-frame__close { float: right; }
 .drawer-frame > .actions { margin: var(--space-4) 0 var(--space-5); }

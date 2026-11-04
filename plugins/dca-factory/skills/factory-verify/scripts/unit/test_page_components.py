@@ -152,9 +152,15 @@ class PageComponentsTest(unittest.TestCase):
             self.assertIn("repeat(var(--grid-columns), minmax(0, 1fr))", rule, block)
         self.assertIn("--grid-columns: 12;", page_tokens.TOKENS)
 
-    def test_one_width_narrows_the_page_the_frame_by_the_window_a_component_by_its_place(self):
-        widths = re.findall(r"@(media|container) \((?:max-width: |width < )([0-9]+px)\)", page_style.STYLE)
-        self.assertEqual({page_style.NARROW}, {w for _kind, w in widths})
+    def test_two_named_widths_the_frame_by_the_window_a_component_by_its_place(self):
+        # one narrow width and one wide (WP-183), each named once; the script's wide width is the stylesheet's
+        widths = re.findall(r"@(media|container) \((?:max-width: |width < |width >= )([0-9]+px)\)", page_style.STYLE)
+        self.assertEqual({page_style.NARROW, page_style.WIDE}, {w for _kind, w in widths})
+        self.assertIn(f"const WIDE_PX = {page_style.WIDE[:-2]};", page_core.SCRIPT_CORE)
+        wide = re.search(r"@container \(width >= [0-9]+px\) \{(.*?)\n\}", page_style.STYLE, re.S).group(1)
+        for template in ("split", "master", "reader"):
+            self.assertIn(f".{template}", wide, template)
+        self.assertIn("repeat(var(--grid-columns), minmax(0, 1fr))", wide)
         self.assertEqual({"media", "container"}, {kind for kind, _w in widths})
         frame = re.search(r"@media \(max-width: [0-9]+px\) \{(.*?)\n\}", page_style.STYLE, re.S).group(1)
         blocks = {re.split(r"__|--", c)[0] for c in re.findall(r"\.([a-z][\w-]*)", frame)}

@@ -27,12 +27,22 @@ const ICONS = {
   wait: '<path d="M8 6.5v7M12 6.5v7"/>', ask: '<path d="M7.6 7.6a2.5 2.5 0 1 1 3.4 2.3c-.7.3-1 .8-1 1.5v.6M10 14.4v.1"/>'};
 const S = {tab: "now", menu: null, help: null, status: null, decisions: null, discover: null, requests: null, follow: null, followSource: null,
            followLines: [], drawer: null, opener: null, drafts: {}, fold: new Map(),
-           rules: null, rulesFor: null, ruleKind: "story", ruleStory: "", flowPick: null, partText: {}, meta: {}};
+           rules: null, rulesFor: null, ruleKind: "story", ruleStory: "", flowPick: null, partText: {}, meta: {},
+           part: "", detail: "", storyView: {}, changing: ""};
 const stored = key => { try { return localStorage.getItem(key) || ""; } catch (e) { return ""; } };
 const store = (key, value) => { try { localStorage.setItem(key, value); } catch (e) {} };
 // the page opens where it stands; a link to a view opens that view
 const known = id => id === "now" || id === "components" || TABS.some(([t]) => t === id);
-if (known(location.hash.slice(1))) S.tab = location.hash.slice(1);
+// a view, and where it holds one: `#describe/<part>` reads a part, `#backlog/<story>` opens a story (WP-183)
+function readHash() {
+  const [tab, sub] = location.hash.slice(1).split("/");
+  if (!known(tab)) return false;
+  S.tab = tab;
+  S.part = tab === "describe" && sub ? decodeURIComponent(sub) : "";
+  S.detail = tab === "backlog" && sub ? decodeURIComponent(sub) : "";
+  return true;
+}
+readHash();
 if (location.hash === "#spec" || S.tab === "spec") S.tab = "describe";                // what holds is part of the description
 // `#rules:<story>[:<rule>]` opens the rules with that story's gate runs marked, and the rule read
 if (location.hash.startsWith("#rules:")) {
@@ -151,6 +161,7 @@ async function press(button) {
     if (pick && pick.value) fields.option = pick.value;
     if (!words) { toast(`${action.label}: ${action.text}`, true); return; }
     if (r.prefix) words = `${r.prefix}\n\n${words}`;
+    if (r.lead) words = `${r.lead} ${words}`;                 // the same line: `tech.md — Stack: <words>`
   }
   try {
     const data = await api("/api/request", Object.assign({kind: r.kind, words, by: by()}, fields));
@@ -159,6 +170,7 @@ async function press(button) {
     if (box) { box.querySelector("textarea").value = ""; delete S.drafts[r.draft || action.skill]; }
     refresh();
     if (S.drawer) openStory(S.drawer);
+    if (S.detail) loadStory(S.detail);
   } catch (e) { toast(e.message, true); }
 }
 document.addEventListener("input", event => {
@@ -187,12 +199,21 @@ const CALLS = {
   async hide(node) { await api("/api/requests/drop", {id: node.dataset.id}); toast("hidden — the draft stays in the backlog"); },
   async follow(node) { follow(node.dataset.kind, node.dataset.id); },
   async unfollow() { follow(null); },
+  async closeDetail() { S.detail = ""; place(); render(); },
   async close() { S.drawer = null; $("drawer").hidden = true; forget("d"); if (S.opener && document.contains(S.opener)) S.opener.focus(); S.opener = null; },
 };
 
 document.addEventListener("click", async event => {
-  const target = event.target.closest("[data-press],[data-call],[data-story],[data-tab],[data-pick],[data-flow],[data-filter]");
+  const target = event.target.closest("[data-press],[data-call],[data-story],[data-tab],[data-pick],[data-flow],[data-filter],[data-part],[data-goto],[data-change]");
   if (!target) return;
+  if (target.dataset.part !== undefined) { S.part = target.dataset.part; S.changing = ""; place(); render(); return window.scrollTo(0, 0); }
+  if (target.dataset.goto) { const at = $(target.dataset.goto); if (at) at.scrollIntoView({behavior: "smooth", block: "start"}); return; }
+  if (target.dataset.change !== undefined) {
+    S.changing = target.dataset.change; render();
+    const field = S.changing && target.closest("section") && target.closest("section").querySelector("textarea");
+    if (field) field.focus();
+    return;
+  }
   if (target.dataset.flow) { S.ruleKind = target.dataset.flow; return render(); }
   if (target.dataset.filter) { S.backlogFilter = target.dataset.filter; forgetFolds("epic:"); return render(); }
   if (target.dataset.pick) return scheme(target.dataset.pick);
@@ -262,8 +283,9 @@ async function refresh() {
 function show(tab) {
   if (S.drawer) CALLS.close();
   S.tab = tab;
+  S.part = S.detail = S.changing = "";
   store("factory.tab", tab);
-  history.replaceState(null, "", "#" + tab);
+  place();
   render();
   window.scrollTo(0, 0);
 }
@@ -338,6 +360,30 @@ document.addEventListener("keydown", event => {
   S.menu = null; menus(); event.stopImmediatePropagation();
   if (toggle) toggle.focus();
 }, true);
+// where the page stands, in its address — a reload opens the same
+function place() {
+  const sub = S.tab === "describe" ? S.part : S.tab === "backlog" ? S.detail : "";
+  history.replaceState(null, "", "#" + S.tab + (sub ? "/" + encodeURIComponent(sub) : ""));
+}
+// the wide width of the stylesheet (page_style.WIDE): the main region's content from which a view takes two columns
+const WIDE_PX = 1500;
+function wide() {
+  const main = $("main"), cs = getComputedStyle(main);
+  return main.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) >= WIDE_PX;
+}
+let wasWide = null;
+const sized = new ResizeObserver(() => {
+  document.documentElement.style.setProperty("--bar-height", $("topbar").getBoundingClientRect().height + "px");
+  const now = wide();
+  if (now === wasWide) return;
+  const first = wasWide === null;
+  wasWide = now;
+  // a story open in the drawer moves beside the list when the window grows, and back into the drawer when it narrows
+  if (now && S.drawer && S.tab === "backlog") { const id = S.drawer; CALLS.close(); S.detail = id; place(); }
+  if (!first) render();
+});
+sized.observe($("main"));
+sized.observe($("topbar"));
 const partOf = id => ((S.help || {}).parts || []).find(p => p.tabs.includes(id));
 // whether the backlog runs: a runner from a terminal or a session's, or the factory's worker with the backlog on
 const backlogOn = st => { const w = st.worker; return !!(w && w.alive && (w.how !== "up" || w.backlog)); };
@@ -487,7 +533,13 @@ document.addEventListener("mousemove", event => {
 // (WCAG 2.1.4: a one-key shortcut acts only where its element has the focus).
 document.addEventListener("keydown", event => {
   if (event.target.closest("textarea, input, select")) return;
-  if (event.key === "Escape") return CALLS.close();
+  if (event.key === "Escape") {
+    if (S.drawer) return CALLS.close();
+    if (S.changing) { S.changing = ""; return render(); }
+    if (S.detail) return CALLS.closeDetail();
+    if (S.part) { S.part = ""; place(); return render(); }
+    return;
+  }
   const at = event.target.closest('[role="tab"]');
   if (!at) return;
   const ids = [...$("tabs").querySelectorAll('[role="tab"]')].map(b => b.dataset.tab), i = ids.indexOf(at.dataset.tab);
@@ -499,10 +551,7 @@ document.addEventListener("keydown", event => {
   if (to !== S.tab) show(to);
   $("tab-" + to).focus();
 });
-window.addEventListener("hashchange", () => {
-  const tab = location.hash.slice(1);
-  if (tab !== S.tab && known(tab)) show(tab);
-});
+window.addEventListener("hashchange", () => { if (readHash()) render(); });
 """
 
 SCRIPT_START = r"""

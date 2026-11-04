@@ -235,6 +235,16 @@ ui.curveTip = (c, rows) => `<b class="curve__title">${esc(c.title || c.story)}</
 
 // --- templates
 ui.pageHead = (eyebrow, title, lede) => `<div class="page-head"><div class="page-head__eyebrow">${esc(eyebrow)}</div><h1 class="page-head__title">${esc(title)}</h1>${lede ? `<p class="page-head__lede">${esc(lede)}</p>` : ""}</div>`;
+// a wide window in two columns, never half and half (WP-183) — below the wide width each stacks as one column
+// content and the column beside it: what belongs to the content, on 4 of the 12 columns
+ui.split = o => `<div class="split"><div class="split__main">${o.main}</div><div class="split__side">${o.side}</div></div>`;
+// a list beside the item opened from it; without one the list takes the width
+ui.master = o => `<div class="${mods("master", [o.narrowList && "narrow-list", o.bare && "bare"])}"${o.detail ? " data-open" : ""}><div class="master__list">${o.list}</div>`
+  + (o.detail ? `<section class="master__detail" aria-label="${esc(o.label || "opened")}">${o.detail}</section>` : "") + `</div>`;
+// a document read as one: its sections beside it, the text at a reading measure
+ui.reader = o => `<div class="reader"><nav class="reader__toc" aria-label="${esc(o.label || "sections")}">${o.head || ""}<ol class="reader__sections">`
+  + (o.sections || []).map(s => `<li><button type="button" class="reader__goto" data-goto="${esc(s.id)}">${esc(s.heading)}</button></li>`).join("")
+  + `</ol></nav><article class="reader__text">${o.body}</article></div>`;
 ui.drawerFrame = (close, head, body) => `<div class="drawer-frame"><div class="drawer-frame__close">${close}</div>${head}${body}</div>`;
 ui.gallery = sections => `<div class="gallery">${sections.map(s => `<section class="gallery__level"><h2 class="gallery__title">${esc(s.level)}</h2>${s.items.map(([name, html]) =>
   `<div class="gallery__item"><h3 class="gallery__name">${esc(name)}</h3><div class="gallery__show">${html}</div></div>`).join("")}</section>`).join("")}</div>`;

@@ -217,8 +217,18 @@ def _story_all():
 
 
 def _part_all():
-    return dict(path="product/overview.md", sections=[dict(heading="What", text="A lending library's desk and its readers."),
-                                                       dict(heading="For whom", text="- the desk\n- the readers")])
+    # seven sections, some long — a part is read as a document beside its sections (WP-183)
+    long = ("The desk lends books to readers and takes them back. A reader holds three loans at most; a loan runs three "
+            "weeks and renews once. What the desk sees first is what waits: a return to book in, a reservation to hand "
+            "out, a fine to settle. ")
+    return dict(path="product/overview.md", sections=[
+        dict(heading="What and for whom", text=long * 2 + "\n\n- the desk\n- the readers"),
+        dict(heading="Surfaces", text="- the desk's screen, in the library\n- a reader's page, on a phone"),
+        dict(heading="How it works", text=long * 3),
+        dict(heading="Look and feel", text="Quiet, legible at arm's length; the desk's actions one press away."),
+        dict(heading="Qualities", text="- a return books in within a second\n- nothing is lost when the network drops"),
+        dict(heading="Not part of the product", text="Buying books, a catalogue search across libraries."),
+        dict(heading="Open questions", text=long)])
 
 
 def _empty():

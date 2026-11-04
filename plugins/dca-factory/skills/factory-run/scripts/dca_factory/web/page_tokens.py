@@ -44,7 +44,7 @@ PUBLIC = {
     "--radius-control": "a control's corner: a button, a field (7 px)",
     "--radius-card": "a card's corner (12 px)",
     "--radius-round": "a state, an event, a dot: round",
-    "--measure": "the page's width",
+    "--measure": "the page's widest width; 1100px keeps it one column on a wide window",
     "--logo": "the logo in the bar, an url(); none keeps the mark — per scheme under :root[data-scheme=\"dark\"]",
     "--logo-width": "the logo's width in the bar",
 }
@@ -108,7 +108,8 @@ TOKENS = """
   --radius-control: 7px;
   --radius-card: 12px;
   --radius-round: 999px;
-  --measure: 1100px;
+  --measure: min(100%, 1840px);
+  --read-measure: 70ch;
   --grid-columns: 12;
   --fold-title: calc(var(--space-3) + 14px + var(--space-3));  /* where a fold's title starts, after its caret's column */
   --caret: max(11px, .75em);

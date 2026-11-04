@@ -33,15 +33,16 @@ function column(c) {
 }
 function now(st) {
   const rows = Object.fromEntries((st.rows || []).map(r => [r.story, r]));
-  const recent = (st.delivered_order || []).slice(0, 3).map(id => rows[id]).filter(Boolean).map(r => ({mark: "done",
+  const recent = (st.delivered_order || []).slice(0, 6).map(id => rows[id]).filter(Boolean).map(r => ({mark: "done",
     what: ui.story(r.story, r.title) + ui.id(r.epic, {block: true}), aside: `${esc(when(r.delivered_text))}<br>${esc(r.cost_text || "")}`}));
   const sums = [st.cost_text, st.seconds_text].filter(Boolean).join(" · ");
   const findings = (st.findings || []).length;
+  // the cycle across the width; beneath it what was delivered, and beside that what fills the backlog (WP-183)
   return ui.board((st.now || []).map(column))
-    + ui.inflow("Inflow →", "a wish, a discovery, a finding, an epic's journey fill the backlog")
-    + wishPart(st)
-    + (recent.length ? ui.card("Last delivered", sums ? `${esc(sums)} in all` : "", ui.list(recent) + ui.link("delivered →", {to: true, attrs: {"data-tab": "delivered"}})) : "")
-    + (findings ? ui.quietLine(`Beside that: ${ui.link(`${findings} open finding${findings > 1 ? "s" : ""} beside their stories →`, {quiet: true, attrs: {"data-tab": "backlog"}})}`) : "");
+    + ui.split({
+        main: (recent.length ? ui.card("Last delivered", sums ? `${esc(sums)} in all` : "", ui.list(recent) + ui.link("delivered →", {to: true, attrs: {"data-tab": "delivered"}})) : "")
+          + (findings ? ui.quietLine(`Beside that: ${ui.link(`${findings} open finding${findings > 1 ? "s" : ""} beside their stories →`, {quiet: true, attrs: {"data-tab": "backlog"}})}`) : ""),
+        side: ui.inflow("Inflow →", "a wish, a discovery, a finding, an epic's journey fill the backlog") + wishPart(st)});
 }
 
 // --- the wish: one part wherever it stands, the field and the trail of what became of each wish ------------------------
@@ -78,20 +79,43 @@ function partBody(name) {
 }
 
 function describe(st) {
-  const parts = (st.description || []).map(p => {
-    const key = `part:${p.part}`;
-    return {key, open: opened(key), body: () => partBody(p.part), cells: [
-      `${ui.mark(p.mark)}<b>${esc(p.part)}</b>${ui.id(p.path, {line: true})}`,
-      (p.present ? esc((p.sections || []).join(" · ")) : ui.flag("missing", "gone"))
-        + ((p.missing || []).length ? ` ${ui.flag("missing: " + p.missing.join(", "), "changes")}` : "")
-        + ((p.empty || []).length ? ` ${ui.flag("empty: " + p.empty.join(", "), "changes")}` : "")]};
-  });
-  return ui.card("The parts", "written by you, through the description — what is built, how, and in which domain; open one to read it",
-      ui.foldTable([{label: "part", width: "minmax(0, 14em)"}, {label: "sections"}], parts))
-    + domainCard()
+  if (S.part) return partReader(st, S.part);
+  // the parts as a short list beside the domain; one opens as a document of its own (WP-183)
+  const parts = (st.description || []).map(p => ({mark: p.mark,
+    what: ui.link(p.part, {ink: true, attrs: {"data-part": p.part}}) + ui.id(p.path, {block: true})
+      + (p.present ? ui.hint((p.sections || []).join(" · "), {prose: true}) : ui.flag("missing", "gone"))
+      + ((p.missing || []).length ? ` ${ui.flag("missing: " + p.missing.join(", "), "changes")}` : "")
+      + ((p.empty || []).length ? ` ${ui.flag("empty: " + p.empty.join(", "), "changes")}` : "")}));
+  return ui.split({main: domainCard(), side:
+    ui.card("The parts", "written by you, through the description — open one to read it", ui.list(parts))
     + ui.card("Change the description", "", ui.intro(`In your words — <code>&lt;part&gt;: &lt;change&gt;</code> where it is one part. Where it needs a decision of yours, it asks here.`, {html: true})
       + act((st.entries || {}).describe))
-    + ((S.decisions || {}).records || []).filter(r => (r.actions || []).length && r.place === "describe").map(recordCard).join("");
+    + ((S.decisions || {}).records || []).filter(r => (r.actions || []).length && r.place === "describe").map(recordCard).join("")});
+}
+// a part read as a document: its sections beside the text; a section changes in the person's words alone — the press
+// only opens the field, the field's own button writes the request (WP-183)
+// written as the description skill takes a change to one section: `<file> — <section>: <change>`
+const sectionChange = (base, part, file, heading) => Object.assign({}, base, {text: `what “${heading}” should say instead — in your words`,
+  request: Object.assign({}, base.request, {draft: `describe:${part}:${heading}`, lead: `${file} — ${heading}:`})});
+function partReader(st, name) {
+  const back = ui.link("← the description", {quiet: true, compact: true, attrs: {"data-part": ""}});
+  const v = S.partText[name];
+  if (!v || v.loading) {
+    if (!v) { S.partText[name] = {loading: true}; loadPart(name); }
+    return back + ui.empty(`Reading ${name}…`);
+  }
+  if (v.error) return back + ui.error(v.error, {block: true});
+  if (!v.sections.length) return back + ui.empty(`${v.path} is missing.`);
+  const base = (st.entries || {}).describe;
+  const body = v.sections.map((sec, i) => {
+    const key = `${name}:${sec.heading}`;
+    const change = !base ? "" : S.changing === key
+      ? ui.caption(`${name} · ${sec.heading}`) + act(sectionChange(base, name, v.path.split("/").pop(), sec.heading)) + ui.link("cancel", {quiet: true, compact: true, attrs: {"data-change": ""}})
+      : ui.link("change this section", {quiet: true, compact: true, attrs: {"data-change": key}});
+    return `<section id="section-${i}"><h2>${esc(sec.heading)}</h2>${sec.text ? ui.prose(sec.text) : ui.empty("empty")}${change}</section>`;
+  }).join("");
+  return ui.reader({label: `${name} — its sections`, head: back + ui.id(v.path, {block: true}),
+    sections: v.sections.map((sec, i) => ({id: `section-${i}`, heading: sec.heading})), body});
 }
 
 // --- the spec: what holds, per context — its domain model, its features, rules and scenarios ---------------------------
@@ -266,13 +290,13 @@ function backlog(st) {
         + ui.actions(acts(e.actions) + (st.journeys || []).filter(j => j.epic === e.epic).map(j => ui.hint(j.text)).join(""))});
   }).join("");
   const findings = (st.findings || []).map(f => [ui.state(f.severity, f.severity), `${esc(f.plain || f.defect)}${ui.id(`${f.row} · ${f.where}`, {block: true})}`, act(f.action)]);
-  return wishPart(st)
+  return ui.master({label: "the story", detail: storyDetail(), list: wishPart(st)
     + (epics || filter !== "all" ? ui.card("Epics", filter === "all" ? "newest first — open one to see its stories by where they stand" : filter === "drafts" ? "the drafts, waiting for your release" : "what is not delivered yet",
         filters + ui.legend(STRIP_KEY) + (epics || ui.empty("Nothing here.")))
       : ui.card("", "", ui.empty("The backlog is empty.")))
     + (findings.length ? ui.accordion({key: "findings", variant: "card", level: 2, open: opened("findings"),
         head: `Findings ${ui.hint(`${findings.length} the judge kept open — each to the backlog or done`)}`,
-        body: () => ui.table([{label: "severity"}, {label: "finding"}, {act: true}], findings)}) : "");
+        body: () => ui.table([{label: "severity"}, {label: "finding"}, {act: true}], findings)}) : "")});
 }
 
 // --- 3 run ---------------------------------------------------------------------------------------------------------
@@ -571,16 +595,35 @@ function rulesTab(st) {
     + ui.formRow({id: "overlay", label: "a story's gate runs", quiet: true, inline: true, attrs: {"data-overlay": ""},
         options: [{value: "", label: "no story"}, ...stories.map(id => ({value: id, selected: id === S.ruleStory}))]}));
   return ui.card(esc(kind), `${(v.rules || []).length} rules`, picks + storyLine(st, flow, story) + (flow.svg_one_at_a_time ? ui.flow(flow.svg_one_at_a_time) : ""))
-    + picked(flow, rules, story)
+    // the rule groups beside what is picked in the drawing (WP-183)
+    + ui.master({narrowList: true, bare: true, label: "what is picked", detail: picked(flow, rules, story), list: ""
     + folded("every-gate", "At every gate", "the checks each gate of this flow runs as well", flow.every_gate, rules, story)
     + folded("anywhere", "Anywhere in a run", "what stops a run or waits for a person at any step",
              [...new Set(((flow.graph || {}).anywhere || []).flatMap(e => e.rules.map(r => r.rule)))], rules, story)
     + folded("outside", "Outside the stages", "the whole run, the commit hook, every stage alike", v.outside || [], rules, story)
-    + ((v.problems || []).length ? ui.card("Problems", "the rulebook itself", `<ul>${v.problems.map(p => `<li>${esc(p)}</li>`).join("")}</ul>`) : "");
+    + ((v.problems || []).length ? ui.card("Problems", "the rulebook itself", `<ul>${v.problems.map(p => `<li>${esc(p)}</li>`).join("")}</ul>`) : "")});
 }
 
 // --- one story -----------------------------------------------------------------------------------------------------
+// a story opens beside the backlog's list where the window is wide, in the drawer elsewhere — one build of it (WP-183)
+const detailHere = () => S.tab === "backlog" && wide();
+async function loadStory(id) {
+  try { S.storyView[id] = await api(`/api/view/story?id=${encodeURIComponent(id)}`); }
+  catch (e) { S.storyView[id] = {error: e.message}; }
+  if (S.detail === id) render();
+}
+function storyDetail() {
+  if (!S.detail) return "";
+  if (!wide()) { const id = S.detail; S.detail = ""; setTimeout(() => openStory(id)); return ""; }
+  const close = ui.btn("close", {attrs: {"data-call": "closeDetail"}}), v = S.storyView[S.detail];
+  if (!v) { S.storyView[S.detail] = {loading: true}; loadStory(S.detail); }
+  if (!v || v.loading) return ui.drawerFrame(close, "", ui.empty(`Reading ${S.detail}…`));
+  if (v.error) return ui.drawerFrame(close, "", ui.error(v.error, {block: true}));
+  const [head, body] = storyParts(v, S.detail, "m");
+  return ui.drawerFrame(close, head, body);
+}
 async function openStory(id) {
+  if (detailHere()) { S.detail = id; delete S.storyView[id]; place(); render(); return; }
   if (!S.drawer) S.opener = document.activeElement;
   S.drawer = id;
   // below the bar, so the tabs and the factory's state stay in reach
@@ -594,6 +637,10 @@ async function openStory(id) {
   catch (e) { node.innerHTML = ui.drawerFrame(close, "", ui.error(e.message, {block: true})); return; }
   if (S.drawer !== id) return;
   forget("d");
+  const [head, body] = storyParts(v, id, "d");
+  node.innerHTML = ui.drawerFrame(close, head, body);
+}
+function storyParts(v, id, scope) {
   const row = v.row || {};
   // the factory's sections in its order, the scenarios where its criteria stood
   const scenarios = (v.scenarios || []).map(c => `<h3>${esc(c.title || c.key)}</h3>${c.rule ? ui.hint(c.rule, {block: true}) : ""}
@@ -605,13 +652,13 @@ async function openStory(id) {
   const head = ui.pageHead(v.epic, v.title || id, "")
     + ui.kv([["story", ui.id(id)], ["state", esc(row.state || v.situation || "")], v.context ? ["context", esc(v.context)] : null,
              ["file", `<code>${esc(v.path)}</code>`], row.tokens_text ? ["tokens", `${esc(row.tokens_text)}${row.cost_text ? " · " + esc(row.cost_text) : ""}`] : null]);
-  const body = ui.actions(acts((v.actions || []).filter(a => a.request.open !== "words"), "d")
+  const body = ui.actions(acts((v.actions || []).filter(a => a.request.open !== "words"), scope)
       + (Object.keys(v.stages || {}).length || row.mark === "running" ? ui.btn("output", {attrs: {"data-call": "follow", "data-kind": "story", "data-id": id}}) : ""))
-    + (v.actions || []).filter(a => a.request.open === "words" && !a.waits_on).map(a => `<h2>${esc(a.label)}</h2>${act(a, "d")}`).join("")
+    + (v.actions || []).filter(a => a.request.open === "words" && !a.waits_on).map(a => `<h2>${esc(a.label)}</h2>${act(a, scope)}`).join("")
     + sections
     + (stages.length ? `<h2>Processes</h2>${ui.table([{label: "process"}, {label: "runs", num: true}, {label: "time", num: true}, {label: "tokens", num: true},
         {label: "cost", num: true, hide: true}, {label: "why"}], stages)}` : "");
-  node.innerHTML = ui.drawerFrame(close, head, body);
+  return [head, body];
 }
 """
 
@@ -726,6 +773,14 @@ function components() {
       ["curve-tip", ui.curveTip(curve[2], [["cost so far", "$15.00"], ["this one", "$6.00"]])]]},
     {level: "templates", items: [
       ["page-head", ui.pageHead("Now", "Where it stands", "The lede of a tab.")],
+      ["split", ui.split({main: ui.card("The content", "8 of the 12 columns on a wide window", ui.intro("What the view is about.")),
+        side: ui.card("Beside it", "the other 4", ui.intro("What belongs to it."))})],
+      ["master", ui.master({label: "the opened item", list: ui.card("A list", "", ui.intro("Its items; one opens beside it.")),
+        detail: ui.drawerFrame(ui.btn("close"), ui.pageHead(sample.epic, sample.title, ""), ui.intro("The opened item."))})],
+      ["reader", ui.reader({label: "a part — its sections", head: ui.id("product/overview.md", {block: true}),
+        sections: [{id: "g-sec-1", heading: "What and for whom"}, {id: "g-sec-2", heading: "Surfaces"}],
+        body: `<section id="g-sec-1"><h2>What and for whom</h2>${ui.prose("A part of the description, read as a document.")}</section>`
+          + `<section id="g-sec-2"><h2>Surfaces</h2>${ui.prose("Each section with its own heading.")}</section>`})],
       ["drawer-frame", ui.drawerFrame(ui.btn("close"), ui.pageHead(sample.epic, sample.title, ""), ui.intro("The story's sections."))],
       ["gallery", ui.hint("this page", {block: true})]]}]);
 }

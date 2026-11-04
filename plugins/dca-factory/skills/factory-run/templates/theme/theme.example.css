@@ -76,7 +76,7 @@
   --radius-control: 7px;
   --radius-card: 12px;
   --radius-round: 999px;
-  --measure: 1100px;                             /* the page's width */
+  --measure: min(100%, 1840px);                  /* the page's widest width; 1100px keeps one column */
 }
 
 /* A light bar with a logo of your own, a dark one in the dark scheme:
