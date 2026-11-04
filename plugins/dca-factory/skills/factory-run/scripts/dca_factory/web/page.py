@@ -50,9 +50,8 @@ FACES = """
 
 #: The page's frame: the bar, the main region, the drawer — the one markup not drawn by a component.
 FRAME = """<header class="topbar" id="topbar">
-  <div class="wrap topbar__nav">
+  <div class="wrap topbar__app">
     <a class="brand" id="home" href="#now" data-tab="now" aria-label="now — where the factory stands" title="now — where the factory stands"><span class="brand__logo" aria-hidden="true">__MARK__</span><span class="brand__name">factory<span class="brand__dot">.</span></span><span class="brand__project" id="project"></span></a>
-    <nav class="tabs" id="tabs" role="tablist" aria-label="the factory's views"></nav>
     <div class="status">
       <span id="worker">…</span>
       <button type="button" class="btn btn--bar btn--primary btn--plain" data-call="up" id="up" title="work the released stories off, one after the other — factory.sh up" hidden>▶ start the backlog</button>
@@ -61,6 +60,7 @@ FRAME = """<header class="topbar" id="topbar">
       <span class="switch switch--bar" role="group" aria-label="colour scheme"><button type="button" class="switch__opt" data-pick="light" aria-pressed="false">light</button><button type="button" class="switch__opt" data-pick="auto" aria-pressed="false">auto</button><button type="button" class="switch__opt" data-pick="dark" aria-pressed="false">dark</button></span>
     </div>
   </div>
+  <div class="topbar__nav"><nav class="wrap tabs" id="tabs" role="tablist" aria-label="the factory's views"></nav></div>
 </header>
 <div class="banner" id="banner" role="alert" hidden><div class="wrap" id="banner-text"></div></div>
 <main class="wrap main" id="main" role="tabpanel"></main>

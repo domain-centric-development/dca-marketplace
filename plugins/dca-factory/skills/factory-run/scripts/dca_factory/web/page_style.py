@@ -44,18 +44,22 @@ tr:last-child td { border-bottom: 0; }
 
 /* === the frame: the bar, the main region, the drawer ========================================================== */
 .topbar { position: sticky; top: 0; z-index: 20; background: var(--bar); color: var(--bar-ink); border-bottom: 1px solid var(--bar-rule); }
-.topbar__nav { display: flex; align-items: center; gap: var(--space-4); padding: var(--space-3) 0; flex-wrap: wrap; }
-.brand { display: flex; align-items: center; gap: 1ex; font: 700 var(--text-xl) var(--display); letter-spacing: -.3px; color: var(--bar-ink);
+/* the bar holds the application above — the brand, what runs, who acts, the scheme — and the views below, their
+   tabs standing on the bar's lower edge and starting where the content starts */
+.topbar__app { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4); padding: var(--space-3) 0; flex-wrap: wrap; }
+.topbar__nav { border-top: 1px solid var(--bar-rule); }
+.brand { display: flex; align-items: baseline; gap: 1ex; font: 700 var(--text-xl) var(--display); letter-spacing: -.3px; color: var(--bar-ink);
   text-decoration: none; border-radius: var(--radius-control); padding: 2px var(--space-2); margin: -2px calc(-1 * var(--space-2)); }
 .brand:hover .brand__name { color: var(--brand); }
 .brand:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
-.brand__logo { display: inline-block; width: 2.13ex; height: 2.4ex; transform: translateY(.1ex); }
+.brand__logo { display: inline-block; width: 2.13ex; height: 2.4ex; align-self: center; }
 .brand__logo svg { display: block; width: 100%; height: 100%; overflow: visible; }
 :root[data-logo] .brand__logo { width: var(--logo-width); background: var(--logo) left center / contain no-repeat; }
 :root[data-logo] .brand__logo svg { display: none; }
 .brand__dot { color: var(--brand); }
 .brand__project { font: 400 var(--text-sm) var(--mono); color: var(--bar-dim); letter-spacing: .3px; margin-left: var(--space-1); }
-.tabs { display: flex; align-items: center; gap: var(--space-1); margin-left: auto; overflow-x: auto; scrollbar-width: none; }
+.tabs { display: flex; align-items: center; gap: var(--space-1); overflow-x: auto; scrollbar-width: none; }
+.tabs > :first-child > .tab:first-child, .tabs > .tab:first-child { margin-left: calc(-1 * var(--space-3)); }
 .tabs__group { display: flex; align-items: center; }
 .tabs__sep { flex: none; width: 1px; height: 16px; margin: 0 var(--space-2); background: var(--bar-faint); }
 .tabs__arrow { color: var(--bar-faint); font: 400 var(--text-sm) var(--mono); }
@@ -525,7 +529,6 @@ div.id { margin-top: 2px; }
    of the pattern library — so one placed in the drawer takes the narrow layout on a wide screen too (WP-181) */
 @media (max-width: 760px) {
   .wrap { padding: 0 var(--space-4); }
-  .tabs { order: 3; width: 100%; margin-left: 0; }
   .field--bar { width: 100px; }
 }
 @container (width < 760px) {
