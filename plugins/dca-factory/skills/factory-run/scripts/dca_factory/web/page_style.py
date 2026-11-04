@@ -431,6 +431,16 @@ div.id { margin-top: 2px; }
 .stepper__step[data-state="stopped"] { color: var(--stop); font-weight: 600; }
 .stepper__step[data-state="stopped"] .stepper__bar { background: var(--stop); }
 .stepper__step[data-state="now"] { color: var(--ink); font-weight: 600; }
+/* a story's track: one tile a stage, its top edge the stage's state */
+.track { list-style: none; margin: var(--space-4) 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); gap: var(--space-2); }
+.track__stage { display: grid; gap: var(--space-1); align-content: start; padding: var(--space-3); background: var(--panel); border: 1px solid var(--line);
+  border-top: 3px solid var(--tone, var(--line)); border-radius: var(--radius-control); font: 400 var(--text-xs) var(--mono); color: var(--muted); }
+.track__stage[data-state="done"] { --tone: var(--ok); }
+.track__stage[data-state="now"] { --tone: var(--run); background: var(--soft); }
+.track__stage[data-state="stopped"] { --tone: var(--stop); }
+.track__stage[data-state=""] { border-top-style: dashed; }
+.track__name { font: 600 var(--text-base) var(--display); color: var(--ink); }
+.track__line b { color: var(--ink); font-weight: 500; }
 /* the run's control: one capsule on the bar — the dot and its word open the panel, the action stands beside them */
 .run-control { display: flex; align-items: center; gap: var(--space-1); padding: var(--space-1); border: 1px solid var(--bar-rule); border-radius: var(--radius-control);
   background: color-mix(in srgb, var(--bar-ink) 5%, var(--bar)); }

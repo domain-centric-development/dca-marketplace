@@ -271,6 +271,7 @@ function epicTone(e) {
 }
 
 function backlog(st) {
+  if (S.detail) return storyPage(st, S.detail);
   // the epics as one list, as the cockpit shows them; an epic opens its stories in place, and stays open on a redraw
   const filter = S.backlogFilter || "all", order = st.delivered_order || [];
   const keep = r => filter === "all" || (filter === "drafts" ? r.lane === "draft" : !["delivered", "superseded"].includes(r.lane));
@@ -298,7 +299,6 @@ function backlog(st) {
   const findingsCard = findings.length ? ui.accordion({key: "findings", variant: "card", level: 2, open: opened("findings"),
         head: `Findings ${ui.hint(`${findings.length} the judge kept open — each to the backlog or done`)}`,
         body: () => ui.table([{label: "severity"}, {label: "finding"}, {act: true}], findings)}) : "";
-  if (S.detail) { const id = S.detail; S.detail = ""; setTimeout(() => openStory(id)); }
   return ui.split({main: epicsCard, side: wishPart(st) + findingsCard});
 }
 
@@ -613,41 +613,72 @@ function rulesTab(st) {
 }
 
 // --- one story -----------------------------------------------------------------------------------------------------
-// a story opens beside the backlog's list where the window is wide, in the drawer elsewhere — one build of it (WP-183)
-// until a story has a place of its own, it opens in the drawer at every width
-const detailHere = () => false;
+// a story has a place of its own, `#backlog/<story>`, like a part of the description: its pipeline as a track across,
+// beneath it its words beside its figures — from whichever view it is opened, and back to that view (WP-183)
 async function loadStory(id) {
   try { S.storyView[id] = await api(`/api/view/story?id=${encodeURIComponent(id)}`); }
   catch (e) { S.storyView[id] = {error: e.message}; }
   if (S.detail === id) render();
 }
-function storyDetail() {
-  if (!S.detail) return wide() ? ui.empty("Open a story from an epic — it opens here.") : "";
-  if (!wide()) { const id = S.detail; S.detail = ""; setTimeout(() => openStory(id)); return ""; }
-  const close = ui.btn("close", {attrs: {"data-call": "closeDetail"}}), v = S.storyView[S.detail];
-  if (!v) { S.storyView[S.detail] = {loading: true}; loadStory(S.detail); }
-  if (!v || v.loading) return ui.drawerFrame(close, "", ui.empty(`Reading ${S.detail}…`));
-  if (v.error) return ui.drawerFrame(close, "", ui.error(v.error, {block: true}));
-  const [head, body] = storyParts(v, S.detail, "m");
-  return ui.drawerFrame(close, head, body);
-}
 async function openStory(id) {
-  if (detailHere()) { S.detail = id; delete S.storyView[id]; place(); render(); return; }
-  if (!S.drawer) S.opener = document.activeElement;
-  S.drawer = id;
-  // below the bar, so the tabs and the factory's state stay in reach
-  document.documentElement.style.setProperty("--bar-height", $("topbar").getBoundingClientRect().height + "px");
-  const node = $("drawer"), close = ui.btn("close", {attrs: {"data-call": "close"}});
-  node.hidden = false;
-  node.innerHTML = ui.drawerFrame(close, "", ui.empty(`Reading ${id}…`));
-  node.focus();
-  let v;
-  try { v = await api(`/api/view/story?id=${encodeURIComponent(id)}`); }
-  catch (e) { node.innerHTML = ui.drawerFrame(close, "", ui.error(e.message, {block: true})); return; }
-  if (S.drawer !== id) return;
-  forget("d");
-  const [head, body] = storyParts(v, id, "d");
-  node.innerHTML = ui.drawerFrame(close, head, body);
+  if (S.drawer) CALLS.close();
+  if (S.tab !== "backlog" || !S.detail) S.storyFrom = S.tab;
+  S.tab = "backlog"; S.detail = id; S.changing = "";
+  delete S.storyView[id];
+  place(); render(); window.scrollTo(0, 0);
+}
+const secs = s => !s ? "—" : s < 60 ? `${Math.round(s)} s` : s < 3600 ? `${Math.floor(s / 60)} min${s % 60 >= 1 && s < 600 ? ` ${Math.round(s % 60)} s` : ""}`
+  : `${Math.floor(s / 3600)} h ${Math.round((s % 3600) / 60)} min`;
+const usd = c => c == null || c === 0 ? "—" : `$${c.toFixed(2)}`;
+const toks = n => !n ? "—" : n >= 1e6 ? `${(n / 1e6).toFixed(1)} M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)} k` : `${n}`;
+// the processes as the factory ran them, a shared builder by its parts; and where a stage stands — the story's course
+// while it runs or stopped, everything done once it is delivered
+function stagesOf(v, st, id) {
+  const live = (st.running || []).find(r => r.story === id) || (st.waiting || []).find(w => w.story === id && w.course) || {};
+  const course = live.course || [], done = (v.row || {}).mark === "done";
+  const stateOf = name => { const c = course.find(x => x.stage === name); return c ? c.state : done ? "done" : ""; };
+  const ran = [];
+  for (const [name, e] of Object.entries(v.stages || {})) {
+    if ((e.parts || []).length) e.parts.forEach(p => ran.push(Object.assign({name: p.stage, part: true}, p)));
+    else ran.push(Object.assign({name}, e));
+  }
+  for (const c of course) if (!ran.some(r => r.name === c.stage)) ran.push({name: c.stage});
+  return ran.map(r => Object.assign(r, {state: stateOf(r.name)}));
+}
+function storyPage(st, id) {
+  const from = S.storyFrom && S.storyFrom !== "backlog" ? S.storyFrom : "backlog";
+  const back = ui.actions(ui.btn(`← ${from}`, {attrs: {"data-call": "closeDetail"}}));
+  const v = S.storyView[id];
+  if (!v) { S.storyView[id] = {loading: true}; loadStory(id); }
+  if (!v || v.loading) return back + ui.empty(`Reading ${id}…`);
+  if (v.error) return back + ui.error(v.error, {block: true});
+  const [head, buttons, text, words] = storyParts(v, id, "m"), row = v.row || {};
+  const stages = stagesOf(v, st, id), longest = Math.max(1, ...stages.map(s => s.seconds || 0));
+  const track = stages.map(s => ({name: s.name, state: s.state, share: s.seconds ? 100 * s.seconds / longest : null, lines: [
+    s.seconds ? `<b>${esc(secs(s.seconds))}</b>` : "not run yet",
+    s.tokens ? `${esc(toks(s.tokens))} · ${esc(usd(s.cost))}` : "",
+    s.runs > 1 ? ui.state(`${s.runs} rounds`, "wait") : ""].filter(Boolean)}));
+  const passes = v.passes || [];
+  const sum = key => typeof row[key] === "number" ? row[key] : Object.values(v.stages || {}).reduce((all, e) => all + (e[key] || 0), 0);
+  const totals = ui.tiles([[secs(sum("seconds")), "worked"], [toks(sum("tokens")), "tokens"], [usd(sum("cost")), "cost"], [`${passes.length}`, passes.length === 1 ? "pass" : "passes"]]
+    .map(([n, label]) => ui.tile(n, label)).join(""));
+  const ranStages = stages.filter(s => s.seconds);
+  const time = ranStages.length ? ui.card("Time per stage", "the bar its share of the longest", ui.table(
+      [{label: "stage"}, {label: "share"}, {label: "time", num: true}, {label: "runs", num: true}, {label: "tokens", num: true}, {label: "cost", num: true}],
+      ranStages.map(s => [esc(s.name), ui.meter(100 * s.seconds / longest, {thin: true}), esc(secs(s.seconds)), s.runs > 1 ? ui.state(`${s.runs}`, "wait") : `${s.runs || ""}`,
+        esc(toks(s.tokens)), esc(usd(s.cost))]))
+      + ui.accordion({key: `tokens:${id}`, variant: "quiet", open: opened(`tokens:${id}`), head: "tokens per stage — input, output, cache",
+          body: () => ui.table([{label: "stage"}, {label: "input", num: true}, {label: "output", num: true}, {label: "cache write", num: true},
+            {label: "cache read", num: true}, {label: "tokens", num: true}],
+            ranStages.map(s => [esc(s.name), esc(toks(s.input)), esc(toks(s.output)), esc(toks(s.cache_write)), esc(toks(s.cache_read)), esc(toks(s.tokens))]))}))
+    : "";
+  const passCard = passes.length ? ui.card("Passes", "each time the story went through", ui.table(
+      [{label: "#", num: true}, {label: "pass"}, {label: "started"}, {label: "time", num: true}, {label: "tokens", num: true}],
+      passes.map((p, i) => [`${i + 1}`, i ? ui.state(p.label || "again", "wait") : esc(p.label || "first"), esc((p.start || "").replace("T", " ").slice(5, 16)),
+        esc(secs(p.seconds)), esc(toks(p.tokens))]))) : "";
+  return back + head + buttons
+    + ui.card("Pipeline", (v.models || []).length ? `run by ${(v.models || []).join(", ")}` : "", totals + (track.length ? ui.track(track) : ui.empty("Not run yet.")))
+    + ui.split({main: ui.card("", "", text || ui.empty("The story has no words yet.")), side: words + time + passCard});
 }
 function storyParts(v, id, scope) {
   const row = v.row || {};
@@ -655,19 +686,15 @@ function storyParts(v, id, scope) {
   const scenarios = (v.scenarios || []).map(c => `<h3>${esc(c.title || c.key)}</h3>${c.rule ? ui.hint(c.rule, {block: true}) : ""}
     ${(c.steps || []).map(s => ui.step(s.word, s.text)).join("")}`).join("");
   const list = v.sections || [], at = v.criteria_at == null ? list.length : v.criteria_at;
-  const sections = list.slice(0, at).map(one => ui.section(one, 2)).join("") + (scenarios ? `<h2>Scenarios</h2>${scenarios}` : "")
+  const text = list.slice(0, at).map(one => ui.section(one, 2)).join("") + (scenarios ? `<h2>Scenarios</h2>${scenarios}` : "")
     + list.slice(at).map(one => ui.section(one, 2)).join("");
-  const stages = Object.entries(v.stages || {}).map(([name, e]) => [esc(name), e.runs || "", esc(e.seconds_text), esc(e.tokens_text), esc(e.cost_text), ui.id(e.why || "")]);
   const head = ui.pageHead(v.epic, v.title || id, "")
-    + ui.kv([["story", ui.id(id)], ["state", esc(row.state || v.situation || "")], v.context ? ["context", esc(v.context)] : null,
-             ["file", `<code>${esc(v.path)}</code>`], row.tokens_text ? ["tokens", `${esc(row.tokens_text)}${row.cost_text ? " · " + esc(row.cost_text) : ""}`] : null]);
-  const body = ui.actions(acts((v.actions || []).filter(a => a.request.open !== "words"), scope)
-      + (Object.keys(v.stages || {}).length || row.mark === "running" ? ui.btn("output", {attrs: {"data-call": "follow", "data-kind": "story", "data-id": id}}) : ""))
-    + (v.actions || []).filter(a => a.request.open === "words" && !a.waits_on).map(a => `<h2>${esc(a.label)}</h2>${act(a, scope)}`).join("")
-    + sections
-    + (stages.length ? `<h2>Processes</h2>${ui.table([{label: "process"}, {label: "runs", num: true}, {label: "time", num: true}, {label: "tokens", num: true},
-        {label: "cost", num: true, hide: true}, {label: "why"}], stages)}` : "");
-  return [head, body];
+    + ui.figures([["state", esc(row.state || v.situation || "")], v.context ? ["context", esc(v.context)] : null, ["file", esc(v.path)]].filter(Boolean));
+  const buttons = ui.actions(acts((v.actions || []).filter(a => a.request.open !== "words"), scope)
+      + (Object.keys(v.stages || {}).length || row.mark === "running" ? ui.btn("output", {attrs: {"data-call": "follow", "data-kind": "story", "data-id": id}}) : ""));
+  // what the person says to a story in words — a correction, a change — stands beside its text, not above its pipeline
+  const words = (v.actions || []).filter(a => a.request.open === "words" && !a.waits_on).map(a => ui.card(esc(a.label), "", act(a, scope))).join("");
+  return [head, buttons, text, words];
 }
 """
 
@@ -763,6 +790,9 @@ function components() {
         cards: name === "running" ? [Object.assign({}, card, {state: "running"})] : [], more: name === "delivered" ? [Object.assign({}, card, {state: "delivered"})] : []})))],
       ["epic", ui.epic({key: "gallery:epic", open: opened("gallery:epic"), title: "Lending", id: sample.epic, metric: "BookLent", tone: ui.state("running", "running"), count: "2/5",
         strip: ["approved", "running", "delivered", "delivered", "superseded"], stripTitle: "2 of 5 delivered", body: () => ui.intro("The epic's goal.")})],
+      ["track", ui.track([{name: "plan", state: "done", share: 45, lines: ["<b>3 min 10 s</b>", "0.8 M · $0.60"]},
+        {name: "build", state: "now", share: 100, lines: ["<b>6 min 40 s</b>", "2.0 M · $1.50", ui.state("2 rounds", "wait")]},
+        {name: "tidy", state: "", lines: ["not run yet"]}])],
       ["stepper · course", ui.course({id: sample.story, title: sample.title, state: "running", word: "build · round 2", right: ui.btn("follow", {small: true}),
         steps: [{stage: "plan", state: "done"}, {stage: "test", state: "done"}, {stage: "build", state: "now"}, {stage: "tidy", state: ""}, {stage: "judge", state: "stopped"}],
         doing: "writing the adapter"})],

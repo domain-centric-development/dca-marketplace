@@ -205,6 +205,10 @@ ui.runControl = o => `<div class="run-control" data-state="${esc(o.state)}">`
   + ui.menu({id: "run", bar: true, flush: true, open: o.open, title: o.title,
              label: `${ui.dot(o.state)}<span class="run-control__say">${o.say}</span>`, body: o.panel})
   + (o.act || "") + `</div>`;
+// a story's stages as a track: each with its figures and its share of the time — done, the one now, or where it stopped
+ui.track = stages => `<ol class="track">${stages.map(s => `<li class="track__stage" data-state="${esc(s.state || "")}">`
+  + `<b class="track__name">${esc(s.name)}${{done: " ✓", stopped: " ✗", now: " ▶"}[s.state] || ""}</b>`
+  + (s.lines || []).map(l => `<span class="track__line">${l}</span>`).join("") + (s.share != null ? ui.meter(s.share, {thin: true}) : "") + `</li>`).join("")}</ol>`;
 ui.queue = inner => `<ul class="queue">${inner}</ul>`;
 ui.record = o => `<section class="${mods("record", [o.accept && "accept"])}"><div class="record__question">${ui.hint(o.about)}<h2 class="record__text">${o.text}</h2></div><div class="record__body">${o.body}</div></section>`;
 ui.options = items => `<ul class="options">${items.map(ui.option).join("")}</ul>`;

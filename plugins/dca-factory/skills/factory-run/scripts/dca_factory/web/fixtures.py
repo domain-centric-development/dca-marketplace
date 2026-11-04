@@ -211,9 +211,16 @@ def _story_all():
                 scenarios=[dict(key="a-returned-book-is-free", title="A returned book is free again", rule="A copy is lent or free.",
                                 steps=[dict(word="Given", text="a lent copy"), dict(word="When", text="the reader returns it"),
                                        dict(word="Then", text="the copy is free")])],
-                stages=dict(plan=dict(runs=1, seconds_text="3 min", tokens_text="0.8 M", cost_text="$0.60", why=""),
-                            test=dict(runs=1, seconds_text="4 min", tokens_text="1.2 M", cost_text="$0.90", why=""),
-                            build=dict(runs=2, seconds_text="6 min", tokens_text="2.0 M", cost_text="$1.50", why="the gate refused once")))
+                # the numbers as the factory keeps them: raw per stage, and each pass the story went through
+                stages=dict(plan=dict(runs=1, seconds=190, tokens=800_000, cost=0.60, input=92, output=21_400, cache_write=88_000, cache_read=690_508,
+                                      seconds_text="3 min", tokens_text="0.8 M", cost_text="$0.60", why=""),
+                            test=dict(runs=1, seconds=242, tokens=1_200_000, cost=0.90, input=120, output=36_200, cache_write=101_500, cache_read=1_062_180,
+                                      seconds_text="4 min", tokens_text="1.2 M", cost_text="$0.90", why=""),
+                            build=dict(runs=2, seconds=400, tokens=2_000_000, cost=1.50, input=240, output=64_800, cache_write=190_300, cache_read=1_744_660,
+                                       seconds_text="6 min", tokens_text="2.0 M", cost_text="$1.50", why="the gate refused once")),
+                passes=[dict(label="first", start="2026-11-03T09:02:00Z", seconds=660, tokens=3_600_000, stages=["plan", "test", "build"]),
+                        dict(label="again", start="2026-11-03T09:21:00Z", seconds=125, tokens=400_000, stages=["build"])],
+                models=["claude-opus-5-5"])
 
 
 def _part_all():

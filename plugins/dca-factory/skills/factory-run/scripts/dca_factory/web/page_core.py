@@ -28,7 +28,7 @@ const ICONS = {
 const S = {tab: "now", menu: null, help: null, status: null, decisions: null, discover: null, requests: null, follow: null, followSource: null,
            followLines: [], drawer: null, opener: null, drafts: {}, fold: new Map(),
            rules: null, rulesFor: null, ruleKind: "story", ruleStory: "", flowPick: null, partText: {}, meta: {},
-           part: "", detail: "", storyView: {}, changing: ""};
+           part: "", detail: "", storyFrom: "", storyView: {}, changing: ""};
 const stored = key => { try { return localStorage.getItem(key) || ""; } catch (e) { return ""; } };
 const store = (key, value) => { try { localStorage.setItem(key, value); } catch (e) {} };
 // the page opens where it stands; a link to a view opens that view
@@ -199,7 +199,11 @@ const CALLS = {
   async hide(node) { await api("/api/requests/drop", {id: node.dataset.id}); toast("hidden — the draft stays in the backlog"); },
   async follow(node) { follow(node.dataset.kind, node.dataset.id); },
   async unfollow() { follow(null); },
-  async closeDetail() { S.detail = ""; place(); render(); },
+  async closeDetail() {
+    const from = S.storyFrom || "backlog"; S.detail = ""; S.storyFrom = "";
+    if (from !== "backlog") return show(from);
+    place(); render();
+  },
   async close() { S.drawer = null; $("drawer").hidden = true; forget("d"); if (S.opener && document.contains(S.opener)) S.opener.focus(); S.opener = null; },
 };
 
@@ -378,8 +382,6 @@ const sized = new ResizeObserver(() => {
   if (now === wasWide) return;
   const first = wasWide === null;
   wasWide = now;
-  // a story open in the drawer moves beside the list when the window grows, and back into the drawer when it narrows
-  if (now && S.drawer && S.tab === "backlog") { const id = S.drawer; CALLS.close(); S.detail = id; place(); }
   if (!first) render();
 });
 sized.observe($("main"));
@@ -438,7 +440,8 @@ function render() {
   const view = {now, describe, discover, backlog, run, decide, delivered, rules: rulesTab, components}[S.tab] || now;
   // a part read as a document is a place of its own beneath the description: the way back above its title (WP-183)
   const part = S.tab === "describe" && S.part ? ((S.status || {}).description || []).find(p => p.part === S.part) || {part: S.part} : null;
-  morph($("main"), (part ? ui.actions(ui.btn("← all parts", {attrs: {"data-part": ""}})) + ui.pageHead(title, part.part, part.path || "")
+  const own = S.tab === "backlog" && S.detail;          // a story's place draws its own head
+  morph($("main"), (own ? "" : part ? ui.actions(ui.btn("← all parts", {attrs: {"data-part": ""}})) + ui.pageHead(title, part.part, part.path || "")
                         : ui.pageHead(eyebrow, title, lede))
     + (S.status || S.tab === "components" ? endedLine(S.status || {}) + view(S.status || {}) : ui.card("", "", ui.empty("Reading the factory…"))));
   if (S.tab === "run") paintFollow();
