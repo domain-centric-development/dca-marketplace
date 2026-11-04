@@ -502,7 +502,7 @@ div.id { margin-top: 2px; }
   white-space: pre-wrap; word-break: break-word; margin-top: var(--space-3); }
 .terminal:empty { display: none; }
 /* delivered over time: two panels on one time axis — cost above, tokens below, never two scales on one axis */
-.curve { position: relative; margin-top: var(--space-4); }
+.curve { position: relative; margin-top: var(--space-4); max-width: var(--flow-measure); margin-inline: auto; }
 .curve svg { display: block; width: 100%; height: auto; }
 .curve__grid { stroke: var(--line); stroke-width: 1; }
 .curve__axis { font: 400 var(--text-xs) var(--mono); fill: var(--muted); }
@@ -520,7 +520,8 @@ div.id { margin-top: 2px; }
 /* the flow, drawn by the factory: a way back shown on a hover, a step, a gate or an edge picked by a click — the
    classes below `.flow` are the drawing's own */
 .flow { overflow-x: auto; margin-top: var(--space-3); }
-.flow svg { display: block; width: 100%; min-width: 880px; height: auto; }
+/* the drawing keeps the size it is read at: a wide window widens the card, not the drawing (WP-183) */
+.flow svg { display: block; width: 100%; max-width: var(--flow-measure); min-width: 880px; height: auto; margin-inline: auto; }
 .flow .f text { fill: var(--ink); } .flow .f text.small { fill: var(--muted); stroke: var(--panel); }
 .flow .f .on-line { stroke: color-mix(in srgb, var(--muted) 70%, transparent); } .flow .f .tip-on { fill: color-mix(in srgb, var(--muted) 70%, transparent); }
 .flow .f .gate circle, .flow .f .tip-again { fill: var(--pass); } .flow .f .way-again path.vis { stroke: var(--pass); }

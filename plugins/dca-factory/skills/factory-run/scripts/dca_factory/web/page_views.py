@@ -226,11 +226,12 @@ function discover(st) {
   const records = ((S.decisions || {}).records || []).filter(rec => (rec.actions || []).length);
   const asking = ((S.discover || {}).working || []).map(r => records.find(rec => r.record && rec.path === r.record))
     .filter(Boolean).map(recordCard).join("");
-  return ui.card("A new discovery", "a problem worth solving, or what should exist — the report and the epics it proposes", act((st.entries || {}).discover)
-      + (working ? `<h3>In progress</h3>${ui.queue(working)}` : "") + asking)
-    + ui.card("Discoveries", "each topic with its report — open one to read it, act on what it proposes, or continue it",
+  // the reports on the width, a new discovery and what is on its way beside them (WP-183)
+  return ui.split({side: ui.card("A new discovery", "a problem worth solving, or what should exist — the report and the epics it proposes", act((st.entries || {}).discover)
+      + (working ? `<h3>In progress</h3>${ui.queue(working)}` : "") + asking),
+    main: ui.card("Discoveries", "each topic with its report — open one to read it, act on what it proposes, or continue it",
       rows.length ? ui.foldTable([{label: "topic"}, {label: "proposed", num: true}, {label: "epics made", num: true},
-        {label: "description changes", num: true, hide: true}], rows) : ui.empty(`No discovery yet — it goes to ${(S.discover || {}).store || ""}.`));
+        {label: "description changes", num: true, hide: true}], rows) : ui.empty(`No discovery yet — it goes to ${(S.discover || {}).store || ""}.`))});
 }
 
 // --- 2 backlog -----------------------------------------------------------------------------------------------------
@@ -322,13 +323,15 @@ function run(st) {
       .map(x => ui.course({id: x.story, title: titles[x.story], state: "stopped", word: "stopped", steps: x.course,
         doing: (x.action && x.action.text) || x.what, right: act(x.action) + follows(x.story)})).join("");
   const readyRows = (st.rows || []).filter(r => st.queue && st.queue.ready.includes(r.story)), readyMarked = marked(readyRows);
-  return ui.card("The backlog", backlogOn(st) ? "on — the released stories one after the other"
+  // what runs, its output and what comes next on the width; beside them the backlog's switch, the wish and the requests (WP-183)
+  return ui.split({
+    main: ui.card("Running", "a story's course through its stages — running, or stopped where it goes on", live || ui.empty("No stage runs."))
+      + ui.card("Output", `<span id="follow-title" data-own></span>`, ui.terminal())
+      + (readyRows.length ? ui.card("Next in line", "ready, in the order the factory takes them", ui.table(storyCols(readyMarked), readyRows.map(r => storyRow(r, readyMarked)))) : ""),
+    side: ui.card("The backlog", backlogOn(st) ? "on — the released stories one after the other"
         : `off — ${(st.queue || {ready: []}).ready.length} released stories would run`, factory)
-    + wishPart(st)
-    + ui.card("Running", "a story's course through its stages — running, or stopped where it goes on", live || ui.empty("No stage runs."))
-    + ui.card("Output", `<span id="follow-title" data-own></span>`, ui.terminal())
-    + ui.card("Requests", "everything asked of the factory, oldest first", tickets ? ui.queue(tickets) : ui.empty("No request waits."))
-    + (readyRows.length ? ui.card("Next in line", "ready, in the order the factory takes them", ui.table(storyCols(readyMarked), readyRows.map(r => storyRow(r, readyMarked)))) : "");
+      + wishPart(st)
+      + ui.card("Requests", "everything asked of the factory, oldest first", tickets ? ui.queue(tickets) : ui.empty("No request waits."))});
 }
 
 function follow(kind, id) {
@@ -388,9 +391,10 @@ function decide(st) {
   const others = waiting.map(w => [...(waitMarked ? [ui.mark(w.mark)] : []), ui.story(w.story), esc(w.what),
     act(w.action) || ui.hint(w.action.text || w.action.skill || w.action.shell || "")]);
   const cols = [...(waitMarked ? [{label: "state", sr: true, mark: true}] : []), {label: "story"}, {label: "what waits"}, {act: true}];
-  return records.map(recordCard).join("")
-    + (others.length ? ui.card(records.length ? "Also waiting for you" : "", "", ui.table(cols, others)) : "")
-    + (!records.length && !others.length ? ui.card("", "", ui.empty("Nothing waits for you.")) : "");
+  if (!records.length && !others.length) return ui.card("", "", ui.empty("Nothing waits for you."));
+  // the records to answer on the width, what else waits beside them (WP-183)
+  const also = others.length ? ui.card(records.length ? "Also waiting for you" : "", "", ui.table(cols, others)) : "";
+  return records.length ? ui.split({main: records.map(recordCard).join(""), side: also}) : also;
 }
 
 // --- 5 delivered ---------------------------------------------------------------------------------------------------
@@ -445,9 +449,11 @@ function delivered(st) {
     days[days.length - 1].rows.push({at: (r.delivered_text || "").slice(11), story: r.story, title: r.title, epic: r.epic,
       event: events[r.epic], seconds: r.seconds_text, tokens: r.tokens_text, cost: r.cost_text});
   }
+  // the sums and the curve across; beneath them the deliveries by day beside the quality they came with (WP-183)
+  const byDay = ui.card("By day", "each delivery with the outcome event its epic is measured by", days.length ? ui.days(days) : ui.empty("Nothing delivered yet."));
+  const quality = qualityCard(st.signals);
   return ui.card("Delivered", "what is delivered, and what it cost as it summed up", ui.tiles(tiles) + curveCard(st))
-    + qualityCard(st.signals)
-    + ui.card("By day", "each delivery with the outcome event its epic is measured by", days.length ? ui.days(days) : ui.empty("Nothing delivered yet."));
+    + (quality ? ui.split({main: byDay, side: quality}) : byDay);
 }
 
 // --- 6 the rules: the factory's rulebook, drawn as it says it ------------------------------------------------------------
@@ -612,7 +618,7 @@ async function loadStory(id) {
   if (S.detail === id) render();
 }
 function storyDetail() {
-  if (!S.detail) return "";
+  if (!S.detail) return wide() ? ui.empty("Open a story from an epic — it opens here.") : "";
   if (!wide()) { const id = S.detail; S.detail = ""; setTimeout(() => openStory(id)); return ""; }
   const close = ui.btn("close", {attrs: {"data-call": "closeDetail"}}), v = S.storyView[S.detail];
   if (!v) { S.storyView[S.detail] = {loading: true}; loadStory(S.detail); }

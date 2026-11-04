@@ -110,6 +110,7 @@ TOKENS = """
   --radius-round: 999px;
   --measure: min(100%, 1840px);
   --read-measure: 70ch;
+  --flow-measure: 1100px;
   --grid-columns: 12;
   --fold-title: calc(var(--space-3) + 14px + var(--space-3));  /* where a fold's title starts, after its caret's column */
   --caret: max(11px, .75em);
