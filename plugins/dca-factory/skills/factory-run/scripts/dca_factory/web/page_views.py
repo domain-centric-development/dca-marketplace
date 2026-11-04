@@ -290,13 +290,16 @@ function backlog(st) {
         + ui.actions(acts(e.actions) + (st.journeys || []).filter(j => j.epic === e.epic).map(j => ui.hint(j.text)).join(""))});
   }).join("");
   const findings = (st.findings || []).map(f => [ui.state(f.severity, f.severity), `${esc(f.plain || f.defect)}${ui.id(`${f.row} · ${f.where}`, {block: true})}`, act(f.action)]);
-  return ui.master({label: "the story", detail: storyDetail(), list: wishPart(st)
-    + (epics || filter !== "all" ? ui.card("Epics", filter === "all" ? "newest first — open one to see its stories by where they stand" : filter === "drafts" ? "the drafts, waiting for your release" : "what is not delivered yet",
+  // the epics are the view, on 8 of the 12 columns so an epic's lanes stand side by side; the wish and the findings
+  // beside them (WP-183)
+  const epicsCard = epics || filter !== "all" ? ui.card("Epics", filter === "all" ? "newest first — open one to see its stories by where they stand" : filter === "drafts" ? "the drafts, waiting for your release" : "what is not delivered yet",
         filters + ui.legend(STRIP_KEY) + (epics || ui.empty("Nothing here.")))
-      : ui.card("", "", ui.empty("The backlog is empty.")))
-    + (findings.length ? ui.accordion({key: "findings", variant: "card", level: 2, open: opened("findings"),
+      : ui.card("", "", ui.empty("The backlog is empty."));
+  const findingsCard = findings.length ? ui.accordion({key: "findings", variant: "card", level: 2, open: opened("findings"),
         head: `Findings ${ui.hint(`${findings.length} the judge kept open — each to the backlog or done`)}`,
-        body: () => ui.table([{label: "severity"}, {label: "finding"}, {act: true}], findings)}) : "")});
+        body: () => ui.table([{label: "severity"}, {label: "finding"}, {act: true}], findings)}) : "";
+  if (S.detail) { const id = S.detail; S.detail = ""; setTimeout(() => openStory(id)); }
+  return ui.split({main: epicsCard, side: wishPart(st) + findingsCard});
 }
 
 // --- 3 run ---------------------------------------------------------------------------------------------------------
@@ -611,7 +614,8 @@ function rulesTab(st) {
 
 // --- one story -----------------------------------------------------------------------------------------------------
 // a story opens beside the backlog's list where the window is wide, in the drawer elsewhere — one build of it (WP-183)
-const detailHere = () => S.tab === "backlog" && wide();
+// until a story has a place of its own, it opens in the drawer at every width
+const detailHere = () => false;
 async function loadStory(id) {
   try { S.storyView[id] = await api(`/api/view/story?id=${encodeURIComponent(id)}`); }
   catch (e) { S.storyView[id] = {error: e.message}; }
