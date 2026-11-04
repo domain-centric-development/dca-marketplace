@@ -106,6 +106,11 @@ ui.ask = o => `<div class="ask" data-ask="${esc(o.id)}">`
   + ((o.choices || []).length ? ui.formRow({id: `why-${slug(o.draft || o.id)}`, label: "why? (optional)", quiet: true,
       options: [{value: "", label: "—"}, ...o.choices.map(c => ({value: c}))]}) : "")
   + `<div class="ask__go">${ui.btn(o.label, {primary: o.primary, write: o.write, title: o.title, attrs: {"data-press": o.id}})}</div></div>`;
+// a button that opens a panel beneath it, the panel's words the page's — Escape or a click beside it closes it
+ui.menu = o => `<div class="${mods("menu", [o.bar && "bar", o.flush && "flush"])}" data-menu-box="${esc(o.id)}">`
+  + `<button type="button" class="menu__toggle" aria-expanded="${!!o.open}" aria-controls="menu-${esc(o.id)}" data-menu="${esc(o.id)}"${o.title ? ` title="${esc(o.title)}"` : ""}>`
+  + `${o.label}<span class="menu__chev" aria-hidden="true">▾</span></button>`
+  + `<div class="menu__panel" id="menu-${esc(o.id)}"${o.open ? "" : " hidden"}>${o.body}</div></div>`;
 ui.actions = (inner, o = {}) => inner ? `<div class="${mods("actions", [o.end && "end", o.tight && "tight", o.foot && "foot", o.indent && "indent"])}"${o.id ? ` id="${esc(o.id)}"` : ""}${o.own ? " data-own" : ""}>${inner}</div>` : "";
 ui.tile = (figure, label, o = {}) => `<div class="${mods("tile", [o.lead && "lead", o.bad && "alert"])}"${o.title ? ` title="${esc(o.title)}"` : ""}>${ui.num(figure, "", {lead: o.lead, alert: o.bad})}${ui.caption(label)}${o.said ? `<small class="tile__said">${esc(o.said)}</small>` : ""}</div>`;
 ui.kv = pairs => `<dl class="kv">${pairs.filter(Boolean).map(([k, v]) => `<dt class="kv__key">${esc(k)}</dt><dd class="kv__value">${v}</dd>`).join("")}</dl>`;
@@ -187,6 +192,19 @@ ui.epic = o => ui.accordion({key: o.key, variant: "panel", open: o.open, level: 
 ui.stepper = steps => `<div class="stepper">${steps.map(c => `<div class="stepper__step" data-state="${esc(c.state)}"><i class="stepper__bar"></i>${esc(c.stage)}</div>`).join("")}</div>`;
 ui.course = o => `<div class="course"><div class="course__top"><div>${ui.story(o.id, o.title)}${ui.id(o.id, {block: true})}</div>
   <div class="course__right">${ui.state(o.word, o.state)}${o.right}</div></div>${(o.steps || []).length ? ui.stepper(o.steps) : ""}${o.doing ? `<div class="course__doing">${esc(o.doing)}</div>` : ""}</div>`;
+// what the factory runs, opened from its control: each story in flight with its course, then the lines that follow
+ui.runPanel = o => {
+  const story = r => `<div class="run-panel__story"><div class="run-panel__head">${ui.story(r.id, r.title || r.id, {compact: true})}${ui.hint(r.word)}</div>`
+    + ((r.steps || []).length ? ui.stepper(r.steps) : "") + (r.doing ? ui.hint(r.doing) : "") + `</div>`;
+  return `<div class="run-panel">${(o.runs || []).map(story).join("")}`
+    + (o.idle ? `<p class="run-panel__line">${esc(o.idle)}</p>` : "")
+    + (o.lines || []).map(l => `<p class="run-panel__line">${l}</p>`).join("") + ui.actions(o.acts) + `</div>`;
+};
+// the factory's run, from every page: its dot and a word on what it does, the one action beside — the panel the rest
+ui.runControl = o => `<div class="run-control" data-state="${esc(o.state)}">`
+  + ui.menu({id: "run", bar: true, flush: true, open: o.open, title: o.title,
+             label: `${ui.dot(o.state)}<span class="run-control__say">${o.say}</span>`, body: o.panel})
+  + (o.act || "") + `</div>`;
 ui.queue = inner => `<ul class="queue">${inner}</ul>`;
 ui.record = o => `<section class="${mods("record", [o.accept && "accept"])}"><div class="record__question">${ui.hint(o.about)}<h2 class="record__text">${o.text}</h2></div><div class="record__body">${o.body}</div></section>`;
 ui.options = items => `<ul class="options">${items.map(ui.option).join("")}</ul>`;

@@ -25,7 +25,7 @@ const MARKS = {look: "!", question: "?", stopped: "✗", running: "▶", done: "
 const ICONS = {
   pass: '<path d="M6 10.4l2.7 2.7L14.2 7.6"/>', fail: '<path d="M6.6 6.6l6.8 6.8M13.4 6.6l-6.8 6.8"/>',
   wait: '<path d="M8 6.5v7M12 6.5v7"/>', ask: '<path d="M7.6 7.6a2.5 2.5 0 1 1 3.4 2.3c-.7.3-1 .8-1 1.5v.6M10 14.4v.1"/>'};
-const S = {tab: "now", help: null, status: null, decisions: null, discover: null, requests: null, follow: null, followSource: null,
+const S = {tab: "now", menu: null, help: null, status: null, decisions: null, discover: null, requests: null, follow: null, followSource: null,
            followLines: [], drawer: null, opener: null, drafts: {}, fold: new Map(),
            rules: null, rulesFor: null, ruleKind: "story", ruleStory: "", flowPick: null, partText: {}, meta: {}};
 const stored = key => { try { return localStorage.getItem(key) || ""; } catch (e) { return ""; } };
@@ -275,12 +275,9 @@ function renderFrame() {
   // the dot is the backlog's, the one thing a person switches here: a person's requests are worked while this page is
   // open, and that goes without saying (WP-177)
   const backlog = backlogOn(st);
-  const dot = !backlog ? "down" : w.stopping ? "stopping" : "up";
-  const queued = (S.requests || {}).counts_text;
-  $("worker").innerHTML = `${ui.dot(dot)}${esc(st.worker_text || "…")}${queued ? ` · ${esc(queued)}` : ""}`;
-  $("worker").title = w ? `${w.owner} since ${w.since_text}` : "nobody holds the checkout";
-  $("up").hidden = backlog;
-  $("down").hidden = !backlog || w.stopping;
+  morph($("run"), runControl(st, backlog));
+  const name = by();
+  $("initials").textContent = name ? name.split(/\s+/).map(part => part[0]).join("").slice(0, 2).toUpperCase() : "you";
   // a record waits where it is answered: a discovery's on discover, the description's on describe, the rest decide
   const asking = place => (st.waiting || []).filter(w => (w.place || "decide") === place).length;
   const tab = id => {
@@ -293,6 +290,54 @@ function renderFrame() {
   morph($("tabs"), ui.tabs(parts.map(p => ({ordered: p.ordered, tabs: p.tabs.map(tab)}))));
   $("main").setAttribute("aria-labelledby", S.tab === "now" || S.tab === "components" ? "home" : "tab-" + S.tab);
 }
+// the run from every page: what it does in a word and the one action; its panel the stories in flight, what comes next
+// and what waits. With the page open the backlog off lets the running stories finish — "stop" is after the story (WP-177)
+function runControl(st, backlog) {
+  const w = st.worker, running = st.running || [], ready = (st.queue || {}).ready || [], waits = (st.waiting || []).length;
+  const titles = Object.fromEntries((st.rows || []).map(r => [r.story, r.title]));
+  const stopping = !!(w && w.stopping), state = backlog ? (stopping ? "stopping" : "up") : running.length ? "stopping" : "down";
+  const first = running[0], more = running.length > 1 ? ` +${running.length - 1}` : "";
+  const say = first ? `${backlog ? "" : "finishing "}<b>${esc(first.story)}</b>${more} · ${esc(first.part || first.stage)}`
+    : backlog ? esc(st.worker_text || "the backlog is on") : `stopped${ready.length ? ` · ${ready.length} ready` : ""}`;
+  const start = ui.btn("▶ start the backlog", {primary: true, plain: true, bar: true, title: "work the released stories off, one after the other — factory.sh up", attrs: {"data-call": "up"}});
+  const stop = ui.btn("■ stop", {bar: true, title: "no further story starts; the running one finishes — factory.sh down", attrs: {"data-call": "down"}});
+  const queued = (S.requests || {}).counts_text;
+  const lines = [
+    ready.length ? `next: <b>${esc(titles[ready[0]] || ready[0])}</b>${ready.length > 1 ? `, then ${ready.length - 1} more` : ""}` : "",
+    waits ? ui.link(`${waits} ${waits === 1 ? "question waits" : "wait"} for you →`, {quiet: true, attrs: {"data-tab": "decide"}}) : "",
+    queued ? esc(queued) : "",
+    w ? esc(`${w.owner} since ${w.since_text}`) : ""].filter(Boolean);
+  const acts = (backlog && !stopping
+      ? ui.btn("■ stop after the running story", {attrs: {"data-call": "down"}}) + ui.btn("■ stop now", {danger: true, attrs: {"data-call": "down", "data-now": "1"}})
+      : !backlog ? ui.btn("▶ start the backlog", {primary: true, plain: true, attrs: {"data-call": "up"}}) : "")
+    + ui.link("open the run →", {quiet: true, compact: true, attrs: {"data-tab": "run"}});
+  const runs = running.map(r => ({id: r.story, title: titles[r.story], steps: r.course, doing: r.activity,
+    word: `${r.interrupted ? "interrupted" : r.part || r.stage}${r.round > 1 ? ` · round ${r.round}` : ""}${r.ago ? ` · ${r.ago}` : ""}`}));
+  return ui.runControl({state, say, open: S.menu === "run", title: "the run — open for what runs and what comes next",
+    act: backlog ? (stopping ? "" : stop) : start,
+    panel: ui.runPanel({runs, idle: running.length ? "" : backlog ? "nothing runs now — the next released story starts by itself" : "the backlog is off", lines, acts})});
+}
+// a menu opens beneath its button; a click beside it, a press inside it or Escape closes it
+function menus() {
+  document.querySelectorAll("[data-menu]").forEach(b => {
+    const open = S.menu === b.dataset.menu, panel = $(b.getAttribute("aria-controls"));
+    b.setAttribute("aria-expanded", String(open));
+    if (panel) panel.hidden = !open;
+  });
+}
+document.addEventListener("click", event => {
+  const toggle = event.target.closest && event.target.closest("[data-menu]");
+  if (toggle) { event.stopPropagation(); S.menu = S.menu === toggle.dataset.menu ? null : toggle.dataset.menu; return menus(); }
+  if (!S.menu) return;
+  const box = event.target.closest && event.target.closest(`[data-menu-box="${S.menu}"]`);
+  if (!box || event.target.closest("[data-call],[data-tab],[data-story],[data-press]")) { S.menu = null; menus(); }
+}, true);
+document.addEventListener("keydown", event => {
+  if (event.key !== "Escape" || !S.menu) return;
+  const toggle = document.querySelector(`[data-menu="${S.menu}"]`);
+  S.menu = null; menus(); event.stopImmediatePropagation();
+  if (toggle) toggle.focus();
+}, true);
 const partOf = id => ((S.help || {}).parts || []).find(p => p.tabs.includes(id));
 // whether the backlog runs: a runner from a terminal or a session's, or the factory's worker with the backlog on
 const backlogOn = st => { const w = st.worker; return !!(w && w.alive && (w.how !== "up" || w.backlog)); };

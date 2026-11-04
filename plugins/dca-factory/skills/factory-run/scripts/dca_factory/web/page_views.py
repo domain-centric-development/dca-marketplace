@@ -280,7 +280,7 @@ function run(st) {
   const w = st.worker, reqs = (S.requests || {}).requests || [];
   // the backlog is the one thing switched here: a person's requests are worked while this page is open (WP-177)
   const factory = (backlogOn(st) ? (w.stopping ? ui.intro("Stopping after the running stage.")
-      : ui.actions(ui.btn("■ stop the backlog — after the running stage", {attrs: {"data-call": "down"}})
+      : ui.actions(ui.btn("■ stop after the running story", {attrs: {"data-call": "down"}})
         + ui.btn("■ stop now", {danger: true, attrs: {"data-call": "down", "data-now": "1"}})))
     : ui.actions(ui.btn("▶ start the backlog", {primary: true, plain: true, attrs: {"data-call": "up"}})))
     + (w ? ui.accordion({key: "worker", variant: "quiet", open: opened("worker"), head: "the worker",
@@ -656,6 +656,7 @@ function components() {
       ["rule-id", `${ui.ruleId("GATE-TESTS", "gate", "pass")} ${ui.ruleId("RUN-ROUND-1", "runner", "fail", 2)} ${ui.ruleId("STAGE-PLAN-1", "instructed")}`]]},
     {level: "molecules", items: [
       ["story", ui.story(sample.story, sample.title)],
+      ["menu", ui.menu({id: "g-menu", label: "CB", title: "a menu, closed"})],
       ["form-row", ui.formRow({id: "g-row", label: "Your name", hint: "as it stands beside your requests", value: "Ann"})
         + ui.formRow({id: "g-row-bad", label: "A story id", value: "Not An Id", error: "an id is lower case words joined by -"})],
       ["ask", ui.ask({id: "g-ask", draft: "gallery-ask", label: "wish", text: "What should exist?", primary: true, write: true, choices: ["too big", "unclear"]})],
@@ -684,6 +685,11 @@ function components() {
       ["step", lines.map(l => l.slice(2).split(" ")).map(([w, ...rest]) => ui.step(w, rest.join(" "))).join("")]]},
     {level: "organisms", items: [
       ["card", ui.card("A card", "what it holds", ui.intro("Its body."))],
+      ["run-control · run-panel", ["up", "stopping", "down"].map(state => ui.runControl({state, say: state === "down" ? "stopped · 1 ready" : `<b>${sample.story}</b> · build`,
+          act: ui.btn(state === "down" ? "▶ start the backlog" : "■ stop", {primary: state === "down", plain: state === "down", bar: true}), panel: ""})).join(" ")
+        + ui.runPanel({runs: [{id: sample.story, title: sample.title, word: "build · round 2 · 3 min", doing: "writing the loan's adapter",
+            steps: [{stage: "plan", state: "done"}, {stage: "test", state: "done"}, {stage: "build", state: "now"}, {stage: "tidy", state: ""}]}],
+          lines: ["next: a-reader-renews-a-loan, then 1 more"], acts: ui.btn("■ stop after the running story") + ui.link("open the run →", {quiet: true})})],
       ["accordion", ["row", "quiet", "group", "ink", "panel", "card"].map(variant => ui.accordion({key: `gallery:${variant}`, variant, open: opened(`gallery:${variant}`, variant === "row"),
         level: variant === "card" ? 3 : 0, head: `the ${variant} fold`, meta: ui.hint("meta"), body: () => ui.intro("What it folds.")})).join("")],
       ["fold-table", ui.foldTable([{label: "context"}, {label: "features", num: true}, {label: "criteria", num: true}],

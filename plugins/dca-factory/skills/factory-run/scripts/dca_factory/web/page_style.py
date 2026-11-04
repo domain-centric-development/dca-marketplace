@@ -11,7 +11,7 @@ NARROW = "760px"
 
 #: The blocks of the page's frame — the bar, the main region, the drawer — written in the page itself, not by a
 #: component; and the few utilities a component may add beside its block.
-FRAME_BLOCKS = ("topbar", "brand", "tabs", "status", "banner", "main", "toasts", "drawer", "wrap", "sr", "hide-narrow")
+FRAME_BLOCKS = ("topbar", "brand", "tabs", "banner", "main", "toasts", "drawer", "wrap", "sr", "hide-narrow")
 
 STYLE = """
 /* === base ===================================================================================================== */
@@ -63,7 +63,7 @@ tr:last-child td { border-bottom: 0; }
 .tabs__group { display: flex; align-items: center; }
 .tabs__sep { flex: none; width: 1px; height: 16px; margin: 0 var(--space-2); background: var(--bar-faint); }
 .tabs__arrow { color: var(--bar-faint); font: 400 var(--text-sm) var(--mono); }
-.status { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; font: 400 var(--text-sm) var(--mono); color: var(--bar-text); }
+.topbar__tools { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
 .banner { background: var(--bar); color: var(--bar-ink); border-bottom: 3px solid var(--stop); font: 500 var(--text-md) var(--display); padding: var(--space-2) 0; }
 .main, .drawer, .gallery__show { container-type: inline-size; }
 .main { padding-top: var(--space-7); padding-bottom: var(--space-8); }
@@ -125,6 +125,22 @@ tr:last-child td { border-bottom: 0; }
 .caret[data-open] { transform: rotate(90deg); stroke: var(--caret-open, currentColor); }
 .label { display: block; font: 600 var(--text-md) var(--display); color: var(--ink); margin-bottom: var(--space-1); }
 .label--quiet { font: 400 var(--text-sm) var(--mono); color: var(--muted); }
+/* a menu: its button, and beneath it a panel of the page's ground that stays above the content */
+.menu { position: relative; }
+.menu__toggle { display: inline-flex; align-items: center; gap: var(--space-2); font: 400 var(--text-sm) var(--mono); color: var(--ink);
+  background: none; border: 1px solid var(--line); border-radius: var(--radius-control); padding: var(--space-1) var(--space-3); cursor: pointer; white-space: nowrap; }
+.menu__toggle:hover { border-color: var(--brand); }
+.menu__toggle:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.menu__chev { font-size: var(--text-xs); color: var(--muted); transition: transform .15s; }
+.menu__toggle[aria-expanded="true"] .menu__chev { transform: rotate(180deg); }
+.menu--bar > .menu__toggle { color: var(--bar-text); border-color: var(--bar-rule); }
+.menu--bar > .menu__toggle:hover, .menu--bar > .menu__toggle[aria-expanded="true"] { color: var(--bar-ink); border-color: var(--bar-faint); }
+.menu--bar .menu__chev { color: var(--bar-dim); }
+.menu--flush > .menu__toggle { border-color: transparent; }
+.menu__panel { position: absolute; top: calc(100% + var(--space-2)); right: 0; z-index: 30; width: min(26rem, calc(100vw - 2 * var(--space-4)));
+  display: grid; gap: var(--space-3); padding: var(--space-4); background: var(--panel); color: var(--ink); border: 1px solid var(--line);
+  border-radius: var(--radius-card); box-shadow: var(--shadow); }
+.menu__panel[hidden] { display: none; }
 /* a label the field's example already explains: read out, not shown */
 .label--hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; margin: 0; }
 .hint { font: 400 var(--text-sm) var(--mono); color: var(--muted); }
@@ -404,6 +420,18 @@ div.id { margin-top: 2px; }
 .stepper__step[data-state="stopped"] { color: var(--stop); font-weight: 600; }
 .stepper__step[data-state="stopped"] .stepper__bar { background: var(--stop); }
 .stepper__step[data-state="now"] { color: var(--ink); font-weight: 600; }
+/* the run's control: one capsule on the bar — the dot and its word open the panel, the action stands beside them */
+.run-control { display: flex; align-items: center; gap: var(--space-1); padding: var(--space-1); border: 1px solid var(--bar-rule); border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--bar-ink) 5%, var(--bar)); }
+.run-control[data-state="up"] { border-color: color-mix(in srgb, var(--run) 45%, var(--bar)); }
+.run-control[data-state="stopping"] { border-color: color-mix(in srgb, var(--wait) 55%, var(--bar)); }
+.run-control__say { font: 400 var(--text-sm) var(--mono); }
+.run-control__say b { color: var(--bar-ink); font-weight: 500; }
+.run-panel { display: grid; gap: var(--space-3); }
+.run-panel__story { display: grid; gap: var(--space-1); padding-bottom: var(--space-3); border-bottom: 1px solid var(--line); }
+.run-panel__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
+.run-panel__line { margin: 0; font: 400 var(--text-sm) var(--mono); color: var(--muted); }
+.run-panel__line b { color: var(--ink); font-weight: 500; }
 .stepper__step[data-state="now"] .stepper__bar { background: var(--wait); animation: pulse 1.5s infinite; }
 .course { border: 1px solid var(--line); border-radius: var(--radius-control); overflow: hidden; margin-top: var(--space-3); }
 .course__top { display: flex; justify-content: space-between; gap: var(--space-3); padding: var(--space-2) var(--space-3); align-items: baseline; flex-wrap: wrap; }

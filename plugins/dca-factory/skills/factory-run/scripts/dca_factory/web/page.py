@@ -52,12 +52,15 @@ FACES = """
 FRAME = """<header class="topbar" id="topbar">
   <div class="wrap topbar__app">
     <a class="brand" id="home" href="#now" data-tab="now" aria-label="now — where the factory stands" title="now — where the factory stands"><span class="brand__logo" aria-hidden="true">__MARK__</span><span class="brand__name">factory<span class="brand__dot">.</span></span><span class="brand__project" id="project"></span></a>
-    <div class="status">
-      <span id="worker">…</span>
-      <button type="button" class="btn btn--bar btn--primary btn--plain" data-call="up" id="up" title="work the released stories off, one after the other — factory.sh up" hidden>▶ start the backlog</button>
-      <button type="button" class="btn btn--bar" data-call="down" id="down" title="no next story from the backlog; what runs ends its stage — factory.sh down" hidden>■ stop the backlog</button>
-      <div class="form-row form-row--inline form-row--bar"><label class="label label--quiet label--bar" for="by">as</label><input class="field field--bar" id="by" type="text" autocomplete="name"></div>
-      <span class="switch switch--bar" role="group" aria-label="colour scheme"><button type="button" class="switch__opt" data-pick="light" aria-pressed="false">light</button><button type="button" class="switch__opt" data-pick="auto" aria-pressed="false">auto</button><button type="button" class="switch__opt" data-pick="dark" aria-pressed="false">dark</button></span>
+    <div class="topbar__tools">
+      <div id="run"></div>
+      <div class="menu menu--bar" data-menu-box="me">
+        <button type="button" class="menu__toggle" aria-expanded="false" aria-controls="menu-me" data-menu="me" title="who acts here, and the colour scheme"><span id="initials">you</span><span class="menu__chev" aria-hidden="true">▾</span></button>
+        <div class="menu__panel" id="menu-me" hidden>
+          <div class="form-row"><label class="label label--quiet" for="by">you act as</label><input class="field" id="by" type="text" autocomplete="name"></div>
+          <div class="form-row"><span class="label label--quiet">colour scheme</span><span class="switch" role="group" aria-label="colour scheme"><button type="button" class="switch__opt" data-pick="light" aria-pressed="false">light</button><button type="button" class="switch__opt" data-pick="auto" aria-pressed="false">auto</button><button type="button" class="switch__opt" data-pick="dark" aria-pressed="false">dark</button></span></div>
+        </div>
+      </div>
     </div>
   </div>
   <div class="topbar__nav"><nav class="wrap tabs" id="tabs" role="tablist" aria-label="the factory's views"></nav></div>
