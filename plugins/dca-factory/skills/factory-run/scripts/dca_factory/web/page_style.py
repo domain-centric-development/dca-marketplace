@@ -46,7 +46,7 @@ tr:last-child td { border-bottom: 0; }
 .topbar { position: sticky; top: 0; z-index: 20; background: var(--bar); color: var(--bar-ink); border-bottom: 1px solid var(--bar-rule); }
 /* the bar holds the application above — the brand, what runs, who acts, the scheme — and the views below, their
    tabs standing on the bar's lower edge and starting where the content starts */
-.topbar__app { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4); padding: var(--space-3) 0; flex-wrap: wrap; }
+.topbar__app { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4); padding-block: var(--space-3); flex-wrap: wrap; }
 .topbar__nav { border-top: 1px solid var(--bar-rule); }
 .brand { display: flex; align-items: baseline; gap: 1ex; font: 700 var(--text-xl) var(--display); letter-spacing: -.3px; color: var(--bar-ink);
   text-decoration: none; border-radius: var(--radius-control); padding: 2px var(--space-2); margin: -2px calc(-1 * var(--space-2)); }
