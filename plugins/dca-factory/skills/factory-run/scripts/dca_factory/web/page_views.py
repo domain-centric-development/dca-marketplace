@@ -81,8 +81,8 @@ function partBody(name) {
 function describe(st) {
   if (S.part) return partReader(st, S.part);
   // the parts as a short list beside the domain; one opens as a document of its own (WP-183)
-  const parts = (st.description || []).map(p => ({mark: p.mark,
-    what: ui.link(p.part, {ink: true, attrs: {"data-part": p.part}}) + ui.id(p.path, {block: true})
+  const parts = (st.description || []).map(p => ({mark: p.mark, press: {label: p.part, attrs: {"data-part": p.part}},
+    what: ui.id(p.path, {block: true})
       + (p.present ? ui.hint((p.sections || []).join(" · "), {prose: true}) : ui.flag("missing", "gone"))
       + ((p.missing || []).length ? ` ${ui.flag("missing: " + p.missing.join(", "), "changes")}` : "")
       + ((p.empty || []).length ? ` ${ui.flag("empty: " + p.empty.join(", "), "changes")}` : "")}));
@@ -98,24 +98,23 @@ function describe(st) {
 const sectionChange = (base, part, file, heading) => Object.assign({}, base, {text: `what “${heading}” should say instead — in your words`,
   request: Object.assign({}, base.request, {draft: `describe:${part}:${heading}`, lead: `${file} — ${heading}:`})});
 function partReader(st, name) {
-  const back = ui.link("← the description", {quiet: true, compact: true, attrs: {"data-part": ""}});
   const v = S.partText[name];
   if (!v || v.loading) {
     if (!v) { S.partText[name] = {loading: true}; loadPart(name); }
-    return back + ui.empty(`Reading ${name}…`);
+    return ui.empty(`Reading ${name}…`);
   }
-  if (v.error) return back + ui.error(v.error, {block: true});
-  if (!v.sections.length) return back + ui.empty(`${v.path} is missing.`);
-  const base = (st.entries || {}).describe;
-  const body = v.sections.map((sec, i) => {
-    const key = `${name}:${sec.heading}`;
-    const change = !base ? "" : S.changing === key
-      ? ui.caption(`${name} · ${sec.heading}`) + act(sectionChange(base, name, v.path.split("/").pop(), sec.heading)) + ui.link("cancel", {quiet: true, compact: true, attrs: {"data-change": ""}})
-      : ui.link("change this section", {quiet: true, compact: true, attrs: {"data-change": key}});
-    return `<section id="section-${i}"><h2>${esc(sec.heading)}</h2>${sec.text ? ui.prose(sec.text) : ui.empty("empty")}${change}</section>`;
-  }).join("");
-  return ui.reader({label: `${name} — its sections`, head: back + ui.id(v.path, {block: true}),
-    sections: v.sections.map((sec, i) => ({id: `section-${i}`, heading: sec.heading})), body});
+  if (v.error) return ui.error(v.error, {block: true});
+  if (!v.sections.length) return ui.empty(`${v.path} is missing.`);
+  const base = (st.entries || {}).describe, file = v.path.split("/").pop();
+  // the margin beside the text carries the press; the field opens beneath the section's words, its cancel beside its button
+  const sections = v.sections.map((sec, i) => {
+    const key = `${name}:${sec.heading}`, changing = !!base && S.changing === key;
+    const field = changing ? ui.caption(`${name} · ${sec.heading}`)
+      + act(sectionChange(base, name, file, sec.heading), "m", ui.btn("cancel", {attrs: {"data-change": ""}})) : "";
+    return {id: `section-${i}`, heading: sec.heading, body: (sec.text ? ui.prose(sec.text) : ui.empty("empty")) + field,
+      aside: base && !changing ? ui.link("change this section", {quiet: true, compact: true, attrs: {"data-change": key}}) : ""};
+  });
+  return ui.reader({label: `${name} — its sections`, head: ui.caption("sections"), sections});
 }
 
 // --- the spec: what holds, per context — its domain model, its features, rules and scenarios ---------------------------
@@ -704,6 +703,7 @@ function components() {
     {level: "molecules", items: [
       ["story", ui.story(sample.story, sample.title)],
       ["menu", ui.menu({id: "g-menu", label: "CB", title: "a menu, closed"})],
+      ["list · press", ui.list([{mark: "done", press: {label: "product"}, what: ui.id("product/overview.md", {block: true}) + ui.hint("an item that opens as a whole")}])],
       ["form-row", ui.formRow({id: "g-row", label: "Your name", hint: "as it stands beside your requests", value: "Ann"})
         + ui.formRow({id: "g-row-bad", label: "A story id", value: "Not An Id", error: "an id is lower case words joined by -"})],
       ["ask", ui.ask({id: "g-ask", draft: "gallery-ask", label: "wish", text: "What should exist?", primary: true, write: true, choices: ["too big", "unclear"]})],
@@ -777,10 +777,10 @@ function components() {
         side: ui.card("Beside it", "the other 4", ui.intro("What belongs to it."))})],
       ["master", ui.master({label: "the opened item", list: ui.card("A list", "", ui.intro("Its items; one opens beside it.")),
         detail: ui.drawerFrame(ui.btn("close"), ui.pageHead(sample.epic, sample.title, ""), ui.intro("The opened item."))})],
-      ["reader", ui.reader({label: "a part — its sections", head: ui.id("product/overview.md", {block: true}),
-        sections: [{id: "g-sec-1", heading: "What and for whom"}, {id: "g-sec-2", heading: "Surfaces"}],
-        body: `<section id="g-sec-1"><h2>What and for whom</h2>${ui.prose("A part of the description, read as a document.")}</section>`
-          + `<section id="g-sec-2"><h2>Surfaces</h2>${ui.prose("Each section with its own heading.")}</section>`})],
+      ["reader", ui.reader({label: "a part — its sections", head: ui.caption("sections"), sections: [
+        {id: "g-sec-1", heading: "What and for whom", body: ui.prose("A part of the description, read as a document."),
+         aside: ui.link("change this section", {quiet: true, compact: true})},
+        {id: "g-sec-2", heading: "Surfaces", body: ui.prose("Each section with its own heading; the margin carries what one does with it.")}]})],
       ["drawer-frame", ui.drawerFrame(ui.btn("close"), ui.pageHead(sample.epic, sample.title, ""), ui.intro("The story's sections."))],
       ["gallery", ui.hint("this page", {block: true})]]}]);
 }

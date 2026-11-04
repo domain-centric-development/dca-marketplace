@@ -105,7 +105,7 @@ ui.ask = o => `<div class="ask" data-ask="${esc(o.id)}">`
   + ui.formRow({id: `ask-${slug(o.draft || o.id)}`, label: o.label, labelHidden: !!o.text, placeholder: o.text, multiline: true, value: o.value, attrs: {"data-draft": o.draft}})
   + ((o.choices || []).length ? ui.formRow({id: `why-${slug(o.draft || o.id)}`, label: "why? (optional)", quiet: true,
       options: [{value: "", label: "—"}, ...o.choices.map(c => ({value: c}))]}) : "")
-  + `<div class="ask__go">${ui.btn(o.label, {primary: o.primary, write: o.write, title: o.title, attrs: {"data-press": o.id}})}</div></div>`;
+  + `<div class="ask__go">${ui.btn(o.label, {primary: o.primary, write: o.write, title: o.title, attrs: {"data-press": o.id}})}${o.also || ""}</div></div>`;
 // a button that opens a panel beneath it, the panel's words the page's — Escape or a click beside it closes it
 ui.menu = o => `<div class="${mods("menu", [o.bar && "bar", o.flush && "flush"])}" data-menu-box="${esc(o.id)}">`
   + `<button type="button" class="menu__toggle" aria-expanded="${!!o.open}" aria-controls="menu-${esc(o.id)}" data-menu="${esc(o.id)}"${o.title ? ` title="${esc(o.title)}"` : ""}>`
@@ -129,7 +129,7 @@ ui.ticket = o => `<li class="ticket"><div class="ticket__what"><b class="ticket_
   + (o.id ? ui.id(o.id, {block: true}) : "") + (o.error ? ui.error(o.error, {block: true}) : "") + (o.note ? ui.note(o.note, {html: true, state: "wait"}) : "")
   + ui.actions(o.actions, {tight: true}) + `</li>`;
 ui.option = o => `<li class="${mods("option", [o.advised && "advised"])}"><div class="option__pick">${o.pick}</div>${o.advised ? `${ui.caption("recommended", {brand: true})}` : ""}<span class="option__text">${o.text}</span></li>`;
-ui.listItem = o => `<li class="list__item">${o.mark ? ui.mark(o.mark) : ""}<span class="list__what">${o.what}</span>${o.aside ? `<span class="list__aside">${o.aside}</span>` : ""}</li>`;
+ui.listItem = o => `<li class="${mods("list__item", [o.press && "press"])}">${o.mark ? ui.mark(o.mark) : ""}<span class="list__what">${o.press ? `<button type="button" class="list__press"${attrs(o.press.attrs)}>${esc(o.press.label)}</button>` : ""}${o.what || ""}</span>${o.aside ? `<span class="list__aside">${o.aside}</span>` : ""}</li>`;
 ui.delivery = o => o.head
   ? `<div class="${mods("delivery", ["head"])}" aria-hidden="true">${["at", "story", "epic", "outcome event", "time", "tokens", "cost"].map((label, i) =>
       `<span class="${mods("delivery__label", [i > 3 && "num"])}${i === 2 || i === 5 ? " hide-narrow" : ""}">${ui.caption(label)}</span>`).join("")}</div>`
@@ -244,7 +244,9 @@ ui.master = o => `<div class="${mods("master", [o.narrowList && "narrow-list", o
 // a document read as one: its sections beside it, the text at a reading measure
 ui.reader = o => `<div class="reader"><nav class="reader__toc" aria-label="${esc(o.label || "sections")}">${o.head || ""}<ol class="reader__sections">`
   + (o.sections || []).map(s => `<li><button type="button" class="reader__goto" data-goto="${esc(s.id)}">${esc(s.heading)}</button></li>`).join("")
-  + `</ol></nav><article class="reader__text">${o.body}</article></div>`;
+  + `</ol></nav><article class="reader__text">${(o.sections || []).map(s => `<section class="reader__part" id="${esc(s.id)}">`
+    + `<h2 class="reader__heading">${esc(s.heading)}</h2>${s.aside ? `<div class="reader__aside">${s.aside}</div>` : ""}`
+    + `<div class="reader__body">${s.body}</div></section>`).join("")}</article></div>`;
 ui.drawerFrame = (close, head, body) => `<div class="drawer-frame"><div class="drawer-frame__close">${close}</div>${head}${body}</div>`;
 ui.gallery = sections => `<div class="gallery">${sections.map(s => `<section class="gallery__level"><h2 class="gallery__title">${esc(s.level)}</h2>${s.items.map(([name, html]) =>
   `<div class="gallery__item"><h3 class="gallery__name">${esc(name)}</h3><div class="gallery__show">${html}</div></div>`).join("")}</section>`).join("")}</div>`;

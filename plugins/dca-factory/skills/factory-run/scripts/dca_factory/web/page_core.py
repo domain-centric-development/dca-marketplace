@@ -129,7 +129,7 @@ function banner(text) {
 // (`queued`). One without a request is no press on this page.
 const ACTIONS = {};
 let actionCount = 0;
-function act(action, scope) {
+function act(action, scope, also = "") {
   if (!action || !action.request) return "";
   if (action.waits_on) return "";                       // another choice of the same record is on its way
   if (action.queued) return ui.state(`${action.label} — ${action.queued_text || "queued"}`, "queued", {title: `request ${action.queued}`});
@@ -142,7 +142,7 @@ function act(action, scope) {
     // what the person typed outlives a redraw: kept by the action's command, until its request is written
     const draft = r.draft || action.skill;
     return ui.ask(Object.assign({id, draft, label: action.label, text: action.text, title: said, value: S.drafts[draft] || "",
-                                 choices: r.choices}, look));
+                                 choices: r.choices, also}, look));
   }
   if (r.open === "record") return ui.btn(action.label, Object.assign({attrs: {"data-tab": "decide"}}, look));
   return ui.btn(action.label, Object.assign({title: said, attrs: {"data-press": id}}, look));
@@ -210,7 +210,7 @@ document.addEventListener("click", async event => {
   if (target.dataset.goto) { const at = $(target.dataset.goto); if (at) at.scrollIntoView({behavior: "smooth", block: "start"}); return; }
   if (target.dataset.change !== undefined) {
     S.changing = target.dataset.change; render();
-    const field = S.changing && target.closest("section") && target.closest("section").querySelector("textarea");
+    const field = S.changing && document.querySelector(".reader__part textarea");
     if (field) field.focus();
     return;
   }
@@ -436,7 +436,10 @@ function render() {
   const [, title, lede] = S.tab === "now" ? NOW : S.tab === "components" ? GALLERY : TABS.find(([id]) => id === S.tab) || NOW;
   const eyebrow = S.tab === "now" ? "Now" : S.tab === "components" ? "Pattern library" : (partOf(S.tab) || {}).eyebrow || "";
   const view = {now, describe, discover, backlog, run, decide, delivered, rules: rulesTab, components}[S.tab] || now;
-  morph($("main"), ui.pageHead(eyebrow, title, lede)
+  // a part read as a document is a place of its own beneath the description: the way back above its title (WP-183)
+  const part = S.tab === "describe" && S.part ? ((S.status || {}).description || []).find(p => p.part === S.part) || {part: S.part} : null;
+  morph($("main"), (part ? ui.actions(ui.btn("← all parts", {attrs: {"data-part": ""}})) + ui.pageHead(title, part.part, part.path || "")
+                        : ui.pageHead(eyebrow, title, lede))
     + (S.status || S.tab === "components" ? endedLine(S.status || {}) + view(S.status || {}) : ui.card("", "", ui.empty("Reading the factory…"))));
   if (S.tab === "run") paintFollow();
   if (S.tab === "rules") paintFlow();

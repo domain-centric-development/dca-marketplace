@@ -199,7 +199,7 @@ div.id { margin-top: 2px; }
 .label--bar { color: var(--bar-text); }
 .ask { margin-top: var(--space-3); }
 .ask .form-row:first-child { margin-top: 0; }
-.ask__go { margin-top: var(--space-3); }
+.ask__go { margin-top: var(--space-3); display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
 .actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); align-items: center; }
 .actions > .ask { flex: 1 1 100%; }
 .actions--end { justify-content: flex-end; margin-top: 0; }
@@ -269,6 +269,14 @@ div.id { margin-top: 2px; }
 .option--advised { border-color: var(--brand); box-shadow: inset 0 0 0 1px var(--brand); }
 .list__item { display: flex; gap: var(--space-3); align-items: baseline; padding: var(--space-2) 0; border-top: 1px solid var(--line); }
 .list__item:first-child { border-top: 0; }
+/* an item that opens as a whole: its title is the button, and the button's reach is the item */
+.list__item--press { position: relative; padding-inline: var(--space-2); margin-inline: calc(-1 * var(--space-2)); border-radius: var(--radius-control); }
+.list__item--press:hover { background: var(--soft); }
+.list__item--press:has(.list__press:focus-visible) { outline: 2px solid var(--brand); outline-offset: -2px; }
+.list__press { font: 500 var(--text-base) var(--display); color: var(--ink); background: none; border: 0; padding: 0; cursor: pointer; text-align: left; display: block; }
+.list__press::after { content: ""; position: absolute; inset: 0; }
+.list__press:focus-visible { outline: none; }
+.list__item--press:hover .list__press { color: var(--brand-text); }
 .list__what { flex: 1; min-width: 0; }
 .list__aside { font: 400 var(--text-sm) var(--mono); color: var(--muted); white-space: nowrap; text-align: right; }
 /* a delivery a row of fixed columns: when, what, its epic, its outcome event, how long, what it cost */
@@ -538,6 +546,8 @@ div.id { margin-top: 2px; }
 .flow [data-badge] { font: 700 11px var(--mono); fill: var(--fail); }
 
 /* === templates ================================================================================================ */
+/* a place beneath a view (a part of the description): its way back stands above the head, apart from it */
+.actions + .page-head { margin-top: var(--space-5); }
 .page-head__eyebrow { font: 400 var(--text-sm) var(--mono); letter-spacing: 2.5px; text-transform: uppercase; color: var(--brand-text); margin-bottom: var(--space-3); }
 .page-head__title { font: 700 clamp(var(--text-2xl), 4vw, var(--text-3xl))/1.1 var(--display); letter-spacing: -1px; }
 .page-head__lede { margin-top: var(--space-3); color: var(--muted); max-width: 44em; font-size: var(--text-lg); }
@@ -546,7 +556,7 @@ div.id { margin-top: 2px; }
 /* each column is a place of its own: what stands in it takes the form its column's width gives it */
 .split__main, .split__side, .master__list, .master__detail, .reader__text { min-width: 0; container-type: inline-size; }
 .split__main > :first-child, .split__side > :first-child, .master__list > :first-child, .master__detail > :first-child { margin-top: 0; }
-.split { margin-top: var(--space-5); }
+.split, .reader { margin-top: var(--space-5); }
 .master__detail { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-card); padding: var(--space-5); }
 .master--bare > .master__detail { background: none; border: 0; padding: 0; }
 .reader__toc { border-bottom: 1px solid var(--line); padding-bottom: var(--space-3); }
@@ -554,9 +564,11 @@ div.id { margin-top: 2px; }
 .reader__goto { font: 400 var(--text-sm) var(--mono); color: var(--muted); background: none; border: 0; padding: var(--space-1) 0; cursor: pointer; text-align: left; }
 .reader__goto:hover { color: var(--brand-text); }
 .reader__goto:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
-.reader__text { max-width: var(--read-measure); }
-.reader__text > section { scroll-margin-top: calc(var(--bar-height, 0px) + var(--space-4)); padding-top: var(--space-2); }
-.reader__text h2 { font: 600 var(--text-xl) var(--display); margin: var(--space-5) 0 var(--space-2); }
+.reader__part { scroll-margin-top: calc(var(--bar-height, 0px) + var(--space-4)); display: grid; grid-template-columns: minmax(0, 1fr) max-content;
+  column-gap: var(--space-5); align-items: baseline; max-width: var(--read-measure); padding-top: var(--space-2); }
+.reader__heading { font: 600 var(--text-xl) var(--display); margin: var(--space-5) 0 var(--space-2); }
+.reader__aside { font-size: var(--text-sm); }
+.reader__body { grid-column: 1 / -1; }
 @container (width >= 1500px) {
   .split, .master[data-open], .reader { grid-template-columns: repeat(var(--grid-columns), minmax(0, 1fr)); gap: var(--space-6); }
   .split__main { grid-column: span 8; } .split__side { grid-column: span 4; }
@@ -567,6 +579,9 @@ div.id { margin-top: 2px; }
   .reader__toc { grid-column: span 3; border-bottom: 0; padding-bottom: 0; }
   .reader__sections { flex-direction: column; flex-wrap: nowrap; }
   .reader__text { grid-column: span 9; }
+  /* the margin beside the reading measure carries what one does with a section, out of the reading's way */
+  .reader__part { grid-template-columns: minmax(0, var(--read-measure)) minmax(0, 1fr); max-width: none; }
+  .reader__body { grid-column: 1; }
 }
 .drawer-frame h2 { font: 600 var(--text-base) var(--display); margin: var(--space-5) 0 var(--space-2); }
 .drawer-frame__close { float: right; }
