@@ -229,7 +229,7 @@ PROFILE_KEYS = frozenset((
     "compile", "test", "e2eTest", "architecture", "format", "formatFix",
     "filterFlag", "filterFormat", "filterJoin", "testReport", "testEvidence",
     # what the project has, and what must hold
-    "required", "checks.backlog", "browser", "integration", "http.stub", "adopt.breakProof", "acceptance", "run",
+    "required", "checks.backlog", "browser", "screenshots", "integration", "http.stub", "adopt.breakProof", "acceptance", "run",
     # where things are (DEFAULTS), the generated map and the glossary; `backlog` is the older layout's, named by
     # the layout hint
     *DEFAULTS, "contextMap", "glossary", "backlog",

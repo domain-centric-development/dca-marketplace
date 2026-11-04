@@ -87,6 +87,8 @@ class ToolHost(typing.Protocol):
 
     def protected_dirs(self) -> typing.List[str]: ...
 
+    def skill_reach(self) -> typing.List[str]: ...
+
     def journal_line(self, story: typing.Optional[str], line: str) -> None: ...
 
     def renew(self) -> bool: ...
@@ -179,9 +181,12 @@ class ToolProcesses:
             err(f"factory: unknown tool '{tool}'")
             return 2
         level, _note = choice.effort_choice(tool, stage)
+        reach = host.skill_reach() if hasattr(host, "skill_reach") else []   # read, never edited (WP-184)
         variables, argv = tool_command(TOOL[tool], model=flags.split(" ", 1)[1] if flags else "",
-                                       writable=host.add_dirs, readable=host.read_dirs,
-                                       protected=host.protected_dirs(), allowed=choice.allowed_commands(), effort=level)
+                                       writable=host.add_dirs, readable=[*host.read_dirs, *reach],
+                                       protected=[*host.protected_dirs(), *reach], allowed=choice.allowed_commands(),
+                                       effort=level,
+                                       offline=choice.reach.offline, web=choice.reach.researches)
         env.update(variables)
         return self.tool_process(spawnable(argv + [prompt]), env, raw, stdin=subprocess.DEVNULL, stage=stage)
 

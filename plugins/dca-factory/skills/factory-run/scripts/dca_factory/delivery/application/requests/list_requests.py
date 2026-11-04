@@ -84,6 +84,7 @@ def wish_entry(request: Request, drafts: typing.List[typing.Dict[str, str]]) -> 
                 asked=str(request.get("asked") or ""), started=str(request.get("started") or ""), state=state,
                 tone={"done": "ok", "waiting": "ask", "failed": "bad"}.get(state, "wait"), text=text,
                 place=place_of(request["id"]), made=drafts, actions=release,
+                files=len(str(request.get("files") or "").split()),        # handed over beside the words (WP-184)
                 operations=[dict(name="hide", label="✕")] if state == "done"
                 else [dict(name=o, label=OPERATION_LABELS[o]) for o in operations_of(state) if o != "follow"])
 

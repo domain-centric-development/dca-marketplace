@@ -50,8 +50,9 @@ FACES = """
 
 #: The page's frame: the bar, the main region, the drawer — the one markup not drawn by a component.
 FRAME = """<header class="topbar" id="topbar">
+  <div class="banner" id="banner" role="alert" data-state="stop" hidden><div class="wrap" id="banner-text"></div></div>
   <div class="wrap topbar__app">
-    <a class="brand" id="home" href="#now" data-tab="now" aria-label="now — where the factory stands" title="now — where the factory stands"><span class="brand__logo" aria-hidden="true">__MARK__</span><span class="brand__name">factory<span class="brand__dot">.</span></span><span class="brand__project" id="project"></span></a>
+    <a class="brand" id="home" href="#now" data-tab="now" aria-label="now — where the factory stands" title="now — where the factory stands"><span class="brand__logo" aria-hidden="true">__MARK__</span><span class="brand__name">domaincentric<span class="brand__accent">.factory</span></span><span class="brand__project" id="project"></span></a>
     <div class="topbar__tools">
       <div id="run"></div>
       <div class="menu menu--bar" data-menu-box="me">
@@ -65,7 +66,6 @@ FRAME = """<header class="topbar" id="topbar">
   </div>
   <div class="topbar__nav"><nav class="wrap tabs" id="tabs" role="tablist" aria-label="the factory's views"></nav></div>
 </header>
-<div class="banner" id="banner" role="alert" hidden><div class="wrap" id="banner-text"></div></div>
 <main class="wrap main" id="main" role="tabpanel"></main>
 <div class="toasts" id="toasts" aria-live="polite"></div>
 <aside class="drawer" id="drawer" aria-label="story" tabindex="-1" hidden></aside>""".replace("__MARK__", MARK)
@@ -79,7 +79,7 @@ PAGE = f"""<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<title>Factory</title>
+<title>domaincentric.factory</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <style>{FACES}{TOKENS}{STYLE}</style>
 <link rel="stylesheet" href="/theme/theme.css">

@@ -6,6 +6,7 @@ from __future__ import annotations
 import typing
 
 from ....building_blocks import OutputPort
+from ...domain.model.shot import Shot
 
 Facts = typing.Dict[str, typing.Any]
 
@@ -30,6 +31,10 @@ class DetailFacts(OutputPort, typing.Protocol):
 
     def epic_folders(self) -> typing.Dict[str, str]:
         """Every epic folder, lower case, with the epic id its file names."""
+        ...
+
+    def shots(self, story_id: str) -> typing.List[Shot]:
+        """The pictures the story's stages took of what they built, newest first (WP-184)."""
         ...
 
     def epic_text(self, epic: str) -> Facts:

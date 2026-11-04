@@ -89,9 +89,17 @@ def _status_all():
              dict(column="delivered", count=3, total=9, percent=33, line="33 %", last_text="2026-11-01T15:02:00Z")],
         waiting=[dict(story="a-late-return-is-fined", mark="question", what="a question", record="q-1", place="decide"),
                  dict(story="the-desk-sees-the-queue", mark="look", what="a result to look at", record="a-1", place="decide"),
-                 dict(story="a-reader-reserves-a-copy", mark="look", what="a draft waits for your release", place="decide",
+                 dict(story="a-reader-reserves-a-copy", mark="look", what="a draft waits for your release", place="decide", draft=True,
                       action=_action("release", "release", primary=True, story="a-reader-reserves-a-copy")),
-                 stopped],
+                 *[dict(story=s, mark="look", what="a draft waits for your release", place="decide", draft=True,
+                        action=_action("release", "release", primary=True, story=s))
+                   for s in ("a-reader-pays-a-fine-online", "the-desk-prints-a-receipt", "a-reader-sees-the-due-dates")],
+                 stopped,
+                 *[dict(story=s, mark="stopped", what=why, place="decide", course=STOPPED_COURSE,
+                        action=_action("run it again", "run", primary=True, text=why, story=s))
+                   for s, why in (("a-copy-is-marked-damaged", "the judge found the build does not converge in three rounds"),
+                                  ("the-catalogue-lists-new-books", "the run reached the budget the person set"),
+                                  ("a-reader-borrows-an-e-book", "a check refused three times: the e-book has no copy to lend"))]],
         running=[dict(story="a-reader-returns-a-book", stage="build", part="build", round=2, course=COURSE,
                       activity="writing the return's adapter", ago="3 min")],
         queue=dict(ready=["a-reader-renews-a-loan"], blocked=2),
@@ -162,12 +170,14 @@ def _decisions_all():
              actions=[_action("accept", "accept", primary=True), _action("correct it", "correct", open_="words",
                                                                          text="what is wrong", draft="correct:a-1")]),
         dict(id="q-2", kind="question", place="discover", path=".dca-factory/discovery/empty-shelves/q-2.md",
-             text="Which readers find the shelves empty?", sections=[],
+             text="Which readers find the shelves empty?",
+             sections=[dict(heading="Why it asks", text="Your words say readers find no copy. Members, walk-ins and the school classes borrow differently — the report names one group's problem, and the epics it proposes follow from that.")],
              actions=[_action("answer", "answer", open_="words", text="in your words", draft="answer:q-2")])])
 
 
 def _discover_all():
-    return dict(store="product/discovery", working=[dict(id="r-3", topic="empty-shelves", state="waiting", words="readers find no copy", record=".dca-factory/discovery/empty-shelves/q-2.md")],
+    return dict(store="product/discovery", working=[dict(id="r-3", topic="empty-shelves", state="waiting", words="readers find no copy", record=".dca-factory/discovery/empty-shelves/q-2.md"),
+                         dict(id="r-6", topic="", state="running", words="the desk wants fewer phone calls", record="")],
                 topics=[dict(topic="empty-shelves", title="Readers find the shelves empty", report="product/discovery/empty-shelves.md",
                              sections=[dict(heading="The problem", text="A reader comes for a book and finds **no copy**.")],
                              proposals=[dict(id="p-1", goal="Readers find a free copy", intent="fewer empty shelves",
@@ -211,14 +221,31 @@ def _story_all():
                 scenarios=[dict(key="a-returned-book-is-free", title="A returned book is free again", rule="A copy is lent or free.",
                                 steps=[dict(word="Given", text="a lent copy"), dict(word="When", text="the reader returns it"),
                                        dict(word="Then", text="the copy is free")])],
-                stages=dict(plan=dict(runs=1, seconds_text="3 min", tokens_text="0.8 M", cost_text="$0.60", why=""),
-                            test=dict(runs=1, seconds_text="4 min", tokens_text="1.2 M", cost_text="$0.90", why=""),
-                            build=dict(runs=2, seconds_text="6 min", tokens_text="2.0 M", cost_text="$1.50", why="the gate refused once")))
+                # the numbers as the factory keeps them: raw per stage, and each pass the story went through
+                stages=dict(plan=dict(runs=1, seconds=190, tokens=800_000, cost=0.60, input=92, output=21_400, cache_write=88_000, cache_read=690_508,
+                                      seconds_text="3 min", tokens_text="0.8 M", cost_text="$0.60", why=""),
+                            test=dict(runs=1, seconds=242, tokens=1_200_000, cost=0.90, input=120, output=36_200, cache_write=101_500, cache_read=1_062_180,
+                                      seconds_text="4 min", tokens_text="1.2 M", cost_text="$0.90", why=""),
+                            build=dict(runs=2, seconds=400, tokens=2_000_000, cost=1.50, input=240, output=64_800, cache_write=190_300, cache_read=1_744_660,
+                                       seconds_text="6 min", tokens_text="2.0 M", cost_text="$1.50", why="the gate refused once")),
+                passes=[dict(label="first", start="2026-11-03T09:02:00Z", seconds=660, tokens=3_600_000, stages=["plan", "test", "build"]),
+                        dict(label="again", start="2026-11-03T09:21:00Z", seconds=125, tokens=400_000, stages=["build"])],
+                models=["the profile's model"])
 
 
 def _part_all():
-    return dict(path="product/overview.md", sections=[dict(heading="What", text="A lending library's desk and its readers."),
-                                                       dict(heading="For whom", text="- the desk\n- the readers")])
+    # seven sections, some long — a part is read as a document beside its sections (WP-183)
+    long = ("The desk lends books to readers and takes them back. A reader holds three loans at most; a loan runs three "
+            "weeks and renews once. What the desk sees first is what waits: a return to book in, a reservation to hand "
+            "out, a fine to settle. ")
+    return dict(path="product/overview.md", sections=[
+        dict(heading="What and for whom", text=long * 2 + "\n\n- the desk\n- the readers"),
+        dict(heading="Surfaces", text="- the desk's screen, in the library\n- a reader's page, on a phone"),
+        dict(heading="How it works", text=long * 3),
+        dict(heading="Look and feel", text="Quiet, legible at arm's length; the desk's actions one press away."),
+        dict(heading="Qualities", text="- a return books in within a second\n- nothing is lost when the network drops"),
+        dict(heading="Not part of the product", text="Buying books, a catalogue search across libraries."),
+        dict(heading="Open questions", text=long)])
 
 
 def _empty():

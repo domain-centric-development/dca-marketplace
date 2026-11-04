@@ -9,6 +9,7 @@ from ...domain.model.correction import REASON_CODES
 from ...domain.model.decision_record import RecordId, RecordKind
 from ...domain.model.epic import EpicId
 from ...domain.model.story import StoryId, StoryStatus
+from ...domain.model.words import Words, WordsRefused
 from .decision_record_repository import DecisionRecordRepository, RecordNotFound
 from .discovery_reports import DiscoveryReports
 from .epic_catalog import EpicCatalog
@@ -34,8 +35,8 @@ class RequestCheck:
         self._stages = stages
 
     def checked(self, kind_name: str, given: typing.Optional[typing.Mapping[str, typing.Any]],
-                words: typing.Optional[str]) -> typing.Tuple[Fields, str]:
-        """(fields, words) as the request will be written."""
+                words: typing.Optional[str], handed: bool = False) -> typing.Tuple[Fields, str]:
+        """(fields, words) as the request will be written; `handed`: files go with its words."""
         kind = KIND.get(kind_name)
         if kind is None:
             raise RequestRefused(f"no request kind {kind_name!r} — one of: {', '.join(KIND)}")
@@ -58,8 +59,12 @@ class RequestCheck:
             raise RequestRefused(f"a {kind.name} request carries the person's words")
         if kind.words == "none" and words:
             raise RequestRefused(f"a {kind.name} request takes no words")
-        if "\0" in words or len(words) > 20000:
-            raise RequestRefused("the words are too long or carry a NUL")
+        if kind.words == "none" and handed:
+            raise RequestRefused(f"a {kind.name} request takes no words, and so no file beside them")
+        try:
+            Words(words)
+        except WordsRefused as refused:
+            raise RequestRefused(str(refused)) from None
         if kind.name == "release" and "story" in fields and len(fields["story"].split()) == 1 \
                 and self._epics.exists(EpicId(fields["story"])):
             fields["epic"] = fields.pop("story")          # `release <id>`: an id that names an epic's folder is the epic

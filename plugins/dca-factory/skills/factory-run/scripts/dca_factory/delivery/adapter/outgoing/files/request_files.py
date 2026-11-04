@@ -24,7 +24,7 @@ REQUEST_DONE = "done"
 DONE_DAYS = 7
 
 #: The keys a request's front matter may carry, in the order they are written.
-FRONT_KEYS = ("kind", "story", "epic", "record", "topic", "proposal", "report", "option", "from", "by", "asked",
+FRONT_KEYS = ("kind", "story", "epic", "record", "topic", "proposal", "report", "option", "from", "files", "by", "asked",
               "state", "worker", "started", "attempts", "record_file", "error", "answered", "wrote",
               "worked", "commit")
 

@@ -43,6 +43,11 @@
 #              when the project deliberately has none. With `none` the plan may fall back to a lower
 #              test level for a page; unset, a criterion only a browser can observe stops the plan
 #              once for the stack decision. `factory.sh setup` sets it where it finds a Playwright setup
+# screenshots  the folder the end-user tests save their pictures in, relative to the project
+#              (`build/reports/test-e2e/screenshots`, `test-results`): after every test command the gate
+#              runs for a story, the runner copies the pictures that run made into the story's run folder
+#              (`shots/`), and the story's place shows them — whatever language or runner took them. Unset,
+#              a story shows no pictures
 # integration  `none` when the project has decided to have no integration level; otherwise one
 #              `test.<name>:` source set runs the scenarios below the page (contract 9: every scenario but
 #              the happy path and a browser-only one is integrated). Neither declared: the plan stops once

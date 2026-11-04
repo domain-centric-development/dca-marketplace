@@ -10,8 +10,10 @@ from ....building_blocks import UseCase
 from ..shared.backlog_changes import BacklogChanges
 from ..shared.request_records import RequestRecords
 from ..shared.request_settlement import RequestSettlement
-from ..shared.request_skill import RequestSkill
-from ..shared.requests import Kind, KIND, Request, RequestRefused, RequestStore, written_keys
+from ..shared.handed_file_store import HandedFileStore
+from ..shared.request_skill import HandedFileRead, RequestSkill
+from ..shared.requests import (Kind, KIND, Request, RequestRefused, RequestStore, named_files,
+                               written_keys)
 from .list_requests import target_text
 from ...domain.model.decision_record import WAITING_WORDS
 from ..delivery.pipeline_rules import decides
@@ -50,8 +52,9 @@ class WorkRequestUseCase:
     description only, never code and never what a person had changed before."""
 
     def __init__(self, store: RequestStore, records: RequestRecords, changes: BacklogChanges, skill: RequestSkill,
-                 settlement: RequestSettlement, now: typing.Callable[[], str]) -> None:
+                 settlement: RequestSettlement, now: typing.Callable[[], str], files: HandedFileStore) -> None:
         self._store = store
+        self._files = files
         self._records = records
         self._changes = changes
         self._skill = skill
@@ -101,12 +104,14 @@ class WorkRequestUseCase:
                             f"by={request.get('by', '')}", f"tool={tool}", f"attempt={attempts}")
         before = self._changes.dirty()
         try:
-            ran = self._skill.run(request, kind, unit, tool)
+            ran = self._skill.run(request, kind, unit, tool, self._handed(request))
         except BaseException:
             self._store.update(request, state="queued", worker=None, started=None,
                                wrote=self._wrote(request, before))
             self._store.journal("request-end", kind.name, request["id"], "exit=stopped", "state=queued")
             raise
+        # the files no live request names any more go, once older than the domain keeps them (WP-184)
+        self._files.prune(named_files(self._store.all()))
         if ran.code != 0:
             why = "ran past its time limit" if ran.timed_out else f"ended with exit {ran.code}"
             self._store.update(request, state="failed", worker=None, wrote=self._wrote(request, before),
@@ -193,6 +198,15 @@ class WorkRequestUseCase:
         self._store.journal("request-end", kind.name, request["id"], "exit=0", "state=done", f"commit={commit}")
         said.append(("out", f"factory: request {request['id']} done — committed {commit}"))
         return RequestWorked(0, said, commit)
+
+    def _handed(self, request: Request) -> typing.List[HandedFileRead]:
+        """The files the request names that are still kept, each where its run reads it."""
+        handed = []
+        for file_id in named_files([request]):
+            ref, path = self._files.find(file_id), self._files.readable(file_id)
+            if ref and path:
+                handed.append(HandedFileRead(ref, path))
+        return handed
 
     def _keep(self, request: Request, kind: Kind, wrote: str, commit: str) -> None:
         """A request that has an agent write something new leaves a note of what it made, for the person who asked."""

@@ -69,7 +69,11 @@ Write `.gitignore` with the line `originals/` before anything lands in the folde
    `## Risks and open questions` and the metric says it cannot yet tell the cases apart. Where the findings change what the project description says — other users, a new "what it is
    not", a new quality — add `## Proposed description changes` before `## Sources`: one
    `### <overview.md | tech.md | domain.md> — <section>` per change, with `- change:` (cited) and `- why:`.
-   Leave the section out when nothing changes.
+   Leave the section out when nothing changes. **Mockups only where the person asked for them** — to see an
+   option or a proposed epic before it is one: each one static page in the topic's folder, `mockups/<name>.html`
+   (HTML and inline CSS, no script, nothing loaded from elsewhere, the project's look where the description names
+   one), named in the report where it belongs as `![<what it shows>](mockups/<name>.html)`. The page draws it in a
+   frame that runs no script. A mockup is an illustration, never a source: a claim it shows still cites one.
 6. **Check it with the gate:** `bash .agents/factory/factory.sh discover --check <topic>` — the
    sections, every citation listed, every source resolving, every proposal with intent, goal and metric, every goal at most 20 words,
    `originals/` ignored. Fix every finding before you hand the report over. Report what it said.

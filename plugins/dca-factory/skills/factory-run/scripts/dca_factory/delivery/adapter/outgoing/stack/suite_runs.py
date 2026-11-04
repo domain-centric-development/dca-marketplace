@@ -6,8 +6,11 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+import time
 import typing
 
+from ..files.run_shots import collect_shots
+from ....domain.model.shot import Instant, RunOrigin, taken_since
 from ..files.hand_over_patterns import SELECTOR
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_text
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir, runs_top
@@ -143,10 +146,16 @@ def suite_run(cwd: str, profile: Profile, key: str, command: str, owner: typing.
               already: typing.Optional[typing.Tuple[int, str, Ran]] = None, reused: str = "") -> SuiteRun:
     """The test command run whole — or the run the mapped tests were read from (`already`) — with a red test outside
     the story run again alone, once."""
+    started, origin = Instant(time.time()), RunOrigin.RAN
     if already is None:
         code, output, ran, reused = recorded_run(command, cwd, profile, with_reports=True)
     else:
         code, output, ran = already
+        origin = RunOrigin.REUSED           # the run the mapped tests were read from, made before this step
+    if owner and profile.get("screenshots"):
+        # what the end-user tests took a picture of goes to the story's place, whatever the stack (WP-184)
+        collect_shots(cwd, str(profile["screenshots"]), os.path.join(owner.runs, owner.story_id), key,
+                      taken_since(started, origin))
     code, ran, flaky, still = retry_outside(cwd, profile, command, code, ran, owner)
     return SuiteRun(Detail(key), CommandRun(Detail(command), Count(code), Detail(tail(output)), Detail(reused)),
                     Count(sum(1 for outcome in ran.values() if outcome != "skipped")),

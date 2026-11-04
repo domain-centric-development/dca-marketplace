@@ -272,6 +272,58 @@ behaviour the project already has —, else a story. The kind decides the stages
 
 **Operations:** kind (`kind`)
 
+### Words (Words)
+
+**Definition:** What a person typed into a request: at most `MAX_LENGTH` characters, no control character but a line
+break, a return and a tab, no direction mark — what is read is what was shown. A run takes them as the request's
+data, never as instructions to it.
+
+**Type:** Value Object
+
+### Handed file (HandedFile) · Handed file id (HandedFileId) · Project path (ProjectPath)
+
+**Definition:** A file a person hands over beside their words — a picture, a PDF or a text, known by its content and
+kept under a reduced name; at most `MAX_FILES` go with one request (`HandedFiles`), none with a kind that takes no
+words. Its id is the factory's own, drawn fresh (`fresh`); the files no live request names go once older than
+`KEEP_DAYS`. A project path is a path in the project with `/` between its folders.
+
+**Type:** Value Object
+
+**Operations:** kind of (`kind_of`), draw an id (`fresh`)
+
+### Shown path (ShownPath) · Shown file (ShownFile) · Refusal (Refusal)
+
+**Definition:** A file the page shows: its path relative, without `..`, beneath one of the places a file is shown
+from (`shown_places`: the project's description and backlog, and the factory's own folder); shown as a picture, a
+PDF or a text, or a mockup as a page of its own. A refusal says why not — of the wrong form, nothing there, too
+large, of no kind shown —, never in a protocol's numbers.
+
+**Type:** Value Object
+
+**Operations:** places (`shown_places`), show (`of`)
+
+### Shot (Shot) · Taken file (TakenFile) · Run origin (RunOrigin)
+
+**Definition:** A picture a story's end-user tests took, brought to the story's place: a picture by its content, not
+older than the run that took it — a run the step reused counts from the window before the step (`taken_since`) —,
+the newest first, at most `SHOWN` (`kept`, `shown`), named for what took it.
+
+**Type:** Value Object
+
+**Operations:** taken since (`taken_since`), keep (`kept`), show (`shown`), name (`shot_name`)
+
+### Reach (Reach) · Network (Network) · Shell head (ShellHead) · Home folder (HomeFolder)
+
+**Definition:** What one run may reach. A stage builds: its shell runs the project's commands, the common reading
+verbs and the whole cli, with the network. A request's skill reads and records: the cli flags and factory verbs of
+the dialog skills, no build and no verb that takes a path, offline — unless its kind researches the web, which gives
+it the network and the tools to search. No run reads the home's secret folders. A person's words widen none of it;
+how each tool is told is the adapters'.
+
+**Type:** Value Object
+
+**Operations:** a stage's (`stage`), a request's (`request`)
+
 ---
 
 ## Concepts

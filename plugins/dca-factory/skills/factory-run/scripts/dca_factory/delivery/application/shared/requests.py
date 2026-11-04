@@ -22,6 +22,8 @@ import re
 import typing
 
 from ....building_blocks import OutputPort, Store, UseCaseException
+from ...domain.model.handed_file import FileRefused, HandedFileId
+from ...domain.model.reach import Network, Reach
 
 #: A request as the store keeps it: its front keys, `id`, `path`, `words` (the body) and `state` — strings all.
 Request = typing.Dict[str, typing.Any]
@@ -40,6 +42,12 @@ class Kind:
     skill: str = ""                     #: the skill a session would run; "" — the runner works it itself
     about: str = ""
     creates: bool = False               #: whether an agent writes something new for it — a draft, an epic, a report
+    web: bool = False                   #: whether its skill researches the web — the one request a network is for (WP-184)
+
+    @property
+    def reach(self) -> Reach:
+        """What its skill's run may reach: offline, or the web for a skill that researches it."""
+        return Reach.request(Network.RESEARCH if self.web else Network.NONE)
 
 
 KINDS = (
@@ -51,7 +59,7 @@ KINDS = (
     Kind("journey", keys=("epic",), skill="factory-backlog", creates=True, about="propose the journey of a delivered epic"),
     Kind("describe", words="required", skill="description", creates=True,
          about="a change to the project description, in the person's words (`<part>: <change>`)"),
-    Kind("discover", words="required", may=("topic",), skill="factory-discover", creates=True,
+    Kind("discover", words="required", may=("topic",), skill="factory-discover", creates=True, web=True,
          about="a problem or a wished deliverable — the discovery report and the epics it proposes"),
     Kind("epic-from", keys=("topic", "proposal"), skill="factory-backlog", creates=True,
          about="a discovery's proposed epic, released as an epic"),
@@ -66,6 +74,18 @@ KINDS = (
 
 
 KIND = {kind.name: kind for kind in KINDS}
+
+
+def named_files(requests: typing.Iterable["Request"]) -> typing.List[HandedFileId]:
+    """The handed files the requests name (WP-184) — an id of the wrong form is no file of theirs."""
+    found = []
+    for request in requests:
+        for word in str(request.get("files") or "").split():
+            try:
+                found.append(HandedFileId(word))
+            except FileRefused:
+                continue
+    return found
 
 
 #: A story, an epic, a record, a topic or a proposal as a request names it: one word, no path.

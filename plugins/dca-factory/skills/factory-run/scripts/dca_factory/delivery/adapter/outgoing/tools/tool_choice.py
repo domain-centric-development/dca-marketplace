@@ -16,18 +16,9 @@ import typing
 from ....application.profile.profile_rules import command_heads, effort_for, first_word, model_for, tool_for
 from .agents import isolation_args, TOOL
 from ....application.delivery.pipeline_rules import decides
+from ....domain.model.reach import Reach
 
 Profile = typing.Mapping[str, typing.Any]
-
-#: The shell a stage may use without asking, beside the gate, the cli and the profile's commands: the ordinary
-#: reading and text tools, the git verbs that look without changing anything (`git apply --check` is how a stage
-#: tries a break patch), and `git rm` — how a stage removes a file its plan says `removed`; it takes tracked files
-#: only, which git still holds, and the pipeline's own files are watched by the run (WP-102). What writes or runs
-#: anything else stays out — `rm`, `sed -i`, `xargs`, `find -exec`, a redirect of `echo`/`printf`, `mkdir`: each
-#: allowed head is allowed with every argument (WP-94). Measured on the bench: without the reading tools a stage hit
-#: the allow-list about three times per story, each a wasted turn; without a delete the build left a planned removal.
-STAGE_SHELL_HEADS = ("cd", "ls", "cat", "head", "tail", "wc", "sort", "grep", "diff", "pwd",
-                     "git status", "git diff", "git log", "git ls-files", "git apply --check", "git rm")
 
 #: Where a tool ran past this many seconds, it is stopped (0: no limit) — FACTORY_STAGE_TIMEOUT, else the profile's
 #: `stageTimeout:`. A number with `s`, `m` or `h`; a bare number is seconds.
@@ -41,13 +32,13 @@ def seconds_of(text: typing.Any) -> typing.Optional[int]:
 
 class ToolChoice:
     """The choices of one run: <profile> reads the profile as it stands, <py> and <gate> are how a stage calls the
-    gate. `allowed_override` replaces the shell a stage may use while a request's skill runs."""
+    gate. `reach` is what the run it starts may reach — a stage's, or a request's while its skill runs."""
 
     def __init__(self, profile: typing.Callable[[], Profile], py: str, gate: str) -> None:
         self._profile = profile
         self._py = py
         self._gate = gate
-        self.allowed_override: typing.Optional[str] = None
+        self.reach = Reach.stage()
 
     @decides(
         "RUN-LIMIT-1",
@@ -73,11 +64,18 @@ class ToolChoice:
             return ""
         return (" ".join(shlex.quote(w) for w in isolation_args(TOOL[tool])) if tool in TOOL else "") + " "
 
+    def gate_command(self) -> str:
+        """The gate as a stage's shell allows it — a request's too: it checks and writes nothing."""
+        return f"Bash({self._py} {self._gate}:*)"
+
     def allowed_commands(self) -> str:
-        if self.allowed_override:
-            return self.allowed_override
-        heads = [f"Bash({self._py} {self._gate}:*)", f"Bash({self._py} .agents/factory/factory-cli.py:*)"]
-        for head in command_heads(self._profile()) + list(STAGE_SHELL_HEADS):
+        """The shell the run's reach allows, as the tools' allow-lists name it: the gate; the cli whole, or the flags
+        the reach names; the factory's verbs it names; the profile's commands where it builds; its shell heads."""
+        reach, cli = self.reach, f"{self._py} .agents/factory/factory-cli.py"
+        heads = [self.gate_command()]
+        heads += [f"Bash({cli}:*)"] if reach.cli_flags is None else [f"Bash({cli} {f.value}:*)" for f in reach.cli_flags]
+        heads += [f"Bash(bash .agents/factory/factory.sh {verb.value}:*)" for verb in reach.verbs]
+        for head in (command_heads(self._profile()) if reach.builds else []) + [h.value for h in reach.shell_heads]:
             if f"Bash({head}:*)" not in heads:
                 heads.append(f"Bash({head}:*)")
         return ",".join(heads)

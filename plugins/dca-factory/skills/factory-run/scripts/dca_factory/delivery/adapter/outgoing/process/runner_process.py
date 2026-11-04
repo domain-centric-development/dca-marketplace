@@ -406,6 +406,27 @@ class Run:
         dirs = [".agents/factory", self.evidence_rel(), *TOOL_SKILL_DIRS, ".agents/skills"]
         return [d if os.path.isabs(d) or re.match(r"^[A-Za-z]:", d) else f"{self.home}/{d}" for d in dirs]
 
+    def skill_reach(self) -> typing.List[str]:
+        """Where the skills a run reads really are (WP-184): a linked skill folder's target and the plugins the tool
+        loads its method skills from — outside the project, so a run that reads only inside its working folders is
+        given them to read, and never to edit."""
+        found: typing.List[str] = []
+        for folder in (*TOOL_SKILL_DIRS, ".agents/skills"):
+            base = f"{self.home}/{folder}"
+            entries = sorted(os.listdir(base)) if os.path.isdir(base) else []
+            for name in entries:
+                path = os.path.join(base, name)
+                if os.path.islink(path) and os.path.isdir(path):
+                    found.append(os.path.realpath(path))
+            if os.path.islink(base) and os.path.isdir(base):
+                found.append(os.path.realpath(base))
+        for tool in TOOLS:
+            plugins = os.path.join(os.path.expanduser("~"), tool.plugin_home) if tool.plugin_home else ""
+            if plugins and os.path.isdir(plugins):
+                found.append(os.path.realpath(plugins))
+        inside = os.path.realpath(self.home) + os.sep
+        return list(dict.fromkeys(f for f in found if not (f + os.sep).startswith(inside)))
+
     def invoke(self, tool: str, prompt: str, raw: str, stage: str, story: typing.Optional[str],
                count: bool = True) -> int:
         """One stage's tool process (`ToolProcesses.invoke`), counted against `--max-stages` where `count`."""

@@ -167,6 +167,15 @@ where it gives an option and words. Answer only the record the request names —
 words point to where exactly one fits; else ask the code as a record beside the story, the seven codes as its
 options. The structural follow-ups and the correction's way into the story are the same as on a person's say-so.
 
+**Pictures and files.** A record may show pictures beside its text — a screenshot a test took, a mockup per option —
+lying in the record's folder (`<nn>/<name>.png`, a mockup `<nn>/<name>.html`: one static page, HTML and inline CSS,
+no script) and named as `![<option>: what it shows](<nn>/<name>.png)` (`templates/decision.md.tmpl`); the page shows
+them above the options, a mockup in a frame that runs no script. Mockups are made only when a person asks for
+them: an answer that asks to *see* the options ("show me mockups") is not an answer — write it into the record as the
+person's request, and the stage that asked makes the pictures when it asks again. Files a person handed over with an
+answer or a correction are listed in the prompt (`requests.md` rule 7); one that is part of the story goes beside it,
+`<story>/files/<name>`, named in the story's text.
+
 ## Do not
 
 - Do not write `## Answer` from a recommendation, a timeout, a majority of options or your own

@@ -108,3 +108,7 @@ asked: <now, UTC, ISO 8601>
 ## The formatter runs last
 
 <!-- rule: STAGE-COMMON-36 -->
+
+## A picture of what you built
+
+<!-- rule: STAGE-COMMON-37 -->

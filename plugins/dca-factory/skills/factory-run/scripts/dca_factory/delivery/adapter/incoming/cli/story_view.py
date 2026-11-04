@@ -193,6 +193,11 @@ def render_story_text(model: typing.Mapping[str, typing.Any], colour: bool = Fal
         headers, rows, right = stage_cells(model)
         out += section(stage_caption(model), colour) + table_text(headers, rows, right, total=True, colour=colour,
                                                                     first_bold=True)
+    if model.get("shots"):
+        # what its end-user tests took a picture of (WP-184): the page shows them, the terminal names where they are
+        out += section("Screenshots — newest first", colour)
+        out += table_text(["taken by", "when (UTC)", "file"], [[s["stage"] or "—", stamp_text(s["at"]), s["path"]]
+                                                             for s in model["shots"]], colour=colour, first_bold=True)
     denials = denial_rows(model)
     if denials:
         out += section("Denied — calls the tool refused without asking, each a turn spent", colour)

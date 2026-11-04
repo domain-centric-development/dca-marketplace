@@ -745,6 +745,8 @@ def request_command(argv: typing.Sequence[str]) -> int:
     parser.add_argument("--option", help="an answer's option key, a correction's reason code")
     parser.add_argument("--from", dest="start", help="with run: the stage the story starts at")
     parser.add_argument("--by", help="who asks (default: git user.name)")
+    parser.add_argument("--file", action="append", default=[], metavar="PATH",
+                        help="a file beside the words — a picture, a PDF or a text; up to five (WP-184)")
     parser.add_argument("--settle", action="store_true",
                         help="settle it now where the factory can, no request written; exit 3 where a skill must work it")
     parser.add_argument("--format", choices=("text", "json"), default="text")
@@ -770,7 +772,16 @@ def request_command(argv: typing.Sequence[str]) -> int:
     if args.settle:
         return settle_press(kind.name, fields, words, args.by or "", args.format)
     try:
-        written = wiring.write_request(os.getcwd()).execute(WriteRequestCommand(kind.name, fields, words, args.by or ""))
+        files = []
+        for given in args.file:
+            with open(given, "rb") as handed:
+                files.append((os.path.basename(given), handed.read()))
+    except OSError as error:
+        print(f"factory: request refused — {error.filename}: {error.strerror}", file=sys.stderr)
+        return 2
+    try:
+        written = wiring.write_request(os.getcwd()).execute(
+            WriteRequestCommand(kind.name, fields, words, args.by or "", tuple(files)))
         request_id, path = written.id, written.path
     except DuplicateRequest as same:
         print(f"factory: {same}")

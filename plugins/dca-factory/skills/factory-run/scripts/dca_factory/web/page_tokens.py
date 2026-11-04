@@ -40,11 +40,13 @@ PUBLIC = {
     **{f"--text-{step}": f"the type scale: {px} px"
        for step, px in (("xs", 11), ("sm", 12.5), ("md", 14), ("base", 16), ("lg", 18), ("xl", 20), ("2xl", 24), ("3xl", 38))},
     "--text-read": "the reading size of running text — the body face's, apart from the scale",
+    **{f"--control-{size}": f"a control's height, size {size}: a button, a field, a select — {px} px times --density"
+       for size, px in (("s", 28), ("m", 36), ("l", 44))},
     "--radius-label": "a label's corner: a term, a flag (3 px)",
     "--radius-control": "a control's corner: a button, a field (7 px)",
     "--radius-card": "a card's corner (12 px)",
     "--radius-round": "a state, an event, a dot: round",
-    "--measure": "the page's width",
+    "--measure": "the page's widest width; 1100px keeps it one column on a wide window",
     "--logo": "the logo in the bar, an url(); none keeps the mark — per scheme under :root[data-scheme=\"dark\"]",
     "--logo-width": "the logo's width in the bar",
 }
@@ -95,20 +97,25 @@ TOKENS = """
   --space-6: calc(32px * var(--density));
   --space-7: calc(48px * var(--density));
   --space-8: calc(72px * var(--density));
-  --text-xs: 11px;
-  --text-sm: 12.5px;
-  --text-md: 14px;
+  --text-xs: 12px;                    /* fine print alone: a column's head, a label in capitals, a count (WP-183) */
+  --text-sm: 14px;                    /* the small words one reads: a hint, a card's line, an id, a figure */
+  --text-md: 15px;
   --text-base: 16px;
   --text-lg: 18px;
   --text-xl: 20px;
   --text-2xl: 24px;
   --text-3xl: 38px;
   --text-read: 17px;
+  --control-s: calc(28px * var(--density));   /* a control's height: s beside a row and in the bar, m by default, */
+  --control-m: calc(36px * var(--density));   /* l for the one call a page leads with (WP-183) */
+  --control-l: calc(44px * var(--density));
   --radius-label: 3px;
   --radius-control: 7px;
   --radius-card: 12px;
   --radius-round: 999px;
-  --measure: 1100px;
+  --measure: min(100%, 1840px);
+  --read-measure: 70ch;
+  --flow-measure: 1100px;
   --grid-columns: 12;
   --fold-title: calc(var(--space-3) + 14px + var(--space-3));  /* where a fold's title starts, after its caret's column */
   --caret: max(11px, .75em);
@@ -121,14 +128,16 @@ TOKENS = """
   --group-line: color-mix(in srgb, var(--brand) 24%, var(--panel));
   --code: color-mix(in srgb, var(--ink) 5%, var(--paper));
   --bar-rule: color-mix(in srgb, var(--bar-ink) 8%, var(--bar));
-  --bar-faint: color-mix(in srgb, var(--bar-ink) 35%, var(--bar));
-  --bar-dim: color-mix(in srgb, var(--bar-ink) 62%, var(--bar));
+  --bar-faint: color-mix(in srgb, var(--bar-ink) 48%, var(--bar));   /* a mark, a rule, an edge in the bar: 3:1 and more */
+  --bar-dim: color-mix(in srgb, var(--bar-ink) 75%, var(--bar));     /* the bar's quiet words: 7:1 and more, light bar or dark */
   --bar-text: color-mix(in srgb, var(--bar-ink) 80%, var(--bar));
   --bar-off: color-mix(in srgb, var(--bar-ink) 55%, var(--bar));
   --terminal: color-mix(in srgb, var(--bar), black 35%);
   --terminal-ink: color-mix(in srgb, var(--bar-ink) 85%, var(--bar));
   --shadow: 0 6px 24px light-dark(color-mix(in srgb, var(--ink) 10%, transparent), rgb(0 0 0 / .35));
-  --lift: 0 1px 0 var(--line), 0 1px 3px rgb(0 0 0 / .06);
+  --control-edge: color-mix(in srgb, var(--ink) 20%, var(--line));   /* an outlined press's edge: clear of the paper */
+  --lift: 0 1px 0 var(--control-edge), 0 1px 3px rgb(0 0 0 / .06);
+  --lift-brand: 0 1px 0 var(--brand-fill-hover), 0 1px 3px rgb(0 0 0 / .06);    /* the same lift under a filled press */
 }
 :root[data-scheme="light"] { color-scheme: light; }
 :root[data-scheme="dark"] { color-scheme: dark; }

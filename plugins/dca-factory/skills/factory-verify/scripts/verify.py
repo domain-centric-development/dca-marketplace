@@ -3251,7 +3251,8 @@ exit 0
         claude_help = ("  -p, --print\n  --permission-mode <mode>\n  --output-format <format>\n  --verbose\n  --model <model>\n"
                        "  --add-dir <directories...>\n  --allowedTools, --allowed-tools <tools...>\n"
                        "  --disallowedTools, --disallowed-tools <tools...>\n  --setting-sources <sources>\n"
-                       "  --tools <tools...>\n  --exclude-dynamic-system-prompt-sections\n")
+                       "  --tools <tools...>\n  --exclude-dynamic-system-prompt-sections\n"
+                       "  --settings <file-or-json>\n")
         bare = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run",
                           env=dict(os.environ, FACTORY_TOOL_HELP_CLAUDE=claude_help))
         flags = [line.split("tool flags:", 1)[1].strip() for line in bare[1].splitlines() if "tool flags:" in line]
@@ -3260,7 +3261,8 @@ exit 0
               and "── stage" not in lacking[1], lacking[1][-300:])
         check("tools: an isolation flag the binary lacks is left out of every stage and named at the start",
               bare[0] == 0 and "claude knows no --strict-mcp-config" in bare[1] and flags
-              and all("--strict-mcp-config" not in f and "--setting-sources project" in f for f in flags),
+              and all("--strict-mcp-config" not in f and "--setting-sources project" in f
+                      and "blockReadsOutsideWorkingDirectories" in f for f in flags),
               bare[1][-300:])
 
     # OpenCode runs a server of its own (attached to the background service, it would take that process's
@@ -10409,6 +10411,12 @@ case "$FACTORY_STAGE" in
   request:*)
     echo "REQ $FACTORY_STAGE" >> "$FIXTURE_LOG"
     printf '%s\\n' "$FACTORY_PROMPT" >> "$FIXTURE_LOG.request-prompts"
+    # a fake agent that reads what was handed over (WP-184): each file the prompt lists, opened from the project
+    # and kept beside the log, so the case compares what the agent could read with what the person handed over
+    if [ -n "${FIXTURE_REQ_READ:-}" ]; then
+      printf '%s\\n' "$FACTORY_PROMPT" | sed -n 's/^- \\(\\.dca-factory\\/requests\\/files\\/[^ ]*\\) (.*/\\1/p' |
+        while read -r handed; do cp "$handed" "$FIXTURE_LOG.read-$(basename "$handed")" && echo "READ $handed" >> "$FIXTURE_LOG.request-reads"; done
+    fi
     [ -n "${FIXTURE_REQ_FAIL:-}" ] && exit 3
     # an answer the first run writes, as factory-decisions would, before its own question
     if [ -n "${FIXTURE_REQ_ANSWERS:-}" ] && [ ! -f "$FIXTURE_REQ_ANSWERS.done" ]; then
@@ -10532,11 +10540,37 @@ def verify_requests(runner, verbose=False):
         check("requests: what a request wrote is committed on its own, named after the request",
               "chore(backlog): wish show the newest first" in git_log(root), git_log(root))
         prompts = open(log + ".request-prompts", encoding="utf-8").read() if os.path.isfile(log + ".request-prompts") else ""
-        check("requests: the request's prompt names the skill with the session's arguments, the person, the headless "
-              "rules and where a question goes",
-              "Apply the factory-backlog skill with the arguments: show the newest first" in prompts
+        check("requests: the request's prompt names the skill with the session's arguments, the person's words in "
+              "their frame, the person, the headless rules and where a question goes",
+              "Apply the factory-backlog skill with the arguments: the person's words below" in prompts
+              and "<<<the person's words>>>\nshow the newest first\n<<<end of the person's words>>>" in prompts
               and "written by Ann" in prompts and os.path.join("factory-run", "reference", "requests.md") in prompts
               and "request: " in prompts and "product/decisions/" in prompts, prompts[:400])
+
+    # a wish carries a file to the agent, end to end with a fake agent (WP-184): the cli hands it over, the use case
+    # keeps it, the runner names it in the prompt after the framed words, the agent reads the same bytes
+    for root in throwaway():
+        log, env = fixture(root)
+        picture = os.path.join(root, "the page today.png")
+        with open(picture, "wb") as handle:
+            handle.write(b"\x89PNG\r\n\x1a\n" + bytes(range(64)))
+        written = run_runner(runner, root, "request", "wish", "the desk sees the queue", "--file", picture, "--by", "Ann",
+                             env=env)
+        code, out = run_runner(runner, root, "run", "--tool", "stand-in", env=dict(env, FIXTURE_REQ_READ="1"))
+        prompts = open(log + ".request-prompts", encoding="utf-8").read() if os.path.isfile(log + ".request-prompts") else ""
+        reads = open(log + ".request-reads", encoding="utf-8").read() if os.path.isfile(log + ".request-reads") else ""
+        read_back = log + ".read-the-page-today.png"
+        same = os.path.isfile(read_back) and open(read_back, "rb").read() == open(picture, "rb").read()
+        journal = open(os.path.join(root, ".dca-factory", "requests", "journal.tsv"), encoding="utf-8").read() \
+            if os.path.isfile(os.path.join(root, ".dca-factory", "requests", "journal.tsv")) else ""
+        check("requests: a wish's file reaches the agent — named in the prompt after the framed words, read from the "
+              "project with the bytes the person handed over, never committed",
+              written[0] == 0 and "<<<end of the person's words>>>" in prompts and "the-page-today.png (image/png" in prompts
+              and prompts.index("<<<end of the person's words>>>") < prompts.index("the-page-today.png")
+              and "READ .dca-factory/requests/files/" in reads and same and "state=done" in journal
+              and "the-page-today.png" not in subprocess.run(["git", "log", "--all", "--name-only", "--format="], cwd=root,
+                                                            capture_output=True, text=True).stdout,
+              f"{written} exit {code}; reads {reads!r}; {prompts[-500:]}")
 
     # a request never commits the spec
     for root in throwaway():

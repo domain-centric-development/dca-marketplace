@@ -7,6 +7,7 @@ import typing
 
 from ..building_blocks import UseCaseException
 from ..delivery.adapter.outgoing.files.decision_record_files import RequestRecordFiles
+from ..delivery.adapter.outgoing.files.handed_files import HandedFileFolder
 from ..delivery.adapter.outgoing.files.request_files import RequestFiles, stamp_utc
 from ..delivery.adapter.outgoing.files.scheduled_starts import ScheduledStarts
 from ..delivery.adapter.outgoing.git.backlog_changes import BacklogChangeFiles
@@ -66,4 +67,4 @@ def request_queue(home: str, worker: str, placed: typing.Callable[[], typing.Any
 def work_request(home: str, runs: str, profile: typing.Callable[[], typing.Any],
                  lock: typing.Callable[[], typing.ContextManager[None]], skill: RequestSkill) -> WorkRequestUseCase:
     return WorkRequestUseCase(RequestFiles(home), RequestRecordFiles(home), BacklogChangeFiles(home, runs, profile, lock),
-                              skill, HeldRequests(home, runs), stamp_utc)
+                              skill, HeldRequests(home, runs), stamp_utc, HandedFileFolder())

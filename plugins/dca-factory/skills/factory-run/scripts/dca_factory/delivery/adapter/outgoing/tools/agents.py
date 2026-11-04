@@ -18,6 +18,8 @@ import sys
 import tempfile
 import typing
 
+from ....domain.model.reach import Reach
+
 
 class Tool(typing.NamedTuple):
     """One agent tool the runner can start a stage with. Everything the runner knows about a tool is here; the
@@ -40,10 +42,21 @@ class Tool(typing.NamedTuple):
     effort: typing.Tuple[str, ...] = ()  #: how the tool takes a reasoning effort, `{level}` the value: flag words; () — none
     default_model: str = ""   #: the model a stage runs on where the profile names none; "" — the tool's own default,
                               #: which follows whatever the person last chose and so is no default at all
+    online: typing.Tuple[str, ...] = ()  #: the flags that give a stage the network; a request runs without them (WP-184)
+    offline: typing.Tuple[str, ...] = ()  #: the flags that take it away, where the tool has the network otherwise
     plugins: bool = False     #: it loads the method skills from its plugins, so its skill folder holds the pipeline's
-
-
                               #: alone; a tool without plugins finds only its folder, which then holds them all
+    plugin_home: str = ""     #: where it keeps the plugins it loads, from the home — read by a run, never edited
+
+
+def codex_profile() -> typing.Tuple[str, ...]:
+    """Codex's permission profile for a factory run: the built-in workspace — the project written, temp folders too —
+    with the home folder's secret folders denied (`Reach.secret_folders`; Codex's sandbox reads the whole disk, its
+    permission profile — beta, probed 0.153 — denies them). A profile applies only where no `--sandbox` is passed."""
+    home = os.path.expanduser("~")
+    denied = ", ".join(f'"{home}/{folder.value}"="deny"' for folder in Reach.stage().secret_folders)
+    return ("-c", 'default_permissions="factory"', "-c", 'permissions.factory.extends=":workspace"',
+            "-c", f"permissions.factory.filesystem={{{denied}}}")
 
 
 TOOLS = (
@@ -53,17 +66,21 @@ TOOLS = (
                     "--verbose"),
          help=("claude", "--help"),
          isolation=(("--setting-sources", "project"), ("--strict-mcp-config",), ("--tools", "{stage_tools}"),
-                    ("--exclude-dynamic-system-prompt-sections",)),
+                    ("--exclude-dynamic-system-prompt-sections",),
+                    # the file tools and the shell's reading verbs read only inside the working folders — the project,
+                    # the worktree and the folders named with --add-dir —, whatever a prompt asks (WP-184)
+                    ("--settings", '{"permissions":{"blockReadsOutsideWorkingDirectories":true}}')),
          usage="claude-json", skills=".claude/skills", model_flag="--model", args_env="FACTORY_CLAUDE_ARGS",
          add_dirs="all", deny=True, allow_list=True, effort=("--effort", "{level}"), default_model="opus",
-         plugins=True),
+         plugins=True, plugin_home=".claude/plugins"),
     # The user's config.toml (MCP servers, profiles, a model) stays out; the login does not. stdin is closed by the
     # runner: `codex exec` also reads a prompt from stdin, and an unattended run has none.
-    Tool("codex", ("codex", "exec", "--json", "-s", "workspace-write", "-c",
-                   "sandbox_workspace_write.network_access=true"),
+    Tool("codex", ("codex", "exec", "--json", *codex_profile()),
          help=("codex", "exec", "--help"), isolation=(("--ignore-user-config",),),
          usage="codex-jsonl", skills=".codex/skills", model_flag="-m", args_env="FACTORY_CODEX_ARGS",
-         add_dirs="writable", effort=("-c", 'model_reasoning_effort="{level}"')),
+         add_dirs="writable", effort=("-c", 'model_reasoning_effort="{level}"'),
+         online=("-c", "permissions.factory.network.enabled=true"),
+         offline=("-c", "permissions.factory.network.enabled=false")),
     # `opencode run` otherwise attaches to a background service started with another configuration: the permission
     # block, the isolation and the model would be that process's. A config folder of its own keeps the person's
     # opencode.json, plugins and MCP servers out; the login lives in the data folder and stays (probed 2.0.20).
@@ -79,6 +96,8 @@ TOOL = {tool.name: tool for tool in TOOLS}
 
 #: The built-in tools a stage process gets: the same list for every stage, so the prompt prefix is shared.
 STAGE_TOOLS = "Read,Write,Edit,Glob,Grep,Bash,Skill"
+#: What a run that researches the web adds — a discovery's request (WP-184); reading stays held to the project
+WEB_TOOLS = "WebSearch,WebFetch"
 
 
 def tool_help(tool: Tool) -> str:
@@ -132,7 +151,7 @@ def has_flag(help_text: str, flag: str) -> bool:
     return re.search(r"(^|[\s,])" + re.escape(flag) + r"([\s,=<\[]|$)", help_text, re.M) is not None
 
 
-def isolation_args(tool: Tool) -> typing.List[str]:
+def isolation_args(tool: Tool, web: bool = False) -> typing.List[str]:
     """The isolation flags this binary knows: an older one refuses a flag it does not know and the stage would not
     start, so each is passed only where the help names it — or every one where there is no binary to ask."""
     if os.environ.get("FACTORY_ISOLATION", "on") == "off":
@@ -141,7 +160,7 @@ def isolation_args(tool: Tool) -> typing.List[str]:
     words = []
     for group in tool.isolation:
         if not help_text or has_flag(help_text, group[0]):
-            words += [word.replace("{stage_tools}", STAGE_TOOLS) for word in group]
+            words += [word.replace("{stage_tools}", STAGE_TOOLS + ("," + WEB_TOOLS if web else "")) for word in group]
     return words
 
 
@@ -152,7 +171,7 @@ def unprobed_flags(tool: Tool) -> typing.Optional[typing.Tuple[typing.List[str],
     help_text = tool_help(tool)
     if not help_text:
         return None
-    flags = [w for w in tool.command[len(tool.help) - 1:] if w.startswith("-")] + [tool.model_flag]
+    flags = [w for w in [*tool.command[len(tool.help) - 1:], *tool.online] if w.startswith("-")] + [tool.model_flag]
     flags += ["--add-dir"] if tool.add_dirs in ("all", "writable") else []
     flags += ["--allowed-tools", "--disallowedTools"] if tool.allow_list else []
     def missing(names: typing.Iterable[str]) -> typing.List[str]:
@@ -161,7 +180,7 @@ def unprobed_flags(tool: Tool) -> typing.Optional[typing.Tuple[typing.List[str],
 
 
 def permission_block(allowed: str, protected: typing.Iterable[str], linked: typing.Iterable[str],
-                     cwd: typing.Optional[str] = None, home: typing.Optional[str] = None) -> str:
+                     cwd: typing.Optional[str] = None, home: typing.Optional[str] = None, web: bool = False) -> str:
     """OpenCode's permission block: the same shell as Claude's allow-list; every edit allowed but under the protected
     folders, which its edit rules match relative to the project (an absolute pattern matches nothing there — probed
     2.0.20); the linked folders as external ones it may use, and the protected ones among them refused there."""
@@ -170,7 +189,9 @@ def permission_block(allowed: str, protected: typing.Iterable[str], linked: typi
     for entry in allowed.split(","):
         if entry.startswith("Bash(") and entry.endswith(":*)"):
             bash[entry[5:-3] + "*"] = "allow"
-    edit, external = {"*": "allow"}, {folder.rstrip("/") + "/**": "allow" for folder in linked}
+    # outside the project nothing but the linked folders — read or written — and the web only for a run that
+    # researches (WP-184); the last pattern that matches decides, as the shell's do
+    edit, external = {"*": "allow"}, {"*": "deny", **{folder.rstrip("/") + "/**": "allow" for folder in linked}}
     for folder in (f for f in protected if f):
         absolute = os.path.abspath(folder)
         inside = os.path.relpath(absolute, home)
@@ -180,31 +201,35 @@ def permission_block(allowed: str, protected: typing.Iterable[str], linked: typi
             # named as the folder was given, with `/`: on Windows abspath puts a drive and `\` on a `/home/…` path
             named = folder if folder.startswith("/") else absolute.replace(os.sep, "/")
             external[named.rstrip("/") + "/**"] = "deny"                # the main checkout's, named by its path
-    return json.dumps({"permission": {"bash": bash, "edit": edit, "external_directory": external}})
+    web_tools = "allow" if web else "deny"
+    return json.dumps({"permission": {"bash": bash, "edit": edit, "external_directory": external,
+                                      "webfetch": web_tools, "websearch": web_tools}})
 
 
 def tool_command(tool: Tool, model: str = "", writable: typing.Sequence[str] = (), readable: typing.Sequence[str] = (),
                  protected: typing.Sequence[str] = (), allowed: str = "",
-                 effort: str = "") -> typing.Tuple[typing.Dict[str, str], typing.List[str]]:
+                 effort: str = "", offline: bool = False,
+                 web: bool = False) -> typing.Tuple[typing.Dict[str, str], typing.List[str]]:
     """What starts one stage with this tool: the variables it is started with and its arguments, the prompt not
-    among them — the caller appends it."""
+    among them — the caller appends it. `offline`: a request's run, which gets no network; `web`: one that researches
+    the web, a discovery's, which gets the tools for it (WP-184)."""
     # a variable the person set is theirs and wins — a config folder that carries their local providers, say
     env = {name: value.replace("{empty}", empty_folder()) for name, value in tool.isolation_env
            if os.environ.get("FACTORY_ISOLATION", "on") != "off" and not os.environ.get(name)}
     if tool.permission_env:
         block = os.environ.get(tool.permission_env, "")
         if not block and os.environ.get("FACTORY_OPENCODE_PERMISSIONS", "on") != "off":
-            block = permission_block(allowed, protected, [*writable, *readable])
+            block = permission_block(allowed, protected, [*writable, *readable], web=web)
         env[tool.permission_env] = block
-    argv = list(tool.command)
+    argv = list(tool.command) + list(tool.offline if offline else tool.online)
     if tool.allow_list:
-        argv += ["--allowed-tools", f"Read,Write,Edit,Glob,Grep,Skill,{allowed}"]
+        argv += ["--allowed-tools", f"Read,Write,Edit,Glob,Grep,Skill,{WEB_TOOLS + ',' if web else ''}{allowed}"]
     if tool.add_dirs in ("all", "writable"):
         for folder in [*writable, *(readable if tool.add_dirs == "all" else ())]:
             argv += ["--add-dir", folder]
     if tool.deny and protected:
         argv += ["--disallowedTools", ",".join(f"Edit(//{d.lstrip('/')}/**)" for d in protected)]
-    argv += isolation_args(tool)
+    argv += isolation_args(tool, web)
     if model:
         argv += [tool.model_flag, model]
     if effort and tool.effort:

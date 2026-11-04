@@ -25,14 +25,25 @@ const MARKS = {look: "!", question: "?", stopped: "✗", running: "▶", done: "
 const ICONS = {
   pass: '<path d="M6 10.4l2.7 2.7L14.2 7.6"/>', fail: '<path d="M6.6 6.6l6.8 6.8M13.4 6.6l-6.8 6.8"/>',
   wait: '<path d="M8 6.5v7M12 6.5v7"/>', ask: '<path d="M7.6 7.6a2.5 2.5 0 1 1 3.4 2.3c-.7.3-1 .8-1 1.5v.6M10 14.4v.1"/>'};
-const S = {tab: "now", menu: null, help: null, status: null, decisions: null, discover: null, requests: null, follow: null, followSource: null,
-           followLines: [], drawer: null, opener: null, drafts: {}, fold: new Map(),
-           rules: null, rulesFor: null, ruleKind: "story", ruleStory: "", flowPick: null, partText: {}, meta: {}};
+const S = {tab: "now", menu: null, help: null, status: null, decisions: null, discover: null, requests: null, follow: null, followOn: "", autoFollow: "", factoryLogOff: false, followSource: null,
+           followLines: [], drawer: null, opener: null, drafts: {}, handed: {}, fold: new Map(),
+           rules: null, rulesFor: null, ruleKind: "story", ruleStory: "", flowPick: null, partText: {}, meta: {},
+           part: "", detail: "", storyFrom: "", record: "", topicPick: "", storyView: {}, changing: ""};
 const stored = key => { try { return localStorage.getItem(key) || ""; } catch (e) { return ""; } };
 const store = (key, value) => { try { localStorage.setItem(key, value); } catch (e) {} };
 // the page opens where it stands; a link to a view opens that view
 const known = id => id === "now" || id === "components" || TABS.some(([t]) => t === id);
-if (known(location.hash.slice(1))) S.tab = location.hash.slice(1);
+// a view, and where it holds one: `#describe/<part>` reads a part, `#backlog/<story>` opens a story (WP-183)
+function readHash() {
+  const [tab, sub] = location.hash.slice(1).split("/");
+  if (!known(tab)) return false;
+  S.tab = tab;
+  S.part = tab === "describe" && sub ? decodeURIComponent(sub) : "";
+  S.detail = ["backlog", "run"].includes(tab) && sub ? decodeURIComponent(sub) : "";
+  S.topicPick = tab === "discover" && sub ? decodeURIComponent(sub) : "";
+  return true;
+}
+readHash();
 if (location.hash === "#spec" || S.tab === "spec") S.tab = "describe";                // what holds is part of the description
 // `#rules:<story>[:<rule>]` opens the rules with that story's gate runs marked, and the rule read
 if (location.hash.startsWith("#rules:")) {
@@ -48,8 +59,36 @@ const esc = v => String(v == null ? "" : v).replace(/[&<>"']/g, c => ({"&": "&am
 // code first, as markdown reads it — `x`, and ``x`` that may hold a backtick —, bold only outside it
 const inline = text => String(text == null ? "" : text).split(/(``.+?``|`[^`]+`)/).map((part, i) => i % 2
   ? `<code>${esc(part.startsWith("``") ? part.slice(2, -2).trim() : part.slice(1, -1))}</code>`
-  : esc(part).replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")).join("");
-function markdown(text) {
+  : linked(part)).join("");
+// a picture and a link in a record's, a report's or a story's markdown (WP-184): a picture only from the project, by
+// its path beside the file it stands in, served by the page's own server; a link out only to https, a link to a
+// project file through the same server — never a script's URL, never a foreign picture (the CSP's img-src is 'self')
+let mdBase = "";
+const projectPath = src => {
+  const parts = (mdBase.includes("/") ? mdBase.slice(0, mdBase.lastIndexOf("/") + 1) : "").concat(src).split("/");
+  const out = [];
+  for (const p of parts) { if (p === "..") out.pop(); else if (p && p !== ".") out.push(p); }
+  return out.join("/");
+};
+const fileOf = path => `/api/file?path=${encodeURIComponent(path)}&t=${encodeURIComponent(TOKEN)}`;   // a project path
+const fileUrl = src => fileOf(projectPath(src));
+const local = src => !/^[a-z][a-z0-9+.-]*:/i.test(src) && !src.startsWith("//") && !src.startsWith("/");
+const strong = part => esc(part).replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+const linked = part => part.split(/(!?\[[^\]]*\]\([^)\s]+\))/).map((bit, i) => {
+  if (!(i % 2)) return strong(bit);
+  const [, picture, label, target] = bit.match(/^(!?)\[([^\]]*)\]\(([^)\s]+)\)$/);
+  // a mockup an option shows: a page of its own, drawn in a frame that runs no script (WP-184)
+  if (picture && local(target) && /\.html$/i.test(target)) return `<iframe src="${esc(fileUrl(target))}" title="${esc(label || target)}" sandbox loading="lazy"></iframe>`
+    + (label ? `<small>${esc(label)}</small>` : "");
+  if (picture) return local(target)
+    ? `<a href="${esc(fileUrl(target))}" target="_blank" rel="noopener"><img src="${esc(fileUrl(target))}" alt="${esc(label)}" loading="lazy"></a>`
+      + (label ? `<small>${esc(label)}</small>` : "")
+    : strong(label || target);
+  if (/^https:\/\//i.test(target)) return `<a href="${esc(target)}" target="_blank" rel="noopener noreferrer">${strong(label)}</a>`;
+  return local(target) ? `<a href="${esc(fileUrl(target))}" target="_blank" rel="noopener">${strong(label)}</a>` : strong(label);
+}).join("");
+function markdown(text, base = "") {
+  mdBase = base;
   // the markdown a person writes in a description, a record or a story: paragraphs, lists, tables, code, headings
   const out = [];
   let para = [], list = null, table = null, code = null;
@@ -108,8 +147,10 @@ function toast(text, isError) {
   setTimeout(() => node.remove(), isError ? 9000 : 4500);
 }
 
-function banner(text) {
+// the one line above the bar, kept in sight as the bar is: what went wrong (`stop`), or a notice that is none (`info`)
+function banner(text, tone = "stop") {
   $("banner-text").textContent = text || "";
+  $("banner").dataset.state = tone;
   $("banner").hidden = !text;
 }
 
@@ -119,25 +160,30 @@ function banner(text) {
 // (`queued`). One without a request is no press on this page.
 const ACTIONS = {};
 let actionCount = 0;
-function act(action, scope) {
+// how long something has run, in the largest unit that still reads: 42 s, 5 min, 3 h, 2 d
+const took = secs => secs < 60 ? `${secs} s` : secs < 3600 ? `${Math.round(secs / 60)} min`
+  : secs < 86400 ? `${Math.round(secs / 3600)} h` : `${Math.round(secs / 86400)} d`;
+function act(action, scope, also = "", shape = {}) {
   if (!action || !action.request) return "";
   if (action.waits_on) return "";                       // another choice of the same record is on its way
   if (action.queued) return ui.state(`${action.label} — ${action.queued_text || "queued"}`, "queued", {title: `request ${action.queued}`});
   const id = `${scope || "m"}${++actionCount}`;
   ACTIONS[id] = action;
   // a press that has an agent write something new says so before it is pressed: ✦ on the button, words in its title
-  const r = action.request, look = {primary: action.primary, write: action.creates};
+  // `shape` sets how a press looks where it stands — small and plain beside a row, say — never what it does
+  const r = action.request, look = Object.assign({primary: action.primary, write: action.creates}, shape);
   const said = [action.creates ? "an agent writes this, in the factory's queue" : "", action.text].filter(Boolean).join(" — ");
   if (r.open === "words") {
     // what the person typed outlives a redraw: kept by the action's command, until its request is written
     const draft = r.draft || action.skill;
     return ui.ask(Object.assign({id, draft, label: action.label, text: action.text, title: said, value: S.drafts[draft] || "",
-                                 choices: r.choices}, look));
+                                 files: S.handed[draft] || [],
+                                 choices: r.choices, also}, look));
   }
   if (r.open === "record") return ui.btn(action.label, Object.assign({attrs: {"data-tab": "decide"}}, look));
   return ui.btn(action.label, Object.assign({title: said, attrs: {"data-press": id}}, look));
 }
-const acts = (list, scope) => (list || []).map(a => act(a, scope)).join("");
+const acts = (list, scope, shape = {}) => (list || []).map(a => act(a, scope, "", shape)).join("");
 function forget(scope) { for (const key of Object.keys(ACTIONS)) if (key[0] === scope) delete ACTIONS[key]; }
 
 async function press(button) {
@@ -146,21 +192,75 @@ async function press(button) {
   const r = action.request, box = button.closest("[data-ask]"), fields = Object.assign({}, r.fields);
   let words = r.words || "";
   if (box) {
-    words = box.querySelector("textarea").value.trim();
-    const pick = box.querySelector("select");
+    words = box.querySelector("[data-draft]").value.trim();
+    const pick = box.querySelector("[data-ask-why]");
     if (pick && pick.value) fields.option = pick.value;
     if (!words) { toast(`${action.label}: ${action.text}`, true); return; }
+    var files = [];
+    try { files = await handedData(box.dataset.hand); } catch (e) { toast(e.message, true); return; }
     if (r.prefix) words = `${r.prefix}\n\n${words}`;
+    if (r.lead) words = `${r.lead} ${words}`;                 // the same line: `tech.md — Stack: <words>`
   }
   try {
-    const data = await api("/api/request", Object.assign({kind: r.kind, words, by: by()}, fields));
+    const data = await api("/api/request", Object.assign({kind: r.kind, words, by: by()}, fields, files.length ? {files} : {}));
     toast(data.duplicate ? `queued already: ${data.id}`
       : r.kind === "wish" ? "✦ your wish is being written as a draft — it shows below the field" : `request written: ${data.id}`);
-    if (box) { box.querySelector("textarea").value = ""; delete S.drafts[r.draft || action.skill]; }
+    if (box) { box.querySelector("[data-draft]").value = ""; delete S.drafts[r.draft || action.skill]; (S.handed[box.dataset.hand] || []).forEach(f => handed.delete(f.key)); delete S.handed[box.dataset.hand]; }
     refresh();
     if (S.drawer) openStory(S.drawer);
+    if (S.detail) loadStory(S.detail);
   } catch (e) { toast(e.message, true); }
 }
+// --- files beside the words (WP-184): chosen with "+ file" or dropped on the field, they stay in the page until the
+// request is sent — then they go with it, one command, and the factory's domain decides what it takes. Here only a
+// first look, so a person sees at once what will not go: the kind by its name, the size, the number
+const HANDED_MAX = 5, HANDED_BYTES = 10 * 1024 * 1024;
+const HANDED_TYPES = /\.(png|jpe?g|gif|webp|pdf|txt|md|csv|json)$/i;
+let handedCount = 0;
+const handed = new Map();                                     // a chip's key → the File it stands for
+async function handOver(key, list) {
+  const files = S.handed[key] = S.handed[key] || [];
+  for (const file of list) {
+    if (files.filter(f => !f.error).length >= HANDED_MAX) { toast(`at most ${HANDED_MAX} files go with a request`, true); break; }
+    const entry = {key: `h${++handedCount}`, name: file.name, size: file.size};
+    if (file.size > HANDED_BYTES) entry.error = "over 10 MB";
+    else if (!HANDED_TYPES.test(file.name)) entry.error = "a picture, a PDF or a text (txt, md, csv, json) — not this one";
+    else handed.set(entry.key, file);
+    if (!entry.error && /^image\/(png|jpeg|gif|webp)$/.test(file.type) && file.size < 2 * 1024 * 1024) {
+      entry.preview = await new Promise(done => { const read = new FileReader(); read.onload = () => done(read.result); read.onerror = () => done(""); read.readAsDataURL(file); });
+    }
+    files.push(entry);
+  }
+  render();
+}
+// the files of one entry, read as base64 for the request that carries them
+const handedData = key => Promise.all((S.handed[key] || []).filter(f => !f.error && handed.has(f.key)).map(f => new Promise((done, fail) => {
+  const read = new FileReader();
+  read.onload = () => done({name: f.name, data: String(read.result).split(",", 2)[1] || ""});
+  read.onerror = () => fail(new Error(`${f.name} could not be read`));
+  read.readAsDataURL(handed.get(f.key));
+})));
+document.addEventListener("click", event => {
+  const pick = event.target.closest("[data-attach]");
+  if (pick) { const input = document.querySelector(`[data-attach-input="${CSS.escape(pick.dataset.attach)}"]`); if (input) input.click(); return; }
+  const drop = event.target.closest("[data-unhand]");
+  if (drop) { handed.delete(drop.dataset.file); S.handed[drop.dataset.unhand] = (S.handed[drop.dataset.unhand] || []).filter(f => f.key !== drop.dataset.file); render(); }
+});
+document.addEventListener("change", event => {
+  const input = event.target.closest && event.target.closest("[data-attach-input]");
+  if (input && input.files.length) { handOver(input.dataset.attachInput, [...input.files]); input.value = ""; }
+});
+document.addEventListener("dragover", event => {
+  const box = event.target.closest && event.target.closest("[data-hand]");
+  if (!box || ![...(event.dataTransfer.types || [])].includes("Files")) return;
+  event.preventDefault(); box.dataset.over = "";
+});
+document.addEventListener("dragleave", event => { const box = event.target.closest && event.target.closest("[data-hand]"); if (box) delete box.dataset.over; });
+document.addEventListener("drop", event => {
+  const box = event.target.closest && event.target.closest("[data-hand]");
+  if (!box || !event.dataTransfer.files.length) return;
+  event.preventDefault(); delete box.dataset.over; handOver(box.dataset.hand, [...event.dataTransfer.files]);
+});
 document.addEventListener("input", event => {
   if (event.target.dataset && event.target.dataset.draft !== undefined) S.drafts[event.target.dataset.draft] = event.target.value;
 });
@@ -186,13 +286,33 @@ const CALLS = {
   async retry(node) { await api("/api/requests/retry", {id: node.dataset.id}); toast("queued again"); },
   async hide(node) { await api("/api/requests/drop", {id: node.dataset.id}); toast("hidden — the draft stays in the backlog"); },
   async follow(node) { follow(node.dataset.kind, node.dataset.id); },
-  async unfollow() { follow(null); },
+  async unfollow() { if (S.follow && S.follow.kind === "log") S.factoryLogOff = true; follow(null); },
+  async closeDetail() {
+    if (S.followOn === "story") stopFollowing();
+    const from = S.storyFrom || S.tab; S.detail = ""; S.storyFrom = ""; S.autoFollow = "";
+    if (from !== S.tab) return show(from);
+    place(); render();
+  },
   async close() { S.drawer = null; $("drawer").hidden = true; forget("d"); if (S.opener && document.contains(S.opener)) S.opener.focus(); S.opener = null; },
 };
 
 document.addEventListener("click", async event => {
-  const target = event.target.closest("[data-press],[data-call],[data-story],[data-tab],[data-pick],[data-flow],[data-filter]");
+  const target = event.target.closest("[data-press],[data-call],[data-story],[data-tab],[data-pick],[data-flow],[data-filter],[data-part],[data-goto],[data-change],[data-record],[data-pick-topic]");
   if (!target) return;
+  if (target.dataset.record) { S.record = target.dataset.record; return render(); }
+  // a discovery opens on a place of its own beneath discover, as a story beneath the backlog (WP-183)
+  if (target.dataset.pickTopic !== undefined) {
+    if (S.followOn === "discover") stopFollowing();
+    S.topicPick = target.dataset.pickTopic; place(); render(); return window.scrollTo(0, 0);
+  }
+  if (target.dataset.part !== undefined) { S.part = target.dataset.part; S.changing = ""; place(); render(); return window.scrollTo(0, 0); }
+  if (target.dataset.goto) { const at = $(target.dataset.goto); if (at) at.scrollIntoView({behavior: "smooth", block: "start"}); return; }
+  if (target.dataset.change !== undefined) {
+    S.changing = target.dataset.change; render();
+    const field = S.changing && document.querySelector("[data-draft^='describe:']");
+    if (field) field.focus();
+    return;
+  }
   if (target.dataset.flow) { S.ruleKind = target.dataset.flow; return render(); }
   if (target.dataset.filter) { S.backlogFilter = target.dataset.filter; forgetFolds("epic:"); return render(); }
   if (target.dataset.pick) return scheme(target.dataset.pick);
@@ -252,8 +372,10 @@ async function refresh() {
     const jobs = [load("status", "/api/view/status"), load("requests", "/api/view/requests")];
     if (slow || !S.decisions) jobs.push(load("decisions", "/api/view/decisions"));
     if (slow || !S.discover) jobs.push(load("discover", "/api/view/discover"));
-    if ((await Promise.all(jobs)).every(Boolean)) banner(S.meta.fixture ? `fixture “${S.meta.fixture}” — what the page shows is canned, every press is refused` : "");
+    if ((await Promise.all(jobs)).every(Boolean)) banner(S.meta.fixture ? `fixture “${S.meta.fixture}” — what the page shows is canned, every press is refused` : "", "info");
     if (slow) lastSlow = Date.now();
+    // a story that runs is read again with each look, so its place shows its progress as it goes
+    if (onStoryPlace() && ((S.status || {}).running || []).some(r => r.story === S.detail)) await loadStory(S.detail);
     render();
   } finally { refreshing = false; }
 }
@@ -261,9 +383,12 @@ async function refresh() {
 // --- the frame -----------------------------------------------------------------------------------------------------
 function show(tab) {
   if (S.drawer) CALLS.close();
+  // output followed on a story's place or a discovery's ends with the place: the run page shows only what is followed there
+  if (S.followOn === "story" || S.followOn === "discover") stopFollowing();
   S.tab = tab;
+  S.part = S.detail = S.changing = S.topicPick = "";
   store("factory.tab", tab);
-  history.replaceState(null, "", "#" + tab);
+  place();
   render();
   window.scrollTo(0, 0);
 }
@@ -271,7 +396,7 @@ function show(tab) {
 function renderFrame() {
   const st = S.status || {}, w = st.worker, counts = (S.requests || {}).counts || {};
   $("project").textContent = st.project || "";
-  document.title = (st.project ? st.project + " — " : "") + "factory";
+  document.title = (st.project ? st.project + " — " : "") + "domaincentric.factory";
   // the dot is the backlog's, the one thing a person switches here: a person's requests are worked while this page is
   // open, and that goes without saying (WP-177)
   const backlog = backlogOn(st);
@@ -297,19 +422,19 @@ function runControl(st, backlog) {
   const titles = Object.fromEntries((st.rows || []).map(r => [r.story, r.title]));
   const stopping = !!(w && w.stopping), state = backlog ? (stopping ? "stopping" : "up") : running.length ? "stopping" : "down";
   const first = running[0], more = running.length > 1 ? ` +${running.length - 1}` : "";
-  const say = first ? `${backlog ? "" : "finishing "}<b>${esc(first.story)}</b>${more} · ${esc(first.part || first.stage)}`
+  const say = first ? `${backlog ? "" : "finishing "}${ui.em(first.story)}${more} · ${esc(first.part || first.stage)}`
     : backlog ? esc(st.worker_text || "the backlog is on") : `stopped${ready.length ? ` · ${ready.length} ready` : ""}`;
-  const start = ui.btn("▶ start the backlog", {primary: true, plain: true, bar: true, title: "work the released stories off, one after the other — factory.sh up", attrs: {"data-call": "up"}});
-  const stop = ui.btn("■ stop", {bar: true, title: "no further story starts; the running one finishes — factory.sh down", attrs: {"data-call": "down"}});
+  const start = ui.btn("start the backlog", {icon: "play", primary: true, plain: true, bar: true, size: "s", title: "work the released stories off, one after the other — factory.sh up", attrs: {"data-call": "up"}});
+  const stop = ui.btn("stop", {icon: "stop", bar: true, size: "s", title: "no further story starts; the running one finishes — factory.sh down", attrs: {"data-call": "down"}});
   const queued = (S.requests || {}).counts_text;
   const lines = [
-    ready.length ? `next: <b>${esc(titles[ready[0]] || ready[0])}</b>${ready.length > 1 ? `, then ${ready.length - 1} more` : ""}` : "",
+    ready.length ? `next: ${ui.em(titles[ready[0]] || ready[0])}${ready.length > 1 ? `, then ${ready.length - 1} more` : ""}` : "",
     waits ? ui.link(`${waits} ${waits === 1 ? "question waits" : "wait"} for you →`, {quiet: true, attrs: {"data-tab": "decide"}}) : "",
     queued ? esc(queued) : "",
     w ? esc(`${w.owner} since ${w.since_text}`) : ""].filter(Boolean);
   const acts = (backlog && !stopping
-      ? ui.btn("■ stop after the running story", {attrs: {"data-call": "down"}}) + ui.btn("■ stop now", {danger: true, attrs: {"data-call": "down", "data-now": "1"}})
-      : !backlog ? ui.btn("▶ start the backlog", {primary: true, plain: true, attrs: {"data-call": "up"}}) : "")
+      ? ui.btn("stop after the running story", {icon: "stop", attrs: {"data-call": "down"}}) + ui.btn("stop now", {icon: "stop", danger: true, attrs: {"data-call": "down", "data-now": "1"}})
+      : !backlog ? ui.btn("start the backlog", {icon: "play", primary: true, plain: true, attrs: {"data-call": "up"}}) : "")
     + ui.link("open the run →", {quiet: true, compact: true, attrs: {"data-tab": "run"}});
   const runs = running.map(r => ({id: r.story, title: titles[r.story], steps: r.course, doing: r.activity,
     word: `${r.interrupted ? "interrupted" : r.part || r.stage}${r.round > 1 ? ` · round ${r.round}` : ""}${r.ago ? ` · ${r.ago}` : ""}`}));
@@ -338,6 +463,32 @@ document.addEventListener("keydown", event => {
   S.menu = null; menus(); event.stopImmediatePropagation();
   if (toggle) toggle.focus();
 }, true);
+// where the page stands, in its address — a reload opens the same
+function place() {
+  const sub = S.tab === "describe" ? S.part : S.tab === "discover" ? S.topicPick : STORY_TABS.includes(S.tab) ? S.detail : "";
+  history.replaceState(null, "", "#" + S.tab + (sub ? "/" + encodeURIComponent(sub) : ""));
+}
+// the wide width of the stylesheet (page_style.WIDE): the main region's content from which a view takes two columns
+const WIDE_PX = 1500;
+// a story has its place under the backlog or under run, whichever it was opened from (WP-183)
+const STORY_TABS = ["backlog", "run"];
+const onStoryPlace = () => STORY_TABS.includes(S.tab) && !!S.detail;
+function wide() {
+  const main = $("main"), cs = getComputedStyle(main);
+  return main.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) >= WIDE_PX;
+}
+let wasWide = null;
+const sized = new ResizeObserver(() => {
+  document.documentElement.style.setProperty("--bar-height", $("topbar").getBoundingClientRect().height + "px");
+  fitCurve();
+  const now = wide();
+  if (now === wasWide) return;
+  const first = wasWide === null;
+  wasWide = now;
+  if (!first) render();
+});
+sized.observe($("main"));
+sized.observe($("topbar"));
 const partOf = id => ((S.help || {}).parts || []).find(p => p.tabs.includes(id));
 // whether the backlog runs: a runner from a terminal or a session's, or the factory's worker with the backlog on
 const backlogOn = st => { const w = st.worker; return !!(w && w.alive && (w.how !== "up" || w.backlog)); };
@@ -390,10 +541,24 @@ function render() {
   const [, title, lede] = S.tab === "now" ? NOW : S.tab === "components" ? GALLERY : TABS.find(([id]) => id === S.tab) || NOW;
   const eyebrow = S.tab === "now" ? "Now" : S.tab === "components" ? "Pattern library" : (partOf(S.tab) || {}).eyebrow || "";
   const view = {now, describe, discover, backlog, run, decide, delivered, rules: rulesTab, components}[S.tab] || now;
-  morph($("main"), ui.pageHead(eyebrow, title, lede)
+  // a part read as a document is a place of its own beneath the description: the way back above its title (WP-183)
+  const part = S.tab === "describe" && S.part ? ((S.status || {}).description || []).find(p => p.part === S.part) || {part: S.part} : null;
+  const own = onStoryPlace() || (S.tab === "discover" && !!S.topicPick);   // a story's place and a discovery's draw their own head
+  morph($("main"), (own ? "" : part ? ui.actions(ui.btn("← all parts", {attrs: {"data-part": ""}})) + ui.pageHead(title, part.part, part.path || "")
+                        : ui.pageHead(eyebrow, title, lede))
     + (S.status || S.tab === "components" ? endedLine(S.status || {}) + view(S.status || {}) : ui.card("", "", ui.empty("Reading the factory…"))));
-  if (S.tab === "run") paintFollow();
+  if (S.tab === "run" || S.tab === "discover" || onStoryPlace()) paintFollow();
   if (S.tab === "rules") paintFlow();
+  fitCurve();
+}
+// the curve takes the width it is given: drawn anew at that width once it is known or has changed
+function fitCurve() {
+  const box = $("curve"), svg = box && box.querySelector("svg");
+  if (!svg || !S.curve) return;
+  const w = Math.round(box.clientWidth);
+  if (!w || Math.abs(w - svg.viewBox.baseVal.width) < 4) return;
+  S.curveW = w;
+  svg.outerHTML = curveSvg(S.curve, w);
 }
 
 // --- the drawing of the rules: a way back shows while its step is hovered; what is picked stays marked --------------
@@ -467,7 +632,7 @@ document.addEventListener("mousemove", event => {
   const hit = event.target.closest && event.target.closest("#curve-hit"), tip = $("curve-tip");
   const marks = ["curve-cross", "curve-dot-0", "curve-dot-1"].map(id => $(id));
   if (!hit || !S.curve) { if (tip) tip.hidden = true; marks.forEach(m => m && m.setAttribute("visibility", "hidden")); return; }
-  const svg = hit.ownerSVGElement, box = svg.getBoundingClientRect(), scale = CURVE.w / box.width;
+  const svg = hit.ownerSVGElement, box = svg.getBoundingClientRect(), scale = svg.viewBox.baseVal.width / box.width;
   const vx = (event.clientX - box.left) * scale, {t0, t1, x0, x1} = S.curveX;
   const at = t0 + (vx - x0) / (x1 - x0) * (t1 - t0);
   let i = 0; while (i + 1 < S.curve.length && Date.parse(S.curve[i + 1].at) <= at) i++;
@@ -487,7 +652,14 @@ document.addEventListener("mousemove", event => {
 // (WCAG 2.1.4: a one-key shortcut acts only where its element has the focus).
 document.addEventListener("keydown", event => {
   if (event.target.closest("textarea, input, select")) return;
-  if (event.key === "Escape") return CALLS.close();
+  if (event.key === "Escape") {
+    if (S.drawer) return CALLS.close();
+    if (S.changing) { S.changing = ""; return render(); }
+    if (S.detail) return CALLS.closeDetail();
+    if (S.part) { S.part = ""; place(); return render(); }
+    if (S.tab === "discover" && S.topicPick) { if (S.followOn === "discover") stopFollowing(); S.topicPick = ""; place(); return render(); }
+    return;
+  }
   const at = event.target.closest('[role="tab"]');
   if (!at) return;
   const ids = [...$("tabs").querySelectorAll('[role="tab"]')].map(b => b.dataset.tab), i = ids.indexOf(at.dataset.tab);
@@ -499,10 +671,7 @@ document.addEventListener("keydown", event => {
   if (to !== S.tab) show(to);
   $("tab-" + to).focus();
 });
-window.addEventListener("hashchange", () => {
-  const tab = location.hash.slice(1);
-  if (tab !== S.tab && known(tab)) show(tab);
-});
+window.addEventListener("hashchange", () => { if (readHash()) render(); });
 """
 
 SCRIPT_START = r"""

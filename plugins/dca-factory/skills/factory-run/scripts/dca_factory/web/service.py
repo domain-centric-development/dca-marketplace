@@ -20,11 +20,16 @@ import socketserver
 import subprocess
 import sys
 import threading
+import time
 import urllib.parse
 import zlib
 
 from ..building_blocks import UseCaseException
 from ..sharedkernel.adapter.outgoing.markdown.front_matter import GateError
+from ..delivery.application.status.show_project_file import ShowProjectFileQuery
+from ..delivery.application.status.follow_factory_log import FollowFactoryLogQuery
+from ..delivery.domain.model.handed_file import MAX_BYTES, MAX_FILES
+from ..delivery.domain.model.shown_file import FileNotShown, Refusal, ShownAs
 from ..delivery.adapter.outgoing.files.request_files import default_by, factory_dir, stamp_utc
 from ..delivery.adapter.outgoing.process.factory_process import (
     cli_path, own_file, read_json, say, SERVE_FILE, write_json)
@@ -208,6 +213,11 @@ VIEWS = {
 
 #: What a press may write: a request's kind and the fields the page sends; nothing else reaches the files.
 REQUEST_FIELDS = ("story", "epic", "record", "topic", "proposal", "option", "from")
+#: The largest request body: the most files a request takes at their largest, base64 (4/3), with room for its words
+#: and the JSON around them.
+REQUEST_WITH_FILES = MAX_FILES * MAX_BYTES * 4 // 3 + 4 * 1024 * 1024
+#: Why a file is not shown, as this server answers it.
+NOT_SHOWN = {Refusal.FORM: 400, Refusal.NOTHING: 404, Refusal.TOO_LARGE: 413, Refusal.KIND: 415}
 
 
 def cli_env():
@@ -255,10 +265,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return site in (None, "same-origin")
 
     # --- answers ---------------------------------------------------------------------------------------------------
-    def common_headers(self):
+    def common_headers(self, framed=False):
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("X-Frame-Options", "SAMEORIGIN" if framed else "DENY")
         self.send_header("Referrer-Policy", "no-referrer")
 
     def answer(self, code, body, kind="application/json; charset=utf-8"):
@@ -273,7 +283,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if kind.startswith("text/html"):
             self.send_header("Content-Security-Policy",
                              f"default-src 'none'; script-src '{SCRIPT_HASH}'; style-src 'self' 'unsafe-inline'; "
-                             "font-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; "
+                             "font-src 'self'; connect-src 'self'; img-src 'self' data:; frame-src 'self'; base-uri 'none'; "
                              "form-action 'none'; "
                              "frame-ancestors 'none'")
         self.end_headers()
@@ -319,7 +329,33 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.view(url.path[len("/api/view/"):], query)
         if url.path == "/api/follow":
             return self.follow(query)
+        if url.path == "/api/file":
+            return self.project_file((query.get("path") or [""])[0])
         return self.refuse(404, "no such view")
+
+    def project_file(self, given):
+        """A file a record, a report or a story names (WP-184), as `ShowProjectFile` shows it — the domain decides
+        whether and as what; here only the answer: a picture, a PDF or a text under a policy that runs nothing, a
+        mockup as a page of its own in the page's frame."""
+        try:
+            with in_project(self.server.project):
+                shown = wiring.show_project_file(self.server.project).execute(ShowProjectFileQuery(given))
+        except FileNotShown as refused:
+            return self.refuse(NOT_SHOWN[refused.refusal], str(refused))
+        page = shown.shown_as is ShownAs.PAGE
+        kind = shown.kind.value
+        self.send_response(200)
+        self.send_header("Content-Type", kind + ("; charset=utf-8" if page or shown.kind.text else ""))
+        self.send_header("Content-Length", str(len(shown.data)))
+        self.send_header("Content-Disposition", "inline")
+        self.common_headers(framed=page)
+        self.send_header("Content-Security-Policy",
+                         "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; "
+                         "form-action 'none'; frame-ancestors 'self'; sandbox" if page
+                         else "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox")
+        self.end_headers()
+        self.wfile.write(shown.data)
+        return None
 
     def font(self, name):
         from .fonts import FONTS                      # read once a page asks: the views never need them
@@ -406,6 +442,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return None
+        if values.get("log") == "factory":
+            return self.follow_log()
         argv = [sys.executable, cli_path(), "--follow"] + (["--story", values["story"]] if values.get("story") else []) \
             + (["--process", values["process"]] if values.get("process") else []) \
             + (["--request", values["request"]] if values.get("request") else [])
@@ -449,6 +487,45 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 process.terminate()
                 process.wait(timeout=5)
 
+    def follow_log(self, tail=200):
+        """The factory's own log as `FollowFactoryLog` follows it, as server-sent events: its last lines, then each new
+        one — the run page's output while nothing else is followed there (WP-183)."""
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.common_headers()
+        self.send_header("Connection", "close")
+        self.end_headers()
+        self.close_connection = True
+
+        def send(line):
+            self.wfile.write(f"data: {json.dumps(line, ensure_ascii=False)}\n\n".encode("utf-8"))
+
+        try:
+            with in_project(self.server.project):
+                follow = wiring.follow_factory_log(self.server.project)
+            followed = follow.execute(FollowFactoryLogQuery(tail=tail))
+            for line in followed.lines:
+                send(line)
+            if not followed.written:
+                send("the factory has written no log yet — it does once the backlog is started")
+            self.wfile.flush()
+            quiet = 0.0
+            while True:
+                time.sleep(0.5)
+                quiet += 0.5
+                followed = follow.execute(FollowFactoryLogQuery(followed.offset, followed.pending))
+                for line in followed.lines:
+                    send(line)
+                if followed.lines:
+                    self.wfile.flush()
+                    quiet = 0.0
+                if quiet >= 15:
+                    self.wfile.write(b": still here\n\n")          # a closed page is noticed on this write
+                    self.wfile.flush()
+                    quiet = 0.0
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            return None
+
     # --- POST ------------------------------------------------------------------------------------------------------
     def do_POST(self):
         url = urllib.parse.urlsplit(self.path)
@@ -464,8 +541,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length") or 0)
         except ValueError:
             length = -1
-        if length < 0 or length > 65536:
-            return self.refuse(413, "a write is at most 64 KiB")
+        # a request may carry its files (WP-184): five of 10 MB, as base64 in its JSON; any other write is small
+        limit = REQUEST_WITH_FILES if url.path == "/api/request" else 65536
+        if length < 0 or length > limit:
+            return self.refuse(413, "a write is at most 64 KiB" if limit == 65536 else "a request and its files are at most 70 MB")
         try:
             body = json.loads(self.rfile.read(length) or b"{}")
             if not isinstance(body, dict):
@@ -475,11 +554,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
         project = self.server.project
         by = " ".join(str(body.get("by") or "").split())[:80] or default_by(project)
         if url.path == "/api/request":
-            fields = {k: body[k] for k in REQUEST_FIELDS if body.get(k)}
+            fields = {k: str(body[k]) for k in REQUEST_FIELDS if body.get(k)}
+            try:
+                files = tuple((str(f.get("name") or "file"), base64.b64decode(str(f.get("data") or ""), validate=True))
+                              for f in (body.get("files") or []) if isinstance(f, dict))
+            except (ValueError, TypeError):
+                return self.refuse(400, "a file goes as {name, data}, its data base64")
             try:
                 with in_project(project):
                     written = wiring.write_request(project).execute(
-                        WriteRequestCommand(str(body.get("kind", "")), fields, str(body.get("words") or ""), by))
+                        WriteRequestCommand(str(body.get("kind", "")), fields, str(body.get("words") or ""), by, files))
             except DuplicateRequest as same:
                 return self.json(200, dict(id=same.existing, duplicate=True, message=str(same)))
             except (UseCaseException, GateError) as error:

@@ -6,8 +6,10 @@ import dataclasses
 import typing
 
 from ....building_blocks import UseCase
+from ...domain.model.handed_file import FileName, FileRefused, HandedFile, HandedFiles
+from ..shared.handed_file_store import HandedFileStore
 from ..shared.request_check import RequestCheck
-from ..shared.requests import RequestStore
+from ..shared.requests import RequestRefused, RequestStore
 
 
 @dataclasses.dataclass(frozen=True)
@@ -16,6 +18,8 @@ class WriteRequestCommand:
     fields: typing.Mapping[str, typing.Any]
     words: str
     by: str
+    #: the files a person hands over beside the words, each its name as given and its bytes (WP-184)
+    files: typing.Tuple[typing.Tuple[str, bytes], ...] = ()
 
 
 @dataclasses.dataclass(frozen=True)
@@ -32,14 +36,34 @@ class WriteRequestInputPort(UseCase[WriteRequestCommand, RequestWritten], typing
 
 class WriteRequestUseCase:
     """The request checked against the files and against the requests that wait — DuplicateRequest where the same
-    waits already, RequestRefused with the reason otherwise — then written, queued."""
+    waits already, RequestRefused with the reason otherwise —, the files beside its words taken as the domain takes
+    them and kept, then written, queued: all or nothing — a request not written keeps no file."""
 
-    def __init__(self, check: RequestCheck, store: RequestStore) -> None:
+    def __init__(self, check: RequestCheck, store: RequestStore, files: HandedFileStore) -> None:
         self._check = check
         self._store = store
+        self._files = files
 
     def execute(self, command: WriteRequestCommand) -> RequestWritten:
-        fields, words = self._check.checked(command.kind, command.fields, command.words)
+        handed = self._handed(command)
+        fields, words = self._check.checked(command.kind, {k: v for k, v in command.fields.items() if k != "files"},
+                                            command.words, handed.any)
         self._check.against(command.kind, fields, words, self._store.all())
-        request_id, path = self._store.add(command.kind, fields, words, command.by)
+        kept = [self._files.keep(file) for file in handed.files]
+        try:
+            if kept:
+                fields = dict(fields, files=" ".join(ref.id.value for ref in kept))
+            request_id, path = self._store.add(command.kind, fields, words, command.by)
+        except BaseException:
+            for ref in kept:
+                self._files.drop(ref.id)
+            raise
         return RequestWritten(request_id, path)
+
+    @staticmethod
+    def _handed(command: WriteRequestCommand) -> HandedFiles:
+        """The files as the domain takes them."""
+        try:
+            return HandedFiles(tuple(HandedFile(FileName(name), data) for name, data in command.files))
+        except FileRefused as refused:
+            raise RequestRefused(str(refused)) from None

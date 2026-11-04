@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from ..delivery.adapter.incoming.requests.settle import Settlement
+from ..delivery.adapter.outgoing.files.shown_files import ShownProjectFiles
+from ..delivery.application.status.show_project_file import ShowProjectFileUseCase
+from ..delivery.adapter.outgoing.files.handed_files import HandedFileFolder
 from ..delivery.adapter.outgoing.discovery.discovery_list_files import DiscoveryListFiles
 from ..delivery.adapter.outgoing.process.factory_process_files import FactoryProcessFiles
 from ..delivery.adapter.outgoing.tools.runner_table_files import RunnerTableFiles
@@ -65,6 +68,8 @@ from ..delivery.application.checkout.give_checkout_back import GiveCheckoutBackU
 from ..delivery.application.checkout.mark_listening import MarkListeningUseCase
 from ..delivery.application.status.list_findings import ListFindingsUseCase
 from ..delivery.application.status.follow_output import FollowOutputUseCase
+from ..delivery.application.status.follow_factory_log import FollowFactoryLogUseCase
+from ..delivery.adapter.outgoing.files.factory_log_file import FactoryLogFile
 from ..delivery.application.status.show_stage_outputs import ShowStageOutputsUseCase
 from ..delivery.application.cost.show_spent import ShowSpentUseCase
 from ..delivery.application.status.show_journal_story import ShowJournalStoryUseCase
@@ -103,8 +108,12 @@ def request_check(cwd: str) -> RequestCheck:
                         ContractStages())
 
 
+def show_project_file(cwd: str) -> ShowProjectFileUseCase:
+    return ShowProjectFileUseCase(ShownProjectFiles(cwd))
+
+
 def write_request(cwd: str) -> WriteRequestUseCase:
-    return WriteRequestUseCase(request_check(cwd), RequestFiles(cwd))
+    return WriteRequestUseCase(request_check(cwd), RequestFiles(cwd), HandedFileFolder())
 
 
 def check_request(cwd: str) -> CheckRequestUseCase:
@@ -221,6 +230,10 @@ def show_stage_outputs(runs: str) -> ShowStageOutputsUseCase:
 
 def follow_output(runs: str) -> FollowOutputUseCase:
     return FollowOutputUseCase(StageOutputFiles(runs))
+
+
+def follow_factory_log(cwd: str) -> FollowFactoryLogUseCase:
+    return FollowFactoryLogUseCase(FactoryLogFile(cwd))
 
 
 def list_findings(cwd: str, epics: str, runs: str) -> ListFindingsUseCase:

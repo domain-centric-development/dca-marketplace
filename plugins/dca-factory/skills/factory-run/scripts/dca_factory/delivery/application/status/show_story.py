@@ -125,7 +125,8 @@ class ShowStoryUseCase:
                     created=created_of(front), intent=front_text(front.get("intent")),
                     description=text["description"], scenarios=text["scenarios"],
                     superseded=data.get("state") == "superseded",
-                    sections=text["sections"], criteria_at=text["criteria_at"],
+                    sections=text["sections"], criteria_at=text["criteria_at"], shots=[dict(path=s.path.value, name=s.name.value, stage=s.taker.value, at=s.at.value)
+                                                 for s in self._detail.shots(story_id)],
                     **story_situation(row, data, overview, text["sections"], now),
                     context=str(front.get("context", "")).strip(), criteria=text["criteria"],
                     accepted_by=accepted_by, passes=passes, stages=stages, decisions=decisions, models=models,

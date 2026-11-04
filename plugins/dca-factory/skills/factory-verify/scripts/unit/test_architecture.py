@@ -192,3 +192,28 @@ class CyclesTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WebHostTest(unittest.TestCase):
+    """The page's server is a host: it translates HTTP into a command or a query and answers with the result — it does
+    not reach past the use cases into an outgoing adapter (WP-184). What it reached before stays named here, as debt
+    to pay down, never as a pattern to follow."""
+
+    #: The outgoing adapters `web/` reached before WP-184 — each a helper, none a rule of the factory.
+    KNOWN = {"delivery.adapter.outgoing.files.request_files",       # default_by, factory_dir, stamp_utc
+             "delivery.adapter.outgoing.process.factory_process",   # the factory's process: start, stop, the worker
+             "sharedkernel.adapter.outgoing.markdown.front_matter",  # GateError, caught
+             "sharedkernel.adapter.outgoing.profile.profile_files"}  # the profile's places, set for a write
+
+    def test_the_page_server_reaches_no_outgoing_adapter_beyond_the_known_ones(self):
+        import ast
+        reached = set()
+        web = os.path.join(PACKAGE, "web")
+        for name in sorted(os.listdir(web)):
+            if not name.endswith(".py"):
+                continue
+            tree = ast.parse(open(os.path.join(web, name), encoding="utf-8").read())
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom) and node.level == 2 and node.module and ".adapter.outgoing" in f".{node.module}":
+                    reached.add((name, node.module))
+        self.assertEqual([], sorted(f"web/{n} imports {m}" for n, m in reached if m not in self.KNOWN))

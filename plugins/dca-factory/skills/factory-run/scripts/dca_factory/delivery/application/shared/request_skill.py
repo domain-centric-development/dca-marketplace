@@ -6,6 +6,8 @@ import dataclasses
 import typing
 
 from ....building_blocks import OutputPort
+from ...domain.model.handed_file import HandedFileRef
+from ...domain.model.project_path import ProjectPath
 from .requests import Kind, Request
 
 
@@ -16,6 +18,14 @@ class SkillRun:
     code: int
     timed_out: bool
     output: str
+
+
+@dataclasses.dataclass(frozen=True)
+class HandedFileRead:
+    """A file handed over beside the request's words, and where its run reads it in the project."""
+
+    ref: HandedFileRef
+    path: ProjectPath
 
 
 class RequestSkill(OutputPort, typing.Protocol):
@@ -29,6 +39,8 @@ class RequestSkill(OutputPort, typing.Protocol):
         """Whether the tool can be started — a known tool, or the person's own command."""
         ...
 
-    def run(self, request: Request, kind: Kind, unit: str, tool: str) -> SkillRun:
-        """The skill run for the request, its usage journaled and booked to it. Stopped from outside, it raises."""
+    def run(self, request: Request, kind: Kind, unit: str, tool: str,
+            handed: typing.Sequence[HandedFileRead] = ()) -> SkillRun:
+        """The skill run for the request within its kind's reach, the handed files named to it as material to read,
+        its usage journaled and booked to it. Stopped from outside, it raises."""
         ...

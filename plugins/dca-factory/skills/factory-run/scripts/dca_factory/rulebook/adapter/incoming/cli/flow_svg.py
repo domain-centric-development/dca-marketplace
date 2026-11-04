@@ -12,18 +12,24 @@ Model = typing.Dict[str, typing.Any]
 
 Y = 130                 # the line the steps stand on
 TOP = 64                # the height a round rises above the line
-GAP = 36                # between two things on the line
+GAP = 30                # between two things on the line
 DOT = 11                # a gate's radius
 MARK = 7                # a stop's or a wait's radius
 CHAR = 13.4             # a step's name, per character, in the display face at 22 px
+SMALL = 15              # the small text's size: a label, a count, a rule in the legend
+SMALL_CHAR = 7.5        # the small text, per character, in the mono face at SMALL
+LEAST = 12              # the size the small text never goes below where the drawing is shown — so its least width
+ROW = 22                # a line of the legend
+LEGEND = 204            # where the legend's rules start, clear of its longest label at SMALL
 
 STYLE = """
 .f text { font-family: 'Space Grotesk', 'Avenir Next', 'Trebuchet MS', sans-serif; fill: #1c2433; }
 .f .step { font-size: 22px; font-weight: 700; }
-.f text.small { font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace; font-size: 11px; fill: #5b6472;
+.f text.small { font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace; font-size: __SMALL__px; fill: #5b6472;
   paint-order: stroke; stroke: #ffffff; stroke-width: 5px; stroke-linejoin: round; }
 .f .on-line { stroke: #a7adb8; stroke-width: 2; fill: none; }
-.f .tip-on { fill: #a7adb8; } .f .tip-again { fill: #148f96; } .f .tip-back { fill: #1c2433; }
+.f [class^="tip-"] { fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.f .tip-on { stroke: #a7adb8; } .f .tip-again { stroke: #148f96; } .f .tip-back { stroke: #1c2433; }
 .f .way path.hit { stroke: transparent; stroke-width: 14; fill: none; }
 .f .way-again path.vis { stroke: #148f96; stroke-width: 2; stroke-dasharray: 5 4; fill: none; }
 .f .way-again text.small { fill: #148f96; }
@@ -35,12 +41,12 @@ STYLE = """
 .f .mark-waits circle { fill: #5b6472; }
 .f .done { fill: none; stroke: #1c2433; stroke-width: 2; }
 @media (prefers-color-scheme: dark) {
-  .f text { fill: #e8eaf0; } .f text.small { fill: #9aa3b2; stroke: #0d1117; } .f .on-line { stroke: #8a93a3; } .f .tip-on { fill: #8a93a3; }
-  .f .tip-again, .f .gate circle { fill: #3bb3b9; } .f .way-again path.vis { stroke: #3bb3b9; } .f .way-again text.small { fill: #3bb3b9; }
-  .f .way-back path.vis { stroke: #e8eaf0; } .f .tip-back { fill: #e8eaf0; } .f .done { stroke: #e8eaf0; }
+  .f text { fill: #e8eaf0; } .f text.small { fill: #9aa3b2; stroke: #0d1117; } .f .on-line, .f .tip-on { stroke: #8a93a3; }
+  .f .gate circle { fill: #3bb3b9; } .f .tip-again, .f .way-again path.vis { stroke: #3bb3b9; } .f .way-again text.small { fill: #3bb3b9; }
+  .f .way-back path.vis, .f .tip-back { stroke: #e8eaf0; } .f .done { stroke: #e8eaf0; }
   .f .mark-stop circle { fill: #d9826f; } .f .mark-waits circle { fill: #9aa3b2; }
 }
-"""
+""".replace("__SMALL__", str(SMALL))
 
 
 def esc(value: typing.Any) -> str:
@@ -81,7 +87,7 @@ def placed(steps: typing.List[Model]) -> typing.Tuple[typing.Dict[str, Place], t
             x += DOT + GAP
     x += 9
     line.append(("delivered", Place(x, 9)))
-    return at, line, x + 9 + 70
+    return at, line, x + 9 + 45      # room for the end's word, centred under it
 
 
 def gate(x: float, name: str, checks: typing.List[str]) -> str:
@@ -120,7 +126,7 @@ def svg(graph: Model, kind: str, titles: typing.Optional[typing.Mapping[str, str
     for edge, names in zip(backs, named):
         nest = edge["source"] if one_at_a_time else ""
         depths.append(below.get(nest, 26.0))
-        below[nest] = depths[-1] + 22 + 13 * (len(names) + 1)
+        below[nest] = depths[-1] + 22 + 15 * (len(names) + 1)
     depth = max(below.values(), default=26.0)
     legend = []                              # a rule a line, with each way it takes (a rule may stop or wait)
     for source, label in (("every_gate", "at every gate"), ("anywhere", "anywhere in a run")):
@@ -131,13 +137,14 @@ def svg(graph: Model, kind: str, titles: typing.Optional[typing.Mapping[str, str
         legend.append((source, label, list(ways.items())))
     legend = [group for group in legend if group[2]]
     rows = sum((len(lines) + 1) // 2 for _, _, lines in legend)
-    height = Y + 54 + depth + 18 * rows + 12 * len(legend) + 10
-    out = [f'<svg xmlns="http://www.w3.org/2000/svg" class="f" viewBox="0 0 __WIDTH__ {height:.0f}" '
+    height = Y + 54 + depth + ROW * rows + 12 * len(legend) + 10
+    # it shrinks with its place down to the width its small text still reads at LEAST px; narrower, it scrolls
+    out = [f'<svg xmlns="http://www.w3.org/2000/svg" class="f" viewBox="0 0 __WIDTH__ {height:.0f}" style="min-width: __LEAST__px" '
            f'role="img" aria-label="the {esc(kind)} flow: its steps, gates, rounds and ways back">',
            f"<style>{STYLE}</style>",
            '<defs>' + "".join(
-               f'<marker id="a-{n}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="12" markerHeight="12" '
-               f'markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="tip-{n}" d="M0,0 L10,5 L0,10 z"/></marker>'
+               f'<marker id="a-{n}" viewBox="0 0 10 10" refX="7.2" refY="5" markerWidth="11" markerHeight="11" '
+               f'markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="tip-{n}" d="M2.2,1.4 L8.6,5 L2.2,8.6"/></marker>'
                for n in ("on", "again", "back")) + "</defs>"]
     # the line: a plain arrow from one thing to the next, an edge on (judge → document) carrying its rules
     on = {(e["source"], e["target"]): e for e in edges if e["way"] == "on"}
@@ -159,7 +166,7 @@ def svg(graph: Model, kind: str, titles: typing.Optional[typing.Mapping[str, str
             out.append(f'<text class="step" data-stage="{esc(name)}" x="{place.x:.1f}" y="{Y + 8}" '
                        f'text-anchor="middle">{esc(name)}</text>')
             if gated[name]["gate"] == "none":
-                out.append(f'<text class="small" x="{place.x:.1f}" y="{Y + 47}" text-anchor="middle">decides, '
+                out.append(f'<text class="small" x="{place.x:.1f}" y="{Y + 53}" text-anchor="middle">decides, '
                            f'no gate</text>')
     # the rounds: from the gate after a step (or the step) up and back into it
     for edge in (e for e in edges if e["way"] == "again"):
@@ -182,7 +189,8 @@ def svg(graph: Model, kind: str, titles: typing.Optional[typing.Mapping[str, str
         a, b = at[edge["source"]], at[edge["target"]]
         top, low = Y + 54, Y + 54 + depths[lane]
         bend = top + (low - top) / .75           # a cubic with both handles here bottoms out at `low`
-        d = f"M{a.x:.1f},{top} C{a.x:.1f},{bend:.1f} {b.x:.1f},{bend:.1f} {b.x:.1f},{top + 4}"
+        lean = (a.x - b.x) * .12                  # the last handle off to the source's side: the point leans into its way
+        d = f"M{a.x:.1f},{top} C{a.x:.1f},{bend:.1f} {b.x + lean:.1f},{bend:.1f} {b.x:.1f},{top + 4}"
         mid = (a.x + b.x) / 2
         out.append(f'<g class="way way-back" data-source="{esc(edge["source"])}" data-target="{esc(edge["target"])}" '
                    f'data-way="back" data-rules="{esc(ruled(edge))}"><title>{esc(edge["source"])} → '
@@ -190,7 +198,7 @@ def svg(graph: Model, kind: str, titles: typing.Optional[typing.Mapping[str, str
                    f'<path class="vis" d="{d}" marker-end="url(#a-back)"/>'
                    f'<text class="small" x="{mid:.1f}" y="{low + 14:.1f}" text-anchor="middle">'
                    f'<tspan class="way-name">{esc(edge["source"])} → {esc(edge["target"])}</tspan>'
-                   + "".join(f'<tspan x="{mid:.1f}" dy="13">{esc(name)}</tspan>' for name in named[lane])
+                   + "".join(f'<tspan x="{mid:.1f}" dy="15">{esc(name)}</tspan>' for name in named[lane])
                    + '</text></g>')
     # a stop and a wait, marked under the step they leave from
     for edge in (e for e in edges if e["way"] in ("stop", "waits")):
@@ -198,20 +206,20 @@ def svg(graph: Model, kind: str, titles: typing.Optional[typing.Mapping[str, str
         offset = -9 if edge["way"] == "stop" else 9
         out.append(mark(step.x + offset, Y + 30, edge["way"], edge, edge["source"]))
     # what every gate and the whole run share, said once: a rule a line, by its title, in two columns
-    y, column = Y + 54 + depth + 8, max((width - 164) / 2, 300.0)
+    y, column = Y + 54 + depth + 8, max((width - LEGEND) / 2, 300.0)
     for source, label, lines in legend:
         out.append(f'<text class="small" x="24" y="{y + 4}">{label}</text>')
         for n, (rule, taken) in enumerate(lines):
             half = (len(lines) + 1) // 2      # down the first column, then the second
-            x, row = 164 + column * (n // half), y + 18 * (n % half)
+            x, row = LEGEND + column * (n // half), y + ROW * (n % half)
             words = titles.get(rule) or rule
-            fits = int((column - 30) / 6.7)
+            fits = int((column - 30) / SMALL_CHAR)
             shown = words if len(words) <= fits else words[:fits - 1].rstrip() + "…"
             out.append(f'<g class="way mark" data-source="{source.replace("_", "-")}" '
                        f'data-target="{taken[0]}" data-way="{taken[0]}" data-rules="{esc(rule)}">'
                        f'<title>{esc(rule)}: {esc(words)}</title>'
                        + "".join(f'<g class="mark-{way}">{sign(x + 16 * i, row, way)}</g>' for i, way in enumerate(taken))
                        + f'<text class="small" x="{x + 14 + 16 * (len(taken) - 1)}" y="{row + 4}">{esc(shown)}</text></g>')
-        y += 18 * ((len(lines) + 1) // 2) + 12
+        y += ROW * ((len(lines) + 1) // 2) + 12
     out.append("</svg>")
-    return "\n".join(out).replace("__WIDTH__", f"{width:.0f}") + "\n"
+    return "\n".join(out).replace("__WIDTH__", f"{width:.0f}").replace("__LEAST__", f"{width * LEAST / SMALL:.0f}") + "\n"

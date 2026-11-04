@@ -9,6 +9,8 @@ import os
 import re
 import typing
 
+from .run_shots import shots_of
+from ....domain.model.shot import Shot
 from ..pipeline.stage_rows import stage_windows
 from .criteria_files import criteria_of, scenarios_of
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError, read_front_matter
@@ -66,6 +68,9 @@ class DetailFactFiles:
 
     def __init__(self, epics: str, runs: str) -> None:
         self._epics, self._runs = epics, runs
+
+    def shots(self, story_id: str) -> typing.List[Shot]:
+        return shots_of(os.getcwd(), self._runs, story_id)
 
     def story_text(self, path: str, body: str, front: Facts) -> Facts:
         try:

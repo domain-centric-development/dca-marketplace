@@ -124,6 +124,33 @@ class PageThemeTest(unittest.TestCase):
         self.assertEqual({"wait", "ask", "ok", "bad"}, {w["tone"] for w in fixtures.FIXTURES["all-states"]["requests"]["wishes"]})
 
 
+    def test_the_run_page_follows_the_factorys_own_log_as_it_is_written(self):
+        # WP-183: the worker's log, its last lines and then each new one, as the run page's output
+        server, _theme = self.serve()
+        log = os.path.join(server.project, ".dca-factory", "factory.log")
+        with open(log, "w", encoding="utf-8") as handle:
+            handle.write("factory: up\nfactory: a-story · plan\n")
+        connection = http.client.HTTPConnection("127.0.0.1", server.port, timeout=10)
+        connection.request("GET", "/api/follow?log=factory", headers={"Host": f"127.0.0.1:{server.port}", "X-Factory-Token": server.token})
+        response = connection.getresponse()
+        self.assertEqual(200, response.status)
+        self.assertIn("text/event-stream", response.getheader("Content-Type"))
+
+        def until(word):
+            seen = []
+            while not any(word in line for line in seen):
+                line = response.fp.readline().decode("utf-8")
+                self.assertTrue(line, f"the stream ended before {word!r}; seen {seen}")
+                if line.startswith("data: "):
+                    seen.append(json.loads(line[6:]))
+            return seen
+
+        self.assertEqual(["factory: up", "factory: a-story · plan"], until("plan"))
+        with open(log, "a", encoding="utf-8") as handle:
+            handle.write("factory: a-story · test\n")
+        self.assertEqual(["factory: a-story · test"], until("test"))
+        connection.close()
+
     def test_the_theme_is_let_into_git_beside_the_journals_once(self):
         root = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, root, True)
