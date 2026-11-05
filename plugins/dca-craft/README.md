@@ -13,13 +13,14 @@ It pairs with [dca-core](../dca-core/), which adds the DCA method, and with
 
 Pick the skill for what you are about to do — `/tdd` before writing new behaviour, `/clean-code`
 while editing, `/adr` when a decision needs to outlive the conversation, `/e2e-testing` when a
-user-visible flow needs a test (or a project has no browser runner yet), `/ubiquitous-language` when
+user-visible flow needs a test (or a project has no browser runner yet), `/frontend` when a page,
+a component or a stylesheet changes, `/ubiquitous-language` when
 a term enters the model, `/context-map` when a context or a relationship changes, one of the three
 `/review-*` perspectives before a change is merged. Nothing has to be set up first.
 
 ## What's inside
 
-### Skills (9) — applied while writing and reviewing
+### Skills (10) — applied while writing and reviewing
 
 | Skill | Purpose | When it triggers |
 |---|---|---|
@@ -27,6 +28,7 @@ a term enters the model, `/context-map` when a context or a relationship changes
 | `/clean-code` | Naming, function size, SLAP, smells, Boy-Scout-Rule | Any code edit |
 | `/adr` | Architecture Decision Records (Michael Nygard format, immutable after Accepted) | Non-trivial architectural choice |
 | `/e2e-testing` | The end-user-testing craft: Page Objects, stable selectors, one flow per test, explicit waits, diagnosis-first when a test breaks — and setting up a browser runner where there is none, ending in a smoke test shown to fail | Adding or fixing an end-user test; a project without a runner |
+| `/frontend` | The maintainable-frontend craft, the default where a project names no rules of its own (a delivery pipeline names it `carrier.frontend`): design principles, cascade layers and one owner per style, state in attributes, tokens in three tiers with a theme file, spacing and type scales with floors, intrinsic layouts with container queries and named widths, components with a contract, templates with landmarks, WCAG 2.2 AA, a living gallery with fixtures, and the checks that keep it true — stack-neutral, for server templates as for React, Vue or Svelte | Building or changing a page, a component, a layout or a stylesheet |
 | `/ubiquitous-language` | One glossary per bounded context, naming consistency, polysemy | Adding or renaming a domain concept |
 | `/context-map` | The designed strategic map: relationship patterns, subdomain types, the map's structure; draft from the code, update, validate against the code, explain a pattern | Introducing a context, changing an integration |
 | `/review-ddd` | The **ddd** review perspective: real invariants, entity vs. value, aggregate boundaries, ubiquitous language, event hygiene, repository vs. store | Reviewing a change from the model's point of view |

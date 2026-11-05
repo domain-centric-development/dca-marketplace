@@ -574,8 +574,13 @@ class Run:
         return f" This story's own worktree: {self.pwd}; the main checkout: {home}." if home else ""
 
     def guard_sentence(self) -> str:
+        """The skills a stage that writes production code applies to every file: the guard, and the frontend craft
+        for the files of a page."""
         guard = first_word(self.profile().get("carrier.guard", ""))
-        return f" The guard (the profile's carrier.guard): the {guard} skill." if guard else ""
+        frontend = first_word(self.profile().get("carrier.frontend", ""))
+        return ((f" The guard (the profile's carrier.guard): the {guard} skill." if guard else "")
+                + (f" The frontend craft for every page, template, stylesheet and client script (the profile's "
+                   f"carrier.frontend): the {frontend} skill." if frontend else ""))
 
     def briefs(self, story: str, stages: typing.Sequence[str],
                dry: bool = False) -> typing.Tuple[str, typing.List[str]]:

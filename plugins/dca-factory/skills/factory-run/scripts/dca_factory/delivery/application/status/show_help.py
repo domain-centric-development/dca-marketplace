@@ -129,7 +129,8 @@ class ShowHelpUseCase:
                  what="product, technical decisions, designed domain — a new project with its skeleton: /dca-new project",
                  skill="/dca-describe", shell="", done=started),
             dict(step="set up", part="foundation",
-                 what="the stack profile: build, test, format and browser commands, the carriers",
+                 what="the stack profile: build, test, format and browser commands, the carriers "
+                      "(each stage's craft, the guard, the frontend craft)",
                  skill="/factory-setup", shell="setup --check" if profile_file else "setup", done=bool(profile_file)),
             dict(step="discover", part="inflow", what="which problem is worth solving — a report with sources "
                                                      "and proposed epics, each with its outcome event",

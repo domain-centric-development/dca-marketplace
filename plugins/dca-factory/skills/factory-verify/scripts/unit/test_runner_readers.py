@@ -34,13 +34,14 @@ class Readers(unittest.TestCase):
 
     def test_in_a_worktree_the_places_are_the_main_checkouts_and_back_home_they_are_relative_again(self):
         with project() as p, tempfile.TemporaryDirectory() as tree:
-            write(os.path.join(p.root, profiles.PROFILE_FILE), "carrier.guard: the-guard\n")
+            write(os.path.join(p.root, profiles.PROFILE_FILE), "carrier.guard: the-guard\ncarrier.frontend: the-frontend\n")
             p.run_file("S-1", "judge.md", "## Verdict\nverdict: `approved`\n")
             run = a_run(p)
             os.chdir(tree)
             os.environ["FACTORY_HOME"] = p.root
             try:
                 self.assertIn("the-guard", run.guard_sentence())
+                self.assertIn("the-frontend", run.guard_sentence())
                 self.assertEqual(profiles.place("runs"), p.root.replace(os.sep, "/") + "/.dca-factory/runs")   # places use /
                 self.assertEqual(run.verdict_of("S-1"), "approved")
                 run.journal_line("S-1", "2026-10-10T10:00:00Z\tnote\t-\twhy=from-the-tree")

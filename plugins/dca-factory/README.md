@@ -113,7 +113,8 @@ leaves a command no preset detects *out* rather than writing a placeholder the g
 run. A new stack is one more preset file, no change to the script. It names a **carrier** — the skill a
 stage takes its craft from, `carrier.<stage>:` in the profile — only where that skill is installed beside
 the pipeline (`dca-modelling`, `dca-discipline`
-where the project has the DCA rule packages; `ubiquitous-language`, `context-map`, `e2e-testing`
+where the project has the DCA rule packages; `frontend` as `carrier.frontend:` where it has a browser surface — build and tidy apply it to
+every page, template, stylesheet and client script, in the styling method and for the browsers `tech.md` names; `ubiquitous-language`, `context-map`, `e2e-testing`
 wherever they are installed) and installs it in the same run. The skills go into the tool's skill
 folder as **copies** when the source is a plugin cache (the marketplace install: a cache folder is
 versioned and removed some time after an update, so a link into it would go stale) and as **links**

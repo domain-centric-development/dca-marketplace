@@ -40,7 +40,9 @@ docs/                      what exists and why — written after the code, some 
    `bash <this skill's folder>/../factory-run/scripts/factory.sh setup --tool <claude|codex|opencode>`,
    and report what it printed. It works without code: what it cannot detect it leaves out of the
    stack profile. It writes the profile first — the build commands the presets detect, and a
-   carrier line only for a method skill that is installed beside the pipeline — then places the
+   carrier line only for a method skill that is installed beside the pipeline (`carrier.frontend:
+   frontend` where the project has a browser surface; the skill follows the styling method and the
+   browsers `tech.md` names) — then places the
    skills (copies from a plugin cache, links from a checkout; `.dca-factory-skills` beside them says
    which, and the install keeps links out of git itself), copies the gate, the runner and the observer,
    installs the commit hook and the pipeline's section in `AGENTS.md`. Say which mode it chose and

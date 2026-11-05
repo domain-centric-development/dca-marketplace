@@ -100,6 +100,30 @@ project uses where they differ.
 - default: —
 - answer goes to: `product/tech.md → ## Frontend approach`
 
+### DESC-BROWSERS
+- look up: a `Browsers:` line under `## Frontend approach`
+- asked: when DESC-SURFACES names pages and DESC-FRONTEND is not "no frontend", or either is itself open in this pass
+- question: Which browsers must the pages serve — the current ones only, or older ones too, and down to which?
+- options: current browsers only (the last two versions of each) · a broad public, older phones and browsers included · a list the organisation names
+- default: current browsers only
+- answer goes to: `product/tech.md → ## Frontend approach` (a line `Browsers: …`)
+
+### DESC-STYLING
+- look up: a `Styling:` line under `## Frontend approach`
+- asked: when DESC-SURFACES names pages and DESC-FRONTEND is not "no frontend", or either is itself open in this pass
+- question: How are the styles kept apart — native CSS scoping, BEM names, the framework's scoped styles, utility classes, or a component library?
+- options: native scoping (`@scope`, cascade layers, state in attributes) · BEM names with cascade layers · the framework's scoped styles (CSS Modules, Vue or Svelte) · utility classes (Tailwind) · a component library or design system (name it)
+- default: native scoping where only current browsers are served; BEM names where older ones are
+- answer goes to: `product/tech.md → ## Frontend approach` (a line `Styling: …`)
+
+### DESC-GALLERY
+- look up: a `Gallery:` line under `## Frontend approach`
+- asked: when DESC-SURFACES names pages and DESC-FRONTEND is not "no frontend", or either is itself open in this pass
+- question: Where are the components shown in every state — Storybook, a gallery page of the application, or none yet?
+- options: Storybook (also for server-rendered templates) · a gallery page of the application, in development only · none yet
+- default: Storybook where the project builds with Node; a gallery page of the application otherwise
+- answer goes to: `product/tech.md → ## Frontend approach` (a line `Gallery: …`)
+
 ### DESC-PERSISTENCE
 - look up: `## Persistence`
 - asked: when open

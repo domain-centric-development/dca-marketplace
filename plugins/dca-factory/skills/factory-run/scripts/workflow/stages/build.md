@@ -62,7 +62,9 @@ knowledge source the profile did not name. The rule in full: in what every stage
 `carrier.build: <name>` in the stack profile names the skill or agent that holds this project's
 craft for it; use it where this tool offers it, otherwise do the stage as described here and say so
 in your file. `carrier.guard: <name>` names the skill that holds the architecture's invariants while
-you edit — apply it to every file you write, the same way. The rule in full: in what every stage is told.
+you edit — apply it to every file you write, the same way; `carrier.frontend: <name>` the skill that holds
+the frontend craft — apply it to every page, template, stylesheet and client script.
+The rule in full: in what every stage is told.
 
 ## The build file
 

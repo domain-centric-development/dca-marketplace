@@ -22,6 +22,7 @@ class CarrierRole(enum.Enum):
 
     CRAFT = "craft"          # the stage's craft (`carrier.<stage>`)
     GUARD = "guard"          # the guard over production code (`carrier.guard`)
+    FRONTEND = "frontend"    # the frontend craft over pages, templates, stylesheets and client scripts (`carrier.frontend`)
     KNOWLEDGE = "knowledge"  # the method's knowledge, asked where in doubt (`knowledge`)
 
 

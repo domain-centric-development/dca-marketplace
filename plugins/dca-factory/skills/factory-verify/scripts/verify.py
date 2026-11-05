@@ -4155,6 +4155,28 @@ def verify_setup(runner, verbose=False):
                           for n in ("review-ddd", "review-hexagonal", "review-clean-code"))
                   and not any(l.startswith("reviews:") and ("ddd" in l or "hexagonal" in l) for l in lines)),
               [l for l in lines if l.startswith(("review", "reviews"))])
+    # WP-182: the frontend craft is the project's where it has a browser surface — with rules of its own as well, which
+    # the craft then follows
+    if "frontend" in installed:
+        surface = {"src/main/resources/templates/home.html": "<main></main>\n", "src/main/resources/static/main.css": "main {}\n"}
+        for roots in throwaway(2):
+            for root, own in zip(roots, (None, "# Tech\n\n## Frontend approach\n\nServer templates.\n\nStyling: BEM names\n")):
+                build_project(root)
+                os.remove(profile_of(root))
+                fixture(root, surface)
+                if own:
+                    write_file(root, "product/tech.md", own)
+                run_setup(runner, root, "--tool", "claude", "--from", source)
+                lines = active_lines(profile_of(root)) or []
+                check("carriers: a project with a browser surface gets `carrier.frontend: frontend` — "
+                      + ("its tech.md's styling method as well" if own else "without a styling method named"),
+                      "carrier.frontend: frontend" in lines, [l for l in lines if l.startswith("carrier.")])
+        for root in throwaway():
+            build_project(root)
+            os.remove(profile_of(root))
+            run_setup(runner, root, "--tool", "claude", "--from", source)
+            check("carriers: a project without a browser surface gets no carrier.frontend",
+                  not any(l.startswith("carrier.frontend") for l in (active_lines(profile_of(root)) or [])))
     for root in throwaway():
         write_file(root, "dca.profile.yaml", "overview: docs/what.md\nverify_command: ./gradlew archTest\n")
         run_setup(runner, root, "--tool", "none", "--from", lone)
@@ -4216,7 +4238,7 @@ def verify_setup(runner, verbose=False):
                   os.path.isdir(link) and "dca-craft" in open(os.path.join(link, "SKILL.md"), encoding="utf-8").read(),
                   os.path.realpath(link) if os.path.exists(link) else "missing")
     for root in throwaway():
-        build_project(root, profile=PROFILE + "carrier.guard: some-guard\n")
+        build_project(root, profile=PROFILE + "carrier.guard: some-guard\ncarrier.frontend: some-frontend\n")
         copy_scripts(runner, root)
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run",
                                   env={"FACTORY_ISOLATION": "off"})
@@ -4225,6 +4247,10 @@ def verify_setup(runner, verbose=False):
         check("guard: the build and tidy prompts carry the declared carrier.guard, the other stages not",
               "some-guard" in prompts.get("build", "") and "some-guard" in prompts.get("tidy", "")
               and not any("some-guard" in prompts.get(s, "") for s in ("plan", "test", "judge", "document")),
+              {k: v[-90:] for k, v in prompts.items()})
+        check("frontend: the build and tidy prompts carry the declared carrier.frontend, the other stages not",
+              "some-frontend" in prompts.get("build", "") and "some-frontend" in prompts.get("tidy", "")
+              and not any("some-frontend" in prompts.get(s, "") for s in ("plan", "test", "judge", "document")),
               {k: v[-90:] for k, v in prompts.items()})
     if SYMLINKS:
         # a link under a skill's OLD name whose folder the rename moved away: the update removes it and

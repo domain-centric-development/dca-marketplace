@@ -41,13 +41,14 @@ class ShowBriefUseCase:
                                           self._carriers(query.stage))
 
     def _carriers(self, stage: StageName) -> typing.List[Carrier]:
-        """The skills the profile names for the stage: its craft, the guard where it writes production code, the
-        method's knowledge."""
+        """The skills the profile names for the stage: its craft, the guard and the frontend craft where it writes
+        production code, the method's knowledge."""
         profile = self._profile.profile()
         row = workflow().stage(stage)
         wanted = [(CarrierRole.CRAFT, f"carrier.{stage.value}")]
         if row is not None and Trait.GUARDED in row.traits:
             wanted.append((CarrierRole.GUARD, "carrier.guard"))
+            wanted.append((CarrierRole.FRONTEND, "carrier.frontend"))
         wanted.append((CarrierRole.KNOWLEDGE, "knowledge"))
         found = []
         for role, key in wanted:

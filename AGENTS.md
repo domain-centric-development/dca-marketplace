@@ -91,7 +91,7 @@ dca-marketplace/
   process of its own and `serve` shows it in a browser (127.0.0.1, a token per start); a press there, like
   `factory.sh request`, writes a request under `.dca-factory/requests/` that the factory works headless with the
   skill a session would run — `factory-run/reference/requests.md`.
-- **dca-craft** — `/tdd`, `/clean-code`, `/adr`, `/e2e-testing`, `/ubiquitous-language`, `/context-map`, `/product-discovery`,
+- **dca-craft** — `/tdd`, `/clean-code`, `/adr`, `/e2e-testing`, `/frontend`, `/ubiquitous-language`, `/context-map`, `/product-discovery`,
   `/review-ddd`, `/review-hexagonal`, `/review-clean-code`; agents `e2e-tester`, `ddd-reviewer`,
   `hexagonal-reviewer`, `clean-code-reviewer`. Independent of the architecture style and usable alone: the
   skills and agents name no DCA artifact (rule ids, `dca-*` names, the building blocks' namespaces and
