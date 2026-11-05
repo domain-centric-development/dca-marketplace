@@ -569,7 +569,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             except (UseCaseException, GateError) as error:
                 return self.refuse(400, str(error))
             requests_worker(project, by)                # a worker that ended meanwhile starts again for it
-            return self.json(201, dict(id=written.id, path=os.path.relpath(written.path, project).replace(os.sep, "/")))
+            # the path is the project's — anchored there, so a server started on another drive (Windows) still answers
+            shown = os.path.relpath(os.path.join(project, written.path), project).replace(os.sep, "/")
+            return self.json(201, dict(id=written.id, path=shown))
         if url.path in ("/api/requests/drop", "/api/requests/retry"):
             request_id = str(body.get("id", ""))
             try:

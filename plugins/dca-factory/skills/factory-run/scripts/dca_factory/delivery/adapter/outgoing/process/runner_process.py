@@ -586,7 +586,7 @@ class Run:
                dry: bool = False) -> typing.Tuple[str, typing.List[str]]:
         """What <stages> are told for <story>, written into its evidence folder (named only, in a dry run): what every
         stage is told once, each stage's own brief beside it — the files as the prompt names them."""
-        folder = brief_dir(self.runs, story)
+        folder = brief_dir(self.runs, story).replace(os.sep, "/")   # a prompt names places with `/`, on Windows too
         every = f"{folder}/{EVERY_STAGE}"
         own = [f"{folder}/{stage}.md" for stage in stages]
         if dry:

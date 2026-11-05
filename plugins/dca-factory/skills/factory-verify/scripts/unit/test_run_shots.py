@@ -16,6 +16,11 @@ from dca_factory.delivery.domain.model.shot import Instant
 PNG = b"\x89PNG\r\n\x1a\n" + b"\0" * 32
 
 
+#: The interpreter as a profile command names it: a profile command runs through bash on Windows too, which would
+#: take the backslashes of `C:\…\python.exe` for escapes.
+PYTHON = sys.executable.replace("\\", "/")
+
+
 class AStorysPictures(unittest.TestCase):
     def test_newest_first_with_the_stage_that_took_it_and_nothing_but_pictures(self):
         root = tempfile.mkdtemp()
@@ -71,7 +76,7 @@ class TheRunnerCollectsWhatATestTook(unittest.TestCase):
         with open(script, "w") as out:
             out.write("import os\nos.makedirs('shots', exist_ok=True)\n"
                       f"open('shots/after-the-login.png', 'wb').write({PNG!r})\n")
-        profile = {"e2eTest": f"{sys.executable} take.py", "screenshots": "shots", "testEvidence": "exit-code"}
+        profile = {"e2eTest": f"{PYTHON} take.py", "screenshots": "shots", "testEvidence": "exit-code"}
         suite_run(root, profile, "e2eTest", profile["e2eTest"], SuiteOwner(os.path.join(root, "runs"), "S-1", {}))
         self.assertEqual(["e2e-after-the-login.png"], [s.name.value for s in shots_of(root, "runs", "S-1")])
 
@@ -80,7 +85,7 @@ class TheRunnerCollectsWhatATestTook(unittest.TestCase):
         script = os.path.join(root, "take.py")
         with open(script, "w") as out:
             out.write(f"import os\nos.makedirs('shots', exist_ok=True)\nopen('shots/a.png', 'wb').write({PNG!r})\n")
-        profile = {"e2eTest": f"{sys.executable} take.py", "testEvidence": "exit-code"}
+        profile = {"e2eTest": f"{PYTHON} take.py", "testEvidence": "exit-code"}
         suite_run(root, profile, "e2eTest", profile["e2eTest"], SuiteOwner(os.path.join(root, "runs"), "S-1", {}))
         self.assertEqual([], shots_of(root, "runs", "S-1"))
 
