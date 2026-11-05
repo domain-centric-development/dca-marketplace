@@ -17,7 +17,7 @@ import hashlib
 import re
 
 from .page_core import SCRIPT_CORE, SCRIPT_START
-from .page_style import STYLE
+from .page_style import LAYERS, STYLE
 from .page_tokens import ICON_BRAND, ICON_INK, TOKENS
 from .page_ui import SCRIPT_UI
 from .page_views import SCRIPT_GALLERY, SCRIPT_VIEWS
@@ -81,7 +81,7 @@ PAGE = f"""<!doctype html>
 <meta name="color-scheme" content="light dark">
 <title>domaincentric.factory</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-<style>{FACES}{TOKENS}{STYLE}</style>
+<style>{LAYERS}{FACES}@layer tokens {{{TOKENS}}}{STYLE}</style>
 <link rel="stylesheet" href="/theme/theme.css">
 </head>
 <body>

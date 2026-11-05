@@ -1,4 +1,4 @@
-"""The page is built from components in atomic levels, one naming, its colours from tokens alone (WP-180).
+"""The page is built from components in three working levels, one naming, its colours from tokens alone (WP-180).
 
 What a person or an agent may change on the page without asking: a component's look in its block, a view's order. What
 these tests hold, so that two hands building the same thing build it the same way: every class a BEM block of a
@@ -16,7 +16,7 @@ import support  # noqa: F401 — puts the package on the path
 
 from dca_factory.delivery.adapter.incoming.web import page, page_core, page_style, page_tokens, page_ui, page_views
 
-LEVELS = ("atoms", "molecules", "organisms", "templates")
+LEVELS = ("primitives", "components", "templates")
 BEM = re.compile(r"^[a-z][a-z0-9]*(-[a-z0-9]+)*(__[a-z0-9]+(-[a-z0-9]+)*)?(--[a-z0-9]+(-[a-z0-9]+)*)?$")
 #: The words the factory names a state with: never a class, always `data-state`.
 STATE_WORDS = {"done", "delivered", "running", "waiting", "queued", "draft", "approved", "stopped", "failed", "superseded",
@@ -105,14 +105,14 @@ class PageComponentsTest(unittest.TestCase):
         self.assertTrue(self.ui, "no component found")
         self.assertEqual({}, {n: lvl for n, (lvl, _b) in self.ui.items() if lvl not in LEVELS})
 
-    def test_a_component_calls_nothing_above_its_level_and_an_atom_calls_none(self):
+    def test_a_component_calls_nothing_above_its_level_and_a_primitive_calls_none(self):
         rank = {lvl: i for i, lvl in enumerate(LEVELS)}
         wrong = []
         for name, (level, body) in self.ui.items():
             for called in set(re.findall(r"\bui\.(\w+)\b", body)) - {name}:
                 if called not in self.ui:
                     wrong.append(f"{name} calls ui.{called}, no component")
-                elif level == "atoms" or rank[self.ui[called][0]] > rank[level]:
+                elif level == "primitives" or rank[self.ui[called][0]] > rank[level]:
                     wrong.append(f"{name} ({level}) calls {called} ({self.ui[called][0]})")
         self.assertEqual([], wrong)
 
@@ -288,7 +288,7 @@ class PageComponentsTest(unittest.TestCase):
     def test_a_place_places_a_component_and_never_restyles_it(self):
         # where one block's selector reaches into another's, it may say where the other stands — its column, its
         # margin, how it aligns —, never how it looks: a look that differs is a variant of its own (`block--variant`)
-        placing = re.compile(r"(grid-column|grid-row|grid-template-columns|display|margin(-[a-z]+)?|align-[a-z]+|"
+        placing = re.compile(r"(grid-column|grid-row|grid-template-columns|display|margin(-[a-z]+)*|align-[a-z]+|"
                              r"justify-[a-z]+|flex(-[a-z]+)?|order|width|min-width|max-width|gap|column-gap|row-gap)$")
         restyled = []
         for selector, body in re.findall(r"([^{}]+)\{([^{}]*)\}", re.sub(r"/\*.*?\*/", "", page_style.STYLE, flags=re.S)):

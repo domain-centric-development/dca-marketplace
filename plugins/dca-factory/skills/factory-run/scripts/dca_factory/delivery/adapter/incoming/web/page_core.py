@@ -19,7 +19,7 @@ const TABS = [
   ["delivered", "Delivered", "What the factory delivered, the newest first."],
   ["rules", "The rules", "What each stage is told, what its gate checks and where a refusal sends the story — per stage, as checks against the stages, or as one story ran. Pick a rule to read it in full."]];
 const NOW = ["now", "Where it stands", "The cycle a story turns through — how many stand where, and the one that matters most in each."];
-const GALLERY = ["components", "The page's components", "Every component of this page in its variants and states, by level — atoms, molecules, organisms, templates. It shows the theme this project gives the page."];
+const GALLERY = ["components", "The page's components", "Every component of this page in its variants and states, by level — primitives, components, templates. It shows the theme this project gives the page."];
 const MARKS = {look: "!", question: "?", stopped: "✗", running: "▶", done: "✓", none: "", next: "→"};             // no state is no mark
 // the marks are the drawing's: a gate's check for a pass, a stop's cross for a fail, a pause where a person answers
 const ICONS = {

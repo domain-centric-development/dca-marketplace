@@ -902,7 +902,7 @@ function components() {
   const states = ["success", "warning", "danger", "info", "done", "delivered", "running", "waiting", "queued", "draft", "stopped", "failed", "superseded"];
   const card = {id: sample.story, title: sample.title, line: "ready · plan", actions: ui.btn("run it", {size: "s", primary: true})};
   return ui.gallery([
-    {level: "atoms — controls", items: [
+    {level: "primitives — controls", items: [
       ["btn", [ui.btn("change this"), ui.btn("accept", {primary: true}), ui.btn("draft it", {write: true}), ui.btn("draft it", {primary: true, write: true}),
                ui.btn("start", {icon: "play", primary: true, plain: true}), ui.btn("drop", {danger: true}), ui.btn("open")].join(" ")],
       ["btn · sizes", ["s", "m", "l"].map(size => ui.btn(size, {size}) + " " + ui.btn(size, {size, primary: true})).join(" · ")],
@@ -911,9 +911,9 @@ function components() {
       ["select · field", ui.formRow({id: "g-select", label: "a select", options: [{value: "one"}, {value: "two"}]})
         + ui.formRow({id: "g-field", label: "a field", value: "words"})],
       ["caret", `${ui.caret(false)} ${ui.caret(true)}`]]},
-    {level: "atoms — form text", items: [
+    {level: "primitives — form text", items: [
       ["label · hint · error", `${ui.label("A label", "g-field")} ${ui.hint("what the field takes")} ${ui.error("what was wrong")}`]]},
-    {level: "atoms — displays", items: [
+    {level: "primitives — displays", items: [
       ["em", `a line with ${ui.em("one word")} that stands out`],
       ["term", `${ui.term("Loan")} ${ui.term("Reader", {minor: true})} ${ui.term("Money", {shared: true})}`],
       ["event", ui.event("BookLent")],
@@ -929,7 +929,7 @@ function components() {
       ["pill", ["core", "supporting", "generic"].map(k => ui.pill(k, k)).join(" ")],
       ["empty · intro · note", ui.empty("Nothing here.") + ui.intro("What a card says first.") + ui.note("asks: a record", {state: "wait"})],
       ["rule-id", `${ui.ruleId("GATE-TESTS", "gate", "pass")} ${ui.ruleId("RUN-ROUND-1", "runner", "fail", 2)} ${ui.ruleId("STAGE-PLAN-1", "instructed")}`]]},
-    {level: "molecules", items: [
+    {level: "components — parts", items: [
       ["story", ui.story(sample.story, sample.title)],
       ["menu", ui.menu({id: "g-menu", label: "CB", title: "a menu, closed"})],
       ["list · press", ui.list([{mark: "done", press: {label: "product"}, what: ui.id("product/overview.md", {block: true}) + ui.hint("an item that opens as a whole")},
@@ -966,7 +966,7 @@ function components() {
       ["trail · trail-item", ui.trail([{words: "readers may reserve", tone: "wait", text: "writing", by: "Ann", actions: ""}, {words: "a due-date reminder", tone: "ok", text: "✓ became the draft story x", actions: ui.btn("open", {size: "s"})}, {words: "fines in another currency", tone: "bad", text: "✗ failed", actions: ""}])],
       ["tab", ui.tab({id: "gallery-a", key: 9, n: 2, on: true}) + ui.tab({id: "gallery-b", key: 8})],
       ["step", lines.map(l => l.slice(2).split(" ")).map(([w, ...rest]) => ui.step(w, rest.join(" "))).join("")]]},
-    {level: "organisms", items: [
+    {level: "components — sections", items: [
       ["card", ui.card("A card", "what it holds", ui.intro("Its body."))],
       ["run-control · run-panel", ["up", "stopping", "down"].map(state => ui.runControl({state, say: state === "down" ? "stopped · 1 ready" : `${ui.em(sample.story)} · build`,
           act: ui.btn(state === "down" ? "start the backlog" : "stop", {icon: state === "down" ? "play" : "stop", primary: state === "down", plain: state === "down", bar: true, size: "s"}), panel: ""})).join(" ")

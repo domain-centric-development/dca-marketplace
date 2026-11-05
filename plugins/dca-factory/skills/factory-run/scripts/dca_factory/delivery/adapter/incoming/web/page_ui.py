@@ -1,9 +1,9 @@
-r"""The page's components (WP-180): every piece of markup the page draws, in Brad Frost's levels.
+r"""The page's components (WP-180): every piece of markup the page draws, in three working levels (WP-182).
 
 Each component is one BEM block and one function `ui.<name>` — the block named in kebab case, the function in camel
 case (`ui.formRow` draws `.form-row`). A component starts at a line `ui.<name> = ` under its level's header
-(`// --- atoms`, `// --- molecules`, `// --- organisms`, `// --- templates`) and calls only components of its own
-level or below; an atom calls none. This is the one module of the page that writes a `class`: the views compose these
+(`// --- primitives`, `// --- components`, `// --- templates`) and calls only components of its own level or below;
+a primitive — one element — calls none. The components come in two runs, the small parts and the sections, one level. This is the one module of the page that writes a `class`: the views compose these
 and write none of their own, and every form field is set through `ui.formRow`. A state the factory names reaches the
 markup as `data-state`, its word written through — never as a class. The unit test `test_page_components.py` holds
 all of it.
@@ -101,7 +101,7 @@ function drawWays(track) {
   wrap.style.setProperty("--band", `${ways.length ? 14 + levels.length * TRACK.level : 8}px`);
 }
 
-// --- atoms
+// --- primitives
 // a control is pressed — a raised rectangle in the display face; a display is read — flat, in the mono face
 // a press: `size` s, m (the default) or l — its height a token, the same whatever it carries; `icon` a mark before the words: play or stop
 ui.btn = (label, o = {}) => `<button type="button" class="${mods("btn", [o.primary && "primary", o.write && "write",
@@ -153,7 +153,7 @@ ui.fileChip = (f, key) => `<li class="${mods("file-chip", [f.busy && "busy", f.e
 ui.shot = o => `<figure class="shot"><a class="shot__open" href="${esc(o.href)}" target="_blank" rel="noopener">`
   + `<img class="shot__picture" src="${esc(o.href)}" alt="${esc(o.alt || o.name)}" loading="lazy"></a>`
   + `<figcaption class="shot__said">${o.stage ? `<b>${esc(o.stage)}</b> · ` : ""}${esc(o.name)}${o.at ? ` · ${esc(o.at)}` : ""}</figcaption></figure>`;
-// --- molecules
+// --- components: the parts — a few primitives that act as one
 ui.story = (id, title, o = {}) => ui.link(title || id, {title: true, compact: o.compact, ink: o.ink, attrs: {"data-story": id}});
 // a rule in a list: its title, and beside it its id or what it did — a press that opens the rule in the drawer
 ui.ruleRow = o => `<li class="rule-row"${o.state ? ` data-state="${esc(o.state)}"` : ""}><button type="button" class="rule-row__open" data-rule-open="${esc(o.id)}" aria-haspopup="dialog" title="${esc(o.id)}">`
@@ -232,7 +232,7 @@ ui.section = (s, h = 3, base = "") => s.kind ? ui.aside(s.heading || s.kind, ui.
 
 // a story's pictures side by side, as many to a row as its column holds
 ui.shots = list => `<div class="shots">${list.map(ui.shot).join("")}</div>`;
-// --- organisms
+// --- components: the sections — a part of a view with a job of its own
 ui.card = (title, sub, body, o = {}) => `<section class="${mods("card", [o.wish && "wish", o.tight && "tight"])}"${o.label ? ` aria-label="${esc(o.label)}"` : ""}>`
   + (title || sub ? `<h2 class="card__title">${title}${sub ? ` <span class="card__sub">${sub}</span>` : ""}</h2>` : "") + `${body}</section>`;
 // the one fold of the page: a button with aria-expanded over its region, its caret, kept across a redraw by its key
