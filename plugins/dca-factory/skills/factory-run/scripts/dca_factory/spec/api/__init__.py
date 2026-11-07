@@ -1,6 +1,6 @@
 """Spec's open host service: what delivery calls, in the published language of the spec — a criterion as an entry
 {key, rule, form, lines, tests} (and `feature` where a context's reading adds it), a delta as the plan's `## Spec
-delta` reads, problems as sentences. The rules behind it are the model's (`LivingSpec`); the files are read and
+delta` reads, problems as sentences. The rules behind it are the model's (`Change`); the files are read and
 written by the files adapter."""
 
 from ..adapter.outgoing.files.spec_files import (  # noqa: F401 — the published reading and writing of the files

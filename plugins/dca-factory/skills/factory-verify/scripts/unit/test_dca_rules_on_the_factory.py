@@ -28,7 +28,6 @@ NOT_YET_HELD = {
     "DCA-ERR-003": "an application exception outside the port exception hierarchy",
     "DCA-USE-006": "a class named Result in an incoming adapter",
     "DCA-ADV-001": "a class named an event that is no DomainEvent",
-    "DCA-ADV-019": "a value calls a domain service",
 }
 
 

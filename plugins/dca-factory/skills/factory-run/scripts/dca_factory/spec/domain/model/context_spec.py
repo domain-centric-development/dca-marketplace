@@ -11,7 +11,7 @@ import typing
 from ....building_blocks import AggregateRoot, Id, Value
 from .criterion import Criterion, CriterionKey, FeatureName, RuleText, Selector
 from .delta import Verdict
-from .living_spec import LivingSpec
+from .living_spec import Change
 
 
 class ContextName(Id):
@@ -257,13 +257,13 @@ class ContextSpec(AggregateRoot[ContextName]):
 
     def pending(self, stories: typing.Sequence[OpenStory]) -> typing.Tuple[PendingChange, ...]:
         """Each criterion an open story of this context adds or changes — one it holds word for word changes
-        nothing and is left out; the comparison is the spec's own (`LivingSpec.derived`)."""
+        nothing and is left out; the comparison is the spec's own (`Change.derived`)."""
         held = self.held()
         found = []
         for story in stories:
             if story.context != self._name:
                 continue
-            for key, verdict in LivingSpec.derived(story.criteria, held).items():
+            for key, verdict in Change(tuple(story.criteria)).derived(held).items():
                 if verdict is not Verdict.HOLDS:
                     found.append(PendingChange(story.story, story.title, story.status, key, verdict))
         return tuple(found)

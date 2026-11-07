@@ -1,5 +1,5 @@
 """The published language, translated: a story's criteria and a plan's delta as delivery writes them, entries in and
-out — and the model's rules (`LivingSpec`) in between."""
+out — and the model's rules (`Change`) in between."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from ..adapter.outgoing.files.spec_files import (
 from ...sharedkernel.adapter.outgoing.markdown.sections import section_of
 from ..domain.model.criterion import Criterion, CriterionKey, FeatureName, Form, Line, Place, RuleText, Selector
 from ..domain.model.delta import Delta, Move, Reason, Rename
-from ..domain.model.living_spec import LivingSpec
+from ..domain.model.living_spec import Change
 
 #: A criterion in the published language: {key, rule, form, lines, tests} — `feature` where a context adds it.
 Entry = typing.Dict[str, typing.Any]
@@ -143,28 +143,33 @@ def entries_of(merged: typing.Sequence[Criterion], story: Entries, held: Entries
 
 
 # --- the rules -------------------------------------------------------------------------------------------------------
+def change(story: Entries, delta: typing.Optional[DeltaEntry] = None) -> Change:
+    """The story's criteria and the plan's delta as the model's change."""
+    return Change(tuple(criteria(story)), model_delta(delta) if delta is not None else Delta())
+
+
 def derived(story: Entries, spec: Entries) -> typing.Dict[str, str]:
     """{key: "adds" | "holds" | "changes"} — what follows from comparing the story's criteria with the spec."""
-    return {key.value: verdict.value for key, verdict in LivingSpec.derived(criteria(story), criteria(spec)).items()}
+    return {key.value: verdict.value for key, verdict in change(story).derived(criteria(spec)).items()}
 
 
 def delta_problems(story: Entries, spec: Entries, delta: DeltaEntry) -> typing.List[str]:
     """What is wrong with a delta against the story and the spec — each a sentence, empty when it holds."""
-    return [p.value for p in LivingSpec.delta_problems(criteria(story), criteria(spec), model_delta(delta))]
+    return [p.value for p in change(story, delta).delta_problems(criteria(spec))]
 
 
 def renamed_rules(story: Entries, spec: Entries, delta: DeltaEntry) -> typing.Dict[str, typing.List[str]]:
     """{old rule: [key]} — the criteria the spec holds under each rule the delta renames, which follow its new text."""
     return {old.value: [key.value for key in keys]
-            for old, keys in LivingSpec.renamed_rules(criteria(spec), model_delta(delta)).items()}
+            for old, keys in change(story, delta).renamed_rules(criteria(spec)).items()}
 
 
 def rule_problems(changed: typing.Sequence[str], story: Entries, spec: Entries,
                   delta: DeltaEntry) -> typing.List[str]:
     """A rule `## Changed expectations` quotes word for word that the story no longer writes and the delta neither
     renames nor takes away (#164). `changed` is the section's lines."""
-    return [p.value for p in LivingSpec.rule_problems([Line(line) for line in changed], criteria(story),
-                                                      criteria(spec), model_delta(delta))]
+    return [p.value for p in change(story, delta).rule_problems([Line(line) for line in changed],
+                                                                       criteria(spec))]
 
 
 def place_name(feature: typing.Optional[str]) -> str:
@@ -176,37 +181,37 @@ def placement_problems(story: Entries, held: Entries, delta: DeltaEntry, feature
                        features: typing.Iterable[str]) -> typing.List[str]:
     """What is wrong with where the story's criteria go (WP-105). `held` is the context's entries with their feature,
     `features` the context's feature folders."""
-    return [p.value for p in LivingSpec.placement_problems(
-        criteria(story), criteria(held), model_delta(delta), FeatureName(feature_name(feature)),
+    return [p.value for p in change(story, delta).placement_problems(
+        criteria(held), FeatureName(feature_name(feature)),
         {FeatureName(name) for name in features})]
 
 
 def placement_lines(story: Entries, held: Entries, feature: typing.Any, features: typing.Iterable[str]) -> typing.List[str]:
     """The delta's lines for where the story's criteria go (WP-105): the feature born, then each criterion that moves —
     as the plan writes them and `placement_problems` holds them."""
-    placed = LivingSpec.placement(criteria(story), criteria(held), FeatureName(feature_name(feature)),
-                                  {FeatureName(name) for name in features})
+    placed = change(story).placement(criteria(held), FeatureName(feature_name(feature)),
+                                     {FeatureName(name) for name in features})
     return [f"- adds feature {name.value}" for name in sorted(placed.features, key=lambda f: f.value)] + \
         [f"- moves {key.value}: {move.source.value} → {move.destination.value}" for key, move in placed.moves.items()]
 
 
 def touches(story: Entries, spec: Entries, delta: DeltaEntry) -> typing.List[str]:
     """The keys whose behaviour the story changes or takes away — what a person's sentence has to back."""
-    return [key.value for key in LivingSpec.touches(criteria(story), criteria(spec), model_delta(delta))]
+    return [key.value for key in change(story, delta).touches(criteria(spec))]
 
 
 def merge(spec: Entries, story: Entries, delta: DeltaEntry, tests: Tests) -> typing.List[Entry]:
     """The spec after the story (#136): a removed criterion gone, a renamed rule renamed, the story's criteria of each
     rule together in the story's order. `tests` is {key: [selector]} — the story's mapping."""
-    merged = LivingSpec.merge(criteria(spec), criteria(story), model_delta(delta), tests_of(tests))
+    merged = change(story, delta).merge(criteria(spec), tests_of(tests))
     return entries_of(merged, story, spec)
 
 
 def merge_context(held: Entries, story: Entries, delta: DeltaEntry, tests: Tests,
                   feature: typing.Any) -> typing.Dict[str, typing.List[Entry]]:
     """{feature: [entry]} after the story — every file of the context; a file left without a criterion maps to []."""
-    merged = LivingSpec.merge_context(criteria(held), criteria(story), model_delta(delta), tests_of(tests),
-                                      FeatureName(feature_name(feature)))
+    merged = change(story, delta).merge_context(criteria(held), tests_of(tests),
+                                                 FeatureName(feature_name(feature)))
     return {name.value: entries_of(items, story, held) for name, items in merged.items()}
 
 
