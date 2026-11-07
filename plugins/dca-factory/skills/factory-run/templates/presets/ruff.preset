@@ -1,0 +1,5 @@
+kind: format
+order: 41
+detect.contains: pyproject.toml :: ^\[tool\.ruff
+format: {python} -m ruff format --check .
+formatFix: {python} -m ruff format .

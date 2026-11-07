@@ -1,0 +1,7 @@
+# Architecture governance for Python: a pyproject.toml with `[tool.dca]` is read by dca-rules, the DCA rule suite
+# (`python -m dca_rules` runs every rule, one line per finding, the rule id first), and the type checker holds what
+# the suite leaves to it - a match over a closed result that misses a case.
+kind: governance
+order: 22
+detect.contains: pyproject.toml :: ^\[tool\.dca\]
+architecture: {python} -m dca_rules && {python} -m mypy
