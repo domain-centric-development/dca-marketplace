@@ -20,8 +20,8 @@ from ..files.kept_files import read_red_digests, red_ledger_path
 from ..files.story_layout import file_digest
 from .commands import command_for, discriminates, joined_filter, recorded_run, red_on_timeout, run, tail
 from .test_reports import display_name_of, fill, normalise, outcome_for
-from ....domain.model.decision_record import DecisionState, Given
-from ....domain.service.acceptance_rules import AcceptanceRules
+from ....domain.model.decision_record import DecisionState, Given, RecordKind
+from ....domain.model.acceptance import RecordAnswer
 
 Located = typing.Mapping[str, str]
 #: {command: (key, code, output, ran)} of a command run whole
@@ -155,7 +155,8 @@ def red_ledger(cwd: str, runs: typing.Optional[str], story: typing.Optional[str]
         changed_on = answered_decisions(cwd, story or "", "test")
         with contextlib.suppress(GateError):
             changed_on += [rid for rid, _f, state, answer, _b in acceptance_records(cwd, story or "")
-                           if AcceptanceRules.corrects(DecisionState(state), Given(str(answer.get("answer", ""))))
+                           if RecordAnswer(RecordKind.ACCEPTANCE, DecisionState(state),
+                                        Given(str(answer.get("answer", "")))).corrects()
                            is Presence.PRESENT]
     built = bool(runs and story) and os.path.isfile(os.path.join(runs or "", story or "", stage_files()["build"]))
     moved = frozenset(Selector(selector) for selector, recorded in digests.items()

@@ -20,7 +20,7 @@ from ..files.kept_files import human_line
 from ..files.story_layout import journeys_hold, find_story
 from ....domain.model.decision_record import DecisionState, Given, RecordKind
 from ....domain.model.stage_story import Presence
-from ....domain.service.acceptance_rules import AcceptanceRules
+from ....domain.model.acceptance import RecordAnswer
 from ....application.shared.story_spec import StorySpec
 
 Front = typing.Mapping[str, typing.Any]
@@ -92,8 +92,8 @@ def spec_backing(cwd: str, story_id: str, body: str, story_path: typing.Optional
         return "the story's `## Changed expectations`"
     try:
         answered = [str(f["id"]).strip() for _p, f, _b, state, a in records_of(story_id, story_path)
-                    if AcceptanceRules.backs_change(RecordKind.ACCEPTANCE if is_acceptance(f) else RecordKind.QUESTION,
-                                                    DecisionState(state), Given(str(a.get("answer", ""))))
+                    if RecordAnswer(RecordKind.ACCEPTANCE if is_acceptance(f) else RecordKind.QUESTION,
+                                    DecisionState(state), Given(str(a.get("answer", "")))).backs_change()
                     is Presence.PRESENT]
     except GateError:
         answered = []

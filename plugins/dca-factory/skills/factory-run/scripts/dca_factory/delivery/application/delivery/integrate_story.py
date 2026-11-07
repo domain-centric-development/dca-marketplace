@@ -7,7 +7,7 @@ import dataclasses
 import typing
 
 from ....building_blocks import UseCase
-from ...domain.service.story_route import Refusal, StoryRoute
+from ...domain.model.story_state import Refusal
 from ..shared.run_lines import RunLines
 from ..shared.story_integration import Lost, StoryIntegration
 from .pipeline_rules import decides
@@ -100,7 +100,7 @@ class IntegrateStoryUseCase:
                                 if self._integration.published() else f"factory: story {story} is integrated and delivered.")
                 return 0
             report = self._integration.report(story)
-            refusals = StoryRoute.integration(report)
+            refusals = report.integration()
             if Refusal.MOVED in refusals:
                 self._lines.out(f"factory: the main line moved on while {story} was merged — merged again (attempt "
                                 f"{attempt + 1}).")
@@ -126,14 +126,14 @@ class IntegrateStoryUseCase:
                                 f"{self._integration.report_place(story)}; then: factory.sh run --story {story} --from "
                                 "integrate")
                 return 1
-            reason = StoryRoute.environment(report)
+            reason = report.environment()
             if reason is not None:
                 self._lines.err(f"factory: gate 'integrate' refused on the environment, not on the story — "
                                 f"{reason.value}")
                 self._lines.err(f"factory:   no round is counted. Fix it, then: factory.sh run --story {story}")
                 return 1
             rounds = self._integration.bump(story)
-            if StoryRoute.converged(rounds):
+            if rounds.converged():
                 self._lines.err(f"factory: gate 'integrate' refused in round {rounds.value} — three rounds did not "
                                 "converge. needs-human.")
                 return 1

@@ -13,7 +13,6 @@ from ..pipeline.stage_rows import stage_windows, stage_files
 from .story_layout import EPIC_FILE, epic_folder
 from ....domain.model.stage import StoryKind
 from ....domain.model.story_state import AcceptanceVerdict, HandOverText
-from ....domain.service.story_route import StoryRoute
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir
 from .decision_record_files import acceptance_records, latest_verdict
 from .journal_files import journal_events
@@ -22,7 +21,6 @@ from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_text
 from ....application.status.texts import parse_time
 from ....domain.model.journal_marks import JournalMarks, MarkKind, MarkName, Seq
 from ....domain.model.stage import StageName
-from ....domain.service.current_pass import CurrentPass
 from ....application.delivery.pipeline_workflow import workflow
 
 
@@ -78,8 +76,8 @@ def verdict_in(text: str) -> str:
 
 
 def back_in(text: str) -> str:
-    """Where a `changes-requested` verdict in <text> sends a story: the domain's rule (`StoryRoute(workflow()).judged_back`)."""
-    return StoryRoute(workflow()).judged_back(StoryKind.STORY, HandOverText(text)).value
+    """Where a `changes-requested` verdict in <text> sends a story: the domain's rule (`Workflow.judged_back`)."""
+    return workflow().judged_back(StoryKind.STORY, HandOverText(text)).value
 
 
 #: What the plan gate leaves for the schedule: the digest of the story it let through, so a story edited
@@ -165,8 +163,8 @@ def journal_marks(marks: typing.Mapping[str, int]) -> JournalMarks:
 
 
 def written_at(marks: typing.Mapping[str, int], stage: str) -> typing.Optional[int]:
-    """When the stage's file last held for the pass (`CurrentPass(workflow()).written_at`)."""
-    at = CurrentPass(workflow()).written_at(journal_marks(marks), StageName(stage))
+    """When the stage's file last held for the pass (`Workflow.written_at`)."""
+    at = workflow().written_at(journal_marks(marks), StageName(stage))
     return None if at is None else at.value
 
 
@@ -185,7 +183,7 @@ def current_stage_files(runs: str, story_id: str, order: typing.Iterable[str]) -
     that went back to its test stage after the build and had the build gate pass again."""
     folder = os.path.join(runs, story_id)
     present = {StageName(stage) for stage in order if os.path.isfile(os.path.join(folder, stage_files()[stage]))}
-    holding = CurrentPass(workflow()).holding(journal_marks(pass_marks(runs, story_id)), [StageName(s) for s in order], present)
+    holding = workflow().holding(journal_marks(pass_marks(runs, story_id)), [StageName(s) for s in order], present)
     return {stage.value: read_text(os.path.join(folder, stage_files()[stage.value])) for stage in holding}
 
 

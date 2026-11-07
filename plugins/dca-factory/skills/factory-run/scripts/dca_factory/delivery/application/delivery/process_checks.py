@@ -18,7 +18,7 @@ from ...domain.service.break_checks import BreakChecks, BreakOutcome, BreakResul
 from ...domain.service.design_checks import DesignChecks
 from ...domain.service.kept_checks import KeptChecks
 from ...domain.service.suite_checks import SuiteChecks
-from ...domain.service.test_verdicts import BreakProof, TestVerdicts
+from ...domain.model.test_verdicts import BreakProof, TestsJudged
 from ..shared.stage_runs import Located, Mapping, StageRuns, WholeRuns
 from .check_stage import check, Run, Verdict
 from .stage_checks import read_table, table_tests
@@ -45,7 +45,7 @@ def test_state(result: Verdict, runs: StageRuns, profile: typing.Mapping[str, ty
                expected: str, located: typing.Optional[Located] = None, story: typing.Optional[str] = None,
                guard: bool = False, whole_for: typing.Iterable[str] = (),
                red_proof: typing.Optional[typing.Tuple[StageStory, StageEvidence]] = None) -> WholeRuns:
-    """Expected 'red': every mapped test must fail; 'green': all must pass (`TestVerdicts`) — the tests run first,
+    """Expected 'red': every mapped test must fail; 'green': all must pass (`TestsJudged.of`) — the tests run first,
     their outcomes judged against the red ledger. A break proof the judgement asks for is run here; a test it proves
     counts as red, one it does not keeps its earlier proof. Returns the commands run whole, so the suite check reads
     them rather than running them again. `red_proof` — the story and its evidence — holds a green run's tests to the
@@ -55,7 +55,7 @@ def test_state(result: Verdict, runs: StageRuns, profile: typing.Mapping[str, ty
         return {}
     test_run, whole_runs = runs.tests(mapping or {}, located, whole_for)
     ledger = runs.ledger(story, expected == "red", located)
-    judged = TestVerdicts.judge(Expectation(expected), presence(guard), test_run, ledger)
+    judged = TestsJudged.of(Expectation(expected), presence(guard), test_run, ledger)
     now_red, kept = {s.value for s in judged.now_red}, {}
     for item in judged.items:
         if not isinstance(item, BreakProof):

@@ -49,7 +49,9 @@ DONE_ROW = RowState("done")
 
 
 class FindingKey(Value):
-    """What makes a kept finding the same as another: where it is (`file:line`) and the defect it names."""
+    """What makes a kept finding the same as another: where it is (`file:line`) and the defect it names. A delivery
+    keeps each finding not kept already — the same place and defect is one finding, however often a later round
+    confirms it."""
 
     place: Place
     defect: Detail

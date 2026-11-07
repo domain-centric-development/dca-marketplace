@@ -13,7 +13,8 @@ from dca_factory.delivery.domain.model.workflow_rule import Outcome, OutcomeStat
 from dca_factory.delivery.domain.model.stage import StageName, StoryKind, Window
 from dca_factory.delivery.domain.model.story_state import GateReport, HandOverText, Rounds, VerdictWord
 from dca_factory.delivery.application.delivery.integrate_story import IntegrateStoryCommand, IntegrateStoryUseCase
-from dca_factory.delivery.domain.service.story_route import Around, Judged, Move, Refusal, StoryRoute
+from dca_factory.delivery.domain.model.route import Around, Move
+from dca_factory.delivery.domain.model.story_state import Judged, Refusal
 from dca_factory.delivery.application.delivery.pipeline_workflow import workflow
 
 
@@ -34,7 +35,7 @@ class Held:
 class Route(unittest.TestCase):
 
     def test_a_story_runs_every_stage_in_its_own_process_with_the_gates_around_them(self):
-        steps = StoryRoute(workflow()).steps(StoryKind.STORY, StageName("plan"), frozenset())
+        steps = workflow().steps(StoryKind.STORY, StageName("plan"), frozenset())
         self.assertEqual([(s.stage.value, s.move) for s in steps],
                          [(n, Move.STAGE) for n in ("plan", "test", "build", "tidy", "judge", "document")])
         self.assertIn(Around.GATE_BEFORE, steps[0].around)
@@ -42,7 +43,7 @@ class Route(unittest.TestCase):
         self.assertEqual({Around.PAUSE, Around.REVIEWS, Around.VERDICT}, set(steps[4].around))
 
     def test_a_shared_builder_carries_its_window_and_requests_wait_until_it_is_done(self):
-        steps = StoryRoute(workflow()).steps(StoryKind.STORY, StageName("test"), frozenset((Window.BUILDER, Window.VERIFIER)))
+        steps = workflow().steps(StoryKind.STORY, StageName("test"), frozenset((Window.BUILDER, Window.VERIFIER)))
         self.assertEqual([(s.stage.value, s.move) for s in steps],
                          [("test", Move.BUILDER), ("build", Move.CARRIED), ("tidy", Move.CARRIED),
                           ("judge", Move.VERIFIER)])
@@ -50,34 +51,34 @@ class Route(unittest.TestCase):
 
     def test_an_answer_applies_where_it_names_and_resumes_at_the_earlier_stage(self):
         plan, test, build = names("plan", "test", "build")
-        self.assertEqual(StoryRoute(workflow()).applying(build, test), test)
-        self.assertEqual(StoryRoute(workflow()).applying(build, StageName("nowhere")), build)
-        self.assertEqual(StoryRoute(workflow()).resumes_at(plan, test), plan)
-        self.assertEqual(StoryRoute(workflow()).resumes_at(build, test), test)
-        self.assertEqual(StoryRoute(workflow()).resumes_at(StageName("integrate"), test), test)
+        self.assertEqual(workflow().applying(build, test), test)
+        self.assertEqual(workflow().applying(build, StageName("nowhere")), build)
+        self.assertEqual(workflow().resumes_at(plan, test), plan)
+        self.assertEqual(workflow().resumes_at(build, test), test)
+        self.assertEqual(workflow().resumes_at(StageName("integrate"), test), test)
 
     def test_an_adoption_changes_nothing_so_its_judge_gets_no_reviews(self):
         for shared in (frozenset(), frozenset((Window.VERIFIER,))):
-            judge = [s for s in StoryRoute(workflow()).steps(StoryKind.ADOPT, StageName("plan"), shared) if s.stage.value == "judge"]
+            judge = [s for s in workflow().steps(StoryKind.ADOPT, StageName("plan"), shared) if s.stage.value == "judge"]
             self.assertEqual(len(judge), 1)
             self.assertNotIn(Around.REVIEWS, judge[0].around)
         for kind in (StoryKind.STORY, StoryKind.JOURNEY, StoryKind.TASK):
-            judge = [s for s in StoryRoute(workflow()).steps(kind, StageName("plan"), frozenset()) if s.stage.value == "judge"]
+            judge = [s for s in workflow().steps(kind, StageName("plan"), frozenset()) if s.stage.value == "judge"]
             self.assertIn(Around.REVIEWS, judge[0].around)
 
     def test_a_kind_skips_what_it_does_not_run_and_says_why(self):
-        steps = StoryRoute(workflow()).steps(StoryKind.TASK, StageName("plan"), frozenset())
+        steps = workflow().steps(StoryKind.TASK, StageName("plan"), frozenset())
         skipped = [s for s in steps if s.move is Move.SKIP]
         self.assertEqual([s.stage.value for s in skipped], ["test"])
         self.assertIn("a task has no criterion to test", skipped[0].skipped.value)
 
     def test_the_windows_carry_what_the_kind_runs_from_where_it_starts(self):
-        self.assertEqual(StoryRoute(workflow()).window(StoryKind.TASK, Window.BUILDER), names("plan", "build", "tidy"))
-        self.assertEqual(StoryRoute(workflow()).window(StoryKind.STORY, Window.BUILDER, StageName("build")), names("build", "tidy"))
-        self.assertEqual(StoryRoute(workflow()).window(StoryKind.ADOPT, Window.VERIFIER), names("judge"))
+        self.assertEqual(workflow().window(StoryKind.TASK, Window.BUILDER), names("plan", "build", "tidy"))
+        self.assertEqual(workflow().window(StoryKind.STORY, Window.BUILDER, StageName("build")), names("build", "tidy"))
+        self.assertEqual(workflow().window(StoryKind.ADOPT, Window.VERIFIER), names("judge"))
 
     def test_the_judges_back_test_sends_the_story_to_the_test_stage_anything_else_to_the_build(self):
-        back = lambda kind, text: StoryRoute(workflow()).judged_back(kind, HandOverText(text)).value
+        back = lambda kind, text: workflow().judged_back(kind, HandOverText(text)).value
         self.assertEqual("test", back(StoryKind.STORY, "verdict: changes-requested\nback: `test`\n"))
         self.assertEqual("build", back(StoryKind.STORY, "verdict: changes-requested\n"))
         self.assertEqual("build", back(StoryKind.STORY, "verdict: changes-requested\nBack: build\n"))
@@ -85,28 +86,28 @@ class Route(unittest.TestCase):
         self.assertEqual("test", back(StoryKind.ADOPT, "verdict: changes-requested\n"))
 
     def test_a_round_goes_back_to_the_last_builder_stage_the_kind_runs(self):
-        self.assertEqual(StoryRoute(workflow()).back_for(StoryKind.STORY, StageName("build")), StageName("build"))
-        self.assertEqual(StoryRoute(workflow()).back_for(StoryKind.JOURNEY, StageName("build")), StageName("test"))
-        self.assertEqual(StoryRoute(workflow()).again_from(StageName("tidy"), StageName("build")), StageName("build"))
-        self.assertEqual(StoryRoute(workflow()).again_from(StageName("tidy"), StageName("judge")), StageName("tidy"))
+        self.assertEqual(workflow().back_for(StoryKind.STORY, StageName("build")), StageName("build"))
+        self.assertEqual(workflow().back_for(StoryKind.JOURNEY, StageName("build")), StageName("test"))
+        self.assertEqual(workflow().again_from(StageName("tidy"), StageName("build")), StageName("build"))
+        self.assertEqual(workflow().again_from(StageName("tidy"), StageName("judge")), StageName("tidy"))
 
     def test_the_verdict_the_rounds_and_the_environment(self):
-        self.assertIs(StoryRoute.judged(VerdictWord("changes-requested")), Judged.AGAIN)
-        self.assertIs(StoryRoute.judged(VerdictWord("")), Judged.MISSING)
-        self.assertIs(StoryRoute.judged(VerdictWord("maybe")), Judged.UNKNOWN)
-        self.assertIsNone(StoryRoute.converged(Rounds(2)))
-        self.assertIsNotNone(StoryRoute.converged(Rounds(3)))
+        self.assertIs(VerdictWord("changes-requested").judged(), Judged.AGAIN)
+        self.assertIs(VerdictWord("").judged(), Judged.MISSING)
+        self.assertIs(VerdictWord("maybe").judged(), Judged.UNKNOWN)
+        self.assertIsNone(Rounds(2).converged())
+        self.assertIsNotNone(Rounds(3).converged())
         report = GateReport("gate:fail environment — no java on the PATH\ngate:fail story S stage build")
-        self.assertEqual(StoryRoute.environment(report).value, "no java on the PATH")
-        self.assertIsNone(StoryRoute.environment(GateReport("gate:fail tests-red")))
+        self.assertEqual(report.environment().value, "no java on the PATH")
+        self.assertIsNone(GateReport("gate:fail tests-red").environment())
 
     def test_a_stale_red_proof_sends_a_story_where_its_rule_says_from_a_listing_stage_only(self):
         stale = jump("RUN-ROUTE-5")
-        self.assertEqual(StoryRoute(workflow()).red_check(StoryKind.STORY, StageName("build"), stale),
+        self.assertEqual(workflow().red_check(StoryKind.STORY, StageName("build"), stale),
                          Next(StageName("test"), RuleId("RUN-ROUTE-5")))
-        self.assertIsNone(StoryRoute(workflow()).red_check(StoryKind.STORY, StageName("test"), stale))
-        self.assertIsNone(StoryRoute(workflow()).red_check(StoryKind.STORY, StageName("judge"), stale))
-        self.assertIsNone(StoryRoute(workflow()).red_check(StoryKind.TASK, StageName("build"), stale))
+        self.assertIsNone(workflow().red_check(StoryKind.STORY, StageName("test"), stale))
+        self.assertIsNone(workflow().red_check(StoryKind.STORY, StageName("judge"), stale))
+        self.assertIsNone(workflow().red_check(StoryKind.TASK, StageName("build"), stale))
 
 
 def way(rule_id, *targets):
@@ -119,7 +120,7 @@ class Jumps(unittest.TestCase):
     ROUNDS = RuleId("RUN-ROUNDS-1")
 
     def refused(self, *jumps, stage="build", resumes=None, kind=StoryKind.STORY):
-        return StoryRoute(workflow()).after_refusal(kind, StageName(stage), resumes and StageName(resumes), jumps, self.ROUNDS)
+        return workflow().after_refusal(kind, StageName(stage), resumes and StageName(resumes), jumps, self.ROUNDS)
 
     def test_a_refusal_whose_rules_name_no_way_runs_the_refused_stage_again(self):
         self.assertEqual(self.refused(way("GATE-TESTS-GREEN")), Next(StageName("build"), RuleId("GATE-TESTS-GREEN")))
@@ -145,15 +146,15 @@ class Jumps(unittest.TestCase):
 
     def test_a_choice_outside_the_rule_stops_the_run(self):
         verdict = jump("RUN-VERDICT-1")
-        self.assertEqual(StoryRoute(workflow()).chosen(StoryKind.STORY, StageName("judge"), verdict, Target("test")),
+        self.assertEqual(workflow().chosen(StoryKind.STORY, StageName("judge"), verdict, Target("test")),
                          Next(StageName("test"), RuleId("RUN-VERDICT-1")))
-        self.assertEqual(StoryRoute(workflow()).chosen(StoryKind.STORY, StageName("judge"), verdict, Target("plan")),
+        self.assertEqual(workflow().chosen(StoryKind.STORY, StageName("judge"), verdict, Target("plan")),
                          Next(None, RuleId("RUN-VERDICT-1")))
 
     def test_the_checks_a_report_failed_once_each_without_its_closing_line(self):
         report = GateReport("gate:pass story — ok\ngate:fail red-proof — x\ngate:fail red-proof — y\n"
                             "gate:fail tests-green — z\ngate:fail story S-1 stage build")
-        self.assertEqual([n.value for n in StoryRoute.refused_checks(report)], ["red-proof", "tests-green"])
+        self.assertEqual([n.value for n in report.refused_checks()], ["red-proof", "tests-green"])
 
     def test_a_rule_goes_nowhere_but_a_stage_again_or_stop(self):
         lost = WorkflowRule(RuleId("RUN-LOST-1"), RulePart.DECISION, RuleText("w"), RuleText("y"),
@@ -176,13 +177,13 @@ class IntegrationRefusals(unittest.TestCase):
 
     def test_what_the_failed_checks_on_the_main_line_say(self):
         close = "gate:fail story S-1 stage integrate"
-        self.assertEqual(StoryRoute.integration(GateReport(f"gate:fail moved — main moved\n{close}")),
+        self.assertEqual(GateReport(f"gate:fail moved — main moved\n{close}").integration(),
                          frozenset((Refusal.MOVED,)))
-        self.assertEqual(StoryRoute.integration(GateReport(f"gate:fail moved\ngate:fail main-tests — x\n{close}")),
+        self.assertEqual(GateReport(f"gate:fail moved\ngate:fail main-tests — x\n{close}").integration(),
                          frozenset((Refusal.MAIN_TESTS,)))
-        self.assertEqual(StoryRoute.integration(GateReport(f"gate:fail checkout — dirty\n{close}")),
+        self.assertEqual(GateReport(f"gate:fail checkout — dirty\n{close}").integration(),
                          frozenset((Refusal.CHECKOUT,)))
-        self.assertEqual(StoryRoute.integration(GateReport(f"gate:fail tests-green\n{close}")), frozenset())
+        self.assertEqual(GateReport(f"gate:fail tests-green\n{close}").integration(), frozenset())
 
 
 class Lines:

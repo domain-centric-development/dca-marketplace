@@ -4,8 +4,8 @@ integration — through the output port StageDelivery."""
 from __future__ import annotations
 
 from ...domain.model.stage_story import Presence
-from ...domain.model.story_state import Detail
-from ...domain.service.acceptance_rules import AcceptanceRules
+from ...domain.model.verdict import Said
+from ...domain.model.acceptance import ACCEPTANCE, AcceptanceStep
 from ...domain.service.adopt_checks import AdoptChecks, Adoption
 from .check_stage import on_pass, Run
 
@@ -57,14 +57,15 @@ def _document_passed(run: Run) -> None:
             result.fail("acceptance", facts.refused)
             return
         if facts.applies and facts.acceptance is not None:
-            step = AcceptanceRules.at_delivery(facts.acceptance)
+            step = AcceptanceStep.at_delivery(facts.acceptance)
             result.take(step.findings)
             if step.ask is Presence.PRESENT:
                 asked, where, refused = run.delivery.ask(story_id, story_path, run.criteria)
                 if refused is not None:
                     result.fail("acceptance", refused)
                     return
-                result.take(AcceptanceRules.asked(Detail(asked), Detail(where)))
+                result.take((ACCEPTANCE.wait(Said(f"{asked} asks a human to accept the story before it is delivered — "
+                                                   f"{where}, answered through /factory-decisions")),))
             if step.goes_on is Presence.ABSENT:
                 return
     if result.failed:

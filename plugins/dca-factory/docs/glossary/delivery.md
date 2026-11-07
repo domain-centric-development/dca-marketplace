@@ -234,12 +234,13 @@ reviews, layout) — a round spent with the work right —, else `substance`.
 
 **Type:** Value Object
 
-### Current pass (CurrentPass) · Journal marks (JournalMarks)
+### Current pass · Journal marks (JournalMarks)
 
 **Definition:** Which of a story's hand-overs say where it stands, read from the journal's order alone: each file by
 the number of its latest write (a file gated after it is written also by its gate's later pass or hold), none that
 was marked an earlier pass's since. Up the run order, the first file older than one before it ends the current pass —
-a stage that ran again makes every later file history. The rules: the domain service `CurrentPass`.
+a stage that ran again makes every later file history. The rules: the workflow's (`Workflow.written_at`,
+`Workflow.holding`).
 
 **Type:** Concept
 
@@ -369,8 +370,8 @@ deterministic check that lets the next stage start; a round is one more pass aft
 stage runs in its own process and which a shared window carries, which a kind skips, the gates around each, the
 reviews before the judge for every kind that changes the code (an adoption changes nothing and gets none), where a
 refusal, the build stage or the judge sends the story back (the judge's `back:` holds for a resumed story too), when
-the rounds did not converge — is the domain service
-`StoryRoute`; the use case `run_story` walks it through the port `StoryStages`, a round one more pass of its loop,
+the rounds did not converge — is the workflow's
+(`Workflow.steps`, `jump`, `after_refusal`, `judged_back`; the readers of a gate's report and a verdict are those values'); the use case `run_story` walks it through the port `StoryStages`, a round one more pass of its loop,
 and `integrate_story` brings the delivered story onto the main line through `StoryIntegration`.
 
 **Type:** Concept
@@ -379,7 +380,7 @@ and `integrate_story` brings the delivered story onto the main line through `Sto
 
 **Definition:** Where an element of the workflow — a gate's rule, a runner's decision — sends a story: the rule
 (`RuleId`, `GATE-RED-PROOF`) and its targets for the outcome it came to, each a stage, `again` or `stop`, as its
-`goes=` says. `StoryRoute` turns jumps into the next step (`Next`: a stage, or none — the run ends): a refused gate
+`goes=` says. The workflow turns jumps into the next step (`Next`: a stage, or none — the run ends): a refused gate
 by the rules of its failed checks (`after_refusal` — `stop` beats every way, else the earliest stage any of them or the
 story's state names), a runner's decision by its own rule (`jump`), a choice the run's facts make (the judge's
 `back:`) only within the rule (`chosen`). The runner names no stage it goes to; it asks the rule.
@@ -409,7 +410,7 @@ running the suite, in the run order), the profile commands its gate runs and the
 whole: each stage named once, each hand-over written by one stage, each file a gate weighs written by a stage of it.
 An aggregate named `delivery`, kept by the `WorkflowRepository`: one Markdown file per stage under `workflow/stages/`
 today, another store later. Every question about a stage — a kind's run order, a stage's file, a window's stages — is
-the workflow's; the domain services take it (`StoryRoute(workflow)`, `CurrentPass`, `KeptChecks`, `StoryStanding`),
+the workflow's; its methods answer it (the route, the current pass), the domain services take it (`KeptChecks`, `StoryStanding`),
 the composition root loads it once per process (`pipeline_workflow.load`, then the rules), and what registers against
 the stages — the gate's checks, its pass actions — is placed once it is loaded. A stage's file carries its frame too —
 what the stage is told, around its told rules, each rule a `<!-- rule: <id> -->` line where its words go — and

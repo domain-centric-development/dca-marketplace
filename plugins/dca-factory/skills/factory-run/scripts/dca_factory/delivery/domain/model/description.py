@@ -5,7 +5,7 @@ from __future__ import annotations
 import enum
 import typing
 
-from ....building_blocks import DomainService, Value
+from ....building_blocks import Value
 
 
 class Part(enum.Enum):
@@ -57,16 +57,13 @@ class Written(Value):
     headings: typing.Tuple[Heading, ...]
     filled: typing.FrozenSet[Heading]
 
-
-class DescriptionRules(DomainService):
-    """A part is done when every heading it requires is there and says something."""
-
-    @staticmethod
-    def missing(part: Part, written: Written) -> typing.List[Heading]:
-        present = {h.key() for h in written.headings}
+    def missing(self, part: Part) -> typing.List[Heading]:
+        """The headings the part requires that are not there — a part is done when every one is there and says
+        something."""
+        present = {h.key() for h in self.headings}
         return [h for h in REQUIRED[part] if h.key() not in present]
 
-    @staticmethod
-    def empty(part: Part, written: Written) -> typing.List[Heading]:
-        present = {h.key() for h in written.headings}
-        return [h for h in REQUIRED[part] if h.key() in present and h.key() not in written.filled]
+    def empty(self, part: Part) -> typing.List[Heading]:
+        """The headings the part requires that are there and say nothing."""
+        present = {h.key() for h in self.headings}
+        return [h for h in REQUIRED[part] if h.key() in present and h.key() not in self.filled]

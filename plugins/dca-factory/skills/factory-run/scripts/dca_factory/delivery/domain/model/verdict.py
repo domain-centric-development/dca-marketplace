@@ -52,10 +52,21 @@ class Said(Value):
     value: str
 
 
+#: The check that holds every mapped test red at the test stage.
+RED_CHECK = CheckName("tests-red")
+#: What it says of a test it lets through green — on a decision, or one an earlier pass's build met.
+GREEN_NOW = "is green now"
+
+
 class Finding(Value):
     state: FindingState
     check: CheckName
     said: Said
+
+    def lets_through_green(self) -> bool:
+        """Whether a finding of the test gate says a test went through green — then the tree is past the red state,
+        and the red tree an earlier pass recorded stays."""
+        return self.check == RED_CHECK and self.state is FindingState.PASS and GREEN_NOW in self.said.value
 
 
 Findings = typing.Tuple[Finding, ...]

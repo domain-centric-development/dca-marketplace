@@ -21,7 +21,7 @@ from ....domain.model.moment import Moment
 from ....domain.model.stage_story import Presence
 from ....domain.model.story import StoryId
 from ....domain.model.story_state import Detail
-from ....domain.service.acceptance_rules import AcceptanceMode, AcceptanceRules
+from ....domain.model.acceptance import AcceptanceMode, FlakyFinding
 from ..stack.commands import command_for
 from ..stack.suite_runs import test_files
 from ..claims.remote_claims import PUBLISHED
@@ -41,8 +41,7 @@ from .story_files import StoryFiles
 from .story_layout import journeys_hold, story_digest, story_folder, story_kind
 from .test_files import locate_tests, read_mapping
 from ....domain.model.stage_story import DONE_ROW, OPEN_ROW
-from ....domain.model.verdict import CheckName, FindingState, Said
-from ....domain.service.test_verdicts import TestVerdicts
+from ....domain.model.verdict import CheckName, Finding, FindingState, Said
 
 Front = typing.Mapping[str, typing.Any]
 
@@ -72,7 +71,7 @@ def record_red_tree(result: typing.Any, cwd: str, runs: str, story_id: str) -> N
     """At the test gate's pass: the tree as it is, when every mapped test was red in this run. A pass that let a test
     through green — a back round after the build, a decision — has production code past the red state: the tree an
     earlier pass recorded stays, since tidy's tests are laid over it anyway."""
-    if any(TestVerdicts.let_through_green(CheckName(c), FindingState(st), Said(m)) is Presence.PRESENT
+    if any(Finding(FindingState(st), CheckName(c), Said(m)).lets_through_green()
            for st, c, m in result.entries):
         return
     tree = git_tree(cwd)
@@ -95,7 +94,7 @@ def record_tests_baseline(cwd: str, runs: str, story_id: str) -> None:
 
 
 def acceptance_applies(cwd: str, runs: str, story_id: str, profile: Front) -> bool:
-    """Whether this story waits for a human before it is delivered (`AcceptanceRules.asks`)."""
+    """Whether this story waits for a human before it is delivered (`AcceptanceMode.asks`)."""
     mode = AcceptanceMode(acceptance_mode(profile))
     browser = str(profile.get("browser", "none")).strip().lower() not in ("", "none")
     end_user = False
@@ -103,7 +102,7 @@ def acceptance_applies(cwd: str, runs: str, story_id: str, profile: Front) -> bo
         with contextlib.suppress(GateError):
             located = locate_tests(cwd, read_mapping(runs, story_id)[1])[0]
             end_user = any(command_for(profile, path)[0] == "e2eTest" for path in located.values())
-    return AcceptanceRules.asks(mode, Presence.PRESENT if browser else Presence.ABSENT,
+    return mode.asks(Presence.PRESENT if browser else Presence.ABSENT,
                                 Presence.PRESENT if end_user else Presence.ABSENT) is Presence.PRESENT
 
 
@@ -159,9 +158,9 @@ def record_flaky_findings(result: typing.Any, story_path: str, story_id: str, fr
         open_rows = {where for _s, where, _sev, _d, perspective, _f, _p in open_findings(place("epics"))
                      if perspective == "flaky"}
     added = [("flaky", f.test.value, "minor", f.defect.value, f.fix.value, f.plain.value)
-             for f in AcceptanceRules.flaky(StoryId(story_id), frozenset(Detail(t) for t in mine),
-                                            {t: tuple(s) for t, s in others.items()},
-                                            frozenset(Detail(w) for w in open_rows))]
+             for f in FlakyFinding.of(StoryId(story_id), frozenset(Detail(t) for t in mine),
+                                     {t: tuple(s) for t, s in others.items()},
+                                     frozenset(Detail(w) for w in open_rows))]
     if added:
         path = project_findings_path(FLAKY_FINDINGS)
         append_finding_rows(path, project_findings_head(FLAKY_FINDINGS), added)

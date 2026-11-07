@@ -5,9 +5,8 @@ import unittest
 
 import support  # noqa: F401 — puts the package on the path
 from dca_factory.delivery.domain.model.stage_story import Count, Presence
-from dca_factory.delivery.domain.model.verdict import CheckName, FindingState, Said
+from dca_factory.delivery.domain.model.verdict import CheckName, Finding, FindingState, RED_CHECK, Said
 from dca_factory.delivery.domain.service.suite_checks import FLAKY_LIMIT, SuiteChecks
-from dca_factory.delivery.domain.service.test_verdicts import RED_CHECK, TestVerdicts
 
 
 class Retries(unittest.TestCase):
@@ -26,11 +25,9 @@ class GreenThrough(unittest.TestCase):
 
     def test_only_the_red_checks_pass_of_a_green_test_lets_one_through(self):
         said = Said("x.T#a is green now and was recorded red before; its expectation changed on decision S-1-01 (a)")
-        self.assertIs(TestVerdicts.let_through_green(RED_CHECK, FindingState.PASS, said), Presence.PRESENT)
-        self.assertIs(TestVerdicts.let_through_green(RED_CHECK, FindingState.PASS, Said("x.T#a fails")),
-                      Presence.ABSENT)
-        self.assertIs(TestVerdicts.let_through_green(CheckName("tests-green"), FindingState.PASS, said),
-                      Presence.ABSENT)
+        self.assertTrue(Finding(FindingState.PASS, RED_CHECK, said).lets_through_green())
+        self.assertFalse(Finding(FindingState.PASS, RED_CHECK, Said("x.T#a fails")).lets_through_green())
+        self.assertFalse(Finding(FindingState.PASS, CheckName("tests-green"), said).lets_through_green())
 
 
 if __name__ == "__main__":

@@ -7,7 +7,6 @@ import typing
 from ....building_blocks import DomainService
 from ..model.decision_record import ANSWERED_STATES, DecisionState, RecordId, RecordKind, WAITING
 from ..model.stage import HandOver, StageName, StoryKind
-from .story_route import StoryRoute
 from ..model.workflow import Workflow
 from ..model.story_state import (
     AcceptanceVerdict, Detail, Mark, MAX_ROUNDS, RunFacts, StateName, Standing, StoryFront, VerdictWord)
@@ -165,7 +164,7 @@ class StoryStanding(DomainService):
         if not texts:
             return Standing(StateName.READY, PLAN, Detail(""))
         if verdict.value == "changes-requested":
-            return Standing(StateName.IN_PROGRESS, StoryRoute(self._workflow).judged_back(front.kind, texts[JUDGE].text),
+            return Standing(StateName.IN_PROGRESS, self._workflow.judged_back(front.kind, texts[JUDGE].text),
                             Detail("the judge requested changes"))
         missing = next(stage for stage in self._workflow.order(front.kind) if stage not in texts)
         return Standing(StateName.IN_PROGRESS, missing, Detail(f"{self._file_of(missing).value} not written yet"))

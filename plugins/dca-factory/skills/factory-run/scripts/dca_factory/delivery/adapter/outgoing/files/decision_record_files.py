@@ -22,9 +22,8 @@ from ....domain.model.decision_record import (
 from ....domain.model.stage import StageName
 from ....domain.model.story_state import AcceptanceVerdict
 from ....domain.model.story import StoryId
-from ....domain.service.story_route import StoryRoute
 from ....domain.model.stage_story import Presence
-from ....domain.service.acceptance_rules import AcceptanceMode, AcceptanceRules
+from ....domain.model.acceptance import AcceptanceMode, RecordAnswer
 from ....application.delivery.pipeline_workflow import workflow
 from ....application.shared.decision_inbox import DecisionInbox
 from ....application.shared.decision_record_repository import DecisionRecordRepository
@@ -258,7 +257,7 @@ def read_decisions(store: str, story_id: str) -> Records:
 def applying_stage(front: Front, answer: typing.Mapping[str, str]) -> str:
     """The stage that applies an answer: the one the answer names (`applies: test` — an answer that changes a
     test goes back to the test stage, whoever asked), else the record's `stage:`, the stage that asked."""
-    return StoryRoute(workflow()).applying(StageName(str(front.get("stage", "")).strip()),
+    return workflow().applying(StageName(str(front.get("stage", "")).strip()),
                                StageName(str((answer or {}).get("applies", "")).strip().lower())).value
 
 
@@ -266,7 +265,7 @@ def resume_stage(front: Front, answer: typing.Mapping[str, str]) -> typing.Optio
     """Where the story resumes for an answer: the earlier of the stage that asked and the one the answer
     names. A plan's question answered `applies: test` still re-plans — the plan lists the tests that change —
     and the test stage after it takes the changed expectation."""
-    return StoryRoute(workflow()).resumes_at(StageName(str(front.get("stage", "")).strip()),
+    return workflow().resumes_at(StageName(str(front.get("stage", "")).strip()),
                                  StageName(str((answer or {}).get("applies", "")).strip().lower())).value
 
 
@@ -412,16 +411,18 @@ def acceptance_state(cwd: str, story_id: str,
     story changed since — a correction written in — is asked again once it has run."""
     records = acceptance_records(cwd, story_id, story_path)
     if not records:
-        return AcceptanceRules.verdict(None, Given(""), Presence.ABSENT).value, None
+        return RecordAnswer(RecordKind.ACCEPTANCE, None, Given("")).verdict(Presence.ABSENT).value, None
     rid, front, state, answer, _body = records[-1]
     same = Presence.PRESENT if str(front.get("digest", "")).strip() == story_digest(story_path or "") else Presence.ABSENT
-    return AcceptanceRules.verdict(DecisionState(state), Given(str(answer.get("answer", ""))), same).value, rid
+    return RecordAnswer(RecordKind.ACCEPTANCE, DecisionState(state), Given(str(answer.get("answer", "")))).verdict(
+        same).value, rid
 
 
 def latest_verdict(records: Records) -> AcceptanceVerdict:
     """What the latest of a story's acceptance records says, the story's digest left aside."""
     _rid, _front, state, answer, _body = records[-1]
-    return AcceptanceRules.verdict(DecisionState(state), Given(str(answer.get("answer", ""))), Presence.PRESENT)
+    return RecordAnswer(RecordKind.ACCEPTANCE, DecisionState(state), Given(str(answer.get("answer", "")))).verdict(
+        Presence.PRESENT)
 
 
 def record_sections(body: str) -> typing.List[typing.Dict[str, str]]:

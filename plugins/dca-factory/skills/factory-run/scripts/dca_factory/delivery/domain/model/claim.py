@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import enum
+import re
+import typing
 
 from ....building_blocks import Value
 from .epic import EpicId
+from .stage_story import Presence
+from .story import StoryId, StoryStatus
 
 
 class Worker(Value):
@@ -32,6 +36,14 @@ class IdPrefix(Value):
 
     value: str
 
+    def next_id(self, used: typing.AbstractSet[StoryId]) -> StoryId:
+        """The next `<prefix>-<n>` nobody uses — a delivered story's id included, which never comes free again —
+        zero-padded to the widest number in use, two digits at least where none is."""
+        pattern = re.compile(rf"^{re.escape(self.value)}-(\d+)$")
+        digits = [m.group(1) for m in (pattern.match(story.value) for story in used) if m]
+        width = max((len(d) for d in digits), default=2)
+        return StoryId(f"{self.value}-{str(max((int(d) for d in digits), default=0) + 1).zfill(width)}")
+
 
 class Meeting(enum.Enum):
     """What a factory finds where it claims a story another claim names already."""
@@ -52,3 +64,34 @@ class Fate(enum.Enum):
     RELEASED = "released"
     #: the remote main line has no such story, and nothing here says it is coming: a person releases it
     ORPHAN = "orphan"
+
+    @classmethod
+    def of(cls, on_main: typing.Optional[StoryStatus], published: Presence, branch: Presence) -> Fate:
+        """A claim whose story is delivered on the remote main line goes; one whose story the main line does not
+        have — and that no published mark or local story branch says is on its way — is an orphan."""
+        if on_main is StoryStatus.DELIVERED:
+            return cls.RELEASED
+        if on_main is None and published is Presence.ABSENT and branch is Presence.ABSENT:
+            return cls.ORPHAN
+        return cls.HOLDS
+
+
+class Claim(Value):
+    """A claim on a story: the factory that holds it and what it says it is for."""
+
+    holder: Worker
+    claimed: ClaimedFor
+
+    def meets(self, me: Worker, story: ClaimedFor) -> Meeting:
+        """An own claim holds; the same id claimed for another epic or title — where the claim names them — is a
+        collision; otherwise another factory runs the story."""
+        if self.holder == me:
+            return Meeting.OWN
+        if (self.claimed.epic.value and self.claimed.epic != story.epic) \
+                or (self.claimed.title.value and self.claimed.title != story.title):
+            return Meeting.COLLISION
+        return Meeting.OTHERS
+
+    def released_by(self, me: Worker, force: Presence) -> Presence:
+        """A factory releases its own claim; another's only with force."""
+        return Presence.PRESENT if self.holder == me or force is Presence.PRESENT else Presence.ABSENT

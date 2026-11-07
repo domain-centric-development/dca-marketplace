@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import typing
 
-from ...domain.model.description import DescriptionRules, Part, REQUIRED
+from ...domain.model.description import Part, REQUIRED
 from ..shared.description_store import DescriptionStore
 
 Model = typing.Dict[str, typing.Any]
@@ -19,8 +19,8 @@ def part_as_it_stands(store: DescriptionStore, part: Part) -> Model:
     if written is None:
         return model
     model.update(sections=[h.value for h in written.headings],
-                 missing=[h.value for h in DescriptionRules.missing(part, written)],
-                 empty=[h.value for h in DescriptionRules.empty(part, written)])
+                 missing=[h.value for h in written.missing(part)],
+                 empty=[h.value for h in written.empty(part)])
     return model
 
 

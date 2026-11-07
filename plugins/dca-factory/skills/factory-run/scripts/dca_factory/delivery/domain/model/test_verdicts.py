@@ -5,10 +5,10 @@ from __future__ import annotations
 
 import typing
 
-from ....building_blocks import DomainService, Value
-from ..model.stage_story import (
+from ....building_blocks import Value
+from .stage_story import (
     Evidence, Expectation, Presence, RedLedger, RunEnd, RunState, ScenarioKey, Selector, TestOutcome, TestRun)
-from ..model.verdict import CheckName, Finding, FindingState, Said
+from .verdict import CheckName, Finding, GREEN_NOW, RED_CHECK, Said
 
 
 class BreakProof(Value):
@@ -25,37 +25,14 @@ class TestsJudged(Value):
     items: typing.Tuple[typing.Union[Finding, BreakProof], ...]
     now_red: typing.FrozenSet[Selector]
 
-
-def timeout_said(selector: Selector) -> Said:
-    return Said(f"{selector.value} is red on a timeout, not on an assertion — an action waited for something that is "
-                f"not there. Red is red, but it says nothing about what is missing: the first step that can be "
-                f"missing should be an expectation (`expect(locator).toBeVisible()` before the click or fill), so "
-                f"the failure names it.")
-
-
-#: The check that holds every mapped test red at the test stage.
-RED_CHECK = CheckName("tests-red")
-#: What it says of a test it lets through green — on a decision, or one an earlier pass's build met.
-GREEN_NOW = "is green now"
-
-
-class TestVerdicts(DomainService):
-    """Expected red: every mapped test fails. Green: all pass. A guard — a journey over delivered stories — is green
-    without ever having been red: its steps exist before it is written."""
-
-    @staticmethod
-    def let_through_green(check: CheckName, state: FindingState, said: Said) -> Presence:
-        """Whether a finding of the test gate says a test went through green — then the tree is past the red state,
-        and the red tree an earlier pass recorded stays."""
-        return Presence.PRESENT if check == RED_CHECK and state is FindingState.PASS and GREEN_NOW in said.value \
-            else Presence.ABSENT
-
-    @staticmethod
-    def judge(expected: Expectation, guard: Presence, run: TestRun, ledger: RedLedger) -> TestsJudged:
+    @classmethod
+    def of(cls, expected: Expectation, guard: Presence, run: TestRun, ledger: RedLedger) -> TestsJudged:
+        """What a run proves. Expected red: every mapped test fails. Green: all pass. A guard — a journey over
+        delivered stories — is green without ever having been red: its steps exist before it is written."""
         name = CheckName(f"tests-{expected.value}")
         red = expected is Expectation.RED
         if run.command is Presence.ABSENT:
-            return TestsJudged((name.skip(Said("no `e2eTest:` or `test:` command in the stack profile")),),
+            return cls((name.skip(Said("no `e2eTest:` or `test:` command in the stack profile")),),
                                frozenset())
         items: typing.List[typing.Union[Finding, BreakProof]] = []
         now_red: typing.Set[Selector] = set()
@@ -121,13 +98,13 @@ class TestVerdicts(DomainService):
                     f"what ran. A runner that exits like a failing test without running one is indistinguishable "
                     f"here.")))
             passed = test.state is RunState.PASSED
-            items += TestVerdicts._verdict(expected, guard, test, ledger, now_red)
+            items += cls._verdict(expected, guard, test, ledger, now_red)
             if red and not passed and test.timeout is Presence.PRESENT:
                 if test.evidence is Evidence.EXIT_CODE:
                     items.append(name.note(timeout_said(test.selector)))
                 else:
                     timed_out.append(test.selector)
-        return TestsJudged(tuple(items), frozenset(now_red))
+        return cls(tuple(items), frozenset(now_red))
 
     @staticmethod
     def _verdict(expected: Expectation, guard: Presence, test: TestOutcome, ledger: RedLedger,
@@ -179,3 +156,10 @@ class TestVerdicts(DomainService):
         evidence = f", {test.how.value}" if test.how.value else ""
         command = test.command.value if test.command else "?"
         return [name.ok(Said(f"{selector} is {'green' if passed else 'red'} ({key}, via `{command}:`{evidence})"))]
+
+
+def timeout_said(selector: Selector) -> Said:
+    return Said(f"{selector.value} is red on a timeout, not on an assertion — an action waited for something that is "
+                f"not there. Red is red, but it says nothing about what is missing: the first step that can be "
+                f"missing should be an expectation (`expect(locator).toBeVisible()` before the click or fill), so "
+                f"the failure names it.")

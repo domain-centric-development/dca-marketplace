@@ -12,7 +12,6 @@ from .....sharedkernel.adapter.outgoing.profile.profile_files import findings_di
 from .story_layout import story_files, story_folder, story_id_of
 from ....domain.model.stage_story import FindingKey, OPEN_ROW, Place
 from ....domain.model.story_state import Detail
-from ....domain.service.finding_rules import FindingRules
 
 
 FINDINGS_FILE = "findings.md"
@@ -116,8 +115,7 @@ def record_findings(story_path: str, story_id: str, front: typing.Mapping[str, t
     have = findings_rows(path)
     known = {FindingKey(Place(r[2]), Detail(r[4])) for r in have}
     key = lambda row: FindingKey(Place(row[1]), Detail(row[3]))
-    kept = FindingRules.kept(known, [key(r) for r in new])
-    added = [r for r in new if key(r) in kept]
+    added = [r for r in new if key(r) not in known]
     if not have and not added:
         return 0, 0
     append_findings(story_path, story_id, front, added)

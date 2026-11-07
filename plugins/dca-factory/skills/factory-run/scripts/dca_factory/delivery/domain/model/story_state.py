@@ -9,12 +9,34 @@ from ....building_blocks import Value
 from .decision_record import DecisionState, RecordId, RecordKind
 from .stage import StageName, StoryKind
 from .story import StoryId
+from .verdict import CheckName
 
 #: The schedule's states of a story that can run now: not started, begun, or stopped where it can continue.
 RUNNABLE = ("ready", "in-progress", "resumable")
 
 #: Rounds of judge and build a story may take before it stops as not converging.
 MAX_ROUNDS = 3
+
+ENVIRONMENT = "gate:fail environment"
+FAILED, CLOSING = "gate:fail ", "gate:fail story "
+
+
+class Judged(enum.Enum):
+    """What the judge's verdict means for the run."""
+
+    PASS = "pass"                       # on to the document stage
+    AGAIN = "changes-requested"         # a round back to the stage the judge names
+    CONFLICT = "story-conflict"         # the story or the plan is wrong: a person decides
+    MISSING = "missing"                 # no `verdict:` line: the judge stage is not finished
+    UNKNOWN = "unknown"                 # a word that is none of the three
+
+
+class Refusal(enum.Enum):
+    """What the integrate gate refused the story for on the main line."""
+
+    MOVED = "moved"             # nothing but the main line moving on meanwhile
+    MAIN_TESTS = "main-tests"   # the resolution dropped what the main line added to a test
+    CHECKOUT = "checkout"       # the main checkout could not take the story
 
 
 class StateName(enum.Enum):
@@ -113,6 +135,12 @@ class VerdictWord(Value):
 
     value: str
 
+    def judged(self) -> Judged:
+        """What the verdict means for the run."""
+        if not self.value:
+            return Judged.MISSING
+        return next((judged for judged in Judged if judged.value == self.value), Judged.UNKNOWN)
+
 
 class HandOverFacts(Value):
     """A current stage file: its text, its `verdict:`, and the records its `## needs-human` names (None without
@@ -137,11 +165,46 @@ class GateReport(Value):
 
     value: str
 
+    def environment(self) -> typing.Optional[Detail]:
+        """A refusal whose cause is the machine, not the story — no stage can put a tool on the PATH, so it counts no
+        round: its reason; None for a refusal of the story."""
+        lines = self.value.splitlines()
+        if not any(line.startswith(ENVIRONMENT) for line in lines):
+            return None
+        return Detail(next((line[len(ENVIRONMENT + " — "):] for line in lines
+                            if line.startswith(ENVIRONMENT + " — ")), ""))
+
+    def integration(self) -> typing.FrozenSet[Refusal]:
+        """What the checks that failed on the main line say — not the report's closing `gate:fail story` line: only
+        that the main line moved on, or that a test of the main line lost its side, or that the checkout could not
+        take the story; empty for a refusal of the story itself."""
+        fails = [line for line in self.value.splitlines() if line.startswith(FAILED) and not line.startswith(CLOSING)]
+        if fails and all(line.startswith(FAILED + Refusal.MOVED.value) for line in fails):
+            return frozenset((Refusal.MOVED,))
+        return frozenset(refusal for refusal in (Refusal.MAIN_TESTS, Refusal.CHECKOUT)
+                         if any(line.startswith(FAILED + refusal.value) for line in fails))
+
+    def refused_checks(self) -> typing.Tuple[CheckName, ...]:
+        """The checks a gate's report says failed, each once, in its order — not its closing `gate:fail story` line."""
+        names: typing.List[CheckName] = []
+        for line in self.value.splitlines():
+            if line.startswith(FAILED) and not line.startswith(CLOSING):
+                name = CheckName(line[len(FAILED):].split(" ", 1)[0])
+                if name not in names:
+                    names.append(name)
+        return tuple(names)
+
 
 class Rounds(Value):
     """How many rounds of judge and build the story took."""
 
     value: int
+
+    def converged(self) -> typing.Optional[Detail]:
+        """Where the rounds did not converge, why — None while another round may run."""
+        if self.value >= MAX_ROUNDS:
+            return Detail(f"{MAX_ROUNDS} rounds did not converge")
+        return None
 
 
 class AcceptanceVerdict(enum.Enum):
