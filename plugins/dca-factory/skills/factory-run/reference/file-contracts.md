@@ -10,7 +10,7 @@ The run folder is `.dca-factory/runs/` unless the stack profile's `runs:` names 
 stories are under `product/epics/` unless `epics:` does.
 
 | plan | the story, the project description (`overview.md`, `tech.md`, `domain.md`), the story's context's spec (`product/spec/<context>/scenarios.md`), the stack profile, the project's glossary and generated context map if present, and its existing tests (for `## Changed tests`) | `.dca-factory/runs/<story>/plan.md` — one line per criterion with its level: `- <key>: … → level: e2e \| integration (port) \| integration (adapter: <Adapter>) \| browser-only (<why>)`, and `## Invariants`, one line per domain type it changes (an adoption: per domain type its scenarios exercise, or `- none — <why>`; contract 24); the test gate reads `browser-only` and the invariants. `## Adopt` (`\| <key> \| <Class>#<method> \|`): scenarios that hold on today's code alone, each with the test that shows it — the plan gate makes the whole story `status: adopted`, or moves them into the adopted story `<story>-holds`, and cites it under the story's `## Assumptions` (`plan-adopt`) |
-| test | the story, `plan.md`, the product description's qualities where the plan names them | `.dca-factory/runs/<story>/tests.md` (with the `gate:tests` table, the `gate:invariants` table: one row per rule of the plan's `## Invariants`, each with its own unit test, and — contract 15 — the `gate:clauses` table: one row per `Then` and each `And` after it, with the line that asserts it and its level; a clause about what is stored never at `adapter`) |
+| test | the story, `plan.md`, the product description's qualities where the plan names them | `.dca-factory/runs/<story>/tests.md` (with the `gate:tests` table, the `gate:invariants` table: one row per rule of the plan's `## Invariants`, each with its own unit test, and — contract 15 — the `gate:clauses` table: one row per `Then` and each `And` after it, with the line that asserts it and its level; a clause about what is stored never at `adapter`; a text a `Then` quotes as shown — not a control's name — in the file of a test of its criterion) |
 | build | the story, `plan.md`, `tests.md`, the product description's look and qualities | `.dca-factory/runs/<story>/build.md` |
 | tidy | the story, `plan.md`, `build.md`, and the code as the build stage left it | `.dca-factory/runs/<story>/tidy.md` |
 | judge | the story and its epic, `plan.md`, `tests.md`, `build.md`, the story diff, the product and the technical description, the profile's `reviews:`/`review.<perspective>:` lines, and in a repeat round `.judge-previous.md` | `.dca-factory/runs/<story>/judge.md` |
@@ -78,8 +78,10 @@ Every rule the plan's `## Invariants` names is shown to be guarded by its unit t
 rule as a criterion's red run does; one green already, its rule existing, needs its break under
 `.dca-factory/runs/<story>/breaks/`, and every break runs on one scratch copy of the project, one test each, so the
 second compiles on the first. A test that stays green under its break, or a green one without a break that applies,
-is refused. The verdicts — `red`, `killed`, `survived`, `no-break`, `unchecked` per rule — are kept in
-`.dca-factory/evidence/<story>/invariant-breaks.tsv`; the factory computes no rate from them.
+is refused. The verdicts — `red`, `killed`, `survived`, `no-break`, `unchecked` per rule, each with its test file's
+digest — are kept in `.dca-factory/evidence/<story>/invariant-breaks.tsv`; the factory computes no rate from them. A
+test that file holds `red` for the version of its test file there now keeps that proof when the gate runs again after
+the build has made its rule.
 
 A test changed after its build met it — a round the judge sent back with `back: test` because the
 test asserted too little — is green and cannot be seen red again. The test gate asks for its break

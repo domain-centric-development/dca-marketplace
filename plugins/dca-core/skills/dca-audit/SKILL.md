@@ -168,7 +168,8 @@ The catalogue is `reference/anti-patterns.md`, each entry with symptoms and the 
 use case, leaky output port, port without an application-side caller, cookies of one exchange with different
 policies, the domain-event contract, setters, injected dependency in an aggregate, a business rule as an
 argument exception, a blanket catch, a failure translated in more than one place, status derived from the base
-type, a domain gateway without a rationale, transaction and controller placement, technical names and framework
+type, a foreign system's failure thrown as the unexpected, "none" refused on a "which one, if any" query,
+a domain gateway without a rationale, transaction and controller placement, technical names and framework
 annotations in the domain, cross-context imports, naming, DTOs and mutable messages, repository versus store.
 Document each so the user understands.
 

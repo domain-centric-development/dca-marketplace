@@ -14,7 +14,7 @@ from ..model.stage_story import (
     BriefFacts, DecidedRecord, DocumentFacts, PlanAdoption, Integration, MainTests, KeptTests, OutcomeFacts, PipelineFacts, ProposalFacts, ReviewFacts, SpecDelta,
     StoryPass, SpecTests, StoryCommit, MappedTest, PlannedTestChange, RedProof, StageChanges,
     AssertionFact, ClauseRow, CommandKey, ContextMapFacts, Count, InvariantFacts, PlannedFile, PortName, Selector, DecisionsFacts, EpicFacts, GateRelease, HandOverName, HandOverSize,
-    InstructionFile, ModelKey, OwnedFacts, Place, PlanLevels, ProfileText, RoundsRecord, RowId, RowState, StageStory, UnknownKey)
+    InstructionFile, ModelKey, OwnedFacts, Place, PlanLevels, ProfileText, RoundsRecord, RowId, RowState, StageStory, TestSource, UnknownKey)
 from ..model.story import StoryId
 from ..model.story_state import Detail
 
@@ -102,6 +102,10 @@ class StageEvidence(DomainGateway, typing.Protocol):
 
     def doubles(self, test: Place) -> typing.Tuple[PortName, ...]:
         """The input ports a test file declares as doubles."""
+        ...
+
+    def test_source(self, test: Place) -> typing.Optional[TestSource]:
+        """The whole text of a test's file — None where it cannot be read."""
         ...
 
     def plan_files(self, story: StoryId) -> typing.Optional[typing.Tuple[PlannedFile, ...]]:

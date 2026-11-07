@@ -111,8 +111,27 @@ Given a path, a diff, or a list of files, evaluate them on these DDD axes:
 - The failure names no transport concept and carries no framework metadata —
   if it does, the model has decided what a caller is told.
 - A failure only a store can state ("no such order", "that number is taken") is
-  a use-case failure and belongs to the application layer. Ask who can state it:
-  the aggregate, or the collection of them.
+  the application's, not the model's. Ask who can state it: the aggregate, or the
+  collection of them. "No such order" is what the use case finds from what the
+  repository answered — its own failure, or a case of its result; "that number is
+  taken" is a failure the output port's contract declares, thrown by the adapter
+  and caught by the use case. A use case that constructs a domain failure has
+  put the application's finding into the model's words.
+- **"None" is an answer, not a refusal.** A query that asks "which one, if
+  any" — the caller's active session, an open draft — answers absence with an
+  empty value. "Not found" is a refusal only where the caller demands a specific
+  thing by its identity. A refusal for an ordinary "none" makes every caller
+  handle a failure the domain does not have.
+- **The model throws, whichever way the context answers.** Where a context
+  returns its expected refusals as cases of a closed result, the aggregate and
+  the value objects still throw their named failures — a behaviour method that
+  returned an outcome would make every caller unpack a case a correct call never
+  produces. The use case catches each concrete one it can raise, once, and
+  returns its case; a catch of the domain base type turns a defect into a
+  refusal and is a finding.
+- **Decide, then write.** Every refusal, thrown or returned, comes before the
+  first save. A refusal that can only be known after a write is two aggregates
+  in one transaction — the boundary may roll it back, the cut is still wrong.
 
 ## How to read the project
 

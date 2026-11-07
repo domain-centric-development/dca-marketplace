@@ -122,18 +122,23 @@ not something to add silently. Then, per `reference/element-modes.md` § Mode co
 **User intent:** "Add a `placeOrder` use case to the `orders` context."
 
 Required parameters (ask if not given): the context, the use-case name in lowerCamelCase, the type (Command
-or Query), the output ports needed. Then, per `reference/element-modes.md` § Mode usecase:
+or Query), the output ports needed, the expected refusals (or none). Then, per `reference/element-modes.md` § Mode
+usecase:
 
-1. **Placement: flat or feature-grouped context** — look at the packages below `{context}/application/`
+1. **Refusal style** — the context's `Refusals:` line in the technical description (`Refusals (<context>): …`, else
+   `Refusals: …`), else its existing use cases; with neither, ask the person — thrown or returned, both equal — and
+   write the line through `dca-describe`. The result and the use case's steps follow it.
+2. **Placement: flat or feature-grouped context** — look at the packages below `{context}/application/`
    first; never mix the two forms (`DCA-USE-014`), `application/shared/` stays context-wide, a vertical
    slice is not a feature.
-2. **Generated files** — input port, command or query, result (values only, `DCA-USE-015`), implementation
+3. **Generated files** — input port, command or query, result (values only, `DCA-USE-015`; closed with one
+   `Refusal` case per refusal where the context returns them; a success case never carries it), implementation
    with the `ImplSuffix` from convention discovery; the table is in the reference.
-3. **Wiring** — constructor injection of the output ports, a `// TODO: implement` body, the project's
+4. **Wiring** — constructor injection of the output ports, a `// TODO: implement` body, the project's
    constructor style; C#: the `AddScoped` line in `Add{Context}Context()`. Missing output ports are created
    in `application/shared/`.
-4. **Naming check** — warn on a name outside the project's verb pattern, proceed with what was asked.
-5. **DTO mapping at the adapter boundary** — read `reference/dto-mapping.md` before writing an adapter's
+5. **Naming check** — warn on a name outside the project's verb pattern, proceed with what was asked.
+6. **DTO mapping at the adapter boundary** — read `reference/dto-mapping.md` before writing an adapter's
    mapping; mapping happens at the adapter boundary only, never in the use case, never in the domain.
 
 ---

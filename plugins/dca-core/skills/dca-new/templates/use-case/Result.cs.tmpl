@@ -1,3 +1,32 @@
+{{#if returnsRefusals}}
+using DomainCentric.BuildingBlocks.Application;
+
+using OneOf;
+
+namespace {{rootNamespace}}.{{Context}}.Application.{{FeatureSegment}}{{Name}};
+
+/// <summary>
+/// How the {{Name}} use case ends: one success case and one case per expected refusal.
+/// </summary>
+/// <remarks>
+/// The context returns its refusals (<c>Refusals: returned</c>): a closed union — OneOf's source generator until
+/// C# <c>union</c> types are released — that the incoming adapter answers with <c>Match</c>, one function per case,
+/// so a new case is a compile error at every caller. <c>Match</c> is positional: keep the cases' order here and in
+/// every call. Every refusal case implements <see cref="IRefusal"/> — the transaction boundary rolls back on it as
+/// on a thrown failure — and the success case never does. Each case carries values, never identities; a refusal
+/// case carries what the refusal compared, never display text.
+/// </remarks>
+[GenerateOneOf]
+public sealed partial class {{Name}}Result : OneOfBase<{{caseTypeList}}>
+{
+    public sealed record {{SuccessCase}}(
+{{resultFields}}
+    );
+
+{{refusalCases}}
+}
+{{/if}}
+{{#if !returnsRefusals}}
 namespace {{rootNamespace}}.{{Context}}.Application.{{FeatureSegment}}{{Name}};
 
 /// <summary>
@@ -17,3 +46,4 @@ public sealed record {{Name}}Result(
     public static {{Name}}Result From(/* the aggregate or read model */ object source) =>
         throw new NotImplementedException("Map values from the source, never expose it");
 }
+{{/if}}

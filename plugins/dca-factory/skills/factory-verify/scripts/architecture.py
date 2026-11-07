@@ -7,7 +7,8 @@ package sits the version stamp `contract.py` alone, read by name by every instal
 
     place_findings(package)   a module at the top of the package, outside every layer
     layer_findings(package)   an import against the direction of the layers, with the DCA rule id it breaks
-    value_findings(package)   a bare primitive or time type in a domain field or a domain signature
+    value_findings(package)   a bare primitive or time type in a domain field or a domain signature; a yes/no fact
+                              may be a bool field, never a bool parameter
     marker_findings(package)  a dataclass decorator on a value, an identifier or a domain event — their base makes them
     port_findings(package)    an output port unmarked, in the domain, unimplemented, or implemented inside the core
     cycle_findings(package)   an import cycle between two modules of the package
@@ -225,11 +226,18 @@ def is_wrapper(cls):
         and getattr(fields[0].target, "id", "") == "value"
 
 
+#: A field that mentions `bool` and nothing beyond these names holds a single yes/no fact — `bool`,
+#: `typing.Optional[bool]`, `bool | None`; `list[bool]` does not.
+YES_NO = frozenset(("bool", "Optional", "typing"))
+
+
 def value_findings(package):
     """Every bare primitive (`str`, `int`, `float`, `bool`) or time type (`datetime`, `date`, `time`) in a domain
     field — an annotated class attribute that is no `ClassVar` — or a domain signature, a parameter's or a return's
-    (DCA-TAC-025). Exempt: the one `value` field of a frozen dataclass that wraps it, the dunder methods, and a
-    return of `bool` alone — a predicate, a question to the object."""
+    (DCA-TAC-025). Exempt: the one `value` field of a frozen dataclass that wraps it, the dunder methods, a field
+    typed `bool` alone — a single yes/no fact the object is told to change and answers by a predicate — and a
+    return of `bool` alone — a predicate, a question to the object. A `bool` parameter stays a finding: a flag
+    argument lets the caller set the state instead of triggering the behaviour."""
     found = []
     for dotted, (rel, tree) in sorted(parsed(package).items()):
         if place_of(dotted)[1] != "domain":
@@ -261,7 +269,8 @@ def value_findings(package):
             for item in node.body:
                 if isinstance(item, ast.AnnAssign):
                     names = annotation_names(item.annotation)
-                    if "ClassVar" in names or (wrapper and getattr(item.target, "id", "") == "value"):
+                    if "ClassVar" in names or (wrapper and getattr(item.target, "id", "") == "value") \
+                            or ("bool" in names and set(names) <= YES_NO):
                         continue
                     bare = sorted(PRIMITIVES & set(names))
                     if bare:

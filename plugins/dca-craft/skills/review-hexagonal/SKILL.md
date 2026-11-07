@@ -1,6 +1,6 @@
 ---
 name: review-hexagonal
-description: The hexagonal review perspective, from outside any one method: do dependencies point inward, are ports declared inside and implemented in adapters, port granularity, framework leaks into inner layers, command/query/result shape of input ports, translation at the edge, one failure-translation site per context. Use when reviewing a change from the ports-and-adapters point of view, or as the carrier of the `hexagonal` perspective in a delivery pipeline's review stage.
+description: The hexagonal review perspective, from outside any one method: do dependencies point inward, are ports declared inside and implemented in adapters, port granularity, framework leaks into inner layers, command/query/result shape of input ports, translation at the edge, each failure answered once per context, refusals thrown or returned uniformly per context. Use when reviewing a change from the ports-and-adapters point of view, or as the carrier of the `hexagonal` perspective in a delivery pipeline's review stage.
 ---
 
 You are a Hexagonal Architecture reviewer.
@@ -172,13 +172,45 @@ contexts):
 
 ### 8. Failure translation at the edge
 
-The inner layers raise types; the adapter decides what a caller is told. Check
-that the decision sits in exactly one place per context:
+The inner layers raise types or return cases; the adapter decides what a caller
+is told. An expected refusal — not found, not the caller's, refused input, a
+rule of the model, a foreign system that refused or did not answer — travels one
+of two equal ways, and the project chooses per
+context: **thrown** as a named failure, or **returned** as a case of the use
+case's closed result (a sealed type, a union) that the caller switches over.
+Check that each answer is decided once per context:
 
-- One translation site in that context's `adapter/incoming/` — a
+- **One style per context.** A context whose use cases throw some refusals and
+  return others is a finding: its adapters answer the same kind of failure two
+  ways, and a reader cannot tell which a new use case takes. Two contexts of one
+  project may differ; the project's configuration says which (read the
+  conventions as below).
+- **Own infrastructure fails unexpectedly; a foreign system fails as
+  expected.** The system's own database or broker has to be there: its failure
+  is the platform's exception and no caller answers it. A foreign system behind
+  an output port — one the context map lists as an external system — that
+  refuses, times out or cannot be reached is expected behaviour of the
+  integration: the port declares that failure in its contract, the outgoing
+  adapter translates the client's error into it, and the use case answers it as
+  a refusal. A foreign system's timeout escaping as the platform's exception, or
+  the own database's failure dressed as a refusal, is a finding. Which systems
+  are foreign is read from the context map, not judged per failure.
+- **An empty answer is not a refusal.** A query that asks whether there is one
+  answers "none" with an empty value; "not found" is a refusal only where the
+  caller names a specific thing.
+- **Thrown:** one exception handler in that context's `adapter/incoming/` — a
   `@RestControllerAdvice` scoped by `basePackages`, or an `IExceptionHandler`
   scoped to the context's routes. A handler in global infrastructure that names
   a context's failure has taken that context's decision.
+- **Returned:** each call site switches over the result and names every case —
+  **no `default`** (in C# with a library union: one function per case, in the
+  type's order), so a new case is a compile error where it must be answered.
+  The answer to each case is written once, in one adapter class per context
+  that every switch calls; the exception handler stays for malformed input and
+  the unexpected. A caller that drops the result — a test helper arranging
+  state included — swallows a refusal; one with nobody to answer (an event
+  consumer) throws on purpose, so the delivery is retried. Each refusal case carries the project's refusal
+  marker, so the transaction boundary rolls it back like an exception.
 - The answer is a problem document (`ProblemDetail` / `ProblemDetails`), not a
   home-grown error DTO.
 - **The words are the adapter's.** A page or an answer that shows the
@@ -191,6 +223,9 @@ that the decision sits in exactly one place per context:
   still answers `404`.
 - No `catch (Exception)` / `catch (RuntimeException)` around a use-case call,
   and no `try`/`catch` in a resource that the context's handler already covers.
+  No catch of the project's port-failure base types as such either — it would
+  answer a failure an output port declared, which the use case should have
+  turned into a refusal, like the use case's own.
 - No `@ResponseStatus` or other framework metadata on an inner-layer failure —
   that is the adapter's decision taken inside.
 - An incoming adapter that translates nothing has a reason: an event consumer

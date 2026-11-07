@@ -11,8 +11,8 @@ boundaries. You write code; you do not just review it. (For review-only work
 from a DDD perspective, apply the `review-ddd` skill instead.)
 
 The invariants that hold while any of this is written — framework-free domain,
-dependency inversion, context isolation, event hygiene, named failures with one
-translation site — are `dca-discipline`'s, the one place they are stated. Apply
+dependency inversion, context isolation, event hygiene, named failures answered
+once per context — are `dca-discipline`'s, the one place they are stated. Apply
 it alongside; this skill is the building guide.
 
 A long modelling session may run in a subagent where the tool has them, so the
@@ -40,6 +40,9 @@ Before writing any code, gather context:
      `rest_controller_suffix:` lines first; then the `DcaLayout` builder in the architecture test;
      the existing code last. A failure is named by the rule it breaks, with `dca.profile.yaml`'s
      `failure_suffix:` (`Exception` when the line is missing)
+   - How each context carries its expected refusals — the technical description's (`tech:`,
+     `product/tech.md`) line `Refusals (<context>): thrown | returned`, else `Refusals: …`; with no
+     line, the style its existing use cases show
    - Whether the project uses Lombok or pure Java records; in C#, `sealed record`
      for values and events, `readonly record struct` for ids
    - Allowed domain imports (some projects allow JSpecify, Apache Commons, etc.)
@@ -73,6 +76,12 @@ Don't impose patterns the project doesn't use.
 - Enforce invariants in factory methods and behavior methods — not in setters.
   In fact: prefer **no setters**. Behavior methods (`confirm()`, `cancel(...)`)
   drive state changes.
+- A single yes/no fact is a private `boolean` field: the aggregate is told
+  (`complete()`) and answers (`isCompleted()`). No domain method takes a
+  `boolean` — `setCompleted(true)` is a flag argument (`DCA-TAC-025`). Three or
+  more states, or transitions with rules, are an enum or a value; facts that
+  hold independently (completed, archived) are separate fields, never one
+  status. The project's glossary, where it names a status, wins.
 - Register domain events at the right state transition (not in every method).
 - Be `final` if the project's convention favors closed inheritance.
 - Constructors validate; the aggregate can never exist in an invalid state.
@@ -173,8 +182,43 @@ Don't impose patterns the project doesn't use.
 ### Failures
 
 - A business rule that refuses gets its own type: `DomainException` in the
-  domain layer, `UseCaseException` in the application layer — both from the
-  building blocks, both abstract, neither carrying a code or a status.
+  domain layer; in the application layer a port's failure under the abstract
+  `PortException` — `UseCaseException` (under `InputPortException`) for what a
+  use case refuses, `OutputPortException` for what an output port's contract
+  declares, thrown by its adapter and caught by the use case by its concrete
+  type. All from the building blocks, all abstract, none carrying a code or a
+  status. A concrete use-case failure extends `UseCaseException`, never
+  `InputPortException` directly.
+- **Own infrastructure throws; a foreign system's failure is a refusal.** The
+  own database or broker failing — a lost connection, a timeout — is no
+  `OutputPortException`; it stays the platform's exception. A foreign system
+  behind an output port (an external system on the context map,
+  `@ExternalUpstream`) that refuses, times out or cannot be reached is expected:
+  the port declares a `{System}UnavailableException extends
+  OutputPortException`, the adapter catches the client's failure and throws it,
+  and the use case answers it as a refusal in the context's style. Read which
+  systems are foreign from the context map; never judge it per failure.
+- **Absence is not always a refusal.** A "which one, if any" query (the
+  caller's active session, an open draft) answers *none* with an empty value in
+  a plain result. "Not found" is a refusal only where the caller names a
+  specific thing by its id.
+- **An expected refusal takes its context's style** — read it before writing
+  (the technical description's `Refusals` lines, else the context's existing
+  use cases; with neither, ask). *Thrown:* the use case
+  throws its own `UseCaseException` subtypes and lets the model's pass.
+  *Returned:* the input port returns a sealed `{Operation}Result` — one success
+  case named for what happened, one nested record per refusal named after it,
+  implementing `Refusal` (.NET `IRefusal`; a closed union, OneOf until C#
+  `union` is released), no `Exception` suffix; the model still throws, and the
+  use case catches each concrete domain or output-port exception it can raise,
+  once, and returns its case. An operation with one outcome keeps a plain
+  result record; one that ends in several successes and no refusal (`Sent` |
+  `AlreadySent`) may seal its result all the same, no case marked `Refusal` —
+  a marked success would be rolled back. Both styles are equal; a context
+  never mixes them.
+- **Decide, then write.** Load, ask the model and every port that can refuse,
+  refuse or go on, and save last. The boundary rolls a returned `Refusal` back
+  like a thrown exception — the net, not the design.
 - Name the rule, not the answer: `InsufficientStockException`, never
   `StockError` or `OrderHttpException`. No `Error`/`Fault`/`Failure` suffix, no
   `Http`/`Status`/`Response` in the name.
@@ -184,7 +228,9 @@ Don't impose patterns the project doesn't use.
   words the refusal from the type and the values, so a page can translate it.
 - Place a domain failure beside the model that raises it; there is no
   `domain/exception/` package. Place a use-case failure with its use case, or in
-  `application/shared` when several raise it or a port declares it.
+  `application/shared` when several raise it; an output-port failure beside the
+  port that declares it. A refusal case is nested in its result, never a file of
+  its own.
 - **Do not convert an argument guard.** A null check or a range check on a value
   only code passes stays `IllegalArgumentException` / `ArgumentException`. The
   cut is the origin and the name: a value built from input refuses with its
@@ -207,6 +253,25 @@ Don't impose patterns the project doesn't use.
 - One repository per Aggregate Root. **Never** create repositories for
   non-root entities or value objects — those are accessed through their
   aggregate or via a Store.
+
+### An aggregate that belongs to someone
+
+Ask whether the aggregate belongs to an identity the system knows — an account, a tenant, a guest with a
+pseudonymous identity from a signed token. If it does:
+
+- The aggregate implements `Owned<OwnerId>` (C#: `IOwned<TOwnerId>`; Rust: `impl Owned { type OwnerId = … }`),
+  the type argument naming the owner's id type, and holds the owner as a field like any other.
+- Its repository declares a lookup by the aggregate's id **and** the owner's id, named in the context's
+  language (`findByIdForPatient(id, patient)`), returning the aggregate. Every use case acting for a caller
+  loads through it — never `findById` plus an `if`. `DCA-TAC-026` (experimental) checks the repository side.
+- An event that asks for an effect on the aggregate carries the owner, and its use case loads through it too.
+  `findById` stays for paths that hold no owner to name.
+- The owner changes only through an explicit operation of the aggregate (`takeOverBy(newOwner)`), called after
+  the use case proved the caller's right to the change — that proof is use-case logic and has its own tests.
+
+If nobody owns it, leave it unmarked. If there is no identity at all and the id itself is the secret (a long
+random id in a link), the aggregate is not `Owned` either — say so beside it, so nobody reads it as forgotten.
+The catalog's decision *Ownership as a marker* has the reasoning.
 
 ### When to use Store instead of Repository
 

@@ -9,6 +9,6 @@ methods: ["Partnership[] value()"]
 tags: [strategic, marker]
 ---
 
-Container annotation for repeatable `p` declarations.
+Container annotation for repeatable `Partnership` declarations.
 
 Not used directly — apply multiple `@Partnership` annotations instead.

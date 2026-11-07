@@ -14,7 +14,9 @@ from ..files.journal_files import journal_append
 from ..files.kept_files import read_red_digests, red_tree, red_tree_copy, tidy_moves, write_red_ledger
 from ..files.run_marks import verdict_in, write_mark
 from ..files.signals import journal_signal
+from ..files.story_layout import file_digest
 from ..files.story_record import INVARIANT_BREAKS
+from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir
 from ..files.test_files import locate_tests
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_text
 from .breaks import apply_break, break_copy, break_patch, break_path, characterization_tests, qualify_selector
@@ -85,13 +87,33 @@ class StageRunFiles:
         path = os.path.join(self._runs, story, "tests.md")
         return read_invariant_rows(read_text(path)) if os.path.isfile(path) else None
 
-    def rule_proofs(self, story: str, rows: typing.Sequence[typing.Tuple[str, typing.List[int], str, str]]) -> None:
+    def rule_proofs(self, story: str, rows: typing.Sequence[typing.Tuple[str, typing.List[int], str, str]],
+                    located: typing.Optional[Located] = None) -> None:
+        def digest(selector: str) -> str:
+            path = os.path.join(self._cwd, (located or {}).get(selector) or "")
+            return "\t" + file_digest(path) if (located or {}).get(selector) and os.path.isfile(path) else ""
         write_mark(self._runs, story, INVARIANT_BREAKS, "\n".join(
-            f"{e}\t{','.join(map(str, n))}\t{sel}\t{verdict}" for e, n, sel, verdict in rows))
+            f"{e}\t{','.join(map(str, n))}\t{sel}\t{verdict}{digest(sel)}" for e, n, sel, verdict in rows))
         journal_signal(self._runs, story, "rules", [("rule", sel, dict(element=e, rules=",".join(map(str, n)),
                                                                        verdict=verdict))
                                                     for e, n, sel, verdict in rows],
                        named=sum(len(n) for _e, n, _s, _v in rows))
+
+    def rules_seen_red(self, story: str, located: Located) -> typing.FrozenSet[str]:
+        """The rules' tests an earlier run of this story's test gate saw red, in the version of their file that is
+        there now — the digest the proof was recorded with binds it to that version, as the red ledger does."""
+        path = os.path.join(evidence_dir(self._runs, story), INVARIANT_BREAKS)
+        if not os.path.isfile(path):
+            return frozenset()
+        seen = set()
+        for line in read_text(path).splitlines():
+            parts = line.split("\t")
+            if len(parts) < 5 or parts[3] != "red" or not located.get(parts[2]):
+                continue
+            test_file = os.path.join(self._cwd, located[parts[2]])
+            if os.path.isfile(test_file) and file_digest(test_file) == parts[4]:
+                seen.add(parts[2])
+        return frozenset(seen)
 
     def answered_tests(self, story: str) -> typing.List[str]:
         return answered_decisions(self._cwd, story, "test")

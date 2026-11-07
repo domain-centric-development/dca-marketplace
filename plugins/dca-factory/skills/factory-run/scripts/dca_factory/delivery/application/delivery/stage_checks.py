@@ -22,6 +22,7 @@ from ...domain.service.profile_checks import ProfileChecks
 from ...domain.service.spec_checks import SpecChecks
 from ...domain.service.story_checks import StoryChecks
 from ...domain.service.test_checks import TestChecks
+from ...domain.service.then_checks import ThenChecks
 from .check_stage import check, Run
 from .pipeline_workflow import workflow
 
@@ -200,6 +201,11 @@ def _test_design(run: Run) -> None:
 def _tests_real(run: Run) -> None:
     if run.contract.value >= TESTS_REAL_CONTRACT.value:
         run.result.take(DesignChecks.tests_real(run.story, mapped(run), run.evidence))
+
+
+@check("tests-assert-then", stages=("test",), kinds=frozenset((StoryKind.STORY,)), rule="GATE-TESTS-ASSERT-THEN")
+def _tests_assert_then(run: Run) -> None:
+    run.result.take(ThenChecks.asserted(run.story, mapped(run), run.evidence))
 
 
 @check("red-proof", stages=listing, kinds=TESTED_KINDS, rule="GATE-RED-PROOF")

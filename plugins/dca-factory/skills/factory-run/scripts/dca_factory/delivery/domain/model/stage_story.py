@@ -293,12 +293,13 @@ class TestLocation(Value):
 
 class PlanLevels(Value):
     """The levels the plan gave: the keys its skeleton left without one, the keys it gave `browser-only`, the keys
-    it gave `integration (adapter: …)` — an incoming adapter's translation, tested against a stubbed input port by
-    design."""
+    it gave `integration (adapter: …)` alone — an incoming adapter's translation, tested against a stubbed input
+    port by design — and the keys it gave both shapes, the adapter's beside one through the real input port."""
 
     unfinished: typing.Tuple[ScenarioKey, ...]
     browser_only: typing.FrozenSet[ScenarioKey]
     adapter: typing.FrozenSet[ScenarioKey]
+    both: typing.FrozenSet[ScenarioKey]
 
 
 class HandOverSize(Value):
@@ -358,8 +359,34 @@ class Clause(Value):
 
 
 class ScenarioClauses(Value):
+    """A scenario's expectations, and its `When` steps — what the person does or enters."""
+
     key: ScenarioKey
     clauses: typing.Tuple[Clause, ...]
+    actions: typing.Tuple[Detail, ...]
+
+
+class ShownLiteral(Value):
+    """A text an expectation quotes as what is shown — „…“, "…", “…”, ‚…‘, ‘…’ or «…» — not one that names an element
+    the step points at (a button, a field, a form, a link, or what is pressed or clicked)."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        if not self.value.strip():
+            raise ValueError("a shown literal says something")
+
+
+class TestSource(Value):
+    """The whole text of a test's file — a literal often stands in a constant, not in the test's method."""
+
+    value: str
+
+    def says(self, literal: ShownLiteral) -> bool:
+        """Whether the file carries the literal as written, or with its straight quotes escaped as a string
+        literal of the language writes them."""
+        text = literal.value
+        return text in self.value or ('"' in text and text.replace('"', '\\"') in self.value)
 
 
 class ClauseRow(Value):

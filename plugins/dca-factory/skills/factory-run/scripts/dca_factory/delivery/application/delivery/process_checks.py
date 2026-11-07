@@ -116,7 +116,9 @@ def invariant_breaks(result: Verdict, runs: StageRuns, profile: typing.Mapping[s
     """Every rule the plan names is shown to be guarded by its unit test. Its test seen red before the build proves it
     as a criterion's red run does; one green already — the rule exists — needs its break, one change to the
     production code that turns it red. All breaks of the gate run on one scratch copy, each running its one test, so
-    the second compiles on the first. A survived or missing break is refused."""
+    the second compiles on the first. A survived or missing break is refused. A test an earlier run of this gate saw
+    red keeps that proof for the version of its file it was seen in — the gate run again after the build, where every
+    new rule is green, asks for no break of it."""
     criterion = {sel for sels in (mapping or {}).values() for sel in sels}
     rules: typing.Dict[str, typing.List[typing.Tuple[str, typing.List[int]]]] = {}
     for element, numbers, selector in runs.invariant_rows(story) or []:
@@ -130,7 +132,10 @@ def invariant_breaks(result: Verdict, runs: StageRuns, profile: typing.Mapping[s
     probe = Verdict()
     test_state(probe, runs, profile, {keys[sel]: [sel] for sel in sorted(rules)}, "red", located)
     before = {sel: BreakChecks.verdict(findings_of(probe, "tests-red", sel)) for sel in rules}
-    green = [sel for sel in sorted(rules) if before[sel].outcome is BreakOutcome.GREEN]
+    seen = runs.rules_seen_red(story, located)
+    seen_red = {sel: presence(sel in seen) for sel in rules}
+    green = [sel for sel in sorted(rules)
+             if before[sel].outcome is BreakOutcome.GREEN and seen_red[sel] is Presence.ABSENT]
     proofs = {}
 
     def prove(copied: typing.Tuple[str, str]) -> None:
@@ -139,13 +144,14 @@ def invariant_breaks(result: Verdict, runs: StageRuns, profile: typing.Mapping[s
             if sel in green:
                 patch = runs.patch(story, sel)
                 under = run_break(runs, profile, copied[0], copied[1], patch, sel, keys[sel], located) if patch else None
-            proofs[sel] = BreakChecks.rule_proof(before[sel], under)
+            proofs[sel] = BreakChecks.rule_proof(before[sel], under, seen_red[sel])
     if green:
         with runs.scratch() as copied:
             prove(copied)
     else:
         prove(("", ""))
-    runs.rule_proofs(story, [(e, n, sel, proofs[sel].value) for sel, owners in sorted(rules.items()) for e, n in owners])
+    runs.rule_proofs(story, [(e, n, sel, proofs[sel].value) for sel, owners in sorted(rules.items()) for e, n in owners],
+                     located)
     for sel in sorted(rules):
         said = "; ".join(m for _st, _c, m in probe.entries if sel in m)
         result.take((BreakChecks.invariant(Selector(sel), Detail(keys[sel]), proofs[sel],

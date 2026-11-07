@@ -79,6 +79,7 @@ your file. The rule in full: in what every stage is told.
 
 ## Context
 <bounded context, and why this story belongs to it — two lines>
+refusals: thrown | returned — <where it was read>   (only where a criterion refuses something)
 
 ## Changes
 | Element | Kind | Location | New or changed | Evidence |

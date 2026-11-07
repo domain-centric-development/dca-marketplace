@@ -355,6 +355,12 @@ STORY_SCENARIOS = STORY.replace("""- shows-the-thing: The reader sees the thing.
 - Sharing things with others.
 """)
 
+#: The scenarios with quoted texts: one the `Then` says is shown, one a step points at as a form's name, one pressed.
+QUOTED_SCENARIOS = STORY_SCENARIOS.replace(
+    "- When the reader opens the list\n- Then the list shows the thing",
+    "- When the reader presses „Done“ at the thing\n- Then „2 things, 1 open“ is shown"
+).replace("- And no error is shown", "- And the list stands near the form „Add“")
+
 #: A story describing behaviour the project already has: adopted, never built.
 ADOPTED = STORY.replace("status: approved", "status: adopted").replace(" (happy path):", ":")
 #: The tests the adoption wrote itself, each shown to work by a break.
@@ -4576,7 +4582,8 @@ def verify_setup(runner, verbose=False):
     check("package: every import follows the layers — DCA-ONI-001/002, DCA-HEX-001/002/006, DCA-LAY-003, "
           "DCA-STR-002/003/004/006", not layered, layered[:8])
     bare = architecture.value_findings(package)
-    check("package: no bare primitive or time type in a domain field or a domain signature — each is a value object",
+    check("package: no bare primitive or time type in a domain field or a domain signature — each is a value object; "
+          "a single yes/no fact may be a bool field, never a bool parameter",
           not bare, bare[:8])
     decorated = architecture.marker_findings(package)
     check("package: a value, an identifier, a domain event is a frozen dataclass by its base — no decorator of its own",
@@ -5593,10 +5600,47 @@ def run_groups(args):
                              (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Acceptance criteria\n"
                               "- shows-the-thing  →  level: integration (adapter: WidgetPage)\n"
                               "- shows-nothing-when-empty  →  level: e2e\n")))),
+        # WP-186, 0.144.1: both shapes on one line — the adapter's test stubs the port beside a test through the port
+        (Case("tests-real: both shapes in the level, the adapter's test stubs the port beside one through it, passes",
+              "test", 0, must_pass=("tests-real",)),
+         dict(tests=TESTS.replace("| shows-nothing-when-empty |",
+                                  "| shows-the-thing | com.example.WidgetPortTest#showsTheThing |\n"
+                                  "| shows-nothing-when-empty |")
+              .replace("## Files\n", "## Files\n- src/test-pages/java/com/example/WidgetPortTest.java\n"),
+              extra_sources=(("src/test-pages/java/com/example/WidgetPageTest.java", "class WidgetPageTest { @MockitoBean private ShowWidgetInputPort port; @DisplayName(\"Shows the thing\") void showsTheThing() {} }\n"),
+                             ("src/test-pages/java/com/example/WidgetPortTest.java", "class WidgetPortTest { @Autowired ShowWidgetInputPort port; void showsTheThing() {} }\n"),
+                             (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Acceptance criteria\n"
+                              "- shows-the-thing  →  level: integration (port) and integration (adapter: WidgetPage) — port: the count\n"
+                              "- shows-nothing-when-empty  →  level: e2e\n")))),
+        (Case("tests-real: both shapes in the level, every test of the criterion stubs the port: the port shape is missing",
+              "test", 1, must_fail=("tests-real",), text=("the port shape is missing", "shows-the-thing")),
+         dict(extra_sources=(("src/test-pages/java/com/example/WidgetPageTest.java", "class WidgetPageTest { @MockitoBean private ShowWidgetInputPort port; @DisplayName(\"Shows the thing\") void showsTheThing() {} }\n"),
+                             (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Acceptance criteria\n"
+                              "- shows-the-thing  →  level: integration (port) and integration (adapter: WidgetPage)\n"
+                              "- shows-nothing-when-empty  →  level: e2e\n")))),
         (Case("tests-real: an integrated test that replaces a repository, and a unit test that mocks the port, pass",
               "test", 0, must_pass=("tests-real",)),
          dict(extra_sources=(("src/test-pages/java/com/example/WidgetPageTest.java", "class WidgetPageTest { @MockitoBean private WidgetRepository widgets; @DisplayName(\"Shows the thing\") void showsTheThing() {} }\n"),
                              ("src/test/java/com/example/WidgetUnitTest.java", "class WidgetUnitTest { @Mock ShowWidgetInputPort port; void showsNothingWhenEmpty() {} }\n")))),
+        # WP-186: a criterion's test says the text its `Then` quotes as shown — the bench's count a port test proved
+        # as a number while the scenario said a sentence is shown; a form's name is an element, not a text shown
+        (Case("tests-assert-then: a text the `Then` quotes, in no test of its criterion, is refused naming both", "test", 1,
+              must_fail=("tests-assert-then",),
+              text=("shows-the-thing: „2 things, 1 open“ is in no test of it (WidgetPageTest)",), absent=("„Add“",)),
+         dict(story=QUOTED_SCENARIOS, profile=PROFILE + "contract: 14\n",
+              extra_sources=(("src/test-pages/java/com/example/WidgetPageTest.java",
+                              "class WidgetPageTest { @DisplayName(\"Shows the thing\") void showsTheThing() { "
+                              "assertThat(count.open()).isEqualTo(1); } }\n"),))),
+        (Case("tests-assert-then: the text in a constant of the test's class passes, the form's name asks nothing",
+              "test", 0, must_pass=("tests-assert-then", "tests-red")),
+         dict(story=QUOTED_SCENARIOS, profile=PROFILE + "contract: 14\n",
+              extra_sources=(("src/test-pages/java/com/example/WidgetPageTest.java",
+                              "class WidgetPageTest { static final String COUNT = \"2 things, 1 open\"; "
+                              "@DisplayName(\"Shows the thing\") void showsTheThing() {} }\n"),))),
+        (Case("tests-assert-then: a criterion whose test has no source file is named, not guessed at", "test", 1,
+              must_fail=("tests-assert-then", "tests-exist"), text=("no source file holds their test",)),
+         dict(story=QUOTED_SCENARIOS, profile=PROFILE + "contract: 14\n",
+              tests=TESTS.replace("com.example.WidgetPageTest#showsTheThing", "com.example.GoneTest#showsTheThing"))),
         (Case("test: a tests.md without `## Files` is refused once the stage's changes are recorded", "test", 1,
               must_fail=("files-listed",)),
          dict(tests=TESTS.split("\n## Files")[0] + "\n", extra_sources=(
@@ -5641,6 +5685,24 @@ def run_groups(args):
               after=lambda root: [] if open(os.path.join(root, ".dca-factory/evidence/STORY-1/invariant-breaks.tsv"),
                                             encoding="utf-8").read().count("\tkilled") == 3
               else ["invariant-breaks.tsv does not hold three `killed`"])),
+        # WP-186, 0.144.1: the test gate run again after the build — its rules green now — keeps the red an earlier
+        # run saw, for the version of the test file it saw it in; another version asks for its break again
+        (Case("test: rules an earlier run saw red, green now in the same test file, keep that proof — no break asked",
+              "test", 0, must_pass=("invariant-breaks",), text=("red before the build",)),
+         dict(tests=TESTS + INVARIANT_TABLE, green=INVARIANT_TESTS, extra_sources=PLAN_AND_TEST + (
+             (".dca-factory/evidence/STORY-1/invariant-breaks.tsv", "".join(
+                 f"Widget\t{n}\t{sel}\tred\t"
+                 f"{hashlib.sha256(INVARIANT_TEST_FILE[1].encode('utf-8')).hexdigest()}\n"
+                 for n, sel in enumerate(INVARIANT_TESTS, 1))),),
+              after=lambda root: [] if open(os.path.join(root, ".dca-factory/evidence/STORY-1/invariant-breaks.tsv"),
+                                            encoding="utf-8").read().count("\tred\t") == 3
+              else ["invariant-breaks.tsv does not keep three `red` with their digest"])),
+        (Case("test: rules seen red in another version of their test file need their break again", "test", 1,
+              must_fail=("invariant-breaks",), text=("green before the build, so the rule exists already",)),
+         dict(tests=TESTS + INVARIANT_TABLE, green=INVARIANT_TESTS, extra_sources=PLAN_AND_TEST + (
+             (".dca-factory/evidence/STORY-1/invariant-breaks.tsv", "".join(
+                 f"Widget\t{n}\t{sel}\tred\t{'0' * 64}\n"
+                 for n, sel in enumerate(INVARIANT_TESTS, 1))),))),
         (Case("test: a rule's test that stays green under its break is refused", "test", 1,
               must_fail=("invariant-breaks",), text=("refusesLong", "stays green under its break")),
          dict(tests=TESTS + INVARIANT_TABLE, green=INVARIANT_TESTS,
@@ -5697,6 +5759,12 @@ def run_groups(args):
               extra_sources=((".dca-factory/runs/STORY-1/plan.md", INVARIANT_PLAN
                               + "- Note on the rules: none crosses an aggregate\n- The aggregate Widget: holds them all\n"),
                              INVARIANT_TEST_FILE))),
+        # WP-186, 0.144.1: `- none — <why>` with a colon in the why named an element `none` with one rule to test
+        (Case("test: `- none — <why>` with a colon in the why is no element and asks for no unit test", "test", 0,
+              must_pass=("tests-red",), absent=("gate:fail invariants", "none 1")),
+         dict(extra_sources=((".dca-factory/runs/STORY-1/plan.md", INVARIANT_PLAN.split("## Invariants")[0].replace(
+             "| Value object |", "| Use case |") + "## Invariants\n- none — no domain type changes: the operation "
+             "loads no record (`a-recipe.md` § Why)\n"),))),
         (Case("test: a lean plan gets no size note", "test", 0, must_pass=("tests-red",), absent=("gate:note size",)),
          dict(extra_sources=((".dca-factory/runs/STORY-1/plan.md",
                               "# Plan\n\n## Acceptance criteria\n- shows-the-thing  →  level: e2e\n"

@@ -5,7 +5,9 @@ import unittest
 
 import support  # noqa: F401 — puts the package on the path
 from dca_factory.delivery.domain.model.verdict import CheckName, Finding, FindingState, Said
-from dca_factory.delivery.domain.service.break_checks import BreakChecks, BreakOutcome
+from dca_factory.delivery.domain.model.stage_story import Presence
+from dca_factory.delivery.domain.model.story_state import Detail
+from dca_factory.delivery.domain.service.break_checks import BreakChecks, BreakOutcome, BreakResult, RuleProof
 
 
 def seen(*entries):
@@ -30,6 +32,20 @@ class BreakVerdictTest(unittest.TestCase):
         verdict = BreakChecks.verdict(seen(("fail", "X#y: no test report from this run shows it ran")))
         self.assertIs(BreakOutcome.UNCHECKED, verdict.outcome)
         self.assertTrue(verdict.said.value.startswith("X#y: no test report"))
+
+
+class RuleProofTest(unittest.TestCase):
+    """A rule's test green now that an earlier run of the gate saw red, in this version of its file, keeps that proof
+    (WP-186, 0.144.1); without it, a green test still needs its break."""
+
+    GREEN = BreakResult(BreakOutcome.GREEN, Detail(""))
+
+    def test_green_now_and_seen_red_before_is_red(self):
+        self.assertIs(RuleProof.RED, BreakChecks.rule_proof(self.GREEN, None, Presence.PRESENT))
+
+    def test_green_now_and_never_seen_red_needs_its_break(self):
+        self.assertIs(RuleProof.NO_BREAK, BreakChecks.rule_proof(self.GREEN, None))
+        self.assertIs(RuleProof.KILLED, BreakChecks.rule_proof(self.GREEN, BreakResult(BreakOutcome.RED, Detail(""))))
 
 
 if __name__ == "__main__":

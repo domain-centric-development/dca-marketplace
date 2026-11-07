@@ -23,10 +23,27 @@ order: 8
      external system stubbed at the protocol (`http.stub:`): the use case is tested once, however
      many adapters call it. A `Then` only an incoming adapter produces — a text on the page, a status
      code, a redirect, a message's payload — is asserted on **that adapter's translation**, against a
-     stubbed input port that answers with the outcome. A refusal the page shows needs both: the port
-     shape proves the use case refuses, with the failure it raises; the adapter shape proves the text,
-     its stub throwing that same failure. Write the shape after the level:
-     `level: integration (port)` or `level: integration (adapter: <Adapter>)`.
+     stubbed input port that answers with the outcome. A `Then` that shows on a surface what a state
+     change produced needs both — a refusal the page shows, and as much a count, a list or a mark the
+     page shows after something was created, changed or removed: the port shape proves the change, the
+     adapter shape the text. Read the scenario's `Then`, not its rule's heading: "the number is computed
+     from what is stored" over a `Then` that quotes a sentence shown still asks for the sentence. For a
+     refusal the port shape proves the use case refuses — its `Then` asserts the case the use case
+     returns, with its values, where the context returns its refusals, and the failure type it throws
+     where the context throws them — and the adapter shape's stub answers with that same case or throws
+     that same failure; for any other change it answers with the outcome the port test asserts. A text
+     the `Then` quotes as shown stands in the adapter test as it is quoted — the test gate looks for it
+     in the criterion's tests. Write the shape after the level: `level: integration (port)`,
+     `level: integration (adapter: <Adapter>)`, or both on the criterion's line —
+     `level: integration (port) and integration (adapter: <Adapter>)`.
+     **Which of the two a context does is the project's choice, never the plan's.** Read it from the
+     technical description (`product/tech.md`, or where the profile's `tech:` points) — a line
+     `Refusals (<context>): thrown | returned`, else `Refusals: thrown | returned` for every context — and
+     where no line says it, from the context's existing use cases: a closed result with refusal cases,
+     or failure types they throw. Name it in `## Context` (`refusals: <style> — <where it was read>`).
+     A context that says neither, in a story that refuses something, is a stack decision: stop once
+     with a `## needs-human` (choose, and record the line in the technical description); never pick one, and never plan a returned
+     refusal beside a thrown one in one context.
    - **`browser-only (<why>)`** for a scenario whose `Then` only a browser can observe — a countdown,
      a script's reaction to a click, a notification, anything that happens after the page has
      loaded. It needs a browser runner; with `browser: none` the project has decided without one:

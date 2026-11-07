@@ -37,9 +37,28 @@ public class {{Name}}{{useCaseImplSuffix}} implements {{Name}}InputPort {
     public {{Name}}Result execute({{Name}}{{CommandOrQuery}} input) {
         // TODO: implement {{Name}}.
         //  1. Resolve aggregate(s) via output ports.
-        //  2. Apply business rules.
+        //  2. Apply business rules — every refusal before the first write.
+{{#if returnsRefusals}}
+        //     A refusal the use case finds itself (a port found nothing) is returned as its case:
+        //     return new {{Name}}Result.<Refusal>(...);
+        //     The model's refusal is caught once, by its concrete type, and returned as its case:
+        //     catch (<TheModelsRefusal>Exception e) { return new {{Name}}Result.<Refusal>(...); }
+        //     A failure an output port declares (an OutputPortException: a conflict the store sees, a foreign
+        //     system that refused or did not answer) the same way. The own database or broker failing is not caught.
+{{/if}}
+{{#if !returnsRefusals}}
+        //     A refusal the use case finds itself (a port found nothing) is thrown as a use-case exception
+        //     beside this class (extends UseCaseException); the model's domain exception passes uncaught;
+        //     a failure an output port declares is caught by its concrete type and thrown as the use case's own.
+        //     The own database or broker failing is not caught.
+{{/if}}
         //  3. {{commandStepGuidance}}
+{{#if returnsRefusals}}
+        //  4. Return new {{Name}}Result.{{SuccessCase}}(...) — values, never the aggregate.
+{{/if}}
+{{#if !returnsRefusals}}
         //  4. Map to {{Name}}Result.
+{{/if}}
         throw new UnsupportedOperationException("Not yet implemented");
     }
 }

@@ -87,20 +87,25 @@ class ValuesTest(unittest.TestCase):
                     "class Pair(Value):\n    value: str\n    other: int\n"
                     "@dataclasses.dataclass(frozen=True)\nclass Loose:\n    value: str\n"
                     "class Story:\n    title: str\n    LIMIT: typing.ClassVar[int] = 3\n"
+                    "    done: bool\n    marks: list[bool]\n"
                     "    def __str__(self) -> str: ...\n"
                     "    def rename(self, title: typing.Optional[str]) -> None: ...\n"
                     "    def is_draft(self) -> bool: ...\n"
+                    "    def finish(self) -> None: ...\n"
+                    "    def mark_done(self, done: bool) -> None: ...\n"
                     "def due(at: datetime.datetime) -> StoryId: ...\n"
                     "def owner_of(story: StoryId) -> uuid.UUID: ...\n",
                 "delivery/application/release.py": "def release(story: str) -> bool: ...\n",
             })
             found = architecture.value_findings(root)
         said = " ".join(found)
-        self.assertEqual(7, len(found), found)
+        self.assertEqual(9, len(found), found)
         for part in ("Pair.value is str", "Pair.other is int", "Loose.value is str", "Story.title is str",
-                     "rename(title) takes str", "due(at) takes datetime", "owner_of returns UUID"):
+                     "rename(title) takes str", "due(at) takes datetime", "owner_of returns UUID",
+                     "mark_done(done) takes bool", "Story.marks is bool"):
             self.assertIn(part, said)
         self.assertNotIn("is_draft", said)      # a predicate returns bool
+        self.assertNotIn("Story.done", said)    # a single yes/no fact is a bool field
         self.assertNotIn("StoryId", said)
         self.assertNotIn("release", said)
 

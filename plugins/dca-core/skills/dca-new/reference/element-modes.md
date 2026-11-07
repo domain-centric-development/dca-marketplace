@@ -69,6 +69,55 @@ placement, the generated files per language, the wiring and the decision tables 
 - **Use-case name** in lowerCamelCase (e.g. `placeOrder`, `getOrderById`)
 - **Type:** Command (write — modifies state) or Query (read — pure data fetch)
 - **Output ports needed:** which existing repositories/data ports does it need? Or create a fresh `*Repository` if a new aggregate is in play.
+- **Expected refusals:** which refusals can a caller answer — the thing does not exist, the caller may not act on
+  it, a business rule says no, a foreign system behind an output port refused or did not answer — each named after
+  the refusal (`OrderNotFound`, `OrderAlreadyShipped`, `PaymentProviderUnavailable`), or none. A foreign system is
+  one the context map declares as an external system; the own database or broker failing is never a refusal. A
+  query that asks "which one, if any" has none for "there is none": it answers with an empty value in its result.
+  "Not found" is a refusal only where the caller names a specific thing by its id.
+
+### Refusals: thrown or returned
+
+The context's style is a line of the technical description (`product/tech.md`, or `tech:` in `dca.profile.yaml`):
+`Refusals (<context>): thrown | returned`, else `Refusals: thrown | returned`. Without a line, the context's existing
+use cases show it; a context with neither is a question to the person — both styles are equal, the template never
+picks one — and the answer is written as that line through `dca-describe`, never into this run alone. A context
+never mixes the two: the new use case takes the context's style.
+
+| | Thrown | Returned |
+|---|---|---|
+| Result | the plain `{Name}Result` record | `{Name}Result` closed: Java a `sealed interface` with the cases nested as records; C# a OneOf union (`[GenerateOneOf]`, `OneOfBase<…>`, the `OneOf` and `OneOf.SourceGenerator` packages) until C# `union` types are released |
+| A refusal the use case finds | a use-case exception beside the use case, `{Refusal}Exception extends UseCaseException` (named by the refusal, carrying its ids and figures) | a case of the result implementing `Refusal` / `IRefusal`, returned |
+| The model's refusal | the `DomainException` passes uncaught | caught once by its concrete type, returned as its case — never a base type |
+| A failure an output port declares (`OutputPortException`): a conflict only the store sees, or a foreign system that refused or did not answer | caught by its concrete type, thrown as the use case's own `UseCaseException` | caught by its concrete type, returned as its case where the caller can answer it |
+| The own database or broker failing | not caught — the platform's exception, unexpected | the same |
+| "None" on a "which one, if any" query | no refusal: an empty value in the plain result | the same |
+| The incoming adapter | calls the port and maps the success; the context's one exception handler maps each refusal type to its answer | a `switch` over the result **without a `default`** (C#: `Match`, one function per case, in the cases' order); each refusal arm calls the class that writes that answer once per context |
+| Rollback | the thrown failure rolls the transaction back | the transaction boundary rolls back on a returned `Refusal` (Java declarative: `dca-spring`'s net; explicit: `TransactionBoundary`; .NET: the project's `ITransactionBoundary`) — still every refusal before the first write |
+
+`returnsRefusals` (`reference/placeholders.md`) is `true` only where the context returns **and** the use case has at
+least one expected refusal: a use case nobody can refuse gets the plain record in both styles. One that ends in
+several successes and no refusal (`Sent` | `AlreadySent`) may have a sealed result instead — written by hand, no
+case marked `Refusal`. A use-case exception
+of the throwing style is no template — its name and fields come from the refusal, like a domain failure's from
+`dca-modelling`; write it by hand beside the use case, the project's `failure_suffix` applied.
+
+The adapter's translation, both forms (Java; the answers written once, in the context's adapter):
+
+```java
+// returned — the compiler holds every case
+return switch (cancelOrder.execute(command)) {
+    case CancelOrderResult.Cancelled cancelled -> ResponseEntity.ok(CancellationResponse.from(cancelled));
+    case CancelOrderResult.OrderNotFound refusal -> OrderProblems.orderNotFound(refusal.orderId());
+    case CancelOrderResult.OrderAlreadyShipped refusal -> OrderProblems.alreadyShipped(refusal.orderId(), refusal.shippedAt());
+};
+
+// thrown — the call maps the success; the context's exception handler maps each refusal
+return ResponseEntity.ok(CancellationResponse.from(cancelOrder.execute(command)));
+
+@ExceptionHandler(OrderNotFoundException.class)
+ProblemDetail handleOrderNotFound(OrderNotFoundException exception) { ... }
+```
 
 ### Placement: flat or feature-grouped context
 
@@ -102,14 +151,15 @@ namespace segment) or `Application/{Feature}/{Name}/`.
 |---|---|---|
 | `{Name}InputPort.java` / `I{Name}InputPort.cs` | `templates/use-case/InputPort.{java,cs}.tmpl` | Interface extending `UseCase<{Name}Command|Query, {Name}Result>` / `IUseCase<…>` (async: `Task<TOut> ExecuteAsync(TIn, CancellationToken)`) |
 | `{Name}Command` _or_ `{Name}Query` | `templates/use-case/Command.*.tmpl` / `Query.*.tmpl` | Record with the fields the user named (`sealed record` in C#) |
-| `{Name}Result` | `templates/use-case/Result.*.tmpl` | Record with the result fields and a static `from(...)`/`From(...)` factory. Values only — no aggregate root or entity, also not via `List<T>`/`Optional<T>` / `IReadOnlyList<T>`/`T?` (`DCA-USE-015`); part records named by content, never `*Result`; a command's result stays small (ids, status, next step) |
+| `{Name}Result` | `templates/use-case/Result.*.tmpl` | By the context's refusal style (above): returned with refusals — the closed result, the success case `{{SuccessCase}}` and one case per refusal implementing `Refusal` / `IRefusal`; otherwise a record with the result fields and a static `from(...)`/`From(...)` factory. Values only — no aggregate root or entity, also not via `List<T>`/`Optional<T>` / `IReadOnlyList<T>`/`T?` (`DCA-USE-015`); part records named by content, never `*Result`; a command's result stays small (ids, status, next step) |
 | `{Name}{ImplSuffix}` | `templates/use-case/UseCase.*.tmpl` | Java: annotations/imports from the resolved preset and transaction mode. C#: plain class, registered in `Add{Context}Context()`; writes wrap load–mutate–save–publish in `ITransactionBoundary.InTransactionAsync`. ImplSuffix from convention discovery (default `UseCase`, but can be `ApplicationService`, etc.) |
 
 ### Wiring
 
 The implementation gets:
 - Constructor injection of all needed output ports (declared explicitly by the user or detected)
-- A `// TODO: implement` body — the skill doesn't try to write business logic
+- A `// TODO: implement` body — the skill doesn't try to write business logic; its steps name the context's
+  refusal style (return the case, or throw the use-case exception)
 - Proper imports (using project conventions: lombok `@RequiredArgsConstructor` if project uses lombok elsewhere; otherwise explicit constructor)
 - C#: add the `services.AddScoped<I{Name}InputPort, {Name}UseCase>()` line to the context's `Add{Context}Context()`
 
@@ -158,6 +208,11 @@ In `src/main/java/{basePackage}/{context}/application/shared/` (C#: `Application
 | File | Notes |
 |---|---|
 | `{Name}Repository.java` / `I{Name}Repository.cs` | Interface `extends Repository<{Name}, {Name}Id>` / `: IRepository<{Name}, {Name}Id>`. Java declares `findById`, `save`; the C# base interface already carries `FindByIdAsync`, `SaveAsync`. |
+
+**Ask whether the aggregate belongs to someone** (an account, a tenant, a guest identity). If it does, ask for the
+owner's id type, add `implements Owned<{OwnerId}>` / `, IOwned<{OwnerId}>` to the aggregate, and declare a lookup by
+id and owner id on the repository (`Optional<{Name}> findByIdFor{Owner}({Name}Id id, {OwnerId} owner)` /
+`Task<{Name}?> FindByIdFor{Owner}Async(...)`) — `DCA-TAC-026` asks for it. If nobody owns it, generate neither.
 
 If the project uses lombok: use `@Getter`, `@AllArgsConstructor` etc. Otherwise explicit accessors.
 

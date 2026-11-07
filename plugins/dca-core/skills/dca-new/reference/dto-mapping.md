@@ -53,6 +53,11 @@ record PlaceOrderRequest(String customerId, List<LineItemDto> items, AddressDto 
 record PlaceOrderResponse(UUID orderId, Instant placedAt, BigDecimal totalAmount) {}
 ```
 
+This is the throwing style: the call maps the success, and the context's exception handler answers each refusal.
+Where the context returns its refusals, the same method switches over the closed result without a `default` and
+maps only the success case to the response; each refusal arm returns the answer the context writes once
+(`reference/element-modes.md` § Refusals: thrown or returned).
+
 ## Example: REST inbound with a dedicated converter
 
 ```java

@@ -4,8 +4,9 @@ description: |
   Applies Domain-Centric Architecture invariants while writing or editing
   Java/Spring or .NET/C# code: framework-free domain, dependency inversion (interfaces in
   app/domain, impls in adapters), bounded-context isolation (no raw cross-context
-  imports), domain-event hygiene (publish + clear), named failure types with one
-  translation site. Use during edits to domain/, application/, or adapter/ folders.
+  imports), domain-event hygiene (publish + clear), named failures — expected
+  refusals thrown or returned as cases, uniform per context — each answered once
+  per context. Use during edits to domain/, application/, or adapter/ folders.
 disable-model-invocation: false
 ---
 
@@ -168,6 +169,9 @@ When writing or editing domain model classes:
 - **Never add public setters.** State changes go through intention-revealing
   ubiquitous-language methods (`confirm()`, `cancel(reason)`), not
   `setStatus(...)`.
+- **An aggregate that belongs to someone is loaded through its owner.** It implements `Owned<OwnerId>`
+  (`IOwned<TOwnerId>`), its repository declares a lookup by id and owner id (`DCA-TAC-026`), and a use case
+  acting for a caller — or for an event that names the owner — calls that lookup, never `findById` and an `if`.
 - **Aggregates are persistence-ignorant.** No `Repository`, `Store`, or other
   `OutputPort` fields on an aggregate — if domain logic needs one, pass it as
   a method parameter.
@@ -188,11 +192,31 @@ When writing or editing domain model classes:
 
 When writing or editing code that refuses:
 
-- **A business rule raises a named failure.** In the domain layer it extends
-  `DomainException` (`ddd.tactical` / `Ddd.Tactical`), in the application layer
-  `UseCaseException` (`application` / `Application`) — both from the building
-  blocks. The name is the rule in the ubiquitous language:
+- **A business rule raises a named failure** from the building blocks: in the
+  domain `DomainException`; in the application a port's, under `PortException` —
+  a use case's own extends `UseCaseException` (never `InputPortException`
+  directly), one an output port declares `OutputPortException`, thrown by the
+  adapter and caught by the use case. The name is the rule:
   `InsufficientStockException`, not `OrderError`.
+- **Own infrastructure throws; a foreign system's failure is a refusal.** The
+  own database or broker timing out stays the platform's exception. A foreign
+  system behind an output port — an external system on the context map — that
+  refuses, times out or cannot be reached is expected: its port declares an
+  `OutputPortException`, the adapter throws it, the use case answers it as a
+  refusal in the context's style. A caller with nobody to answer throws the
+  case back, so the delivery is retried.
+- **"Which one, if any" answers none with an empty value.** Not a refusal; "not
+  found" refuses only a caller that names a specific thing by its id.
+- **An expected refusal is thrown or returned, uniformly per context** — the
+  style the technical description records (below), else what the context's
+  use cases show. Returned: a case of the sealed result implementing `Refusal`
+  (`IRefusal`), ids and figures, no suffix; the model still throws, and the use
+  case catches each concrete exception it can raise, once, and returns its case.
+  Not every case refuses: a sealed result of successes alone (`Sent` |
+  `AlreadySent`) is correct and carries no `Refusal`; `DCA-ERR-008` lists
+  such results so someone confirms none of their outcomes refuses.
+- **Decide, then write.** Every refusal comes before the first write; the
+  boundary rolls a returned `Refusal` back — a net, not a licence.
 - **An argument guard stays the platform's own exception.** A null check or a
   range check on a value only code passes is a caller contract, not a business
   rule: `IllegalArgumentException` / `ArgumentException`,
@@ -204,11 +228,10 @@ When writing or editing code that refuses:
   adapter checks shape (does it parse) and passes the raw value on, absent as
   absent — no Bean Validation / DataAnnotations repeating a value object's rule,
   no `defaultValue = ""` turning a missing field into an empty one.
-- **Domain exception or use-case exception: ask who can state the failure.**
-  "Already confirmed" is something the aggregate knows; "no such order" is
-  something only the repository can answer. A failure the store detects is
-  declared in the application layer beside the port whose contract it is, and
-  raised by the adapter implementing it.
+- **Ask who can state the failure.** "Already confirmed" is the aggregate's;
+  "no such order" the use case's — never a domain exception it constructs. A
+  failure the store detects, and a foreign system's expected failure, is an
+  `OutputPortException` declared beside its port and raised by the adapter.
 - **Never show the exception's message.** The failure carries the rule and
   its values; the sentence a page or an answer shows is the incoming
   adapter's, from the type and the values (a text per failure, a message key
@@ -218,17 +241,19 @@ When writing or editing code that refuses:
 - **Never put a transport decision in the type.** No `@ResponseStatus` or other
   framework metadata on the exception, and no `Error`/`Fault`/`Failure` suffix,
   no `Http`/`Status`/`Response` in the name (`DCA-ERR-004`, `DCA-ERR-005`).
-- **One translation site per context**, in `adapter/incoming/`: a
-  `@RestControllerAdvice` scoped to that context's package, or an
-  `IExceptionHandler` scoped to its routes, producing a problem document
-  (`ProblemDetail` / `ProblemDetails`). The status follows the failure, not the
-  base type — a missing position is a rule of the model and still answers 404.
-  A page adapter translates a refusal in one place too: one method turns the
-  refusal and its notice into the redirect, and every handler calls it — never
-  the same `catch` in each handler.
-- **Never catch `Exception` or `RuntimeException` around a use-case call.** Name
-  the types the call can produce. The same holds inside a use case that converts
-  a rule into a result variant: catch the rule's own type, not a generic one.
+- **Each refusal's answer is written once per context**, in `adapter/incoming/`.
+  Thrown: one handler per context — a `@RestControllerAdvice` scoped to its
+  package, or an `IExceptionHandler` scoped to its routes — producing a problem
+  document. Returned: each call site switches without a `default` (OneOf:
+  `Match`, in the type's order), the answers in one adapter class the switches
+  call; the handler stays for the unexpected. The status follows the failure,
+  not the base type. A page adapter turns a refusal into its redirect in one
+  method every handler calls.
+- **Nobody drops a result.** A test helper asserts the success case; a caller
+  with nobody to answer (an event consumer) throws the case on purpose.
+- **Never catch `Exception` or `RuntimeException` around a use-case call**, nor
+  `PortException` / `InputPortException` as such — it swallows an escaped
+  `OutputPortException`. Inside a use case too: catch the rule's own type.
 
 > **Note:** invariant strictness follows the context's declared pattern style
 > (see the project's pattern-selection ADR, if any). Contexts implemented as
@@ -270,6 +295,9 @@ Read `dca.profile.yaml` at the project root (the `AGENTS.md` line ``- configurat
 - The naming suffixes the architecture suite holds the project to (`use_case_suffix:`,
   `input_port_suffix:`, `repository_suffix:`, `controller_suffix:`, `rest_controller_suffix:`),
   and the failure suffix the project chose (`failure_suffix:`)
+- Each context's refusal style is in the technical description (`tech:`,
+  `product/tech.md`): `Refusals (<context>): thrown | returned`, else
+  `Refusals: …`; a context with neither line nor use case: ask
 - Project-specific exceptions (e.g. "Bean Validation annotations allowed in
   domain")
 

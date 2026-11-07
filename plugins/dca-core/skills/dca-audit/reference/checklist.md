@@ -232,10 +232,13 @@ The shape of the port is as important as its existence. Run these checks on ever
 - [ ] A use case acting on a caller's resource takes the caller **as a command/query field** (`GetCartByIdQuery(cartId, customerId)`). The incoming adapter fills it from the port; the use case does not call the identity port to learn on whose behalf it runs.
   - Symptom: `identityProvider.getCurrentIdentity()` inside a `*UseCase`; or a command that names a resource id but not whose it is while sibling use cases in the same context carry the caller.
 - [ ] The repository is asked a **scoped question** (`findByIdForCustomer`) — not `findById` followed by an ownership `if`.
+- [ ] An aggregate that belongs to someone implements **`Owned<OwnerId>`** (`IOwned<TOwnerId>`), so `DCA-TAC-026` holds its repository to the scoped lookup. An unmarked owned aggregate silences the rule; an aggregate whose id is the secret (no identity at all) is deliberately unmarked and says so.
+  - Symptom: a repository with `findByIdFor…` whose aggregate carries no `Owned`; or a use case on an owned aggregate that calls `findById`.
 - [ ] A **claims-only gate** (role on the token) may sit in the incoming adapter. Anything that needs the loaded resource must not.
+  - It is declared on the route in the framework's own form (an authorization annotation or attribute, an extractor, a route layer), not a role branch in the handler; `DCA-HEX-020` lists the branch.
 - [ ] The **domain never sees the caller**: no `User`/identity parameter on aggregate methods, no role check in domain code, no security-framework type in `domain/`.
 - [ ] The authentication filter **enriches, never gates** — no blanket `authenticated()` rule guards a use case.
-- [ ] A use case with no caller (event consumer, scheduled job) is unscoped **and says so** in a comment.
+- [ ] A use case with no caller (event consumer, scheduled job) checks no caller **and says so** in a comment — but it still loads an owned aggregate through the owner the event names. Only a path that holds no owner to name uses `findById`.
 - [ ] Refusals are rendered in the adapter (`403` vs `404` is a protocol decision); the use case returns "nothing here for you".
 
 See [use-case-pattern.md §3](use-case-pattern.md#3-decision-guide-local-versus-shared-output-port) for the full decision guide.
@@ -258,15 +261,35 @@ DCA distinguishes Repository (for Aggregate Roots) from Store (for operational d
 
 ## Application — Failures (`application/{usecasename}/` or `application/shared/`)
 
-- [ ] A request the use case cannot serve raises a subtype of `UseCaseException` — not found, not the caller's,
-      a precondition on another aggregate, a uniqueness rule only the store can see (`DCA-ERR-003`)
+- [ ] **One refusal style per context:** every use case of the context throws its expected refusals, or every one
+      returns them as cases of a sealed result — the style the technical description records (`Refusals (<context>):` /
+      `Refusals:`), else the one its use cases show. A context that mixes them is a finding; two contexts may differ
+- [ ] Thrown: a request the use case cannot serve raises a subtype of `UseCaseException` — not found, not the
+      caller's, a precondition on another aggregate (`DCA-ERR-003`); never `InputPortException` directly
+- [ ] Returned: the input port returns a sealed `{Operation}Result` — one success case, one nested record per refusal
+      implementing `Refusal` (.NET `IRefusal`), ids and figures, no `Exception` suffix; a sealed result of
+      successes alone carries no `Refusal`, and each entry `DCA-ERR-008` lists is answered — none of its outcomes
+      refuses, or the refusing one gets the marker. The use case catches each concrete domain or output-port exception
+      it can raise, once, and returns its case
 - [ ] The kind matches who can state the failure: a rule the aggregate knows is a `DomainException` and belongs
-      to the domain layer, even when the use case is the one that noticed
-- [ ] A failure the store detects is declared beside the port whose contract it is and documented on the port's
-      method, so every implementation reports it with the same type
-- [ ] Lives with its use case, or in `application/shared` when several raise it or a port declares it
-- [ ] A `catch` that converts a rule into a result variant names the rule's own type — a generic catch there
-      swallows a defect and shows it to the user as a business answer
+      to the domain layer, even when the use case is the one that noticed; a refusal the use case finds itself is
+      never a domain exception it constructs
+- [ ] A failure the store detects is an `OutputPortException` subtype declared beside the port whose contract it is
+      and documented on the port's method, so every implementation throws the same type; a lost connection or a
+      timeout of the system's own database or broker is none — it stays the platform's exception
+- [ ] **Own infrastructure or a foreign system:** a foreign system behind an output port — one the context map
+      declares as an external system (`@ExternalUpstream`) — that refuses, times out or cannot be reached is an
+      expected failure: its port declares it as an `OutputPortException` subtype, the adapter throws it, the use case
+      answers it as a refusal in the context's style. A foreign system's unavailability carried as an unexpected
+      exception, or the own database's as a refusal case, is a finding
+- [ ] **Absence on a "which one, if any" query is an empty value**, not a refusal case and not an exception; "not
+      found" is a refusal only where the caller names a specific thing by its id
+- [ ] **Decide, then write:** every refusal, thrown or returned, comes before the first write. A refusal after a
+      save is rolled back by the boundary on a returned `Refusal`, and is still a wrong cut
+- [ ] Lives with its use case, or in `application/shared` when several raise it; an output-port failure beside its
+      port; a refusal case nested in its result
+- [ ] A `catch` that turns a rule into a case names the rule's own type — a generic catch there (`DomainException`,
+      `OutputPortException`) swallows a defect and shows it to the user as a business answer
 
 ---
 
@@ -296,8 +319,14 @@ DCA distinguishes Repository (for Aggregate Roots) from Store (for operational d
 
 ### Failure translation
 
-- [ ] Exactly one translation site per context, in its own `adapter/incoming/` package: a
-      `@RestControllerAdvice` scoped by `basePackages`, or an `IExceptionHandler` scoped to the context's routes
+- [ ] Each refusal's answer is decided once per context, in its own `adapter/incoming/` package. Thrown: one
+      `@RestControllerAdvice` scoped by `basePackages`, or an `IExceptionHandler` scoped to the context's routes.
+      Returned: each call site switches over the result **without a `default`** (OneOf: `Match`, functions in the
+      type's order), the answers in one adapter class per context that every switch calls; the handler stays for
+      malformed input and the unexpected
+- [ ] No caller drops a returned result: a test helper that arranges state asserts the success case; a caller with
+      nobody to answer (an event consumer, an open host service without such a case) throws the case on purpose — a
+      foreign system that did not answer is then retried with the delivery
 - [ ] The answer is a problem document (`ProblemDetail` / `ProblemDetails`, RFC 9457), not a home-grown error DTO
 - [ ] No exception message reaches a person: the adapter words a refusal from the failure's type and values (a
       text per failure, a message key its translations resolve), never `getMessage()` / `.Message`
@@ -305,9 +334,11 @@ DCA distinguishes Repository (for Aggregate Roots) from Store (for operational d
       renders the form again with the failure — no `try`/`catch` per handler method, no failure branch in a template
 - [ ] **The status follows the failure, not the base type** — a position missing from a cart is a rule of the
       model and still answers `404`. Mapping every `DomainException` to one status is the common mistake
-- [ ] No `catch (Exception)` / `catch (RuntimeException)` around a use-case call; a blanket catch answers a
-      defect of this application like a refusal the customer caused (`DCA-ERR-006` lists the candidates but
-      cannot decide this — a `catch` is not in the import model)
+- [ ] No `catch (Exception)` / `catch (RuntimeException)` around a use-case call, and no handler or catch for
+      `PortException` / `InputPortException` as such — it answers an escaped `OutputPortException` like the use
+      case's own refusal; a blanket catch answers a defect of this application like a refusal the customer caused
+      (`DCA-ERR-006` lists the candidates — an adapter that only switches over a result counts as translating — but
+      cannot decide this: a `catch` is not in the import model)
 - [ ] No stack trace and no internal detail in the answer
 - [ ] Page controllers of the same context map the same types into form errors rather than catching broadly
 - [ ] An incoming adapter that deliberately translates nothing says why — an event consumer whose failed

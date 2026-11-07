@@ -4,7 +4,7 @@ title: A rule's test notices a break of the rule
 part: check
 reports:
 - invariant-breaks
-pass: each rule test is red before the build, or turns red under its break patch
+pass: each rule test is red before the build — in this run or, for the same version of its file, an earlier one — or turns red under its break patch
 fail: a rule test stays green under its break, or has no patch that applies
 ---
 

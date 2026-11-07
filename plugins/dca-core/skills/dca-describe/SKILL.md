@@ -1,6 +1,6 @@
 ---
 name: dca-describe
-description: Writes the project description with the person who decides what is built — the product (what, for whom, surfaces, how it works, how it looks, qualities, what it is not), the technical decisions (stack, frontend approach, persistence, runtime, integrations, version policy) and the designed domain (bounded contexts, subdomain types, relationships and why, the glossary of terms and operations with their code words) — under product/, and the AGENTS.md line that makes every implementation read them first. Use before the first line of code or the first story, when a project has code but no description, when a description is incomplete, on "/dca-describe", or on "/dca-describe <change>" to change one statement in the person's words. Never invents an answer; writes no code and no story.
+description: Writes the project description with the person who decides what is built — the product (what, for whom, surfaces, how it works, how it looks, qualities, what it is not), the technical decisions (stack, how expected refusals reach callers, frontend approach, persistence, runtime, integrations, version policy) and the designed domain (bounded contexts, subdomain types, relationships and why, the glossary of terms and operations with their code words) — under product/, and the AGENTS.md line that makes every implementation read them first. Use before the first line of code or the first story, when a project has code but no description, when a description is incomplete, on "/dca-describe", or on "/dca-describe <change>" to change one statement in the person's words. Never invents an answer; writes no code and no story.
 ---
 
 # Describe the project
@@ -33,7 +33,8 @@ could show goes to `docs/`.
    `templates/` — the product's six, the technical description's six, the domain's contexts, relationships and one glossary table per context — and
    `reference/questions.md` holds the question for each, word for word, with its options and its
    default. Look every heading up, then ask **only the open ones — all at once, in catalogue order,
-   word for word**; write the answers in the person's words. Never invent an answer: a stage or a
+   word for word**; write the answers in the person's words. DESC-REFUSALS offers both styles as equals
+   and never recommends one: the trade is the person's. Never invent an answer: a stage or a
    person that reads an invented look builds it, and a placeholder passes a check that counts
    headings. A heading with nothing to decide gets one honest line.
    Called with answers already given — `dca-new` asks the catalogue in its one pass — write those and
@@ -42,8 +43,9 @@ could show goes to `docs/`.
    submitted" belongs in the product description; "server-rendered pages, no client framework" in
    the technical one. An endpoint, a package or a class belongs in neither.
 4. **Existing code: draft from it, ask for the rest.** Where code exists, draft what the code can
-   tell — surfaces, how it works, look and feel, stack, persistence, runtime, integrations, the
-   contexts and their dependencies — and mark each draft as read from the code. Ask for what code
+   tell — surfaces, how it works, look and feel, stack, the refusal style each context's use cases show
+   (thrown or returned; a context that shows both is drafted as a question, not as either), persistence,
+   runtime, integrations, the contexts and their dependencies — and mark each draft as read from the code. Ask for what code
    cannot tell: what it is for and for whom, the qualities, what it is not, the version policy, the
    subdomain types and the reasons. The person confirms each file before it counts.
 5. **The domain through the map's craft.** Where the `context-map` skill is installed, write

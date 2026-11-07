@@ -26,9 +26,25 @@ public sealed class {{Name}}{{useCaseImplSuffix}} : I{{Name}}InputPort
     {
         // TODO: implement {{Name}}.
         //  1. Resolve aggregate(s) via output ports.
-        //  2. Apply business rules.
+        //  2. Apply business rules — every refusal before the first write.
+{{#if returnsRefusals}}
+        //     A refusal the use case finds itself (a port found nothing) is returned as its case:
+        //     return new {{Name}}Result.<Refusal>(...);   (an implicit conversion to the union)
+        //     The model's refusal is caught once, by its concrete type, and returned as its case:
+        //     catch (<TheModelsRefusal>Exception e) { return new {{Name}}Result.<Refusal>(...); }
+        //     A failure an output port declares (an OutputPortException: a conflict the store sees, a foreign
+        //     system that refused or did not answer) the same way. The own database or broker failing is not caught.
+        //  3. {{commandStepGuidance}}
+        //  4. Return new {{Name}}Result.{{SuccessCase}}(...) — values, never the aggregate.
+{{/if}}
+{{#if !returnsRefusals}}
+        //     A refusal the use case finds itself (a port found nothing) is thrown as a use-case exception
+        //     beside this class (derives from UseCaseException); the model's domain exception passes uncaught;
+        //     a failure an output port declares is caught by its concrete type and thrown as the use case's own.
+        //     The own database or broker failing is not caught.
         //  3. {{commandStepGuidance}}
         //  4. Assemble {{Name}}Result ({{Name}}Result.From(...)) — values, never the aggregate.
+{{/if}}
         throw new NotImplementedException();
     }
 }

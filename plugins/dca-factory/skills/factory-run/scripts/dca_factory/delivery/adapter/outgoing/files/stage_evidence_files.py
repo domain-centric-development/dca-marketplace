@@ -30,7 +30,7 @@ from ....domain.model.stage_story import (
     ElementName, ElementRules, FileChange, InvariantFacts, InvariantRow, PlannedFile, PortName, Presence, Rule,
     ScenarioClauses, Selector, ContextMapFacts, HandOverName, HandOverSize, PlanLevels, DecisionFacts, DecisionsFacts, HandOverAsk, ContractNumber, EpicFacts, EpicField, EventName, GateRelease, InstructionFile,
     Metric, ModelKey, OwnedFacts, OwnedPart, Place, ProfileKey, ProfileText, RoundsRecord, RowId, RowState,
-    ScenarioKey, StageStory, UnknownKey)
+    ScenarioKey, StageStory, TestSource, UnknownKey)
 from ....domain.model.story import DeliveredOn, StoryId
 from ....domain.model.story_state import Detail, HandOverText, Rounds, StatusWord
 from ....domain.service.backlog_checks import EPIC_FIELDS, normal_name
@@ -69,8 +69,8 @@ from .run_marks import last_ended, stage_open, window_open
 from .snapshots import git_tree, listed_files, snapshot_reason, tree_changes
 from .story_layout import file_digest
 from .design_files import (
-    adapter_level_keys, asserts_at, locate_selector, MOCK_MARKERS, mocked_ports, PLAN_FILE_LINE, plan_domain_elements,
-    plan_invariants, read_clause_rows, read_invariant_rows, scenario_clauses)
+    adapter_shapes, asserts_at, locate_selector, MOCK_MARKERS, mocked_ports, PLAN_FILE_LINE, plan_domain_elements,
+    plan_invariants, read_clause_rows, read_invariant_rows, scenario_actions, scenario_clauses)
 from .run_marks import OWNED_CHANGED
 from .story_layout import delivered_on, EPIC_FILE, epic_folder, find_story, story_kind
 
@@ -207,7 +207,8 @@ def stage_story(story_id: str, story_path: str, front: Front, body: str,
         tuple(ScenarioKey(key) for key, _text in criteria), tuple(ScenarioKey(k) for k in happy_paths(body)),
         tuple(StoryId(s) for s in depends_on_of(front)), tuple(RowId(r) for r in closes_of(front)),
         tuple(EventName(e) for e in publishes_of(front)),
-        tuple(ScenarioClauses(ScenarioKey(key), tuple(Clause(Count(n), Detail(text)) for n, text in clauses))
+        tuple(ScenarioClauses(ScenarioKey(key), tuple(Clause(Count(n), Detail(text)) for n, text in clauses),
+                              tuple(Detail(a) for a in scenario_actions(body).get(key, [])))
               for key, clauses in scenario_clauses(body).items()),
         Count(sum(1 for line in section_of(body, "changed expectations") or []
                   if line.strip().startswith(("-", "*")) and human_line(line.strip()[1:].strip()))),
@@ -351,9 +352,11 @@ class StageEvidenceFiles:
     def plan_levels(self, story: StoryId) -> typing.Optional[PlanLevels]:
         if not os.path.isfile(os.path.join(self._runs, story.value, "plan.md")):
             return None
+        alone, both = adapter_shapes(self._runs, story.value)
         return PlanLevels(tuple(ScenarioKey(k) for k in unfinished_levels(self._runs, story.value)),
                           frozenset(ScenarioKey(k) for k in plan_levels(self._runs, story.value)),
-                          frozenset(ScenarioKey(k) for k in adapter_level_keys(self._runs, story.value)))
+                          frozenset(ScenarioKey(k) for k in alone),
+                          frozenset(ScenarioKey(k) for k in both))
 
     def hand_over_sizes(self, story: StoryId,
                         names: typing.Tuple[HandOverName, ...]) -> typing.Tuple[HandOverSize, ...]:
@@ -412,6 +415,13 @@ class StageEvidenceFiles:
                 return tuple(PortName(name) for name in mocked_ports(handle.read(), markers, suffixes))
         except (OSError, UnicodeDecodeError):
             return ()
+
+    def test_source(self, test: Place) -> typing.Optional[TestSource]:
+        try:
+            with open(os.path.join(self._cwd, test.value), encoding="utf-8") as handle:
+                return TestSource(handle.read())
+        except (OSError, UnicodeDecodeError):
+            return None
 
     def plan_files(self, story: StoryId) -> typing.Optional[typing.Tuple[PlannedFile, ...]]:
         plan = self._run_file(story, "plan.md")

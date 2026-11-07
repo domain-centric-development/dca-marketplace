@@ -92,6 +92,14 @@ project uses where they differ.
 - default: —
 - answer goes to: `product/tech.md → ## Stack` (a capability added later — formatter, browser tests, HTTP stub, coverage — adds its own line under the same heading)
 
+### DESC-REFUSALS
+- look up: a `Refusals:` line under `## Stack`, and any `Refusals (<context>):` line beside it
+- asked: when not found
+- question: How do a use case's expected refusals — the thing does not exist, the caller may not act on it, a business rule says no — reach its callers: thrown as named failures, or returned as cases of a closed result? Answer for the whole project, and name any context that goes the other way. Returned: a new refusal is a compile error at every caller that must answer it, for a little more translation code. Thrown: one handler per context answers them all, and a refusal nobody answers shows only at run time.
+- options: thrown, in every context · returned, in every context · one for the project, the other for the contexts named
+- default: — (both are equal; the person decides)
+- answer goes to: `product/tech.md → ## Stack` (a line `Refusals: thrown` or `Refusals: returned`, and one `Refusals (<context>): thrown | returned` per context that departs from it)
+
 ### DESC-FRONTEND
 - look up: `## Frontend approach`
 - asked: when open

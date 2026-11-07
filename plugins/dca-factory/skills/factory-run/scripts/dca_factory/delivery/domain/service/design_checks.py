@@ -11,7 +11,8 @@ from ....building_blocks import DomainService
 from ..gateway.stage_evidence import StageEvidence
 from ..model.stage import StoryKind
 from ..model.stage_story import (
-    AssertionAt, CommandKey, ContractNumber, Count, FileChange, MappedTest, Place, Presence, StageStory)
+    AssertionAt, Clause, CommandKey, ContractNumber, Count, FileChange, MappedTest, Place, Presence, ScenarioKey, StageStory)
+from ..model.story_state import Detail
 from ..model.verdict import CheckName, Findings, Said
 
 INVARIANTS = CheckName("invariants")
@@ -33,8 +34,42 @@ CLAUSE_LEVELS = ("unit", "port", "adapter", "e2e")
 #: never in an adapter test whose input ports are stubs, where the assertion only reads back the stub's answer.
 STATE_WORDS = re.compile(r"\b(bleibt|bleiben|unverändert|weiterhin|danach|gespeichert|gelöscht|remains?|stays?|"
                          r"unchanged|still|afterwards|stored|persisted|deleted)\b", re.IGNORECASE)
+#: A form field that holds something — "the field „Name“ still holds …", "das Eingabefeld enthält weiterhin …": the
+#: field is the subject, a verb says it holds or shows; group 1 is what it holds.
+FIELD_HOLDS = re.compile(
+    r"\b(?:fields?|input(?:\s+fields?|\s+box(?:es)?)?|text\s?(?:box(?:es)?|areas?|fields?)|"
+    r"Feld(?:er)?|Eingabefeld(?:er)?|Textfeld(?:er)?)\b[^.;]*?"
+    r"\b(?:holds?|shows?|contains?|keeps?|displays?|retains?|"
+    r"enthält|enthalten|zeigt|zeigen|behält|behalten|hält|halten|steht|stehen)\b([^.;]*)", re.IGNORECASE)
+#: A word that says what the field holds is what was entered — "the 201 characters entered", "den eingegebenen Text".
+ENTERED = re.compile(r"\b(?:entered|typed|eingegeben\w*|eingetippt\w*|getippt\w*)\b", re.IGNORECASE)
+#: What a step names exactly: a quoted text or a number.
+NAMED = re.compile(r'„([^“”"\n]+)[“”]|“([^”\n]+)”|"([^"\n]+)"|‚([^‘’\n]+)[‘’]|«([^»\n]+)»|\b(\d+)\b')
 
 UNIT = CommandKey("test")
+
+
+def states_stored(clause: Clause, actions: typing.Tuple[Detail, ...]) -> bool:
+    """Whether a clause says something about what is stored — a state word, unless the clause is a form field that
+    holds what the person entered. Nothing is stored there: the page shows the request's input again, the incoming
+    adapter's own translation, so the clause may be asserted at the adapter level.
+
+    What the field holds is what was entered when a word says so ("the 201 characters entered", "den eingegebenen
+    Text"), or when every quoted text and number it names stands in the scenario's `When` steps ("the title field
+    still holds the 201 characters „a“" after "When the person creates a task whose title is 201 characters „a“").
+    Narrow on purpose: the field is the subject — "„Alpha“ still carries the button" names another record's state and
+    stays a state clause — and a field that names nothing the person entered stays one too."""
+    text = clause.text.value
+    if not STATE_WORDS.search(text):
+        return False
+    held = FIELD_HOLDS.search(text)
+    if held is None:
+        return True
+    if ENTERED.search(held.group(1)):
+        return False
+    named = {next(g for g in m.groups() if g) for m in NAMED.finditer(held.group(1))}
+    entered = {next(g for g in m.groups() if g) for action in actions for m in NAMED.finditer(action.value)}
+    return not (named and named <= entered)
 
 
 class DesignChecks(DomainService):
@@ -126,7 +161,8 @@ class DesignChecks(DomainService):
         """Every expectation of every scenario — its `Then` and each `And` after it — names the line of the test that
         asserts it, in tests.md's `gate:clauses` table, with the level it runs at. A clause without a line is an
         expectation nobody asserted; a clause about what is stored, asserted in an adapter test against stubbed
-        input ports, asserts only the stub."""
+        input ports, asserts only the stub. A form field that still holds what was entered is no such clause: the
+        page shows the request's input again, the incoming adapter's own translation (`states_stored`)."""
         if story.kind is not StoryKind.STORY or contract.value < CLAUSES_CONTRACT.value:
             return ()
         if not story.clauses:
@@ -164,7 +200,7 @@ class DesignChecks(DomainService):
                 if level not in CLAUSE_LEVELS:
                     problems.append(f"{key} {n}: level `{level or '—'}` is none of {', '.join(CLAUSE_LEVELS)}")
                     continue
-                if level == "adapter" and STATE_WORDS.search(text):
+                if level == "adapter" and states_stored(clause, scenario.actions):
                     state_on_stub.append(f"{key} {n} ({text[:60]})")
                     continue
                 counted += 1
@@ -182,25 +218,40 @@ class DesignChecks(DomainService):
         """A criterion's test above the unit level runs through the real use case — it does not declare a double of
         an input port. "The list stays unchanged" checked against a stub proves the stub. A unit test mocks what it
         wants; an output port may be replaced at any level; and a criterion the plan gave `integration (adapter: …)`
-        tests the adapter's translation against a stubbed input port by design."""
+        alone tests the adapter's translation against a stubbed input port by design.
+
+        A criterion the plan gave both shapes — through the port and `integration (adapter: …)` — has both: its
+        adapter test may stub the input port, as long as at least one of its tests above the unit level runs
+        without a double of an input port; that one is the port's proof. Without it the port shape is missing."""
         if not any(test.place is not None for test in tests):
             return ()
         plan = evidence.plan_levels(story.story)
         adapter_keys = plan.adapter if plan else frozenset()
-        wrong = set()
+        both_keys = plan.both if plan else frozenset()
+        wrong: typing.Set[str] = set()
+        stubbed: typing.Set[ScenarioKey] = set()
+        proven: typing.Set[ScenarioKey] = set()
         for test in sorted(tests, key=lambda t: t.key.value):
             if test.key in adapter_keys or test.place is None or test.command in (None, UNIT):
                 continue
             doubles = evidence.doubles(test.place)
-            if doubles:
+            if test.key in both_keys:
+                (stubbed if doubles else proven).add(test.key)
+            elif doubles:
                 wrong.add(f"{test.key.value} ({test.place.value}: {', '.join(d.value for d in doubles)})")
         if wrong:
             return (TESTS_REAL.fail(Said(
                 "a criterion's integrated or end-to-end test replaces the input port it is about — it proves the "
                 "double, not the use case; let it run through the real one and replace only what lies outside (a "
                 "repository, an external system): " + "; ".join(sorted(wrong)))),)
+        no_port = sorted(key.value for key in stubbed - proven)
+        if no_port:
+            return (TESTS_REAL.fail(Said(
+                "the plan gives these criteria the port shape beside the adapter's, but each of their tests stubs the "
+                "input port — the port shape is missing; map a test that runs through the real input port beside the "
+                "adapter's: " + ", ".join(no_port))),)
         return (TESTS_REAL.ok(Said("every integrated and end-to-end test of a criterion runs through the real input "
-                                   "port")),)
+                                   "port, or is the adapter's beside one that does")),)
 
     @staticmethod
     def plan_files(story: StageStory, evidence: StageEvidence) -> Findings:

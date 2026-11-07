@@ -17,4 +17,7 @@ order: 10
    code does: a test defect (`back: test`), not a proof.
    An adapter test whose stub throws a failure the criterion's port test does not assert — another type, a
    parent, no port test at all — proves the page for a refusal the use case may never raise: a test defect
-   (`back: test`).
+   (`back: test`). Where the plan's `## Context` says the context returns its refusals, the stub returns a
+   case of the port's result and the type holds that seam; a stub there that throws a refusal instead of
+   returning its case is the defect, and so is a helper that runs a use case to arrange a state and
+   ignores its result.

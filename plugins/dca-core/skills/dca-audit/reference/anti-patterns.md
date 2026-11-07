@@ -88,9 +88,33 @@ cannot decide this.
 Symptoms: a `try`/`catch` in a resource for a failure the context's exception handler already maps, a
 handler in global infrastructure naming one context's failure, or the same `catch` of a refusal in every
 handler of a page adapter, each building its own redirect with a notice.
-Why: two sites decide the same answer and drift apart. One translation site per context, and infrastructure
-keeps only the last-resort handler for an exception nobody named. A page adapter has one method that turns
+Why: two sites decide the same answer and drift apart. Each refusal is answered once per context — one
+exception handler where the context throws, one adapter class every switch calls where it returns — and
+infrastructure keeps only the last-resort handler for an exception nobody named. A page adapter has one method that turns
 the refusal and its notice into the redirect, and every handler calls it.
+
+### Refusals thrown and returned in one context
+Symptoms: one use case of a context returns a sealed result with refusal cases, the next throws a
+`UseCaseException` for the same kind of refusal; or a switch over a result with a `default` branch.
+Why: the context's adapters answer one kind of failure two ways, and a new use case has no shape to follow; a
+`default` compiles every new case into one answer — the defect the result was meant to remove. One style per
+context, as the project records it; a switch names every case.
+
+### A foreign system's failure thrown as the unexpected, the own infrastructure's returned as a refusal
+Symptoms: an output port to an external system the context map declares (`@ExternalUpstream`) lets the client's
+timeout or connection failure escape as the platform's exception, or the use case throws a `UseCaseException` for it
+that no port declared; the other way round, a refusal case or an `OutputPortException` for the own database or
+broker failing.
+Why: a foreign system refusing, timing out or being unreachable is expected behaviour of the integration, and a
+caller has an answer for it — its port declares it as an `OutputPortException`, the adapter throws it, the use case
+answers it as a refusal. The own database and broker have to be there; their failure is unexpected and stays an
+exception. Which systems are foreign is read from the context map, so two people judge it the same way.
+
+### "None" refused on a "which one, if any" query
+Symptoms: a query that asks whether there is one (the caller's active session, an open draft) returns a
+`…NotFound` case or throws a `…NotFoundException` when there is none.
+Why: "none" is a normal answer to that question; an empty value carries it, and the caller shows the empty state.
+"Not found" is a refusal only where the caller names a specific thing by its id.
 
 ### Status derived from the base type
 Symptoms: every `DomainException` mapped to one status, every `UseCaseException` to another.

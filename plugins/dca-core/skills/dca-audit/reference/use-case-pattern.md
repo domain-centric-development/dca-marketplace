@@ -169,6 +169,21 @@ public record PlaceOrderResult(
 - Void use cases (`cancelOrder` without a return value) still return a `Result` record, possibly with a single
   confirmation field (`record CancelOrderResult(Instant cancelledAt) {}`). Avoids API breaks when fields are
   added later.
+- **A result with expected refusals** — in a context that returns its refusals (the style the technical description
+  records per context; the other contexts throw them, and both are equal): the result is sealed, one success case
+  named for what happened and one nested record per refusal named after it, implementing `Refusal`, carrying ids
+  and figures. C#: a closed union (OneOf `OneOfBase<…>` until C# `union` is released), refusal cases `: IRefusal`.
+  An operation with one outcome keeps the plain record above; one that ends in several successes and no refusal
+  (`Sent` | `AlreadySent`) may be sealed all the same, no case marked `Refusal`. `DCA-ERR-008` lists every sealed
+  result without a marked case: confirm none of its outcomes refuses, or mark the one that does.
+
+  ```java
+  public sealed interface CancelOrderResult
+          permits CancelOrderResult.Cancelled, CancelOrderResult.OrderNotFound {
+      record Cancelled(OrderId orderId) implements CancelOrderResult {}
+      record OrderNotFound(OrderId orderId) implements CancelOrderResult, Refusal {}
+  }
+  ```
 
 ---
 

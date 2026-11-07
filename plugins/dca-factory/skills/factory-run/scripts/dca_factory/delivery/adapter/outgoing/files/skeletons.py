@@ -83,7 +83,7 @@ plan — {folder}/plan.md (gate before the stage: story, epic, context map, deci
     if stage == "test":
         return f"""{CONTRACT_HEAD}
 
-test — {folder}/tests.md (gate after the stage: tests-mapped, tests-exist, compiles, tests-red, levels, test-titles, invariants, invariant-breaks, files-listed)
+test — {folder}/tests.md (gate after the stage: tests-mapped, tests-exist, compiles, tests-red, levels, test-titles, tests-assert-then, invariants, invariant-breaks, files-listed)
 - the table, right after the marker `<!-- gate:tests -->`, one row per criterion (a criterion may have several rows):
   `| criterion | test |` then `| <key> | <selector> |`
   row pattern: {MAPPING_ROW.pattern!r}

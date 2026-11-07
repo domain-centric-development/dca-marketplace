@@ -16,12 +16,28 @@ from .test_files import contains, in_package
 STEP = re.compile(r"^-\s+(Given|When|Then|And|But)\b\s*(.*)$")
 
 
-def adapter_level_keys(runs: str, story_id: str) -> typing.Set[str]:
-    """The keys the plan gave `integration (adapter: …)` — an incoming adapter's translation, tested against a stubbed
-    input port by design (the test stage)."""
-    text = read_text(os.path.join(runs, story_id, "plan.md")) if os.path.isfile(os.path.join(runs, story_id, "plan.md")) else ""
-    return {m.group(1) for m in re.finditer(r"^\s*-\s+([a-z0-9][a-z0-9-]*)\b[^\n]*level:\s*integration\s*\(\s*adapter",
-                                            text, re.M)}
+#: A plan line's key and what follows its `level:` — up to the first ` — `, after which the line explains itself.
+LEVEL_LINE = re.compile(r"^\s*-\s+([a-z0-9][a-z0-9-]*)\b[^\n]*?level:([^\n]*)$", re.M)
+#: The adapter shape: an incoming adapter's translation, tested against a stubbed input port.
+ADAPTER_SHAPE = re.compile(r"\bintegration\s*\(\s*adapter\b[^)]*\)?", re.I)
+#: A shape that runs through the real input port: `integration`, `integration (port)`, `e2e`.
+PORT_SHAPE = re.compile(r"\b(integration|e2e)\b", re.I)
+
+
+def adapter_shapes(runs: str, story_id: str) -> typing.Tuple[typing.Set[str], typing.Set[str]]:
+    """The keys the plan gave `integration (adapter: …)`, anywhere in the level: those with the adapter shape alone,
+    and those that name a shape through the real input port beside it — `integration (port) and integration
+    (adapter: …)`, both shapes of one criterion (the test stage)."""
+    path = os.path.join(runs, story_id, "plan.md")
+    text = read_text(path) if os.path.isfile(path) else ""
+    alone: typing.Set[str] = set()
+    both: typing.Set[str] = set()
+    for m in LEVEL_LINE.finditer(text):
+        level = m.group(2).split(" — ", 1)[0]
+        if not ADAPTER_SHAPE.search(level):
+            continue
+        (both if PORT_SHAPE.search(ADAPTER_SHAPE.sub(" ", level)) else alone).add(m.group(1))
+    return alone, both
 
 
 #: The kinds of a plan's `## Changes` row that carry invariants: the domain's own types. A use case, a port, an
@@ -73,7 +89,8 @@ def split_rules(text: str) -> typing.List[str]:
 
 def plan_invariants(plan: str) -> typing.Optional[typing.Dict[str, typing.List[str]]]:
     """`## Invariants` as {element: [rule, …]}: one line per domain type, `- <Element>: <rule>; <rule>`, or
-    `- <Element>: none — <why>` (an empty list). None when the section is absent."""
+    `- <Element>: none — <why>` (an empty list). None when the section is absent. `- none — <why>` names no
+    element — no domain type is involved — even where the why holds a colon."""
     lines = section_of(plan, "invariants")
     if lines is None:
         return None
@@ -83,6 +100,8 @@ def plan_invariants(plan: str) -> typing.Optional[typing.Dict[str, typing.List[s
         if not match:
             continue
         name = first_identifier(match.group(1))
+        if name.lower() == "none":
+            continue
         # The part before the `:` is one element's name — bare, in backticks, or followed by a dash and a
         # description. A sentence there (`- The aggregate Task: …`, `- Note on the rules: …`) names no element.
         if not name or not re.fullmatch(rf"[`*]*{re.escape(name)}[`*]*(\s*\([^)]*\))?(\s+[—–-].*)?",
@@ -155,6 +174,36 @@ def scenario_clauses(body: str) -> typing.Dict[str, typing.List[typing.Tuple[int
             entries = clauses.setdefault(key, [])
             entries.append((len(entries) + 1, f"{word} {text}".strip()))
     return clauses
+
+
+def scenario_actions(body: str) -> typing.Dict[str, typing.List[str]]:
+    """{scenario key: ["When …", "And …"]} — what each scenario's person does: its `When` and every `And` or `But`
+    after it, up to its `Then`."""
+    actions: typing.Dict[str, typing.List[str]] = {}
+    key: typing.Optional[str] = None
+    phase: typing.Optional[str] = None
+    collecting = False
+    for line in body.splitlines():
+        stripped = line.strip()
+        if stripped.lower().startswith("## acceptance criteria"):
+            collecting = True
+            continue
+        if collecting and line.startswith("## "):
+            break
+        if not collecting:
+            continue
+        if line.startswith("#### "):
+            key, phase = re.sub(r"\s*\(happy path\)$", "", line[5:].strip()), None
+            continue
+        step = STEP.match(stripped)
+        if not step or key is None:
+            continue
+        word, text = step.groups()
+        if word in ("Given", "When", "Then"):
+            phase = word
+        if phase == "When":
+            actions.setdefault(key, []).append(f"{word} {text}".strip())
+    return actions
 
 
 def read_clause_rows(text: str) -> typing.Optional[typing.List[typing.Tuple[str, int, str, str]]]:

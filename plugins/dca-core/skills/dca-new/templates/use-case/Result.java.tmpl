@@ -1,4 +1,30 @@
 package {{basePackage}}.{{context}}.application.{{featureSegment}}{{usecasename}};
+{{#if returnsRefusals}}
+
+import {{refusalMarkerFqn}};
+
+/**
+ * How the {{Name}} use case ends: one success case and one case per expected refusal.
+ *
+ * <p>The context returns its refusals ({@code Refusals: returned}): the incoming adapter switches
+ * over this type without a {@code default}, so a new case is a compile error at every caller that
+ * must answer it. Every refusal case implements {@link Refusal} — the transaction boundary rolls
+ * back on it as on a thrown failure — and the success case never does.
+ *
+ * <p>Each case carries values, never identities: ids, figures, value objects and read models — no
+ * aggregate root or entity, also not inside a {@code List} or {@code Optional}. A refusal case
+ * carries what the refusal compared, never display text; the adapter writes the words.
+ */
+public sealed interface {{Name}}Result {
+
+    record {{SuccessCase}}(
+{{resultFields}}
+    ) implements {{Name}}Result {}
+
+{{refusalCases}}
+}
+{{/if}}
+{{#if !returnsRefusals}}
 
 /**
  * Result of the {{Name}} use case.
@@ -20,3 +46,4 @@ public record {{Name}}Result(
         throw new UnsupportedOperationException("Map values from the source, never expose it");
     }
 }
+{{/if}}

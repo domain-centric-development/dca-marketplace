@@ -81,13 +81,18 @@ class BreakChecks(DomainService):
         return BREAK_PROOF.fail(Said(f"{name}: its break could not be checked — {result.said.value}"))
 
     @staticmethod
-    def rule_proof(before: BreakResult, under: typing.Optional[BreakResult]) -> RuleProof:
+    def rule_proof(before: BreakResult, under: typing.Optional[BreakResult],
+                   seen_red: Presence = Presence.ABSENT) -> RuleProof:
         """A rule's test: seen red before the build it proves the rule as a criterion's red run does; green already —
-        the rule exists — it needs its break (`under`, None where it has none)."""
+        the rule exists — it needs its break (`under`, None where it has none). Green now but seen red by an earlier
+        run of the gate, in the version of its file there now (`seen_red`), it keeps that proof: the build made the
+        rule, as it makes a criterion's test green, and a run of the gate after it asks for no break."""
         if before.outcome is BreakOutcome.RED:
             return RuleProof.RED
         if before.outcome is not BreakOutcome.GREEN:
             return RuleProof.UNCHECKED
+        if seen_red is Presence.PRESENT:
+            return RuleProof.RED
         if under is None:
             return RuleProof.NO_BREAK
         return {BreakOutcome.RED: RuleProof.KILLED, BreakOutcome.GREEN: RuleProof.SURVIVED,

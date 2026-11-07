@@ -39,7 +39,7 @@ public record Money(BigDecimal amount, Currency currency) implements Value {
 }
 ```
 
-Identifiers are Value Objects too, but carry their own marker: `d`.
+Identifiers are Value Objects too, but carry their own marker: `Id`.
 
 ## Governed by
 

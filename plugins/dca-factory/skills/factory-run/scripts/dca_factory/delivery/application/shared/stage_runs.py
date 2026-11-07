@@ -75,8 +75,14 @@ class StageRuns(OutputPort, typing.Protocol):
         """The tests' `gate:invariants` table — None where it has none."""
         ...
 
-    def rule_proofs(self, story: str, rows: typing.Sequence[typing.Tuple[str, typing.List[int], str, str]]) -> None:
-        """How each rule's test was shown to guard it, kept in the evidence and the journal."""
+    def rule_proofs(self, story: str, rows: typing.Sequence[typing.Tuple[str, typing.List[int], str, str]],
+                    located: typing.Optional[Located] = None) -> None:
+        """How each rule's test was shown to guard it, kept in the evidence and the journal — each with the version
+        of its test file (`located`) the proof was taken against."""
+        ...
+
+    def rules_seen_red(self, story: str, located: Located) -> typing.FrozenSet[str]:
+        """The rules' tests an earlier run of the story's test gate saw red, in the version of their file there now."""
         ...
 
     def answered_tests(self, story: str) -> typing.List[str]:
