@@ -38,6 +38,11 @@ whether a journey is there and proven; "delivered, unguarded" is delivery's stat
 and adds the rules the skills mark in their text. Delivery knows no rulebook. A *rule* there is the factory's; a *rule*
 in spec is a `### Rule:` that groups criteria — two words, two contexts.
 
+**In the code**, each context declares the contexts whose `api` it uses as `__dca__ = BoundedContext(upstreams=…)` in
+its package, the shared kernel `__dca__ = SharedKernel()`; the rule suite of DCA-Python holds the imports to them.
+Besides the crossings above, two run back: discovery asks delivery's `api` which proposals became epics, and spec
+asks it for the open stories and their proofs.
+
 **spec → discovery — not built.** An epic delivered and unguarded, or an outcome that does not happen, would start a
 new discovery: a future crossing, shown so it is not forgotten.
 

@@ -14,6 +14,8 @@ dataclass by its base: it declares its fields and carries no decorator of its ow
     OutputPort                 what the application needs from outside, implemented by an outgoing adapter
     Repository, Store          aggregates with a life cycle; operational data recorded or looked up without one
     UseCaseException           a use case's failure about the request, not about an invariant
+    BoundedContext, Upstream   a context's declaration, `__dca__` in its package, and the contexts it depends on
+    SharedKernel               the shared kernel's declaration
 
 A marker that exists is not a duty to use it: an entity, an aggregate, a repository is used where something has a
 life cycle, a value where something is described.
@@ -23,6 +25,7 @@ from __future__ import annotations
 
 import abc
 import dataclasses
+import enum
 import typing
 
 
@@ -254,3 +257,44 @@ class UseCaseException(Exception):
     stays the platform's own. It names no transport vocabulary — the incoming adapter maps it onto its protocol's
     answer.
     """
+
+
+class Translation(enum.Enum):
+    """How a downstream context takes over an upstream's model."""
+
+    ANTI_CORRUPTION_LAYER = "acl"
+    CONFORMIST = "conformist"
+
+
+class Consumes(enum.Enum):
+    """The channel through which a downstream context uses an upstream: its `api` or its `api.events`."""
+
+    API = "api"
+    EVENTS = "events"
+
+
+@dataclasses.dataclass(frozen=True)
+class Upstream:
+    """Another bounded context this context depends on, through its published interface."""
+
+    context: str
+    translation: Translation
+    via: tuple[Consumes, ...]
+    rationale: str = ""
+
+
+@dataclasses.dataclass(frozen=True)
+class BoundedContext:
+    """The declaration of a bounded context, as `__dca__` in its package's `__init__.py`. The architecture rules read
+    it from the source, so its arguments are literals and the enums above."""
+
+    name: str
+    description: str = ""
+    upstreams: tuple[Upstream, ...] = ()
+
+
+@dataclasses.dataclass(frozen=True)
+class SharedKernel:
+    """The declaration of the shared kernel, as `__dca__` in its package's `__init__.py`."""
+
+    description: str = ""
