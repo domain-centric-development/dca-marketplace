@@ -3598,6 +3598,8 @@ PRESET_FIXTURES = {
     "pytest-setupcfg": {"setup.cfg": "[pytest]\n"},
     # the DCA rule suite for Python is the architecture governance; ruff formats
     "pytest-dca-ruff": {"pyproject.toml": "[tool.pytest.ini_options]\n\n[tool.dca]\nbase-package = \"app\"\n\n[tool.ruff]\n"},
+    # a project uv manages runs its tools in its own environment
+    "pytest-uv": {"pyproject.toml": "[tool.pytest.ini_options]\n", "uv.lock": "version = 1\n"},
     "npm-playwright": {"package.json": '{"devDependencies": {"@playwright/test": "1.62.0"}}\n'},
     # cargo-nextest with a junit path: the report is the evidence; plain cargo: the exit code is
     "cargo-nextest": {"Cargo.toml": "[workspace]\n", ".config/nextest.toml": '[profile.ci.junit]\npath = "junit.xml"\n'},
@@ -3639,6 +3641,7 @@ PRESET_GOLDEN = {
     "dotnet-playwright": _DOTNET[:2] + ["e2eTest: dotnet test tests/App.E2E/App.E2E.csproj --logger trx"]
                          + _DOTNET[3:] + ["browser: playwright"],
     "pytest-ini": _PYTEST, "pytest-pyproject": _PYTEST, "pytest-setupcfg": _PYTEST,
+    "pytest-uv": [l.replace("{py}", "uv run python") for l in _PYTEST],
     "pytest-dca-ruff": _PYTEST[:3] + ["architecture: {py} -m dca_rules && {py} -m mypy",
                                       "format: {py} -m ruff format --check .", "formatFix: {py} -m ruff format .",
                                       "covers.test: **"],

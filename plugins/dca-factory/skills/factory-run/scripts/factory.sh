@@ -1241,6 +1241,10 @@ presets() {                                 # presets <dir> <mode> [args…]
 import os, re, sys
 
 directory, python, conventions, mode, rest = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5:]
+#: A project uv manages runs its own interpreter, with its own dependencies: the project's tools (pytest, the rule
+#: suite, the type checker) are installed there, not beside the pipeline's Python.
+if os.path.isfile("uv.lock"):                        # detection reads the project from its working directory
+    python = "uv run python"
 #: The order presets apply in; a later kind's value replaces an earlier one's, an empty value takes it back.
 KINDS = ("stack", "browser", "format", "governance", "stub", "integration", "unit")
 #: Folders no detection looks into: build output, dependencies, tool state. Bounded in depth as well,
