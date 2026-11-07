@@ -695,7 +695,10 @@ class StageEvidenceFiles:
             declares = re.compile(rf"\b(?:class|record|interface|struct|enum|object|type)\s+{re.escape(event)}\b")
             declared = [rel for rel, text in texts.items() if declares.search(text)]
             mention = re.compile(rf"(?<!\w){re.escape(event)}(?!\w)")
-            constructs = re.compile(rf"\bnew\s+{re.escape(event)}\b|(?<!\w){re.escape(event)}\s*\.\s*\w+\s*\(")
+            # `new X(…)`, `X.of(…)`, and - where a language constructs without `new` - a call `X(…)` (Python,
+            # Kotlin) or a struct literal `X { … }` (Rust); the declaration itself is taken out first.
+            constructs = re.compile(rf"\bnew\s+{re.escape(event)}\b|(?<!\w){re.escape(event)}\s*\.\s*\w+\s*\("
+                                    rf"|(?<![\w.]){re.escape(event)}\s*[({{]")
 
             def raises(rel: str, text: str) -> bool:
                 # The event's own file (`TaskCompleted.java`) never raises it: its factory names it, nothing else does.
@@ -705,7 +708,7 @@ class StageEvidenceFiles:
                 if os.path.splitext(os.path.basename(rel))[0] == event.rsplit(".", 1)[-1]:
                     return False
                 body = IMPORT_LINE.sub("", text)
-                return bool(constructs.search(body)) if rel in declared else bool(mention.search(body))
+                return bool(constructs.search(declares.sub("", body))) if rel in declared else bool(mention.search(body))
             raising = [rel for rel, text in texts.items() if raises(rel, text)] if declared else []
             events.append(OutcomeEvent(name, tuple(Place(d) for d in declared), tuple(Place(r) for r in raising)))
         return OutcomeFacts(tuple(events), changed)
