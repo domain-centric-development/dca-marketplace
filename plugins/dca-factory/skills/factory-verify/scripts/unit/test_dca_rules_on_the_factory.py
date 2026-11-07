@@ -16,7 +16,6 @@ RULES_SOURCE = os.path.join(DCA_PYTHON, "dca-rules", "src")
 
 #: The ids the package does not hold yet (WP-188), with what stands behind them.
 NOT_YET_HELD = {
-    "DCA-PY-003": "adapters fit their ports by shape and never name them",
     "DCA-ADV-020": "domain services that take values only",
     "DCA-HEX-004": "incoming adapters import the composition root",
     "DCA-HEX-007": "an incoming adapter imports another context's api",

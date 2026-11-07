@@ -9,9 +9,10 @@ from ....domain.model.context_spec import ContextName, OpenStory, Statement, Sto
 from ..files.context_spec_files import criterion_of
 from ..files.spec_files import context_folder
 from ....api.published import story_entries
+from ....application.shared.open_stories import OpenStories
 
 
-class OpenStoryFiles:
+class OpenStoryFiles(OpenStories):
     """The stories of the project <cwd> not delivered yet, each with the criteria of its story file."""
 
     def __init__(self, cwd: str) -> None:

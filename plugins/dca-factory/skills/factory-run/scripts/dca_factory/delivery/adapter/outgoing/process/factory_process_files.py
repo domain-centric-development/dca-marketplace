@@ -6,11 +6,12 @@ import os
 import typing
 
 from . import factory_process
+from ....application.shared.factory_process import FactoryProcess
 
 Info = typing.Mapping[str, typing.Any]
 
 
-class FactoryProcessFiles:
+class FactoryProcessFiles(FactoryProcess):
     def __init__(self, cwd: typing.Optional[str] = None) -> None:
         self._cwd = cwd or os.getcwd()
 

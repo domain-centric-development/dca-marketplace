@@ -14,9 +14,10 @@ from ....domain.model.story_state import Detail, StatusWord
 from .criteria_files import criteria_of
 from .stage_evidence_files import stage_story
 from .story_layout import duplicate_ids, is_delivered, story_files, story_folder
+from ....application.shared.backlog_entries import BacklogEntries
 
 
-class BacklogEntryFiles:
+class BacklogEntryFiles(BacklogEntries):
     """The story files under <epics>."""
 
     def __init__(self, epics: str) -> None:

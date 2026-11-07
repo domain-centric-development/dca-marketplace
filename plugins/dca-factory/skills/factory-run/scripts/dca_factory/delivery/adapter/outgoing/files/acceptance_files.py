@@ -13,9 +13,10 @@ from .decision_record_files import acceptance_records, latest_verdict, Records
 from ....domain.model.story_state import AcceptanceVerdict
 from .run_marks import accepted_criteria
 from .story_layout import find_story
+from ....application.shared.acceptances import Acceptances
 
 
-class AcceptanceFiles:
+class AcceptanceFiles(Acceptances):
     """The acceptance records beside the stories under <epics>, in the project <cwd>."""
 
     def __init__(self, cwd: str, epics: str) -> None:

@@ -27,6 +27,7 @@ from .snapshots import DELETED, tree_snapshot
 from .story_facts_files import StoryFactsFiles
 from .story_layout import (
     delivered_on, depends_on, duplicate_ids, epic_folder, story_files, story_folder, story_kind)
+from ....application.shared.backlog_facts import BacklogFacts
 
 #: What people write and the pipeline installs: a change there is not code a story left behind.
 PEOPLE_OWNED = ("product/", "project/", ".agents/", ".claude/", ".codex/", ".opencode/", ".githooks/", "docs/")
@@ -36,7 +37,7 @@ def stopped(why: str) -> Standing:
     return Standing(StateName.STOPPED, None, Detail(why))
 
 
-class BacklogFiles:
+class BacklogFiles(BacklogFacts):
     """The backlog under <epics>, its runs under <runs>, in the checkout <cwd>."""
 
     def __init__(self, cwd: str, epics: str, runs: str) -> None:

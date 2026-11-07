@@ -73,6 +73,7 @@ from .design_files import (
     plan_invariants, read_clause_rows, read_invariant_rows, scenario_actions, scenario_clauses)
 from .run_marks import OWNED_CHANGED
 from .story_layout import delivered_on, EPIC_FILE, epic_folder, find_story, story_kind
+from ....application.shared.decision_stamps import DecisionStamps
 
 Front = typing.Mapping[str, typing.Any]
 
@@ -863,7 +864,7 @@ class StageEvidenceFiles:
         return MainTests(adapted, tuple(waived), Detail(lost_text(lost) if lost else ""),
                          Detail(integration_target(runs, story_id) or "the main line"))
 
-class DecisionStampFiles:
+class DecisionStampFiles(DecisionStamps):
     """The decision records beside the story and its `## Assumptions`, the journal under the run folder <runs>."""
 
     def __init__(self, runs: str) -> None:

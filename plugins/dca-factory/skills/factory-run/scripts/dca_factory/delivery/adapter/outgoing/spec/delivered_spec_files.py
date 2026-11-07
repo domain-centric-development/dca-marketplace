@@ -12,6 +12,7 @@ from .....spec.api import lint_context, read_delta, story_entries
 from ....application.shared.delivered_specs import DeliveredCriteria
 from ..files.story_layout import journeys_hold, delivered_on, is_delivered, story_files, story_id_of
 from .story_spec_files import spec_target, story_spec
+from ....application.shared.delivered_specs import DeliveredSpecs
 
 Front = typing.Mapping[str, typing.Any]
 
@@ -21,7 +22,7 @@ def spec_place(front: Front) -> str:
     return "journeys" if journeys_hold(front) else str(front.get("context", "")).strip().lower()
 
 
-class DeliveredSpecFiles:
+class DeliveredSpecFiles(DeliveredSpecs):
     """The stories under <epics>, their plans under <runs>, the spec under the profile's place."""
 
     def __init__(self, runs: str, epics: str) -> None:

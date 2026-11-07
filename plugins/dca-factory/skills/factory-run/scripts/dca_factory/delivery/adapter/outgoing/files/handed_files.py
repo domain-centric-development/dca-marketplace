@@ -15,13 +15,14 @@ from ....domain.model.handed_file import (FILE_ID, KEEP_DAYS, ByteSize, FileName
                                           HandedFileRef, kind_of)
 from ....domain.model.project_path import ProjectPath
 from .request_files import requests_dir
+from ....application.shared.handed_file_store import HandedFileStore
 
 
 def files_dir() -> str:
     return os.path.join(requests_dir(), "files")
 
 
-class HandedFileFolder:
+class HandedFileFolder(HandedFileStore):
     """`HandedFileStore` on a folder of the project."""
 
     def keep(self, file: HandedFile) -> HandedFileRef:

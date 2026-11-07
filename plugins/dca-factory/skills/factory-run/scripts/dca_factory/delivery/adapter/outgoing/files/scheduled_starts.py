@@ -10,9 +10,10 @@ from ....application.schedule.schedule_backlog import schedule_backlog
 from ....application.schedule.start_story import start_story
 from ....application.shared.story_starts import Start
 from .backlog_files import BacklogFiles
+from ....application.shared.story_starts import StoryStarts
 
 
-class ScheduledStarts:
+class ScheduledStarts(StoryStarts):
     """Where a story begins, as the schedule of the checkout reads it now."""
 
     def __init__(self, cwd: str) -> None:

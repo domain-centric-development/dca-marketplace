@@ -15,6 +15,7 @@ from ..git.repository import git
 from .epic_files import epic_files
 from .owned_files import write_story_fields
 from .story_layout import EPIC_FILE, story_files
+from ....application.shared.created_stamps import CreatedStamps
 
 
 def utc_text(moment: datetime) -> str:
@@ -22,7 +23,7 @@ def utc_text(moment: datetime) -> str:
     return moment.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-class CreatedFiles:
+class CreatedFiles(CreatedStamps):
     """The stories and epics under <epics>, in the project <cwd>."""
 
     def __init__(self, cwd: str, epics: str) -> None:

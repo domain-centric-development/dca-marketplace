@@ -10,9 +10,10 @@ from .....spec.api import derived, read_delta, renamed_rules, story_entries
 from ....application.shared.spec_deltas import SpecDeltaFacts
 from ..files.story_layout import find_story
 from .story_spec_files import story_spec
+from ....application.shared.spec_deltas import SpecDeltas
 
 
-class SpecDeltaFiles:
+class SpecDeltaFiles(SpecDeltas):
     """The stories under <epics>, their plans under <runs>."""
 
     def __init__(self, runs: str, epics: str) -> None:

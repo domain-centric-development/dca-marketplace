@@ -6,9 +6,10 @@ import typing
 
 from .....sharedkernel.adapter.outgoing.profile.profile_files import location, read_profile, resolve_profile
 from .....discovery.api import proposals_in, report_of
+from ....application.shared.discovery_reports import DiscoveryReports
 
 
-class DiscoveryReportFiles:
+class DiscoveryReportFiles(DiscoveryReports):
     """The discovery reports of the project the process works in, as discovery says them."""
 
     def __init__(self, cwd: str) -> None:

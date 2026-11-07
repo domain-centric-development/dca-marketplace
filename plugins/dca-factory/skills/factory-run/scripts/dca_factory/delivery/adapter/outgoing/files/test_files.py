@@ -15,6 +15,7 @@ from ....domain.model.stage_story import (
 from ....domain.model.story_state import Detail
 from ..stack.commands import command_for
 from ..stack.test_reports import display_name_of, unescape_literal
+from ....application.shared.stage_tests import StageTests
 
 Mapping = typing.Dict[str, typing.List[str]]
 
@@ -236,7 +237,7 @@ def mapped_tests(cwd: str, profile: typing.Mapping[str, typing.Any], body: str,
     return tuple(rows)
 
 
-class StageTestFiles:
+class StageTestFiles(StageTests):
     """The tests table of a story under the run folder <runs>, its tests in the project <cwd>, as the profile runs
     them."""
 

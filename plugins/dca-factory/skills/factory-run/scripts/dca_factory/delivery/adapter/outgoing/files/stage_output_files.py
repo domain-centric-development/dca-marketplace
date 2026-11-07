@@ -12,9 +12,10 @@ from ....application.shared.stage_outputs import Output
 from ..tools.streams import follow_lines
 from .request_files import out_path
 from .status_facts import follow_newest
+from ....application.shared.stage_outputs import StageOutputs
 
 
-class StageOutputFiles:
+class StageOutputFiles(StageOutputs):
     def __init__(self, runs: str) -> None:
         self._runs = runs
 

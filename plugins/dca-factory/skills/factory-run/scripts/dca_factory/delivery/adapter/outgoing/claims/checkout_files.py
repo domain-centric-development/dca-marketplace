@@ -6,9 +6,10 @@ import typing
 
 from ..files.windows import freeze_all
 from .checkout_claim import claim, mark_listening, release, session_owner
+from ....application.shared.checkout import Checkout
 
 
-class CheckoutFiles:
+class CheckoutFiles(Checkout):
     def __init__(self, cwd: str, runs: str) -> None:
         self._cwd, self._runs = cwd, runs
 

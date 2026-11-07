@@ -36,6 +36,7 @@ from .signals import latest_signal
 from .journal_files import journal_events
 from ....application.shared.front import is_acceptance
 from ....domain.model.decision_record import ANSWERED_WORDS
+from ....application.shared.status_facts import StatusFacts
 
 GateError = MarkdownError
 
@@ -286,7 +287,7 @@ def dangling_skill_links(cwd: str) -> typing.List[str]:
     return found
 
 
-class StatusFactFiles:
+class StatusFactFiles(StatusFacts):
     """The status's facts, read from the project <cwd> with its epics and run folder as the profile places them;
     the schedule is the schedule's read model, which the composition root hands in."""
 

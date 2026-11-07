@@ -19,6 +19,7 @@ from ....domain.model.story import (
     Assumption, DeliveredBy, DeliveredOn, Delivery, KindWord, Story, StoryId, StoryStatus)
 from .epic_files import epic_dir
 from .request_files import write_atomic
+from ....application.shared.story_repository import StoryRepository
 
 ASSUMPTIONS = "assumptions"
 
@@ -53,7 +54,7 @@ def names_story(word: str) -> bool:
     return False
 
 
-class StoryFiles:
+class StoryFiles(StoryRepository):
     """The story repository as files, under the project the process works in — or under the epics folder given."""
 
     def __init__(self, cwd: str, epics: typing.Optional[str] = None) -> None:

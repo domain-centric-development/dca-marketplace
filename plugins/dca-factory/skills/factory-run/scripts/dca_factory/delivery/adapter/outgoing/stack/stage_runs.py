@@ -23,12 +23,13 @@ from .breaks import apply_break, break_copy, break_patch, break_path, characteri
 from .commands import test_command_keys
 from .suite_runs import command_run, suite_commands, suite_run, SuiteOwner
 from .test_runs import red_ledger, run_tests, WholeRuns
+from ....application.shared.stage_runs import StageRuns
 
 Mapping = typing.Mapping[str, typing.Sequence[str]]
 Located = typing.Mapping[str, str]
 
 
-class StageRunFiles:
+class StageRunFiles(StageRuns):
     """The runs of the project tree <cwd>, the run folder <runs>, the profile."""
 
     def __init__(self, cwd: str, runs: str, profile: typing.Mapping[str, typing.Any]) -> None:

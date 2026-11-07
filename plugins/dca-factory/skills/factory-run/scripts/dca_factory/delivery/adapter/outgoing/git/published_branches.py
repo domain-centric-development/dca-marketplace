@@ -14,9 +14,10 @@ from ..files.owned_files import write_story_fields
 from ..files.story_layout import find_story
 from .repository import git
 from .worktrees import has_worktree, worktree_of
+from ....application.shared.published_branches import PublishedBranches
 
 
-class PublishedBranchFiles:
+class PublishedBranchFiles(PublishedBranches):
     """The published branches of the checkout <cwd>, the stories under <epics>, the run folder <runs>."""
 
     def __init__(self, cwd: str, runs: str, epics: str) -> None:

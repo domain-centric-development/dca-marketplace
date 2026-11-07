@@ -8,7 +8,7 @@ import typing
 from ..building_blocks import UseCaseException
 from ..delivery.adapter.outgoing.files.decision_record_files import RequestRecordFiles
 from ..delivery.adapter.outgoing.files.handed_files import HandedFileFolder
-from ..delivery.adapter.outgoing.files.request_files import RequestFiles, stamp_utc
+from ..delivery.adapter.outgoing.files.request_files import PlacedRequests, RequestFiles, stamp_utc
 from ..delivery.adapter.outgoing.files.scheduled_starts import ScheduledStarts
 from ..delivery.adapter.outgoing.git.backlog_changes import BacklogChangeFiles
 from ..delivery.adapter.outgoing.process.console_lines import ConsoleLines
@@ -19,9 +19,10 @@ from ..delivery.application.shared.request_skill import RequestSkill
 from ..delivery.application.shared.requests import Kind, Request, RequestRefused
 from ..sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError
 from . import delivery as wiring
+from ..delivery.application.shared.request_settlement import RequestSettlement
 
 
-class HeldRequests:
+class HeldRequests(RequestSettlement):
     """Whether a request still holds (the request check) and what the factory settles itself (the settlement) — a
     file that cannot be read on the way refuses the request, saying why."""
 
@@ -40,23 +41,6 @@ class HeldRequests:
             return wiring.settlement(self._cwd, self._runs).settle(request, at)
         except (UseCaseException, MarkdownError) as error:
             raise RequestRefused(str(error)) from error
-
-
-class PlacedRequests(RequestFiles):
-    """The request store where the profile puts it now: the places are set again before every look — a person may
-    edit the profile while a run waits, and the runner moves between the checkout and a worktree."""
-
-    def __init__(self, cwd: str, placed: typing.Callable[[], typing.Any]) -> None:
-        super().__init__(cwd)
-        self._placed = placed
-
-    def all(self) -> typing.List[Request]:
-        self._placed()
-        return super().all()
-
-    def find(self, request_id: str) -> Request:
-        self._placed()
-        return super().find(request_id)
 
 
 def request_queue(home: str, worker: str, placed: typing.Callable[[], typing.Any]) -> RequestQueue:

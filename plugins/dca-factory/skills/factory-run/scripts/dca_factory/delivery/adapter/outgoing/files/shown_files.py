@@ -11,9 +11,10 @@ from ....domain.model.handed_file import MAX_BYTES
 from ....domain.model.project_path import ProjectPath
 from ....domain.model.shown_file import ShownPath
 from .request_files import factory_dir
+from ....application.shared.shown_file_source import ShownFileSource
 
 
-class ShownProjectFiles:
+class ShownProjectFiles(ShownFileSource):
     """`ShownFileSource` on the project's folders."""
 
     def __init__(self, cwd: str) -> None:

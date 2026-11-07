@@ -326,10 +326,9 @@ def drives_an_input_port(cls):
 
 def port_findings(package):
     """Every output port that is not one, has no implementation, or has one in the wrong place. Python's ports are
-    protocols: an adapter fits a port by its shape and never names it, so the type checker sees a fit only where an
-    adapter is assigned to the port — that a port is marked, implemented, and implemented outside the core is checked
-    here. A class implements a port when it declares each of the port's methods (its own and its port bases') with
-    the same parameter names. By DCA's ids:
+    protocols, and an adapter names the port it implements among its bases (DCA-PY-003, held by `dca-rules`); a
+    port is a protocol that extends a port marker, a class naming it is none. A class implements a port when it
+    declares each of the port's methods (its own and its port bases') with the same parameter names. By DCA's ids:
 
     - DCA-HEX-009  a protocol in an application's `shared` package extends `OutputPort`, `Repository` or `Store`
       (`InputPort`, `UseCase` and a domain's `DomainGateway` are what they say);
@@ -352,7 +351,7 @@ def port_findings(package):
         grown = False
         for dotted, rel, node in classes:
             kind = next((kinds[b] or b for b in sorted(class_bases(node)) if b in kinds), None)
-            if dotted != "building_blocks" and kind and node.name not in ports:
+            if dotted != "building_blocks" and kind and "Protocol" in class_bases(node) and node.name not in ports:
                 ports[node.name] = (dotted, rel, node, kind)
                 kinds[node.name] = kind
                 grown = True

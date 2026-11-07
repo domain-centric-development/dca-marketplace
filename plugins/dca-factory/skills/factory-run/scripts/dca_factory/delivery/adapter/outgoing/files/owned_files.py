@@ -20,6 +20,7 @@ from .run_marks import OWNED_CHANGED, pass_marks, STORY_DIGEST, write_mark, writ
 from ....domain.model.story import StoryId
 from .story_layout import (
     DECISIONS_DIR, file_digest, find_story, STATE_KEYS, story_digest, STORY_FILE, story_id_of)
+from ....application.shared.owned_changes import OwnedChanges
 
 
 # --- what is the person's: the story and the answers (WP-94) --------------------------------------------------
@@ -238,7 +239,7 @@ def run_owned(path: str, runs: str) -> bool:
         or (in_worktree() and worktree_owned(path))
 
 
-class OwnedChangeFiles:
+class OwnedChangeFiles(OwnedChanges):
     """The mark `.owned-changed` in a story's evidence, under the run folder <runs>."""
 
     def __init__(self, runs: str) -> None:

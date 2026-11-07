@@ -10,6 +10,7 @@ import typing
 
 from ....domain.model.rule import (
     Citation, KindName, Part, Rule, RuleId, Source, StageName, Words)
+from ....application.shared.instructed_rules import InstructedRules
 
 MARKER = re.compile(r"^\s*<!--\s*rule:\s*(\S+)\s*-->\s*$")
 CITED = re.compile(r"(?<![\w-])(?:GATE|RUN|STAGE)(?:-[A-Z0-9]+)+(?![\w-])")
@@ -47,7 +48,7 @@ def plain(paragraph: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-class SkillFiles:
+class SkillFiles(InstructedRules):
     """The markdown of every skill under <folder> — none where no folder was found."""
 
     def __init__(self, folder: typing.Optional[str]) -> None:

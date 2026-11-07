@@ -63,6 +63,8 @@ from ....application.requests.work_request import RequestWorked
 from ....application.shared.requests import Request
 from ....application.shared.story_integration import Lost
 from ....application.delivery.pipeline_rules import decides
+from ....application.shared.backlog_worker import Child
+from .....sharedkernel.application.profile_source import ProfileSource
 
 
 # --- the run: what `factory.sh run` starts once its checks before the first stage passed -------------------------
@@ -114,7 +116,7 @@ class RunCases(typing.Protocol):
         """What every stage is told, for a session that works no stage (`ShowEveryStageUseCase`)."""
 
 
-class Run:
+class Run(ProfileSource):
     """One runner process: the story or the backlog it runs, and what it keeps between stages. The use cases a step
     starts are the composition root's (`cases`)."""
 
@@ -1262,7 +1264,7 @@ class Run:
 TOOL_SKILL_DIRS = tuple(tool.skills for tool in TOOLS)
 
 
-class ChildProcess:
+class ChildProcess(Child):
     """A story's or a request's process beside a parallel run, its lines pumped to the runner's."""
 
     def __init__(self, process: "subprocess.Popen[bytes]", pump: threading.Thread) -> None:

@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import sys
+from ....application.shared.run_lines import RunLines
 
 
-class ConsoleLines:
+class ConsoleLines(RunLines):
     """`RunLines` on the process's own streams."""
 
     def out(self, line: str) -> None:

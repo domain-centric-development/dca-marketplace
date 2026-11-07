@@ -11,9 +11,10 @@ from .....sharedkernel.adapter.outgoing.profile.profile_files import location, p
 from .....sharedkernel.application.profile import Profile
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_text
 from ....domain.model.description import Body, Heading, Part, Section, Written
+from ....application.shared.description_store import DescriptionStore
 
 
-class DescriptionFiles:
+class DescriptionFiles(DescriptionStore):
     """The description store as files, under the project <cwd>, placed by <profile>."""
 
     def __init__(self, cwd: str, profile: Profile) -> None:

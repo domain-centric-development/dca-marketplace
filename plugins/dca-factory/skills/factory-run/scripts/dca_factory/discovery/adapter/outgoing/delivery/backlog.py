@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from .....delivery.api import epic_of_proposal
+from ....application.shared.backlog import Backlog
 
 
-class DeliveryBacklog:
+class DeliveryBacklog(Backlog):
     """What became of a proposal, in the project <cwd>."""
 
     def __init__(self, cwd: str) -> None:

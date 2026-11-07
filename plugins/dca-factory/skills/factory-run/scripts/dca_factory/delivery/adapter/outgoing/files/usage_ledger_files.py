@@ -10,9 +10,10 @@ from ....application.shared.usage_ledger import Spent
 from ..tools.streams import tokens_of
 from .run_marks import run_stories
 from .usage_files import journal_usage
+from ....application.shared.usage_ledger import UsageLedger
 
 
-class UsageLedgerFiles:
+class UsageLedgerFiles(UsageLedger):
     def __init__(self, runs: str) -> None:
         self._runs = runs
 

@@ -10,6 +10,7 @@ import typing
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_text
 from .....sharedkernel.adapter.outgoing.markdown.sections import section_of
 from ....domain.model.report import DESCRIPTION_CHANGES, Item, PROPOSED_WORK, Report, SourceId, Text, Topic
+from ....application.shared.report_store import ReportStore
 
 REPORT_FILE = "discovery.md"
 SOURCE_LINE = re.compile(r"^\s*-\s*\[(S\d+)\]\s*(.+?)\s*$")
@@ -43,7 +44,7 @@ def parse(text: str) -> Report:
                   proposals=items(PROPOSED_WORK), changes=items(DESCRIPTION_CHANGES))
 
 
-class ReportFiles:
+class ReportFiles(ReportStore):
     """The report store as files, under the project <cwd>, in the discovery folder <folder> the profile names."""
 
     def __init__(self, cwd: str, folder: str) -> None:

@@ -10,9 +10,10 @@ from ....api.published import story_entries
 from ....domain.model.context_spec import ContextName, Delivery, Statement, StoryRef
 from ....domain.model.criterion import CriterionKey, Selector
 from ..files.spec_files import context_folder
+from ....application.shared.proofs import Deliveries, TestSources
 
 
-class TestSourceFiles:
+class TestSourceFiles(TestSources):
     """The sources of the project <cwd>."""
 
     def __init__(self, cwd: str) -> None:
@@ -22,7 +23,7 @@ class TestSourceFiles:
         return {Selector(s) for s in located_tests(self._cwd, [s.value for s in selectors])}
 
 
-class DeliveryFiles:
+class DeliveryFiles(Deliveries):
     """The delivered stories of the project <cwd>."""
 
     def __init__(self, cwd: str) -> None:

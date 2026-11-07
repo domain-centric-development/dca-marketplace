@@ -8,9 +8,10 @@ import typing
 
 from ..process.factory_process import LOG_FILE
 from .request_files import factory_dir
+from ....application.shared.factory_log import FactoryLog
 
 
-class FactoryLogFile:
+class FactoryLogFile(FactoryLog):
     """`FactoryLog` on the factory's folder of a project."""
 
     def __init__(self, cwd: str) -> None:

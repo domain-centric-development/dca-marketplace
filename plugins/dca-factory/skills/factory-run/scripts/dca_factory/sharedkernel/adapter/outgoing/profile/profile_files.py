@@ -15,6 +15,7 @@ import typing
 
 from ..markdown.front_matter import read_text
 from ....application.profile import Profile
+from ....application.profile_source import ProfileSource
 
 
 #: Every place the factory reads and writes, from the profile with its default: the project description
@@ -332,7 +333,7 @@ def places_in(cwd: str) -> typing.Iterator[None]:
         PLACES.update(saved)
 
 
-class ProfileFiles:
+class ProfileFiles(ProfileSource):
     """The stack profile at <path> (None: no profile), read anew on every question: a person may edit it meanwhile."""
 
     def __init__(self, path: typing.Optional[str]) -> None:

@@ -28,6 +28,11 @@ from ....application.shared.requests import KIND, Kind, Request
 from ....application.shared.backlog_worker import Child
 from ....application.shared.story_integration import Lost
 from .runner_process import Run
+from ....application.shared.backlog_schedule import BacklogSchedule
+from ....application.shared.backlog_worker import BacklogCheckout, BacklogWorker
+from ....application.shared.request_skill import RequestSkill
+from ....application.shared.story_integration import StoryIntegration
+from ....application.shared.story_stages import StoryStages
 
 #: The frame a person's words stand in within a request's prompt (WP-184): they are the request's data, never
 #: instructions to the run. A marker inside the words is broken, so they cannot close the frame early.
@@ -47,7 +52,7 @@ def newer(path: str, than: str) -> bool:
     return not os.path.exists(than) or os.path.getmtime(path) > os.path.getmtime(than)
 
 
-class RunnerRequestSkill:
+class RunnerRequestSkill(RequestSkill):
     """A request's skill as the runner starts it: the prompt that names the skill, the request's arguments, the rules
     for a skill run for a request and where things are; the shell narrowed to what the dialog skills read and record
     with; the tool's process, its usage journaled and booked to the request."""
@@ -174,7 +179,7 @@ class RunnerRequestSkill:
         return "\n\n".join(lines)
 
 
-class RunnerStages:
+class RunnerStages(StoryStages):
     """A story's stages on the runner (`StoryStages`): its files read with the package's readers, in the checkout or
     the worktree it runs in, its gates and its processes as the runner starts them."""
 
@@ -279,7 +284,7 @@ class RunnerStages:
         return self._run.cases.integrate(self._run, self._tool, story, dry)
 
 
-class RunnerIntegration:
+class RunnerIntegration(StoryIntegration):
     """A story's integration on the runner (`StoryIntegration`): from the story's worktree into the main checkout,
     the cli's integrate steps run there, the integrate stage and the gate as the runner starts them."""
 
@@ -339,7 +344,7 @@ class RunnerIntegration:
         return Rounds(self._run.bump_rounds(story))
 
 
-class RunnerBacklog:
+class RunnerBacklog(BacklogSchedule, BacklogCheckout, BacklogWorker):
     """The backlog run's ports on the runner (`BacklogSchedule`, `BacklogCheckout`, `BacklogWorker`): the schedule
     the cli prints, the checkout under the claim, the stories and requests as processes."""
 

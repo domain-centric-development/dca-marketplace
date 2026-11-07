@@ -13,9 +13,10 @@ from ..stack.commands import tail
 from ..files.delivery_writes import story_journals
 from .change import in_places, people_places
 from .repository import git, git_identity
+from ....application.shared.backlog_changes import BacklogChanges
 
 
-class BacklogChangeFiles:
+class BacklogChangeFiles(BacklogChanges):
     """The main checkout <home> with its run folder <runs>; <profile> sets the places as they stand, <lock> is the
     integrate lock a commit takes."""
 

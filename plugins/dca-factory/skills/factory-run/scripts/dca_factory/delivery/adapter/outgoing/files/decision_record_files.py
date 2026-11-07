@@ -26,6 +26,9 @@ from ....domain.service.story_route import StoryRoute
 from ....domain.model.stage_story import Presence
 from ....domain.service.acceptance_rules import AcceptanceMode, AcceptanceRules
 from ....application.delivery.pipeline_workflow import workflow
+from ....application.shared.decision_inbox import DecisionInbox
+from ....application.shared.decision_record_repository import DecisionRecordRepository
+from ....application.shared.request_records import RequestRecords
 
 GateError = MarkdownError
 
@@ -58,7 +61,7 @@ def answer_appended(given: str, by: str, at: str) -> str:
     return f"\n## Answer\nanswer: {given}\nby: {by}\nat: {at}\n"
 
 
-class DecisionRecordFiles:
+class DecisionRecordFiles(DecisionRecordRepository):
     """The decision record repository as files, under the project the process works in."""
 
     def __init__(self, cwd: str) -> None:
@@ -429,7 +432,7 @@ def record_sections(body: str) -> typing.List[typing.Dict[str, str]]:
             if s["heading"].split("(")[0].strip().lower() not in ("recommendation", "answer")]
 
 
-class DecisionInboxFiles:
+class DecisionInboxFiles(DecisionInbox):
     """The decision inbox as files, under the project the process works in."""
 
     def __init__(self, cwd: str) -> None:
@@ -460,7 +463,7 @@ class DecisionInboxFiles:
         return f"{place('epics')}/<epic>/<story>/{DECISIONS_DIR}/"
 
 
-class RequestRecordFiles:
+class RequestRecordFiles(RequestRecords):
     """The records the requests of the project <cwd> wrote, beside the stories and the project's own."""
 
     def __init__(self, cwd: str) -> None:

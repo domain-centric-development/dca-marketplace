@@ -21,12 +21,13 @@ from ..files.story_layout import journeys_hold, find_story
 from ....domain.model.decision_record import DecisionState, Given, RecordKind
 from ....domain.model.stage_story import Presence
 from ....domain.service.acceptance_rules import AcceptanceRules
+from ....application.shared.story_spec import StorySpec
 
 Front = typing.Mapping[str, typing.Any]
 Entries = typing.List[typing.Dict[str, typing.Any]]
 
 
-class StorySpecFiles:
+class StorySpecFiles(StorySpec):
     """The spec files beside the stories under <epics>."""
 
     def __init__(self, epics: str) -> None:

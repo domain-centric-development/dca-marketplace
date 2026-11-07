@@ -15,6 +15,7 @@ from ..git.repository import git
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import (
     MarkdownError, read_front_matter, read_text, split_front)
 from ....application.shared.requests import ID_WORD, KIND, Request, RequestRefused, STATES
+from ....application.shared.requests import RequestStore
 
 REQUESTS = "requests"
 REQUEST_JOURNAL = "journal.tsv"
@@ -231,7 +232,7 @@ def prune_outputs(days: int = 7, now: typing.Optional[float] = None) -> None:
                 os.remove(path)
 
 
-class RequestFiles:
+class RequestFiles(RequestStore):
     """The request store as files, relative to the project the process works in."""
 
     def __init__(self, cwd: str) -> None:
@@ -269,3 +270,20 @@ class RequestFiles:
 
     def hide_done(self, request_id: str) -> bool:
         return hide_done(request_id)
+
+
+class PlacedRequests(RequestFiles):
+    """The request store where the profile puts it now: the places are set again before every look — a person may
+    edit the profile while a run waits, and the runner moves between the checkout and a worktree."""
+
+    def __init__(self, cwd: str, placed: typing.Callable[[], typing.Any]) -> None:
+        super().__init__(cwd)
+        self._placed = placed
+
+    def all(self) -> typing.List[Request]:
+        self._placed()
+        return super().all()
+
+    def find(self, request_id: str) -> Request:
+        self._placed()
+        return super().find(request_id)

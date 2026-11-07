@@ -14,6 +14,7 @@ from ....domain.model.context_spec import (
     ContextName, ContextSpec, Feature, SharedKernel, Statement, Subdomain, Term, TermKind, TermName)
 from ....domain.model.criterion import Criterion, CriterionKey, FeatureName, Form, Line, RuleText, Selector
 from .spec_files import GLOSSARY_FILE, parse_spec, SCENARIOS_FILE
+from ....application.shared.context_specs import ContextSpecs
 
 #: A row of the designed domain's context table: | `cart` | Shopping cart … | Core |
 CONTEXT_ROW = re.compile(r"^\|\s*`?([A-Za-z][\w -]*?)`?\s*\|\s*(.*?)\s*\|\s*(.*?)\s*\|\s*$")
@@ -99,7 +100,7 @@ def mentions_of(glossary: str) -> typing.FrozenSet[TermName]:
     return frozenset(TermName(name) for name in NAMED.findall(text))
 
 
-class ContextSpecFiles:
+class ContextSpecFiles(ContextSpecs):
     """The contexts of the project <cwd>."""
 
     def __init__(self, cwd: str) -> None:

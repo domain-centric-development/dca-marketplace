@@ -12,6 +12,7 @@ from ....application.shared.front import created_of, front_text
 from .story_layout import depends_on, EPIC_FILE
 from ....domain.model.epic import EpicId
 from ....domain.model.schedule import EpicGraph
+from ....application.shared.epic_catalog import EpicCatalog
 
 Facts = typing.Dict[str, typing.Any]
 GateError = MarkdownError
@@ -93,7 +94,7 @@ def epic_dependency_problem(epics: str, epic: str) -> typing.Optional[str]:
     return problem.value if problem else None
 
 
-class EpicFiles:
+class EpicFiles(EpicCatalog):
     """The epic catalog as folders, under the project the process works in."""
 
     def __init__(self, cwd: str) -> None:

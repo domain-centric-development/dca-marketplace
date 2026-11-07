@@ -8,9 +8,10 @@ import typing
 from .journal_files import journal_writer
 from .owned_files import owned_end, record_owned
 from .windows import mark_stage, mark_window
+from ....application.shared.session_marks import SessionMarks
 
 
-class SessionMarkFiles:
+class SessionMarkFiles(SessionMarks):
     def __init__(self, cwd: str, runs: str) -> None:
         self._cwd, self._runs = cwd, runs
 

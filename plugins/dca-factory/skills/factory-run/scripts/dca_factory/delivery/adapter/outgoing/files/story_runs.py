@@ -19,6 +19,7 @@ from .snapshots import STAGES_MADE
 from .story_facts_files import StoryFactsFiles
 from .story_layout import find_story, story_files, story_id_of
 from ....domain.model.story_state import ENDED
+from ....application.shared.story_runs import StoryRuns
 
 #: What the gate and the runner keep in a story's evidence folder that a new pass starts without: the red ledger, the
 #: story's digest, the tests baseline, the round count, the base tree and the red tree. The journal and the snapshots carry on.
@@ -49,7 +50,7 @@ def keep_pass(folder: str) -> typing.Optional[str]:
     return target
 
 
-class StoryRunFiles:
+class StoryRunFiles(StoryRuns):
     """The stories' runs as files: the run folder <runs>, the stories under <epics>, the project <cwd>."""
 
     def __init__(self, cwd: str, epics: str, runs: str) -> None:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import typing
 
-from ....building_blocks import OutputPort
+from ...building_blocks import OutputPort
 
 
 class ProfileSource(OutputPort, typing.Protocol):

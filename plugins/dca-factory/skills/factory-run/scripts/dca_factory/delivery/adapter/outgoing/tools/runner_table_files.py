@@ -6,9 +6,10 @@ import typing
 
 from .....sharedkernel.adapter.outgoing.profile.profile_files import place
 from .agents import tools_shell
+from ....application.shared.runner_tables import RunnerTables
 
 
-class RunnerTableFiles:
+class RunnerTableFiles(RunnerTables):
     def tool_lines(self) -> typing.Optional[typing.List[str]]:
         return tools_shell()
 

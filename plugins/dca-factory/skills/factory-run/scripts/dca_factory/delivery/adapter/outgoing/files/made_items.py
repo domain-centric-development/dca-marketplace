@@ -6,12 +6,13 @@ import os
 import typing
 
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError, read_front_matter
+from ....application.shared.requests import MadeItems
 
 #: The file names that are a backlog item, and the kind each is where its front matter names none.
 ITEM_FILES = {"story.md": "story", "epic.md": "epic", "findings.md": "finding"}
 
 
-class MadeItemFiles:
+class MadeItemFiles(MadeItems):
     """The items at the paths a request wrote, relative to <cwd>."""
 
     def __init__(self, cwd: str) -> None:

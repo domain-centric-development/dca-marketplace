@@ -9,6 +9,8 @@ from ....domain.model.rule import (
     Count, Fired, KindName, Outcome, OutcomeState, Part, Refused, Rule, RuleId, RuleState, Source, StageName, Words)
 from ....domain.model.rulebook import GateTime, KindOrder, OrderPlace, StageRow
 from ..skills.skill_files import plain
+from ....application.shared.decided_rules import DecidedRules
+from ....application.shared.gate_findings import GateFindings
 
 #: How delivery publishes where a rule sits, in the rulebook's terms.
 PARTS = {"check": Part.CHECK, "pass": Part.PASS_ACTION, "decision": Part.DECISION, "told": Part.INSTRUCTION}
@@ -39,7 +41,7 @@ def translated(published: typing.Mapping[str, typing.Any]) -> Rule:
         Source(published.get("bound", "")), Words(published.get("title", "")))
 
 
-class DeliveryRules:
+class DeliveryRules(DecidedRules):
     """The rules the gate and the runner register, and the stage table — read once."""
 
     def rules(self) -> typing.Tuple[Rule, ...]:
@@ -56,7 +58,7 @@ class DeliveryRules:
                      for kind, stages in kind_orders().items())
 
 
-class DeliveryFindings:
+class DeliveryFindings(GateFindings):
     """What the gate found over a story of the project <cwd>, as delivery publishes it."""
 
     def __init__(self, cwd: str) -> None:

@@ -9,9 +9,10 @@ from ..stack import commands
 from ..stack.commands import open_suites_record
 from .run_marks import current_stage_files
 from .signals import record_judge_signal
+from ....application.shared.stage_marks import StageMarks
 
 
-class StageMarkFiles:
+class StageMarkFiles(StageMarks):
     """The marks of a gate run over a story of the kind <kind>, in the project <cwd> with its run folder <runs>."""
 
     def __init__(self, cwd: str, runs: str, kind: str) -> None:

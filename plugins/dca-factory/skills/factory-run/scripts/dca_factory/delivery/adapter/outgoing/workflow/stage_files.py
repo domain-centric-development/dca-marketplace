@@ -34,6 +34,7 @@ import typing
 from ....domain.model.stage import HandOver, ProfileCommand, Stage, StageName, StageText, StoryKind, Trait, Window
 from ....domain.model.workflow import DELIVERY, Workflow, WorkflowName
 from ....domain.model.workflow_rule import Written
+from ....application.shared.workflow_repository import WorkflowRepository
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
 from .rule_files import listed
 
@@ -47,7 +48,7 @@ FOLDER = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)
                                        "workflow", "stages"))
 
 
-class StageFiles:
+class StageFiles(WorkflowRepository):
     """The workflow's repository (`WorkflowRepository`) over a folder of Markdown files, one per stage — the folder
     holds the one workflow every story runs, `delivery`."""
 

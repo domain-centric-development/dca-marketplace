@@ -24,11 +24,12 @@ from .journal_files import journal_events
 from .run_marks import (
     backlog_digest, current_stage_files, gate_passed_since, OWNED_CHANGED, pass_marks, STORY_DIGEST, verdict_in)
 from .story_layout import delivered_by, is_delivered, story_digest, story_kind
+from ....application.shared.story_facts import StoryFacts
 
 Front = typing.Mapping[str, typing.Any]
 
 
-class StoryFactsFiles:
+class StoryFactsFiles(StoryFacts):
     """The facts of the story <story_id> with the front matter <front>, under the checkout <cwd> and the run folder
     <runs>."""
 

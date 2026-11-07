@@ -6,9 +6,10 @@ import typing
 
 from .....discovery.api import list_reports
 from .....sharedkernel.adapter.outgoing.profile.profile_files import location, read_profile, resolve_profile
+from ....application.shared.discovery_list import DiscoveryList
 
 
-class DiscoveryListFiles:
+class DiscoveryListFiles(DiscoveryList):
     def __init__(self, cwd: str) -> None:
         self._cwd = cwd
 

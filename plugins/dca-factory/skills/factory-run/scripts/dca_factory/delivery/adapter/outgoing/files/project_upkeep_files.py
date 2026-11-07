@@ -7,9 +7,10 @@ import typing
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_rel
 from .migrations import migrate_layout
 from .story_record import ignore_journals_in
+from ....application.shared.project_upkeep import ProjectUpkeep
 
 
-class ProjectUpkeepFiles:
+class ProjectUpkeepFiles(ProjectUpkeep):
     def __init__(self, cwd: str) -> None:
         self._cwd = cwd
 

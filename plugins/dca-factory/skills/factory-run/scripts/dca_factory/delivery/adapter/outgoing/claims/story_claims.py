@@ -12,6 +12,7 @@ from ..git.repository import git
 from ..files.run_marks import story_title
 from ..files.story_layout import epic_folder, find_story
 from .remote_claims import cached_claims, claim_config_here, claim_story, free_id, refresh_claims, release_claim
+from ....application.shared.story_claims import StoryClaims
 
 #: a claim's exit codes, as the runner reads them
 CLAIM_CODES = {0: Claim.OWN, 3: Claim.ELSEWHERE, 4: Claim.NEEDS_PERSON}
@@ -22,7 +23,7 @@ def claim_target(cwd: str) -> str:
     return git(cwd, "symbolic-ref", "--quiet", "--short", "HEAD")[1].strip() or "main"
 
 
-class RemoteStoryClaims:
+class RemoteStoryClaims(StoryClaims):
     """The claims on the remote the profile names (`claim_remote:`), fetched fresh into the run folder <runs>; the
     stories under <epics>."""
 

@@ -10,9 +10,10 @@ from ....domain.model.story import StoryId
 from ....domain.model.verdict import CheckName
 from .journal_files import journal_events
 from .run_marks import run_stories
+from ....application.shared.gate_refusals import GateRefusals
 
 
-class GateRefusalFiles:
+class GateRefusalFiles(GateRefusals):
     def __init__(self, runs: str) -> None:
         self._runs = runs
 

@@ -5,9 +5,10 @@ from __future__ import annotations
 import typing
 
 from .skeletons import contract_text, document_skeleton, files_skeleton, plan_skeleton
+from ....application.shared.hand_over_skeletons import HandOverSkeletons
 
 
-class HandOverSkeletonFiles:
+class HandOverSkeletonFiles(HandOverSkeletons):
     def __init__(self, cwd: str, runs: str) -> None:
         self._cwd, self._runs = cwd, runs
 

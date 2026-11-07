@@ -20,9 +20,10 @@ from .run_marks import STORY_DIGEST, write_mark
 from .plan_adoption_files import adopt_split, adopt_whole
 from .signals import journal_signal, plan_left_open
 from .story_layout import story_digest
+from ....application.shared.stage_delivery import StageDelivery
 
 
-class StageDeliveryFiles:
+class StageDeliveryFiles(StageDelivery):
     """The writes of a passing gate in the project <cwd> with its run folder <runs> and its profile."""
 
     def __init__(self, cwd: str, runs: str, profile: typing.Mapping[str, typing.Any]) -> None:

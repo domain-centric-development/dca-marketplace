@@ -17,6 +17,7 @@ from ....application.shared.story_journal import Window
 from ....application.shared.story_repository import StoryNotFound
 from ....domain.model.story import StoryId
 from ....domain.model.usage import Usage, USAGE_FIELDS
+from ....application.shared.story_journal import StoryJournal
 
 #: One event of a journal: its `seq`, `at`, `kind`, `name`, `fields` and the `line` as written.
 Event = typing.Dict[str, typing.Any]
@@ -139,7 +140,7 @@ def mark_questioned(cwd: str, runs: str, paths: typing.Iterable[str], request_id
                                f"request={request_id}")
 
 
-class StoryJournalFiles:
+class StoryJournalFiles(StoryJournal):
     """The story journal as files, in the run folder the profile places."""
 
     def __init__(self, cwd: str, runs: str) -> None:

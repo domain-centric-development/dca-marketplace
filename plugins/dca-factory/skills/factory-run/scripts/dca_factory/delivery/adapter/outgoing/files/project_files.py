@@ -8,12 +8,13 @@ import typing
 from .....sharedkernel.adapter.outgoing.profile.profile_files import (
     location, PROFILE_FILE, read_profile, resolve_profile)
 from .story_layout import DECISIONS_DIR
+from ....application.shared.project_facts import ProjectFacts
 
 #: The build files a stack is known by; a .NET solution or project is known by its extension.
 BUILD_FILES = ("build.gradle", "build.gradle.kts", "pom.xml", "package.json", "pyproject.toml", "go.mod", "Cargo.toml")
 
 
-class ProjectFiles:
+class ProjectFiles(ProjectFacts):
     """The project <cwd>, with its epics and run folder as the profile places them."""
 
     def __init__(self, cwd: str, epics: str, runs: str) -> None:

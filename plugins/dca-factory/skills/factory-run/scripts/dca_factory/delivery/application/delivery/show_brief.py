@@ -11,7 +11,7 @@ from ...domain.model.stack_profile import SkillName
 from ...domain.model.stage import StageName, StageText, Trait
 from ...domain.model.story import StoryId
 from ...domain.service.stage_brief import Brief, Carrier, CarrierRole, StageBrief
-from ..shared.profile_source import ProfileSource
+from ....sharedkernel.application.profile_source import ProfileSource
 from ..shared.story_repository import StoryRepository
 from .check_stage import judging
 from .pipeline_rules import RULES

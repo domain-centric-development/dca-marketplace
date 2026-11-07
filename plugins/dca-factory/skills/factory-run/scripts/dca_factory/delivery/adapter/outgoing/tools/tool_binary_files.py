@@ -7,9 +7,10 @@ import typing
 from ....application.shared.tool_binaries import Probe
 from .agents import TOOL, unprobed_flags
 from .streams import usage_lines
+from ....application.shared.tool_binaries import ToolBinaries
 
 
-class ToolBinaryFiles:
+class ToolBinaryFiles(ToolBinaries):
     def names(self) -> typing.Sequence[str]:
         return list(TOOL)
 
