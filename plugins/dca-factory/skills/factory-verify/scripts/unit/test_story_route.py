@@ -325,7 +325,8 @@ class Stages:
 
 def run(stages, start=None):
     lines = Lines()
-    code = exit_of(RunStoryUseCase(Translated(stages), lines).execute(RunStoryCommand("S-1", start)))
+    translated = Translated(stages)
+    code = exit_of(RunStoryUseCase(translated, translated, lines).execute(RunStoryCommand("S-1", start)))
     return code, lines.said
 
 

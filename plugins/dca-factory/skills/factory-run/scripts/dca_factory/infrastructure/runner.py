@@ -50,7 +50,8 @@ class RunnerCases:
 
     def run_story(self, run: Run, tool: str, story: str, start: typing.Optional[str], dry: bool, gate_first: bool,
                   shared: typing.FrozenSet[Window]) -> int:
-        return exit_of(RunStoryUseCase(RunnerStages(run, tool), ConsoleLines()).execute(
+        stages = RunnerStages(run, tool)          # the run's journal and its steps, one adapter
+        return exit_of(RunStoryUseCase(stages, stages, ConsoleLines()).execute(
             RunStoryCommand(story, start, dry, gate_first, shared)))
 
     def integrate(self, run: Run, tool: str, story: str, dry: bool) -> typing.Optional[int]:

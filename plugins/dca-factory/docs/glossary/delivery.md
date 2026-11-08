@@ -373,7 +373,7 @@ stage runs in its own process and which a shared window carries, which a kind sk
 reviews before the judge for every kind that changes the code (an adoption changes nothing and gets none), where a
 refusal, the build stage or the judge sends the story back (the judge's `back:` holds for a resumed story too), when
 the rounds did not converge — is the workflow's
-(`Workflow.steps`, `jump`, `after_refusal`, `judged_back`; the readers of a gate's report and a verdict are those values'); the use case `run_story` walks it through the port `StoryStages`, a round one more pass of its loop,
+(`Workflow.steps`, `jump`, `after_refusal`, `judged_back`; the readers of a gate's report and a verdict are those values'); the use case `run_story` — the executive of the story's process — walks it, reading where the story stands from its journal (the store `StoryRunJournal`) and taking each step through the port `StageSteps`, a round one more pass of its loop,
 and `integrate_story` brings the delivered story onto the main line through `StoryIntegration`.
 
 **Type:** Concept

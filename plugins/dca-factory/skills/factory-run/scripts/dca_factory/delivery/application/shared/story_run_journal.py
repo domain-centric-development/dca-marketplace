@@ -1,17 +1,18 @@
-"""What a story's run asks of the factory around it: its files, its gates, and the processes that carry its stages."""
+"""The tracker of a story's process: what its journal and its files say about where the story stands — read, never
+decided here; the rounds counted."""
 
 from __future__ import annotations
 
 import typing
 
-from ....building_blocks import OutputPort
+from ....building_blocks import Store
 from ...domain.model.stage import StageName, StoryKind
 from ...domain.model.story_state import GateReport, Judged, Rounds
-from .run_outcome import GateOutcome, RunOutcome
 
 
-class StoryStages(OutputPort, typing.Protocol):
-    """One story's stages as the runner carries them, in the checkout or the worktree the story runs in."""
+class StoryRunJournal(Store, typing.Protocol):
+    """One story's run as its journal and its files keep it, in the checkout or the worktree the story runs in. The
+    executive (`RunStoryUseCase`) reads where the story stands here and decides with the workflow."""
 
     def open_decisions(self, story: str) -> typing.List[str]:
         """The records of the story nobody answered yet, as a person reads their places."""
@@ -23,18 +24,6 @@ class StoryStages(OutputPort, typing.Protocol):
     def red_stale(self, story: str, start: StageName) -> bool:
         """The story's tests changed after the test stage saw them fail: said and journaled — the red proof is about
         an earlier version."""
-        ...
-
-    def pause(self, story: str) -> None:
-        """Between two stages: a `stop` request, then the requests about other stories."""
-        ...
-
-    def gate(self, stage: str, story: str) -> GateOutcome:
-        """The gate's exit: 0 passed, 3 waits for a person's acceptance, else refused."""
-        ...
-
-    def quiet_gate(self, stage: str, story: str) -> GateOutcome:
-        """The gate asked only whether a file already holds — its lines unread."""
         ...
 
     def report(self, story: str, stage: str) -> GateReport:
@@ -58,30 +47,6 @@ class StoryStages(OutputPort, typing.Protocol):
 
     def asks_human(self, story: str, stage: str) -> bool:
         """The stage's hand-over ends with a needs-human section."""
-        ...
-
-    def stopped_for_human(self, story: str, stage: str) -> RunOutcome:
-        """The records the needs-human section names, said with how to resume: 3 when it names one, else 1."""
-        ...
-
-    def stage(self, story: str, stage: str) -> RunOutcome:
-        """The stage in a process of its own: 0 when it ran and wrote its file, else the run's exit."""
-        ...
-
-    def dry(self, story: str, stage: str) -> None:
-        """What the stage's process would be started with, said."""
-        ...
-
-    def builder(self, story: str, stages: typing.Sequence[str], start: str, dry: bool) -> RunOutcome:
-        """The shared builder carrying <stages> in one process: 0 when it ran, else the run's exit."""
-        ...
-
-    def reviews(self, story: str, dry: bool) -> RunOutcome:
-        """One process per review perspective, at once: 0, or the run's exit when they may not be dispatched."""
-        ...
-
-    def verifier(self, story: str, stages: typing.Sequence[str], dry: bool) -> RunOutcome:
-        """The shared verifier carrying <stages> in one process: 0 when it ran, else the run's exit."""
         ...
 
     def sent_back(self, story: str) -> bool:
@@ -117,9 +82,4 @@ class StoryStages(OutputPort, typing.Protocol):
 
     def in_worktree(self) -> bool:
         """The story runs in its worktree, integrated once delivered."""
-        ...
-
-    def integrate(self, story: str, dry: bool) -> typing.Optional[RunOutcome]:
-        """The story integrated into the main line: its exit, or None where the gate refused it there and the build
-        stage runs again."""
         ...

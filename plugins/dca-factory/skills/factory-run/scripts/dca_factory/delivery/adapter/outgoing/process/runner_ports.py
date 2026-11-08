@@ -36,7 +36,8 @@ from ....application.shared.backlog_schedule import BacklogSchedule
 from ....application.shared.backlog_worker import BacklogCheckout, BacklogWorker
 from ....application.shared.request_skill import RequestSkill
 from ....application.shared.story_integration import StoryIntegration
-from ....application.shared.story_stages import StoryStages
+from ....application.shared.stage_steps import StageSteps
+from ....application.shared.story_run_journal import StoryRunJournal
 
 #: The frame a person's words stand in within a request's prompt (WP-184): they are the request's data, never
 #: instructions to the run. A marker inside the words is broken, so they cannot close the frame early.
@@ -183,8 +184,8 @@ class RunnerRequestSkill(RequestSkill):
         return "\n\n".join(lines)
 
 
-class RunnerStages(StoryStages):
-    """A story's stages on the runner (`StoryStages`): its files read with the package's readers, in the checkout or
+class RunnerStages(StoryRunJournal, StageSteps):
+    """A story's run on the runner — its journal (`StoryRunJournal`) and its steps (`StageSteps`): its files read with the package's readers, in the checkout or
     the worktree it runs in, its gates and its processes as the runner starts them."""
 
     def __init__(self, run: Run, tool: str) -> None:
