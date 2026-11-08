@@ -7,6 +7,7 @@ tomorrow — and answers by the `HandedFileRef` it was given.
 
 from __future__ import annotations
 
+import enum
 import re
 import typing
 
@@ -50,10 +51,19 @@ class FileName(Value):
         return FileName(self.value.replace("\\", "/").rsplit("/", 1)[-1])
 
 
-class FileKind(Value):
-    """What a file is — one of the kinds the factory takes, or `html` for a mockup it shows."""
+class FileKind(enum.Enum):
+    """What a file is — one of the kinds the factory takes, or `html` for a mockup it shows; its value the media type."""
 
-    value: str
+    PNG = "image/png"
+    JPEG = "image/jpeg"
+    GIF = "image/gif"
+    WEBP = "image/webp"
+    PDF = "application/pdf"
+    PLAIN = "text/plain"
+    MARKDOWN = "text/markdown"
+    CSV = "text/csv"
+    JSON = "application/json"
+    HTML = "text/html"
 
     @property
     def picture(self) -> bool:
@@ -61,7 +71,7 @@ class FileKind(Value):
 
     @property
     def text(self) -> bool:
-        return self.value.startswith("text/") or self.value == "application/json"
+        return self.value.startswith("text/") or self is FileKind.JSON
 
 
 class ByteSize(Value):

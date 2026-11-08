@@ -78,10 +78,13 @@ class StageName(Value):
     value: str
 
 
-class KindName(Value):
-    """A story kind: `story`, `journey`, `adopt`, `task`."""
+class KindName(enum.Enum):
+    """A story kind, as the rulebook names the kinds its rules hold for."""
 
-    value: str
+    STORY = "story"
+    JOURNEY = "journey"
+    ADOPT = "adopt"
+    TASK = "task"
 
 
 class Source(Value):

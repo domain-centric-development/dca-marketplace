@@ -4,6 +4,8 @@ no rule has, a stage no row has)."""
 
 from __future__ import annotations
 
+from ....domain.model.rule import KindName
+
 import argparse
 import os
 import sys
@@ -33,7 +35,8 @@ def main(argv: typing.Sequence[str]) -> int:
     parser = argparse.ArgumentParser(prog="factory-cli.py --rules", description="the factory's rules")
     parser.add_argument("--rules", action="store_true", required=True)
     parser.add_argument("--stage", help="only the rules that hold at this stage")
-    parser.add_argument("--kind", help="only the rules that hold for this story kind")
+    parser.add_argument("--kind", choices=[kind.value for kind in KindName],
+                        help="only the rules that hold for this story kind")
     parser.add_argument("--story", help="mark the rules that fired in the story's last gate runs")
     parser.add_argument("--format", choices=("md", "json", "svg", "mermaid"), default="md",
                         help="svg, mermaid: the flow of --kind (story when none) as a drawing")
