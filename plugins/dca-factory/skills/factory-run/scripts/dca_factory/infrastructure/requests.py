@@ -14,6 +14,7 @@ from ..delivery.adapter.outgoing.git.backlog_changes import BacklogChangeFiles
 from ..delivery.adapter.outgoing.process.console_lines import ConsoleLines
 from ..delivery.application.requests.check_request import CheckRequestCommand
 from ..delivery.application.requests.request_queue import RequestQueue
+from ..delivery.application.requests.settle_request import SettleRequestUseCase
 from ..delivery.application.requests.work_request import WorkRequestUseCase
 from ..delivery.application.shared.request_skill import RequestSkill
 from ..delivery.application.shared.requests import Kind, Request, RequestRefused
@@ -50,5 +51,12 @@ def request_queue(home: str, worker: str, placed: typing.Callable[[], typing.Any
 
 def work_request(home: str, runs: str, profile: typing.Callable[[], typing.Any],
                  lock: typing.Callable[[], typing.ContextManager[None]], skill: RequestSkill) -> WorkRequestUseCase:
-    return WorkRequestUseCase(RequestFiles(home), RequestRecordFiles(home), BacklogChangeFiles(home, runs, profile, lock),
-                              skill, HeldRequests(home, runs), stamp_utc, HandedFileFolder())
+    store, changes, settlement = RequestFiles(home), BacklogChangeFiles(home, runs, profile, lock), HeldRequests(home, runs)
+    return WorkRequestUseCase(store, RequestRecordFiles(home), changes, skill, settlement, stamp_utc, HandedFileFolder())
+
+
+def settle_request(home: str, runs: str, profile: typing.Callable[[], typing.Any],
+                   lock: typing.Callable[[], typing.ContextManager[None]]) -> SettleRequestUseCase:
+    """A request the factory settles itself, written and committed at once."""
+    return SettleRequestUseCase(RequestFiles(home), BacklogChangeFiles(home, runs, profile, lock), HeldRequests(home, runs),
+                                stamp_utc)

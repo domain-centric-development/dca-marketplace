@@ -20,7 +20,7 @@ class StartSessionStageInputPort(UseCase[StartSessionStageCommand, int], typing.
     """Its exit."""
 
 
-class StartSessionStageUseCase:
+class StartSessionStageUseCase(StartSessionStageInputPort):
     def __init__(self, port: SessionMarks) -> None:
         self._port = port
 

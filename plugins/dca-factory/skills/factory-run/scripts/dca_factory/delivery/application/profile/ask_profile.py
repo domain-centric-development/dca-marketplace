@@ -34,7 +34,7 @@ class AskProfileInputPort(UseCase[AskProfileQuery, typing.Tuple[str, ...]], typi
     """The profile's answer to one question, one line per item."""
 
 
-class AskProfileUseCase:
+class AskProfileUseCase(AskProfileInputPort):
     def __init__(self, profiles: ProfileSource) -> None:
         self._profiles = profiles
 

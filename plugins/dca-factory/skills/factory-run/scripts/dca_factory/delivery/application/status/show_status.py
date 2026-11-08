@@ -41,7 +41,7 @@ class ShowStatusInputPort(UseCase[ShowStatusQuery, Model], typing.Protocol):
     """Where the factory stands."""
 
 
-class ShowStatusUseCase:
+class ShowStatusUseCase(ShowStatusInputPort):
     """The status every view draws — the terminal, the page, the cockpit, a session's start: the order, the marks,
     the words, the figures and every action are decided here, a view composes none of its own."""
 

@@ -18,7 +18,7 @@ class GiveCheckoutBackInputPort(UseCase[GiveCheckoutBackCommand, int], typing.Pr
     """Its exit."""
 
 
-class GiveCheckoutBackUseCase:
+class GiveCheckoutBackUseCase(GiveCheckoutBackInputPort):
     def __init__(self, port: Checkout) -> None:
         self._port = port
 

@@ -91,7 +91,7 @@ class ShowHelpInputPort(UseCase[ShowHelpQuery, Model], typing.Protocol):
     """The factory explained."""
 
 
-class ShowHelpUseCase:
+class ShowHelpUseCase(ShowHelpInputPort):
     """The factory explained in one fixed view: the text is the same everywhere; only the marks in the flow and the
     Next line come from the project."""
 

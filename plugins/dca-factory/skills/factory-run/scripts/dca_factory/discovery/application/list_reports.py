@@ -22,7 +22,7 @@ class ListReportsInputPort(UseCase[ListReportsQuery, Model], typing.Protocol):
     """The discovery reports."""
 
 
-class ListReportsUseCase:
+class ListReportsUseCase(ListReportsInputPort):
     """Every topic with its proposed epics — and the epic of the backlog that holds each, as delivery says — and its
     proposed description changes; what the report says, read the way the check reads it."""
 

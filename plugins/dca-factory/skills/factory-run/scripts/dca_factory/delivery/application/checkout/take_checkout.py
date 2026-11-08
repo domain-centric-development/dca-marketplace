@@ -18,7 +18,7 @@ class TakeCheckoutInputPort(UseCase[TakeCheckoutCommand, int], typing.Protocol):
     """Its exit."""
 
 
-class TakeCheckoutUseCase:
+class TakeCheckoutUseCase(TakeCheckoutInputPort):
     def __init__(self, port: Checkout) -> None:
         self._port = port
 

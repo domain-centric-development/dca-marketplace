@@ -27,7 +27,7 @@ class ShowStageOutputsInputPort(UseCase[ShowStageOutputsQuery, typing.List[Model
     """One entry per output: `story`, `stage`, `file`, `running`, `lines`."""
 
 
-class ShowStageOutputsUseCase:
+class ShowStageOutputsUseCase(ShowStageOutputsInputPort):
     def __init__(self, outputs: StageOutputs) -> None:
         self._outputs = outputs
 

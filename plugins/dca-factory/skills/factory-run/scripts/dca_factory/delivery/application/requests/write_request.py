@@ -34,7 +34,7 @@ class WriteRequestInputPort(UseCase[WriteRequestCommand, RequestWritten], typing
     """Write one request."""
 
 
-class WriteRequestUseCase:
+class WriteRequestUseCase(WriteRequestInputPort):
     """The request checked against the files and against the requests that wait — DuplicateRequest where the same
     waits already, RequestRefused with the reason otherwise —, the files beside its words taken as the domain takes
     them and kept, then written, queued: all or nothing — a request not written keeps no file."""

@@ -24,7 +24,7 @@ class ShowPartInputPort(UseCase[ShowPartQuery, Model], typing.Protocol):
     """One part of the description, as written."""
 
 
-class ShowPartUseCase:
+class ShowPartUseCase(ShowPartInputPort):
     """A part with where it is and each of its sections with what it says; no sections where its file is missing."""
 
     def __init__(self, store: DescriptionStore) -> None:

@@ -42,7 +42,7 @@ class ShowStoryInputPort(UseCase[ShowStoryQuery, Model], typing.Protocol):
     """One story as a person reads it."""
 
 
-class ShowStoryUseCase:
+class ShowStoryUseCase(ShowStoryInputPort):
     """A story's detail over the status: the row the status shows of it, and what its file, its journal and its
     records say beyond that — the passes, why a stage ran more than once, the decisions, what is up with it."""
 

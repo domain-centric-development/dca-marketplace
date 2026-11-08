@@ -26,7 +26,7 @@ class CheckSpecInputPort(UseCase[CheckSpecQuery, SpecChecked], typing.Protocol):
     """Check story against spec."""
 
 
-class CheckSpecUseCase:
+class CheckSpecUseCase(CheckSpecInputPort):
     """In one direction: a delivered criterion missing from its spec disagrees — unless a story delivered at the same
     time or later removed it by its plan. Whether a scenario came from a story is not asked: a delivered story may be
     gone. Then the shape of every context's spec, as a delivery checks it before it writes."""

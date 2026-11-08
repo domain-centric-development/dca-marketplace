@@ -20,7 +20,7 @@ class ReleaseStoryClaimInputPort(UseCase[ReleaseStoryClaimCommand, int], typing.
     """Its exit."""
 
 
-class ReleaseStoryClaimUseCase:
+class ReleaseStoryClaimUseCase(ReleaseStoryClaimInputPort):
     def __init__(self, claims: StoryClaims) -> None:
         self._claims = claims
 

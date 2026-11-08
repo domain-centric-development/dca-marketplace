@@ -33,7 +33,7 @@ class AnswerQuestionInputPort(UseCase[AnswerQuestionCommand, AnswerQuestionResul
     """Answer a question with an option, where the option is the whole decision."""
 
 
-class AnswerQuestionUseCase:
+class AnswerQuestionUseCase(AnswerQuestionInputPort):
     """An option named for a request's own question (`request:` in the record), open and offering that option, is
     written as the answer; the request that asked runs again and applies it. A stage's question goes through the
     decisions skill, which weighs what an answer changes — a test, the designed map."""

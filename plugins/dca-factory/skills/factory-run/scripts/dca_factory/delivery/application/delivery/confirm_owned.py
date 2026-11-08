@@ -34,7 +34,7 @@ class ConfirmOwnedInputPort(UseCase[ConfirmOwnedCommand, ConfirmOwnedResult], ty
     """Confirm what a stage changed as the person's."""
 
 
-class ConfirmOwnedUseCase:
+class ConfirmOwnedUseCase(ConfirmOwnedInputPort):
     """The mark goes, what changed is journaled, and the story runs on from what its files say."""
 
     def __init__(self, owned: OwnedChanges, journal: StoryJournal) -> None:

@@ -31,7 +31,7 @@ class ResolveRunArgumentInputPort(UseCase[ResolveRunArgumentQuery, ResolvedArgum
     """The argument's meaning."""
 
 
-class ResolveRunArgumentUseCase:
+class ResolveRunArgumentUseCase(ResolveRunArgumentInputPort):
     def __init__(self, stories: StoryRepository) -> None:
         self._stories = stories
 

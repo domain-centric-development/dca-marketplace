@@ -99,7 +99,7 @@ def with_health(model: Model, spec: ContextSpec, health: typing.Sequence[Health]
     return model
 
 
-class ShowSpecUseCase:
+class ShowSpecUseCase(ShowSpecInputPort):
     """The contexts the project keeps, with what open stories would do to them — and, asked, how each criterion
     stands."""
 

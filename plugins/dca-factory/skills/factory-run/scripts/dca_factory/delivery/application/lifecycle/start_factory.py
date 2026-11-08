@@ -23,7 +23,7 @@ class StartFactoryInputPort(UseCase[StartFactoryCommand, int], typing.Protocol):
     """Its exit."""
 
 
-class StartFactoryUseCase:
+class StartFactoryUseCase(StartFactoryInputPort):
     def __init__(self, process: FactoryProcess) -> None:
         self._process = process
 

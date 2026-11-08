@@ -18,7 +18,7 @@ class MigrateLayoutInputPort(UseCase[MigrateLayoutCommand, int], typing.Protocol
     """Its exit."""
 
 
-class MigrateLayoutUseCase:
+class MigrateLayoutUseCase(MigrateLayoutInputPort):
     def __init__(self, upkeep: ProjectUpkeep) -> None:
         self._upkeep = upkeep
 

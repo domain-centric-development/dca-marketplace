@@ -23,7 +23,7 @@ class RetryRequestInputPort(UseCase[RetryRequestCommand, Retried], typing.Protoc
     """Queue a failed request again."""
 
 
-class RetryRequestUseCase:
+class RetryRequestUseCase(RetryRequestInputPort):
     """A failed request queued again, as it was written; any other state is refused."""
 
     def __init__(self, store: RequestStore) -> None:

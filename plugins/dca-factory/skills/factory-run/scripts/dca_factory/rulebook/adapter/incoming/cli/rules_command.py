@@ -9,13 +9,13 @@ import os
 import sys
 import typing
 
-from ....application.show_rulebook import ShowRulebookQuery, ShowRulebookUseCase
+from ....application.show_rulebook import ShowRulebookQuery, ShowRulebookInputPort
 
 
 class RulesRoot(typing.Protocol):
     """What this command line takes from the composition root — given at start (`wire`), never imported."""
 
-    def show_rulebook(self, cwd: str) -> ShowRulebookUseCase: ...
+    def show_rulebook(self, cwd: str) -> ShowRulebookInputPort: ...
 
 
 #: the composition root, given by `wire` before the command line runs

@@ -31,7 +31,7 @@ class FollowFactoryLogInputPort(UseCase[FollowFactoryLogQuery, LogFollowed], typ
     """What the factory's log added since the last call."""
 
 
-class FollowFactoryLogUseCase:
+class FollowFactoryLogUseCase(FollowFactoryLogInputPort):
     """A log that shrank was kept aside and a new one begun: it is read again from its start. Only whole lines are
     said; the rest waits for its line break."""
 

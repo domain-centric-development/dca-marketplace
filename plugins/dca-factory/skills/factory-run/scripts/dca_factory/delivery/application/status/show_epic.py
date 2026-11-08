@@ -42,7 +42,7 @@ class ShowEpicInputPort(UseCase[ShowEpicQuery, Model], typing.Protocol):
     """One epic as a person reads it."""
 
 
-class ShowEpicUseCase:
+class ShowEpicUseCase(ShowEpicInputPort):
     """One epic as a person reads it (WP-146): its fields, its own text, its stories with their state — newest
     first, as the backlog shows them — and what comes next."""
 

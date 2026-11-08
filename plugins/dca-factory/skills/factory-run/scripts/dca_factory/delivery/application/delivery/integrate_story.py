@@ -9,8 +9,9 @@ import typing
 from ....building_blocks import UseCase
 from ...domain.model.story_state import Refusal
 from ..shared.run_lines import RunLines
-from ..shared.story_integration import Lost, StoryIntegration
+from ..shared.story_integration import StoryIntegration
 from .pipeline_rules import decides
+from .resolve_conflicts import ConflictResolution
 
 
 @dataclasses.dataclass(frozen=True)
@@ -24,7 +25,7 @@ class IntegrateStoryInputPort(UseCase[IntegrateStoryCommand, typing.Optional[int
     again."""
 
 
-class IntegrateStoryUseCase:
+class IntegrateStoryUseCase(IntegrateStoryInputPort):
     """Delivered is the integration — under the lock, journaled as the runner's own step. Again where the main line
     moved on meanwhile (three times at most); back to the integrate stage, not a round, where a resolution dropped the
     main line's side of a test (twice at most); a round from the build stage where the gate refused the story."""
@@ -32,6 +33,7 @@ class IntegrateStoryUseCase:
     def __init__(self, integration: StoryIntegration, lines: RunLines) -> None:
         self._integration = integration
         self._lines = lines
+        self._resolution = ConflictResolution(integration, lines)
 
     @decides(
         "RUN-INTEGRATE-1",
@@ -50,28 +52,6 @@ class IntegrateStoryUseCase:
         self._integration.relink(story)
         return None
 
-    def resolve(self, story: str, said: str, lost: Lost = ()) -> typing.Optional[int]:
-        """A merge of the main line into the story that stopped on conflicts (`conflict: <path>` lines in <said>):
-        the integrate stage resolves them, then the merge is committed and squashed. A resolution that dropped what
-        the main line added to a test goes back to the same stage, naming the lines, at most twice — never to a person,
-        and never to the story's own stages, whose gates would call it the story's change. `lost` starts with such a
-        repair. None when it holds, else the run's exit."""
-        conflicts = "".join(line[len("conflict: "):] + " " for line in said.split("\n") if line.startswith("conflict: "))
-        for attempt in (1, 2, 3):
-            stopped = self._integration.session(story, conflicts, lost)
-            if stopped is not None:
-                return stopped
-            lost = self._integration.lost(story)
-            if not lost:
-                return None
-            if attempt < 3:
-                self._lines.out(f"factory: the resolution of {story} changed a test the main line holds — "
-                                f"{self._integration.lost_text(lost)}; back to the integrate stage (attempt "
-                                f"{attempt + 1}).")
-        self._lines.err(f"factory: three resolutions of {story} kept dropping the main line's side of a test — "
-                        f"{self._integration.lost_text(lost)}. needs-human: the worktree "
-                        f"{self._integration.worktree()} holds the merge.")
-        return 1
 
     def _attempts(self, story: str) -> typing.Optional[int]:
         """The integration, again where the main line moved meanwhile: an exit, or None where the gate refused the
@@ -84,7 +64,7 @@ class IntegrateStoryUseCase:
                 code, said = self._integration.prepare(story)
                 self._lines.out(said)
                 if code == 3:
-                    stopped = self.resolve(story, said)
+                    stopped = self._resolution.resolve(story, said)
                     if stopped is not None:
                         return stopped
                 elif code != 0:
@@ -115,7 +95,7 @@ class IntegrateStoryUseCase:
                                     f"— back to the integrate stage, not a round ({self._integration.lost_text(lost)}).")
                     self._integration.lock()
                     try:
-                        stopped = self.resolve(story, "", lost)
+                        stopped = self._resolution.resolve(story, "", lost)
                     finally:
                         self._integration.unlock()
                     if stopped is not None:

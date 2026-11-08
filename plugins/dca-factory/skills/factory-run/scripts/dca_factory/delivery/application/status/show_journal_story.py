@@ -20,7 +20,7 @@ class ShowJournalStoryInputPort(UseCase[ShowJournalStoryQuery, Model], typing.Pr
     """`stages`, the `models` they ran on, the stages whose requested model was `not_applied`, and `priced`."""
 
 
-class ShowJournalStoryUseCase:
+class ShowJournalStoryUseCase(ShowJournalStoryInputPort):
     def __init__(self, facts: StatusFacts) -> None:
         self._facts = facts
 

@@ -18,7 +18,7 @@ class ShowWorkerInputPort(UseCase[ShowWorkerQuery, typing.Tuple[typing.Optional[
     """The worker's facts (None: nobody) and its line."""
 
 
-class ShowWorkerUseCase:
+class ShowWorkerUseCase(ShowWorkerInputPort):
     def __init__(self, process: FactoryProcess) -> None:
         self._process = process
 

@@ -18,7 +18,7 @@ class TakeBackDeliveryInputPort(UseCase[TakeBackDeliveryCommand, typing.Optional
     """Take a published delivery back; None where the story has no published branch."""
 
 
-class TakeBackDeliveryUseCase:
+class TakeBackDeliveryUseCase(TakeBackDeliveryInputPort):
     """A published branch whose merge request lost the race goes back to before its delivery, so the integrate step
     merges the remote main line and the delivering gate merges again under the new rules. The spec is never resolved
     by text."""

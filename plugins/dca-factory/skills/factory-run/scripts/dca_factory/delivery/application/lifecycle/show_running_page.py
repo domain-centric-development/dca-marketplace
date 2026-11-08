@@ -18,7 +18,7 @@ class ShowRunningPageInputPort(UseCase[ShowRunningPageQuery, typing.Optional[Inf
     """The running page (pid, port, url), or None."""
 
 
-class ShowRunningPageUseCase:
+class ShowRunningPageUseCase(ShowRunningPageInputPort):
     def __init__(self, process: FactoryProcess) -> None:
         self._process = process
 

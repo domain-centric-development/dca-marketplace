@@ -20,7 +20,7 @@ class ReadToolUsageInputPort(UseCase[ReadToolUsageQuery, typing.List[str]], typi
     """The usage's lines, as the journal takes them."""
 
 
-class ReadToolUsageUseCase:
+class ReadToolUsageUseCase(ReadToolUsageInputPort):
     def __init__(self, tools: ToolBinaries) -> None:
         self._tools = tools
 

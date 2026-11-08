@@ -18,7 +18,7 @@ class MarkListeningInputPort(UseCase[MarkListeningCommand, int], typing.Protocol
     """Its exit."""
 
 
-class MarkListeningUseCase:
+class MarkListeningUseCase(MarkListeningInputPort):
     def __init__(self, port: Checkout) -> None:
         self._port = port
 

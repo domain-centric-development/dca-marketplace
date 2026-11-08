@@ -23,7 +23,7 @@ class PendingRequestsInputPort(UseCase[PendingRequestsQuery, PendingRequests], t
     """The requests not done."""
 
 
-class PendingRequestsUseCase:
+class PendingRequestsUseCase(PendingRequestsInputPort):
     """Every request queued, running or waiting, oldest first."""
 
     def __init__(self, store: RequestStore) -> None:

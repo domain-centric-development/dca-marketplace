@@ -22,7 +22,7 @@ class CheckParityInputPort(UseCase[CheckParityCommand, Findings], typing.Protoco
     """Check parity."""
 
 
-class CheckParityUseCase:
+class CheckParityUseCase(CheckParityInputPort):
     """Every implementation's reports against one scenario contract (`ParityFacts.findings`)."""
 
     def __init__(self, reports: ParityReports) -> None:

@@ -32,7 +32,7 @@ class RunBacklogInputPort(UseCase[RunBacklogCommand, int], typing.Protocol):
     """Run the backlog: its exit."""
 
 
-class RunBacklogUseCase:
+class RunBacklogUseCase(RunBacklogInputPort):
     """The backlog run: 0 once nothing more can start, the exit of the first story that stopped it, 5 when another
     worker took the checkout over. With --keep-going a stopped story is skipped with what depends on it, unless the
     stop concerns the whole run."""

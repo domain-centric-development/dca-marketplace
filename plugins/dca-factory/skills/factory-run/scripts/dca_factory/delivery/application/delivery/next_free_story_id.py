@@ -18,7 +18,7 @@ class NextFreeStoryIdInputPort(UseCase[NextFreeStoryIdQuery, str], typing.Protoc
     """The id."""
 
 
-class NextFreeStoryIdUseCase:
+class NextFreeStoryIdUseCase(NextFreeStoryIdInputPort):
     def __init__(self, claims: StoryClaims) -> None:
         self._claims = claims
 

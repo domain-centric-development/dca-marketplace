@@ -35,7 +35,7 @@ class ProveDeliveryInputPort(UseCase[ProveDeliveryCommand, ProveDeliveryResult],
     """Check a claimed delivery through the adopt path."""
 
 
-class ProveDeliveryUseCase:
+class ProveDeliveryUseCase(ProveDeliveryInputPort):
     """The story becomes adopted — the code exists, check it, build nothing — and its claim is kept as a line of its
     evidence. The adopt gate then maps every criterion to a green test and delivers it by the gate. Not the way to
     deliver an edit: a change is a new story."""

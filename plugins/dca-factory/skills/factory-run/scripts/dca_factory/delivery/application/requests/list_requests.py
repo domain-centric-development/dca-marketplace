@@ -27,7 +27,7 @@ class ListRequestsInputPort(UseCase[ListRequestsQuery, RequestList], typing.Prot
     """List the requests."""
 
 
-class ListRequestsUseCase:
+class ListRequestsUseCase(ListRequestsInputPort):
     """`factory.sh requests`, the page's request view: each request with what a person can do with it, and the trail of
     the wishes — one waiting, writing, asking back or failed, and one done until what it made is released or hidden."""
 

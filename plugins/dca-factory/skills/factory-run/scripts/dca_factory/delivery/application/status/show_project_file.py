@@ -22,7 +22,7 @@ class ShowProjectFileInputPort(UseCase[ShowProjectFileQuery, ShownFile], typing.
     """Show one project file."""
 
 
-class ShowProjectFileUseCase:
+class ShowProjectFileUseCase(ShowProjectFileInputPort):
     """The path checked by the domain, the bytes read by the source, the file taken as the domain shows it —
     FileNotShown with its refusal otherwise."""
 

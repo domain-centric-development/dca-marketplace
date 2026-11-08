@@ -18,7 +18,7 @@ class ShowHandOverContractInputPort(UseCase[ShowHandOverContractQuery, typing.Op
     """The contract's text; None for a name that has none."""
 
 
-class ShowHandOverContractUseCase:
+class ShowHandOverContractUseCase(ShowHandOverContractInputPort):
     def __init__(self, skeletons: HandOverSkeletons) -> None:
         self._skeletons = skeletons
 

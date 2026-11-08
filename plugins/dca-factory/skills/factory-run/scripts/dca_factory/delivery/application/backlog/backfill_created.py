@@ -26,7 +26,7 @@ class BackfillCreatedInputPort(UseCase[BackfillCreatedCommand, Backfilled], typi
     """Backfill `created:`."""
 
 
-class BackfillCreatedUseCase:
+class BackfillCreatedUseCase(BackfillCreatedInputPort):
     """Idempotent and never over a value there. The time is when the history first added the file, followed through
     its renames — a file a layout change moved keeps its first day; a file the history does not hold yet takes its
     own modification time."""

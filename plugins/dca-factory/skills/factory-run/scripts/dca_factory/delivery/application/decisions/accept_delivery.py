@@ -34,7 +34,7 @@ class AcceptDeliveryInputPort(UseCase[AcceptDeliveryCommand, AcceptDeliveryResul
     """Accept a delivery — a yes, nothing to weigh."""
 
 
-class AcceptDeliveryUseCase:
+class AcceptDeliveryUseCase(AcceptDeliveryInputPort):
     """The story's open acceptance takes `answer: accepted`."""
 
     def __init__(self, stories: StoryRepository, records: DecisionRecordRepository) -> None:

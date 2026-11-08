@@ -20,7 +20,7 @@ class OpenWorkWindowInputPort(UseCase[OpenWorkWindowCommand, int], typing.Protoc
     """Its exit."""
 
 
-class OpenWorkWindowUseCase:
+class OpenWorkWindowUseCase(OpenWorkWindowInputPort):
     def __init__(self, port: SessionMarks) -> None:
         self._port = port
 

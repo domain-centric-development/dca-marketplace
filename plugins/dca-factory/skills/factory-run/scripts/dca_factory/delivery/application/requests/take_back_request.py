@@ -23,7 +23,7 @@ class TakeBackRequestInputPort(UseCase[TakeBackRequestCommand, TakenBack], typin
     """Take a request back."""
 
 
-class TakeBackRequestUseCase:
+class TakeBackRequestUseCase(TakeBackRequestInputPort):
     """A request that does not run is removed; one that runs now is the factory's until it ends; the note of a worked
     one is hidden."""
 

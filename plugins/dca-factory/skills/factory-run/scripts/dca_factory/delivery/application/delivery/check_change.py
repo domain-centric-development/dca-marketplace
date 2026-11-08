@@ -36,7 +36,7 @@ class CheckChangeInputPort(UseCase[CheckChangeCommand, Verdict], typing.Protocol
     """Check a change outside a story."""
 
 
-class CheckChangeUseCase:
+class CheckChangeUseCase(CheckChangeInputPort):
     """The profile declares the commands; its `required:` line declares which of them must hold. Without that line
     the check reports what it ran and what it skipped, and fails only on a red command. A commit of the backlog alone
     runs what `checks.backlog` names and nothing more."""

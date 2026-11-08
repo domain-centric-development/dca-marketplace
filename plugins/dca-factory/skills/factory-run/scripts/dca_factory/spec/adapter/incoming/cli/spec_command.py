@@ -9,13 +9,13 @@ import os
 import sys
 import typing
 
-from ....application.showspec.show_spec import ShowSpecQuery, ShowSpecUseCase
+from ....application.showspec.show_spec import ShowSpecQuery, ShowSpecInputPort
 
 
 class SpecRoot(typing.Protocol):
     """What this command line takes from the composition root — given at start (`wire`), never imported."""
 
-    def show_spec(self, cwd: str) -> ShowSpecUseCase: ...
+    def show_spec(self, cwd: str) -> ShowSpecInputPort: ...
 
 
 #: the composition root, given by `wire` before the command line runs

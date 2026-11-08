@@ -37,7 +37,7 @@ class CheckReportInputPort(UseCase[CheckReportCommand, ReportChecked], typing.Pr
     """Check a report."""
 
 
-class CheckReportUseCase:
+class CheckReportUseCase(CheckReportInputPort):
     """The report's sections in order, every citation a listed source, every source resolving — an excerpt under the
     topic's folder, a project file, or a URL with the date it was read —, every proposed body of work with intent,
     goal and metric, and the topic's `originals/` ignored by git."""

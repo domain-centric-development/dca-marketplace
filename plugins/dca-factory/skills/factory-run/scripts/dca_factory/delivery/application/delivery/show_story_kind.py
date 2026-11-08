@@ -20,7 +20,7 @@ class ShowStoryKindInputPort(UseCase[ShowStoryKindQuery, StoryKind], typing.Prot
     """The story's kind; StoryNotFound where no single story has the id."""
 
 
-class ShowStoryKindUseCase:
+class ShowStoryKindUseCase(ShowStoryKindInputPort):
     def __init__(self, stories: StoryRepository) -> None:
         self._stories = stories
 

@@ -20,7 +20,7 @@ class StopFactoryInputPort(UseCase[StopFactoryCommand, int], typing.Protocol):
     """Its exit."""
 
 
-class StopFactoryUseCase:
+class StopFactoryUseCase(StopFactoryInputPort):
     def __init__(self, process: FactoryProcess) -> None:
         self._process = process
 

@@ -32,7 +32,7 @@ class CheckRequestInputPort(UseCase[CheckRequestCommand, CheckedRequest], typing
     """Check a request."""
 
 
-class CheckRequestUseCase:
+class CheckRequestUseCase(CheckRequestInputPort):
     """What held when a request was written may not hold when it is worked — an answer given by hand, a story
     released meanwhile: it is checked again, the same way."""
 

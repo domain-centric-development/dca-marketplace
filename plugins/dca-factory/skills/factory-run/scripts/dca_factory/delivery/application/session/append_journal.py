@@ -19,7 +19,7 @@ class AppendJournalInputPort(UseCase[AppendJournalCommand, int], typing.Protocol
     """Its exit."""
 
 
-class AppendJournalUseCase:
+class AppendJournalUseCase(AppendJournalInputPort):
     def __init__(self, port: SessionMarks) -> None:
         self._port = port
 

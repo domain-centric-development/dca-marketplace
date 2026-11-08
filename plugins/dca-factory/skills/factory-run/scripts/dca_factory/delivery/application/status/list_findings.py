@@ -20,7 +20,7 @@ class ListFindingsInputPort(UseCase[ListFindingsQuery, Model], typing.Protocol):
     """`rows` (story, where, severity, defect, plain) and the findings file's `name`."""
 
 
-class ListFindingsUseCase:
+class ListFindingsUseCase(ListFindingsInputPort):
     def __init__(self, facts: StatusFacts) -> None:
         self._facts = facts
 

@@ -21,7 +21,7 @@ class ClaimStoryInputPort(UseCase[ClaimStoryCommand, ClaimOutcome], typing.Proto
     """Claim a story across factories."""
 
 
-class ClaimStoryUseCase:
+class ClaimStoryUseCase(ClaimStoryInputPort):
     """The claim on the remote the profile names; a story another factory holds is noted in its journal."""
 
     def __init__(self, claims: StoryClaims, journal: StoryJournal) -> None:

@@ -34,7 +34,7 @@ class ProbeToolInputPort(UseCase[ProbeToolQuery, ToolProbe], typing.Protocol):
     """The probe's outcome."""
 
 
-class ProbeToolUseCase:
+class ProbeToolUseCase(ProbeToolInputPort):
     def __init__(self, tools: ToolBinaries) -> None:
         self._tools = tools
 

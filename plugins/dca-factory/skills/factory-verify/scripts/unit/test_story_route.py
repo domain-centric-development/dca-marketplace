@@ -22,6 +22,11 @@ def names(*words):
     return tuple(StageName(word) for word in words)
 
 
+
+def integrated(integration, lines):
+    """The integration use case as the composition root builds it."""
+    return IntegrateStoryUseCase(integration, lines)
+
 class Held:
     """A rules' repository that holds what it is given."""
 
@@ -430,7 +435,7 @@ class Integrate(unittest.TestCase):
 
     def test_a_main_line_that_moved_on_is_merged_again(self):
         integration = Integration(moves=1)
-        code = IntegrateStoryUseCase(integration, Lines()).execute(IntegrateStoryCommand("S-1"))
+        code = integrated(integration, Lines()).execute(IntegrateStoryCommand("S-1"))
         self.assertEqual(code, 0)
         self.assertEqual(integration.did, ["prepare", "gate", "prepare", "gate"])
         self.assertEqual(integration.held, 0)
@@ -438,17 +443,17 @@ class Integrate(unittest.TestCase):
     def test_a_refusal_of_the_story_is_a_round_from_the_build_stage(self):
         integration = Integration(refusal="gate:fail tests-green")
         lines = Lines()
-        self.assertIsNone(IntegrateStoryUseCase(integration, lines).execute(IntegrateStoryCommand("S-1")))
+        self.assertIsNone(integrated(integration, lines).execute(IntegrateStoryCommand("S-1")))
         self.assertEqual((integration.rounds, integration.did[-1]), (1, "relink"))
 
     def test_a_lost_test_goes_back_to_the_integrate_stage_and_is_no_round(self):
         integration = Integration(refusal="gate:fail main-tests — a test lost its case", lost=[("T.java", ["x"])])
-        IntegrateStoryUseCase(integration, Lines()).execute(IntegrateStoryCommand("S-1"))
+        integrated(integration, Lines()).execute(IntegrateStoryCommand("S-1"))
         self.assertEqual(integration.did[:4], ["prepare", "gate", "session", "prepare"])
 
     def test_a_checkout_that_cannot_take_the_story_stops_for_a_person(self):
         integration = Integration(refusal="gate:fail checkout — dirty")
-        self.assertEqual(IntegrateStoryUseCase(integration, Lines()).execute(IntegrateStoryCommand("S-1")), 1)
+        self.assertEqual(integrated(integration, Lines()).execute(IntegrateStoryCommand("S-1")), 1)
         self.assertEqual(integration.rounds, 0)
 
 

@@ -27,7 +27,7 @@ class ShowSpentInputPort(UseCase[ShowSpentQuery, SpentView], typing.Protocol):
     """Per story what its journal books (None without one), and the tokens of all of them."""
 
 
-class ShowSpentUseCase:
+class ShowSpentUseCase(ShowSpentInputPort):
     def __init__(self, ledger: UsageLedger) -> None:
         self._ledger = ledger
 

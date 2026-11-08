@@ -59,7 +59,7 @@ class ReopenStoryInputPort(UseCase[ReopenStoryCommand, ReopenStoryResult], typin
     """Take a delivered story back for a correction."""
 
 
-class ReopenStoryUseCase:
+class ReopenStoryUseCase(ReopenStoryInputPort):
     """Only with an answered acceptance record the story cites — the answer is in the story, not in a prompt. Before
     a story was accepted every answer is a correction; after an acceptance, one that changes a criterion as accepted
     is a new wish. The pass the story ran is kept aside, and the story runs again from plan."""

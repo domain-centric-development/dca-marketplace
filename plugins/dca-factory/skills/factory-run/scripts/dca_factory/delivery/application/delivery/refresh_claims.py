@@ -18,7 +18,7 @@ class RefreshClaimsInputPort(UseCase[RefreshClaimsCommand, int], typing.Protocol
     """Its exit."""
 
 
-class RefreshClaimsUseCase:
+class RefreshClaimsUseCase(RefreshClaimsInputPort):
     def __init__(self, claims: StoryClaims) -> None:
         self._claims = claims
 

@@ -26,7 +26,7 @@ class StartPageInputPort(UseCase[StartPageCommand, PageStart], typing.Protocol):
     """The running page, or the new one's exit."""
 
 
-class StartPageUseCase:
+class StartPageUseCase(StartPageInputPort):
     def __init__(self, process: FactoryProcess) -> None:
         self._process = process
 

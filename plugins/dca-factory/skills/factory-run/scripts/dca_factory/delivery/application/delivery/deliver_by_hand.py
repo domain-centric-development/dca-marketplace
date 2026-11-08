@@ -54,7 +54,7 @@ class DeliverByHandInputPort(UseCase[DeliverByHandCommand, DeliverByHandResult],
     """Deliver a story by hand."""
 
 
-class DeliverByHandUseCase:
+class DeliverByHandUseCase(DeliverByHandInputPort):
     """A story a person built is delivered, claimed by them — works where the factory never ran; `--prove` checks it
     later. Its new criteria go into the spec without a test line. A story another factory claimed is delivered only
     with force, and that is journaled; one that changes what holds is not delivered by hand."""

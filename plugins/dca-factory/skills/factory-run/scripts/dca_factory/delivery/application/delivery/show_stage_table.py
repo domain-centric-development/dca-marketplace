@@ -26,7 +26,7 @@ class ShowStageTableInputPort(UseCase[ShowStageTableQuery, Model], typing.Protoc
     """The table's lists by name; `tools` (None where a record is no word) and `places` where asked."""
 
 
-class ShowStageTableUseCase:
+class ShowStageTableUseCase(ShowStageTableInputPort):
     def __init__(self, tables: RunnerTables) -> None:
         self._tables = tables
 

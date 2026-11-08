@@ -21,7 +21,7 @@ class ShowSpecDeltaInputPort(UseCase[ShowSpecDeltaQuery, Model], typing.Protocol
     """The story's spec delta as a view."""
 
 
-class ShowSpecDeltaUseCase:
+class ShowSpecDeltaUseCase(ShowSpecDeltaInputPort):
     """The rows read from the story, its plan and the spec, never parsed by a skill: a key the plan moves and the spec
     holds as it is `moves`, a key the plan removes `removes` with its reason; `features` names what the story
     brings."""

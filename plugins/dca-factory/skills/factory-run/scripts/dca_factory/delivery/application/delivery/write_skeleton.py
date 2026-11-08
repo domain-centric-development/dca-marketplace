@@ -28,7 +28,7 @@ class WriteSkeletonInputPort(UseCase[WriteSkeletonCommand, int], typing.Protocol
     """Its exit."""
 
 
-class WriteSkeletonUseCase:
+class WriteSkeletonUseCase(WriteSkeletonInputPort):
     def __init__(self, skeletons: HandOverSkeletons) -> None:
         self._skeletons = skeletons
 

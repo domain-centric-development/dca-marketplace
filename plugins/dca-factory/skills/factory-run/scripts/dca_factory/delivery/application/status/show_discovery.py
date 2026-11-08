@@ -25,7 +25,7 @@ class ShowDiscoveryInputPort(UseCase[ShowDiscoveryQuery, Model], typing.Protocol
     """`project`, `store`, `topics` — each proposal and change with its `actions`."""
 
 
-class ShowDiscoveryUseCase:
+class ShowDiscoveryUseCase(ShowDiscoveryInputPort):
     def __init__(self, discovery: DiscoveryList, requests: RequestStore, stories: StoryRepository) -> None:
         self._discovery = discovery
         self._requests = requests

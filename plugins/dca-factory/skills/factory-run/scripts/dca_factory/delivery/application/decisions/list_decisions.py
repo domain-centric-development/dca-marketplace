@@ -31,7 +31,7 @@ class ListDecisionsInputPort(UseCase[ListDecisionsQuery, Model], typing.Protocol
     """The decision inbox."""
 
 
-class ListDecisionsUseCase:
+class ListDecisionsUseCase(ListDecisionsInputPort):
     """Every record, what waits for a person first — open, drafts, answered, applied — read from the files alone,
     each open one with what a person can answer to it."""
 

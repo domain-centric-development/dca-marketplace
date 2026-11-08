@@ -4,7 +4,9 @@ and the model keys against the workflow's stages."""
 from __future__ import annotations
 
 import dataclasses
+import typing
 
+from ....building_blocks import UseCase
 from ...domain.gateway.stage_evidence import StageEvidence
 from ...domain.model.verdict import Findings
 from ...domain.service.profile_checks import ProfileChecks
@@ -24,7 +26,11 @@ class ProfileChecked:
     models: Findings
 
 
-class CheckProfileUseCase:
+class CheckProfileInputPort(UseCase[CheckProfileQuery, ProfileChecked], typing.Protocol):
+    """The profile checked on its own."""
+
+
+class CheckProfileUseCase(CheckProfileInputPort):
     def __init__(self, evidence: StageEvidence) -> None:
         self._evidence = evidence
 

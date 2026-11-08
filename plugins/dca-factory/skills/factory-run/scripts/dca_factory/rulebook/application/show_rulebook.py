@@ -62,7 +62,7 @@ def graph_model(graph: FlowGraph) -> Model:
                 anywhere=[edge_model(e) for e in graph.anywhere])
 
 
-class ShowRulebookUseCase:
+class ShowRulebookUseCase(ShowRulebookInputPort):
     """The rules delivery registers and the skills mark, read as one rulebook."""
 
     def __init__(self, decided: DecidedRules, instructed: InstructedRules, findings: GateFindings) -> None:

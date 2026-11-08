@@ -39,7 +39,7 @@ class ReleaseStoriesInputPort(UseCase[ReleaseStoriesCommand, ReleaseStoriesResul
     """Release drafts the factory may release itself."""
 
 
-class ReleaseStoriesUseCase:
+class ReleaseStoriesUseCase(ReleaseStoriesInputPort):
     """A draft whose question pass ran on it as it stands and that no open record holds is approved, its release an
     answered assumption — of an epic, only where every draft is such a one. Anything else needs the backlog skill,
     which asks what the drafts leave open."""

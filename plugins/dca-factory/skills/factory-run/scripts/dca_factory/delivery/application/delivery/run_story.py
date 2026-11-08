@@ -38,7 +38,7 @@ class RunStoryInputPort(UseCase[RunStoryCommand, int], typing.Protocol):
     """Run a story: its exit."""
 
 
-class RunStoryUseCase:
+class RunStoryUseCase(RunStoryInputPort):
     """The story's stages, round after round: 0 when it ran through, 3 when it waits for a person, 1 when it failed
     or the rounds did not converge, 4 at a limit, 5 when the checkout was taken over, 7 when a person's file changed
     under a stage."""

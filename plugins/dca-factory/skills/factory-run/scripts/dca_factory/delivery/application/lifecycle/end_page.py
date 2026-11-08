@@ -18,7 +18,7 @@ class EndPageInputPort(UseCase[EndPageCommand, int], typing.Protocol):
     """Its exit: 0 when no page runs any more."""
 
 
-class EndPageUseCase:
+class EndPageUseCase(EndPageInputPort):
     def __init__(self, process: FactoryProcess) -> None:
         self._process = process
 

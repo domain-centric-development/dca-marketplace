@@ -8,6 +8,7 @@ import os
 import typing
 
 from ..delivery.application.requests.check_request import CheckRequestCommand
+from ..delivery.application.requests.settle_request import SettleRequestCommand
 from ..delivery.application.requests.work_request import RequestWorked
 from ..delivery.application.shared.requests import KIND, Request
 from ..delivery.adapter.incoming.runner.usage import book_request_usage
@@ -16,6 +17,7 @@ from ..delivery.application.backlog.run_backlog import RunBacklogCommand, RunBac
 # the rules a refused gate routes by: the modules of checks register them, as in the gate's composition root
 from ..delivery.application.delivery import pass_actions, process_checks, stage_checks  # noqa: F401
 from ..delivery.application.delivery.integrate_story import IntegrateStoryCommand, IntegrateStoryUseCase
+from ..delivery.application.delivery.resolve_conflicts import ResolveConflictsCommand, ResolveConflictsUseCase
 from ..delivery.application.delivery.run_story import RunStoryCommand, RunStoryUseCase
 from ..delivery.application.requests.request_queue import RequestQueue
 from ..delivery.application.requests.work_request import WorkRequestCommand, WorkRequestUseCase
@@ -53,7 +55,8 @@ class RunnerCases:
         return self._integration(run, tool).execute(IntegrateStoryCommand(story, dry))
 
     def resolve(self, run: Run, tool: str, story: str, out: str) -> typing.Optional[int]:
-        return self._integration(run, tool).resolve(story, out)
+        return ResolveConflictsUseCase(RunnerIntegration(run, tool), ConsoleLines()).execute(
+            ResolveConflictsCommand(story, out))
 
     def run_backlog(self, run: Run, tool: str, slots: int, watch: bool, interval: int, dry: bool) -> int:
         backlog = RunnerBacklog(run, tool)
@@ -118,4 +121,5 @@ def settle(cwd: str, kind_name: str, fields: typing.Mapping[str, str], words: st
     run = Run(options, os.path.realpath(cwd), place("runs"), worker=worker,
               cases=RunnerCases())
     request = run.press(kind_name, checked.fields, checked.words, by)
-    return request, RunnerCases._work_request(run).settle(request, KIND[kind_name])
+    return request, requests.settle_request(run.home, run.runs_rel, run.profile, run.locked).execute(
+        SettleRequestCommand(request, KIND[kind_name]))

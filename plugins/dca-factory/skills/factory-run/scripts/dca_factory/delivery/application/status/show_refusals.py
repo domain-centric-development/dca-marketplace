@@ -23,7 +23,7 @@ class ShowRefusalsInputPort(UseCase[ShowRefusalsQuery, Model], typing.Protocol):
     """`form_checks` and `stories`: per story `{runner|stages: {form, substance, checks: {check: n}}}`."""
 
 
-class ShowRefusalsUseCase:
+class ShowRefusalsUseCase(ShowRefusalsInputPort):
     def __init__(self, refusals: GateRefusals) -> None:
         self._refusals = refusals
 

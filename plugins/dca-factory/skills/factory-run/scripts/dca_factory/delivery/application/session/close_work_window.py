@@ -20,7 +20,7 @@ class CloseWorkWindowInputPort(UseCase[CloseWorkWindowCommand, int], typing.Prot
     """Its exit."""
 
 
-class CloseWorkWindowUseCase:
+class CloseWorkWindowUseCase(CloseWorkWindowInputPort):
     def __init__(self, port: SessionMarks) -> None:
         self._port = port
 

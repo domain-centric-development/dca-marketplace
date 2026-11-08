@@ -31,7 +31,7 @@ class BookRequestCostInputPort(UseCase[BookRequestCostCommand, CostBooked], typi
     """Book a request's usage on the stories it worked on."""
 
 
-class BookRequestCostUseCase:
+class BookRequestCostUseCase(BookRequestCostInputPort):
     """One `usage` line on each window the request's process opened, an even share each. A request that opened no
     window — a description, a discovery — keeps its usage in the request journal alone."""
 

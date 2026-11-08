@@ -51,7 +51,7 @@ class CheckBacklogInputPort(UseCase[CheckBacklogCommand, BacklogChecked], typing
     """Check the backlog."""
 
 
-class CheckBacklogUseCase:
+class CheckBacklogUseCase(CheckBacklogInputPort):
     """The same checks the plan gate holds a story to on these points — front matter, the epic's completeness, the
     criteria, the status, the context on the map — so a story that passes here passes there. A draft is named, not
     refused. Nothing is written: the plan gate's marks belong to the run that plans the story."""

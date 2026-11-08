@@ -35,7 +35,7 @@ class FollowOutputInputPort(UseCase[FollowOutputQuery, Followed], typing.Protoco
     """What the newest output added since the last call."""
 
 
-class FollowOutputUseCase:
+class FollowOutputUseCase(FollowOutputInputPort):
     def __init__(self, outputs: StageOutputs) -> None:
         self._outputs = outputs
 

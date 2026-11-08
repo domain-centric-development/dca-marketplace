@@ -29,7 +29,7 @@ class ShowBriefInputPort(UseCase[ShowBriefQuery, Brief], typing.Protocol):
     has no such stage or the story's kind does not run it."""
 
 
-class ShowBriefUseCase:
+class ShowBriefUseCase(ShowBriefInputPort):
     def __init__(self, stories: StoryRepository, profile: ProfileSource) -> None:
         self._stories = stories
         self._profile = profile
@@ -62,6 +62,6 @@ class ShowEveryStageInputPort(UseCase[None, StageText], typing.Protocol):
     """What every stage is told, for a session that works no stage."""
 
 
-class ShowEveryStageUseCase:
+class ShowEveryStageUseCase(ShowEveryStageInputPort):
     def execute(self, query: None = None) -> StageText:
         return StageBrief(workflow()).every_stage(list(RULES.values()))

@@ -38,7 +38,7 @@ class CheckDescriptionInputPort(UseCase[CheckDescriptionCommand, DescriptionChec
     """Check the project description."""
 
 
-class CheckDescriptionUseCase:
+class CheckDescriptionUseCase(CheckDescriptionInputPort):
     """The two mandatory parts: the product and the technical decisions — the designed domain is read by the context
     check and stays optional here. Absent is a note: the gate does not block a project that has none, the backlog
     skill does. A key that names a missing file is a broken reference, and a heading missing or empty is a

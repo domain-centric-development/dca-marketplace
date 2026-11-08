@@ -19,7 +19,7 @@ class LetJournalsIntoGitInputPort(UseCase[LetJournalsIntoGitCommand, typing.Opti
     """Where the journals are when the ignores changed, else None."""
 
 
-class LetJournalsIntoGitUseCase:
+class LetJournalsIntoGitUseCase(LetJournalsIntoGitInputPort):
     def __init__(self, upkeep: ProjectUpkeep) -> None:
         self._upkeep = upkeep
 
