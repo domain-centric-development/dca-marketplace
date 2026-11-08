@@ -147,7 +147,7 @@ function scenario(item) {
 const KIND_LABEL = {"aggregate": "aggregate", "entity": "entities", "identity": "ids", "value object": "values", "domain event": "events",
   "domain service": "services", "domain gateway": "gateways", "specification": "specifications", "factory": "factories",
   "read model": "read models", "failure": "failures", "concept": "concepts", "other": "other"};
-const subdomainKind = sd => /core/i.test(sd) ? "core" : /generic/i.test(sd) ? "generic" : "supporting";
+const subdomainKind = sd => sd.toLowerCase();   // the spec says Core, Supporting or Generic — the domain classifies
 // a model as its kinds, each a row of terms; a shared term in the kernel's colour, saying who uses it
 const modelFacts = model => model.map(g => ({kind: KIND_LABEL[g.kind] || g.kind, terms: g.terms.map(t => ({name: t.name, shared: t.shared,
   minor: !t.shared && ["concept", "other"].includes(g.kind),

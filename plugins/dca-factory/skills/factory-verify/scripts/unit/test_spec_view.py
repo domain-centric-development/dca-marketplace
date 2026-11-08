@@ -56,6 +56,12 @@ class SpecViewTest(unittest.TestCase):
         return ShowSpecUseCase(ContextSpecFiles(root), OpenStoryFiles(root), TestSourceFiles(root),
                                DeliveryFiles(root)).execute(ShowSpecQuery())
 
+    def test_the_subdomain_is_read_as_one_of_the_three_whatever_the_table_adds(self):
+        from dca_factory.spec.adapter.outgoing.files.context_spec_files import subdomain_of
+        from dca_factory.spec.domain.model.context_spec import Subdomain
+        self.assertEqual([subdomain_of(w) for w in ("Core domain", "generic subdomain", "Supporting", "")],
+                         [Subdomain.CORE, Subdomain.GENERIC, Subdomain.SUPPORTING, Subdomain.UNSTATED])
+
     def test_a_context_shows_its_purpose_its_model_its_features_and_what_open_stories_change(self):
         with tempfile.TemporaryDirectory() as root:
             plant(root, PROJECT)

@@ -26,10 +26,14 @@ class Statement(Value):
     value: str
 
 
-class Subdomain(Value):
-    """How the designed domain classifies a context: Core, Supporting, Generic — as written."""
+class Subdomain(enum.Enum):
+    """How the designed domain classifies a context — what modelling effort it gets, how strict its rules and reviews
+    are; none where the description does not say."""
 
-    value: str
+    CORE = "Core"
+    SUPPORTING = "Supporting"
+    GENERIC = "Generic"
+    UNSTATED = ""
 
 
 class TermKind(enum.Enum):
