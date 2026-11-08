@@ -43,7 +43,6 @@ Options as the gate's: --epics, --runs, --profile (else FACTORY_PROFILE, else th
 """
 
 import argparse
-import contextlib
 import json
 import os
 import re
@@ -55,7 +54,7 @@ import typing
 from .....contract import CONTRACT, VERSION
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from .....sharedkernel.adapter.outgoing.profile.profile_files import (
-    DEFAULTS, place, PROFILE_FILE, read_profile, resolve_profile, set_places, shown)
+    DEFAULTS, place, PROFILE_FILE, read_profile, resolve_profile, set_places)
 from ....application.description.show_part import ShowPartQuery
 from ....application.profile.ask_profile import AskProfileQuery, Question
 from ....application.status.show_status import ShowStatusQuery
@@ -66,22 +65,7 @@ from ....application.status.texts import stamp_text
 from ....application.decisions.list_decisions import ListDecisionsQuery
 from ....application.requests.list_requests import ListRequestsQuery
 from ....application.requests.pending_requests import PendingRequestsQuery
-from ....application.requests.retry_request import RetryRequestCommand
-from ....application.requests.take_back_request import TakeBackRequestCommand
-from ....application.requests.write_request import WriteRequestCommand
-from ....application.shared.requests import DuplicateRequest, KIND, KINDS, RequestRefused
-from .....building_blocks import UseCaseException
-from ....application.shared.story_repository import StoryNotFound
-from ....application.backlog.backfill_created import BackfillCreatedCommand
-from ....application.delivery.claim_story import ClaimStoryCommand
-from ....application.delivery.confirm_owned import ConfirmOwnedCommand, NothingToConfirm
-from ....application.shared.story_claims import Claim
-from ....application.delivery.deliver_by_hand import ChangesWhatHolds, ClaimedElsewhere, DeliverByHandCommand
-from ....application.delivery.prove_delivery import ProveDeliveryCommand
-from ....application.delivery.reopen_story import CheckoutHeld, NewWish, NoCorrection, NotCited, ReopenStoryCommand
-from ....domain.model.moment import Moment
-from ....domain.model.person import Person
-from ....domain.model.story import AlreadyDelivered, NotDelivered, NothingToDeliver, NothingToProve, StoryId
+from ....domain.model.story import StoryId
 from ....application.run.resolve_run_argument import ResolveRunArgumentQuery
 from ....application.status.show_refusals import ShowRefusalsQuery
 from ....application.status.show_journal_story import ShowJournalStoryQuery
@@ -92,30 +76,13 @@ from ....application.delivery.show_brief import ShowBriefQuery
 from ....application.delivery.show_story_kind import ShowStoryKindQuery
 from .brief_view import brief_model, markdown as brief_markdown
 from ....application.delivery.show_stage_table import ShowStageTableQuery
-from ....application.delivery.release_story_claim import ReleaseStoryClaimCommand
-from ....application.delivery.refresh_claims import RefreshClaimsCommand
 from ....application.delivery.next_free_story_id import NextFreeStoryIdQuery
-from ....application.upkeep.migrate_layout import MigrateLayoutCommand
-from ....application.lifecycle.start_factory import StartFactoryCommand
-from ....application.lifecycle.stop_factory import StopFactoryCommand
-from ....application.lifecycle.end_page import EndPageCommand
-from ....application.lifecycle.start_page import StartPageCommand
-from ....application.lifecycle.show_running_page import ShowRunningPageQuery
 from ....application.lifecycle.show_worker import ShowWorkerQuery
 from ....application.status.show_discovery import ShowDiscoveryQuery
-from ....application.upkeep.let_journals_into_git import LetJournalsIntoGitCommand
 from ....application.delivery.probe_tool import Probed, ProbeToolQuery
 from ....application.cost.read_tool_usage import ReadToolUsageQuery
 from ....application.delivery.show_hand_over_contract import ShowHandOverContractQuery
-from ....application.delivery.write_skeleton import Skeleton, WriteSkeletonCommand
-from ....application.session.open_work_window import OpenWorkWindowCommand
-from ....application.session.close_work_window import CloseWorkWindowCommand
-from ....application.session.start_session_stage import StartSessionStageCommand
-from ....application.session.end_session_stage import EndSessionStageCommand
-from ....application.session.append_journal import AppendJournalCommand
-from ....application.checkout.take_checkout import TakeCheckoutCommand
-from ....application.checkout.give_checkout_back import GiveCheckoutBackCommand
-from ....application.checkout.mark_listening import MarkListeningCommand
+from ....application.delivery.write_skeleton import Skeleton
 from ....application.status.follow_output import FollowOutputQuery
 from ....application.status.show_stage_outputs import ShowStageOutputsQuery
 from ....domain.model.run_argument import ArgumentMeaning
@@ -123,9 +90,7 @@ from ....domain.model.stage import StageName, StoryKind, Window
 from . import spec_delta_view as spec_delta_text
 from ....application.delivery.check_spec import CheckSpecQuery
 from ....application.delivery.show_spec_delta import ShowSpecDeltaQuery
-from ....application.delivery.take_back_delivery import TakeBackDeliveryCommand
-from ..web import service as web
-from ..runner.run_command import request_main, run_main, settle_command
+from ..runner.run_command import request_main, run_main
 from .terminal import (
     MARKS_MD, MARKS_TEXT, bold, decision_mark, dim, heading, how_lines, how_md, json_ready, paint, section, table_md, table_text, use_colour, view_width)
 from .status_view import render_short_md, render_short_text, render_status_md, render_status_text, token_rows
@@ -136,136 +101,12 @@ from .help_view import render_help_md, render_help_text
 from ....domain.model.decision_record import WAITING_WORDS
 from ....application.delivery.pipeline_workflow import workflow
 
-from ....application.backlog.backfill_created import BackfillCreatedInputPort
-from ....application.checkout.give_checkout_back import GiveCheckoutBackInputPort
-from ....application.checkout.mark_listening import MarkListeningInputPort
-from ....application.checkout.take_checkout import TakeCheckoutInputPort
-from ....application.cost.read_tool_usage import ReadToolUsageInputPort
-from ....application.cost.show_spent import ShowSpentInputPort
-from ....application.decisions.list_decisions import ListDecisionsInputPort
-from ....application.delivery.check_spec import CheckSpecInputPort
-from ....application.delivery.claim_story import ClaimStoryInputPort
-from ....application.delivery.confirm_owned import ConfirmOwnedInputPort
-from ....application.delivery.deliver_by_hand import DeliverByHandInputPort
-from ....application.delivery.next_free_story_id import NextFreeStoryIdInputPort
-from ....application.delivery.probe_tool import ProbeToolInputPort
-from ....application.delivery.prove_delivery import ProveDeliveryInputPort
-from ....application.delivery.refresh_claims import RefreshClaimsInputPort
-from ....application.delivery.release_story_claim import ReleaseStoryClaimInputPort
-from ....application.delivery.reopen_story import ReopenStoryInputPort
-from ....application.delivery.show_brief import ShowBriefInputPort
-from ....application.delivery.show_hand_over_contract import ShowHandOverContractInputPort
-from ....application.delivery.show_spec_delta import ShowSpecDeltaInputPort
-from ....application.delivery.show_stage_table import ShowStageTableInputPort
-from ....application.delivery.show_story_kind import ShowStoryKindInputPort
-from ....application.delivery.take_back_delivery import TakeBackDeliveryInputPort
-from ....application.delivery.write_skeleton import WriteSkeletonInputPort
-from ....application.description.show_part import ShowPartInputPort
-from ....application.lifecycle.end_page import EndPageInputPort
-from ....application.lifecycle.show_running_page import ShowRunningPageInputPort
-from ....application.lifecycle.show_worker import ShowWorkerInputPort
-from ....application.lifecycle.start_factory import StartFactoryInputPort
-from ....application.lifecycle.start_page import StartPageInputPort
-from ....application.lifecycle.stop_factory import StopFactoryInputPort
-from ....application.profile.ask_profile import AskProfileInputPort
-from ....application.requests.list_requests import ListRequestsInputPort
-from ....application.requests.pending_requests import PendingRequestsInputPort
-from ....application.requests.retry_request import RetryRequestInputPort
-from ....application.requests.take_back_request import TakeBackRequestInputPort
-from ....application.requests.write_request import WriteRequestInputPort
-from ....application.run.resolve_run_argument import ResolveRunArgumentInputPort
-from ....application.schedule.start_story import Start
-from ....application.session.append_journal import AppendJournalInputPort
-from ....application.session.close_work_window import CloseWorkWindowInputPort
-from ....application.session.end_session_stage import EndSessionStageInputPort
-from ....application.session.open_work_window import OpenWorkWindowInputPort
-from ....application.session.start_session_stage import StartSessionStageInputPort
-from ....application.status.follow_output import FollowOutputInputPort
-from ....application.status.list_findings import ListFindingsInputPort
-from ....application.status.show_discovery import ShowDiscoveryInputPort
-from ....application.status.show_epic import ShowEpicInputPort
-from ....application.status.show_help import ShowHelpInputPort
-from ....application.status.show_journal_story import ShowJournalStoryInputPort
-from ....application.status.show_refusals import ShowRefusalsInputPort
-from ....application.status.show_stage_outputs import ShowStageOutputsInputPort
-from ....application.status.show_status import ShowStatusInputPort
-from ....application.status.show_story import ShowStoryInputPort
-from ....application.upkeep.let_journals_into_git import LetJournalsIntoGitInputPort
-from ....application.upkeep.migrate_layout import MigrateLayoutInputPort
-
-
-class CliRoot(typing.Protocol):
-    """What the cli's command line takes from the composition root: its use cases and the schedule's read model —
-    given at start (`wire`), never imported."""
-
-    def append_journal(self, cwd: str, runs: str) -> AppendJournalInputPort: ...
-    def ask_profile(self, path: typing.Optional[str]) -> AskProfileInputPort: ...
-    def backfill_created(self, cwd: str, epics: str) -> BackfillCreatedInputPort: ...
-    def check_spec(self, runs: str, epics: str) -> CheckSpecInputPort: ...
-    def claim_story(self, cwd: str, epics: str, runs: str) -> ClaimStoryInputPort: ...
-    def close_work_window(self, cwd: str, runs: str) -> CloseWorkWindowInputPort: ...
-    def confirm_owned(self, cwd: str, runs: str) -> ConfirmOwnedInputPort: ...
-    def deliver_by_hand(self, cwd: str, epics: str, runs: str) -> DeliverByHandInputPort: ...
-    def end_page(self) -> EndPageInputPort: ...
-    def end_session_stage(self, cwd: str, runs: str) -> EndSessionStageInputPort: ...
-    def follow_output(self, runs: str) -> FollowOutputInputPort: ...
-    def give_checkout_back(self, cwd: str, runs: str) -> GiveCheckoutBackInputPort: ...
-    def let_journals_into_git(self, cwd: str) -> LetJournalsIntoGitInputPort: ...
-    def list_decisions(self, cwd: str) -> ListDecisionsInputPort: ...
-    def list_findings(self, cwd: str, epics: str, runs: str) -> ListFindingsInputPort: ...
-    def list_requests(self, cwd: str) -> ListRequestsInputPort: ...
-    def mark_listening(self, cwd: str, runs: str) -> MarkListeningInputPort: ...
-    def migrate_layout(self, cwd: str) -> MigrateLayoutInputPort: ...
-    def next_free_story_id(self, cwd: str, epics: str, runs: str) -> NextFreeStoryIdInputPort: ...
-    def open_work_window(self, cwd: str, runs: str) -> OpenWorkWindowInputPort: ...
-    def pending_requests(self, cwd: str) -> PendingRequestsInputPort: ...
-    def probe_tool(self) -> ProbeToolInputPort: ...
-    def prove_delivery(self, cwd: str, epics: str, runs: str) -> ProveDeliveryInputPort: ...
-    def read_tool_usage(self) -> ReadToolUsageInputPort: ...
-    def refresh_claims(self, cwd: str, epics: str, runs: str) -> RefreshClaimsInputPort: ...
-    def release_story_claim(self, cwd: str, epics: str, runs: str) -> ReleaseStoryClaimInputPort: ...
-    def reopen_story(self, cwd: str, epics: str, runs: str) -> ReopenStoryInputPort: ...
-    def resolve_run_argument(self, cwd: str) -> ResolveRunArgumentInputPort: ...
-    def retry_request(self, cwd: str) -> RetryRequestInputPort: ...
-    def schedule_data(self, cwd: str, epics: str, runs: str, slots: typing.Optional[int] = None,
-                      busy: typing.Iterable[str] = (), skip: typing.Iterable[str] = ()) -> Model: ...
-    def show_brief(self, cwd: str) -> ShowBriefInputPort: ...
-    def show_discovery(self, cwd: str) -> ShowDiscoveryInputPort: ...
-    def show_epic(self, cwd: str, epics: str, runs: str) -> ShowEpicInputPort: ...
-    def show_hand_over_contract(self, cwd: str, runs: str) -> ShowHandOverContractInputPort: ...
-    def show_help(self, cwd: str, epics: str, runs: str) -> ShowHelpInputPort: ...
-    def show_journal_story(self, cwd: str, epics: str, runs: str) -> ShowJournalStoryInputPort: ...
-    def show_part(self, cwd: str) -> ShowPartInputPort: ...
-    def show_refusals(self, runs: str) -> ShowRefusalsInputPort: ...
-    def show_running_page(self) -> ShowRunningPageInputPort: ...
-    def show_spec_delta(self, runs: str, epics: str) -> ShowSpecDeltaInputPort: ...
-    def show_spent(self, runs: str) -> ShowSpentInputPort: ...
-    def show_stage_outputs(self, runs: str) -> ShowStageOutputsInputPort: ...
-    def show_stage_table(self) -> ShowStageTableInputPort: ...
-    def show_status(self, cwd: str, epics: str, runs: str) -> ShowStatusInputPort: ...
-    def show_story(self, cwd: str, epics: str, runs: str) -> ShowStoryInputPort: ...
-    def show_story_kind(self, cwd: str) -> ShowStoryKindInputPort: ...
-    def show_worker(self) -> ShowWorkerInputPort: ...
-    def start_factory(self) -> StartFactoryInputPort: ...
-    def start_of(self, cwd: str, epics: str, runs: str, story_id: str, slots: typing.Optional[int] = None) -> typing.Optional[Start]: ...
-    def start_page(self) -> StartPageInputPort: ...
-    def start_session_stage(self, cwd: str, runs: str) -> StartSessionStageInputPort: ...
-    def stop_factory(self) -> StopFactoryInputPort: ...
-    def take_back_delivery(self, cwd: str, runs: str, epics: str) -> TakeBackDeliveryInputPort: ...
-    def take_back_request(self, cwd: str) -> TakeBackRequestInputPort: ...
-    def take_checkout(self, cwd: str, runs: str) -> TakeCheckoutInputPort: ...
-    def write_request(self, cwd: str) -> WriteRequestInputPort: ...
-    def write_skeleton(self, cwd: str, runs: str) -> WriteSkeletonInputPort: ...
-
-
-#: the composition root, given by `wire` before the command line runs
-wiring: CliRoot
-
-
-def wire(root: CliRoot) -> None:
-    """The composition root this command line builds its use cases from."""
-    global wiring
-    wiring = root
+from . import checkout_commands, delivery_commands, root, session_commands, upkeep_commands
+from .common import placed
+from .delivery_commands import owned_confirm, reopen, deliver_by_hand, claim_command, undeliver_branch, prove
+from .backlog_commands import backfill_created
+from .lifecycle_commands import up_command, down_command, serve_command
+from .requests_commands import request_command, requests_command
 
 
 Model = typing.Dict[str, typing.Any]
@@ -276,7 +117,7 @@ def resolve(epics: str, argument: str) -> int:
     """What `/factory-run <argument>` means — decided here, not by a model: one word naming a story is that
     story; one word naming none is an unknown id, never a new story (a typo stays a typo); more than one
     word is a wish, for the backlog skill to turn into a story; nothing is the backlog."""
-    resolved = wiring.resolve_run_argument(".").execute(ResolveRunArgumentQuery(argument))
+    resolved = root.wiring.resolve_run_argument(".").execute(ResolveRunArgumentQuery(argument))
     if resolved.meaning is ArgumentMeaning.STORY and resolved.story:
         print(f"story {resolved.story.value}")
         return 0
@@ -292,7 +133,7 @@ def resolve(epics: str, argument: str) -> int:
 
 def discovery_model(cwd: str, epics: str) -> Model:
     """Every discovery topic with its proposals and changes and what a person can do with each (`ShowDiscoveryUseCase`)."""
-    return wiring.show_discovery(cwd).execute(ShowDiscoveryQuery(os.path.basename(os.path.abspath(cwd))))
+    return root.wiring.show_discovery(cwd).execute(ShowDiscoveryQuery(os.path.basename(os.path.abspath(cwd))))
 
 
 def discovery_list(cwd: str, epics: str, fmt: str = "text", colour: str = "auto") -> int:
@@ -320,7 +161,7 @@ def discovery_list(cwd: str, epics: str, fmt: str = "text", colour: str = "auto"
 def list_decisions(cwd: str, story_id: typing.Optional[str] = None, fmt: str = "text", colour: str = "auto") -> int:
     """The inbox: every record, what waits for a person first — open, drafts, answered, applied — read
     from the files alone; the same view as the status, in text, Markdown or JSON."""
-    model = wiring.list_decisions(cwd).execute(ListDecisionsQuery(story_id))
+    model = root.wiring.list_decisions(cwd).execute(ListDecisionsQuery(story_id))
     records = model["records"]
     waiting = [r for r in records if r["state"] in WAITING_WORDS | {"unreadable"}]
     mark = lambda r: "look" if r["kind"] == "acceptance" and r["state"] in WAITING_WORDS else \
@@ -373,19 +214,9 @@ def list_decisions(cwd: str, story_id: typing.Optional[str] = None, fmt: str = "
     return 0
 
 
-def owned_confirm(runs: str, story_id: str, cwd: str = ".") -> int:
-    """The person's word that the story and its answers are as they want them after a stage changed them
-    (`ConfirmOwnedUseCase`): the mark goes, what changed is journaled, and the story runs on from its files."""
-    result = wiring.confirm_owned(cwd, runs).execute(ConfirmOwnedCommand(StoryId(story_id)))
-    if isinstance(result, NothingToConfirm):
-        print(f"owned: nothing to confirm for {story_id} — no stage changed its story or an answer")
-    else:
-        print(f"owned: {story_id} — {', '.join(result.parts)} confirmed as the person's; the story runs on")
-    return 0
-
 def refusals_report(runs: str, story_filter: typing.Optional[str] = None, fmt: str = "text") -> int:
     """`--refusals`: every story's refusals, form against substance — what a bench counts (`ShowRefusalsUseCase`)."""
-    model = wiring.show_refusals(runs).execute(ShowRefusalsQuery(story_filter))
+    model = root.wiring.show_refusals(runs).execute(ShowRefusalsQuery(story_filter))
     if fmt == "json":
         print(json.dumps(model, indent=2, sort_keys=True))
         return 0
@@ -409,7 +240,7 @@ def usage_report(runs: str, story_filter: typing.Optional[str] = None, total_onl
     """Tokens by class, as the status shows them: one story's stages, or every story by epic."""
     epics = epics or place("epics")
     if total_only:
-        spent = wiring.show_spent(runs).execute(ShowSpentQuery((story_filter,) if story_filter else None))
+        spent = root.wiring.show_spent(runs).execute(ShowSpentQuery((story_filter,) if story_filter else None))
         print(spent.tokens)
         return 0
     colour = use_colour("auto")
@@ -417,7 +248,7 @@ def usage_report(runs: str, story_filter: typing.Optional[str] = None, total_onl
         try:
             model = story_model(cwd, epics, runs, story_filter)
         except GateError:
-            model = wiring.show_journal_story(cwd, epics, runs).execute(ShowJournalStoryQuery(story_filter))
+            model = root.wiring.show_journal_story(cwd, epics, runs).execute(ShowJournalStoryQuery(story_filter))
         if fmt == "json":
             print(json.dumps(json_ready(model["stages"]), indent=2, ensure_ascii=False))
             return 0
@@ -440,7 +271,7 @@ def usage_report(runs: str, story_filter: typing.Optional[str] = None, total_onl
 
 def status_model(cwd: str, epics: str, runs: str, live: bool = False) -> Model:
     """Where the factory stands — the status read model, over the project's files."""
-    return wiring.show_status(cwd, epics, runs).execute(ShowStatusQuery(live))
+    return root.wiring.show_status(cwd, epics, runs).execute(ShowStatusQuery(live))
 
 
 def foreign_claim_lines(claims: typing.Sequence[Model]) -> typing.List[str]:
@@ -473,8 +304,8 @@ def schedule(cwd: str, epics: str, runs: str, slots: typing.Optional[int] = None
              busy: typing.Sequence[str] = (), skip: typing.Sequence[str] = ()) -> int:
     """Print every story's state and the next one to run; return 0. The runner and the tests read these lines
     (`schedule_view.py`)."""
-    data = wiring.schedule_data(cwd, epics, runs, slots, busy, skip)
-    spent = wiring.show_spent(runs).execute(ShowSpentQuery(tuple(data["order"]))).by_story
+    data = root.wiring.schedule_data(cwd, epics, runs, slots, busy, skip)
+    spent = root.wiring.show_spent(runs).execute(ShowSpentQuery(tuple(data["order"]))).by_story
     for line in schedule_lines(data, epics, {story: spent_text(spent[story]) for story in data["order"]}):
         print(line)
     return 0
@@ -483,7 +314,7 @@ def schedule(cwd: str, epics: str, runs: str, slots: typing.Optional[int] = None
 def start(cwd: str, epics: str, runs: str, story_id: str, slots: typing.Optional[int] = None) -> int:
     """Where the story starts, printed as `state:`, `start:` (a stage, or `none`) and `detail:`. Exit 2 for an
     unknown story."""
-    found = wiring.start_of(cwd, epics, runs, story_id, slots)
+    found = root.wiring.start_of(cwd, epics, runs, story_id, slots)
     if found is None:
         print(f"factory: no story {story_id} under {epics}/", file=sys.stderr)
         return 2
@@ -560,20 +391,20 @@ def status_brief(cwd: str, epics: str, runs: str, session_start: bool = False) -
 
 def story_model(cwd: str, epics: str, runs: str, story_id: str, live: bool = False) -> Model:
     try:
-        return wiring.show_story(cwd, epics, runs).execute(ShowStoryQuery(story_id, live))
+        return root.wiring.show_story(cwd, epics, runs).execute(ShowStoryQuery(story_id, live))
     except UnknownStory:
         raise GateError(f"no story {story_id} under {epics}/") from None
 
 
 def epic_model(cwd: str, epics: str, runs: str, epic_id: str, live: bool = False) -> Model:
     try:
-        return wiring.show_epic(cwd, epics, runs).execute(ShowEpicQuery(epic_id, live))
+        return root.wiring.show_epic(cwd, epics, runs).execute(ShowEpicQuery(epic_id, live))
     except UnknownEpic as unknown:
         raise GateError(f"no epic {epic_id} under {epics}/ — the epics: {', '.join(unknown.known) or 'none'}") from None
 
 
 def help_model(cwd: str, epics: str, runs: str) -> Model:
-    return wiring.show_help(cwd, epics, runs).execute(ShowHelpQuery())
+    return root.wiring.show_help(cwd, epics, runs).execute(ShowHelpQuery())
 
 
 def status(cwd: str, epics: str, runs: str, story_filter: typing.Optional[str] = None, fmt: str = "text", colour: str = "auto",
@@ -622,121 +453,9 @@ def factory_help(cwd: str, epics: str, runs: str, fmt: str = "text", colour: str
     return 0
 
 
-def backfill_created(cwd: str, epics: str) -> int:
-    """WP-146: `created:` into every story and every epic that has none (`BackfillCreatedUseCase`). Prints what it
-    wrote."""
-    done = wiring.backfill_created(cwd, epics).execute(BackfillCreatedCommand())
-    if not done.stories and not done.epics:
-        print("backfill: every story and epic has its created: — nothing written")
-        return 0
-    print(f"backfill: created: written into {done.stories} stor{'y' if done.stories == 1 else 'ies'} and "
-          f"{done.epics} epic{'' if done.epics == 1 else 's'}, from the commit that added each"
-          + (f" — {done.from_file} not in git yet, from the file's own time" if done.from_file else ""))
-    return 0
-
-def story_command(run: typing.Callable[[], RESULT]) -> RESULT:
-    """A story command's use case run; a story not found is the gate's error, as the readers raise it."""
-    try:
-        return run()
-    except StoryNotFound as error:
-        raise GateError(str(error)) from None
-
-
-def reopen(cwd: str, runs: str, epics: str, story_id: str) -> int:
-    """Take a delivered story back for a correction a human gave on looking at it (`ReopenStoryUseCase`)."""
-    try:
-        result = story_command(lambda: wiring.reopen_story(cwd, epics, runs).execute(
-            ReopenStoryCommand(StoryId(story_id), Moment(time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())))))
-    except NotDelivered:
-        print(f"reopen: {story_id} is not delivered — a correction before delivery goes into the story, "
-              f"and the schedule runs it from plan")
-        return 1
-    if isinstance(result, NoCorrection):
-        print(f"reopen: {story_id} has no answered correction — /factory-decisions records the human's "
-              f"correction as an acceptance record first")
-    elif isinstance(result, CheckoutHeld):
-        print(f"reopen: {', '.join(h.value for h in result.holders)} holds the checkout with unfinished code — one "
-              f"story at a time; reopen {story_id} once it is delivered")
-    elif isinstance(result, NotCited):
-        rid = result.record.value
-        print(f"reopen: the story does not cite {rid} — write the correction into it first (criteria and "
-              f"an `answered:` line naming {rid})")
-    elif isinstance(result, NewWish):
-        print(f"reopen: after its acceptance the correction changes {', '.join(result.changed)} — that is a new "
-              f"wish: a new story with `## Changed expectations`, not this one reopened")
-    else:
-        print(f"reopen: {story_id} taken back for {result.record.value} — it runs again from plan; the delivered pass "
-              f"is kept as {shown(result.kept) if result.kept else 'nothing (no run folder)'}, and the story no "
-              f"longer says delivered")
-        return 0
-    return 1
-
-
-def deliver_by_hand(cwd: str, runs: str, epics: str, story_id: str, who: typing.Optional[str], force: bool = False) -> int:
-    """A story a person built: `status: delivered`, `delivered:` (UTC), `delivered_by: hand:<who>`
-    (`DeliverByHandUseCase`). Works where the factory never ran; `--prove` checks it later."""
-    who = " ".join(str(who or "").split())
-    if not who:
-        print("deliver-by-hand: `--by <who>` names the person who delivers — the line is their claim")
-        return 1
-    stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    try:
-        result = story_command(lambda: wiring.deliver_by_hand(cwd, epics, runs).execute(
-            DeliverByHandCommand(StoryId(story_id), Person(who), Moment(stamp), force)))
-    except AlreadyDelivered as error:
-        print(f"deliver-by-hand: {story_id} is delivered already ({error.by.value or 'before delivered_by'}) — "
-              f"a change of its behaviour is a new story with `## Changed expectations`")
-        return 1
-    except NothingToDeliver:
-        print(f"deliver-by-hand: {story_id} is superseded — nothing to deliver")
-        return 1
-    if isinstance(result, ClaimedElsewhere):
-        held = result.claim
-        print(f"deliver-by-hand: {story_id} is claimed by {held.who} ({held.host}) since {held.since} — "
-              f"another factory builds it; `--force` delivers it anyway")
-        return 1
-    if isinstance(result, ChangesWhatHolds):
-        print(f"deliver-by-hand: {story_id} changes what holds ({', '.join(result.change.keys)} in "
-              f"{shown(result.change.where)}) — the delta of a change is planned: `factory-cli.py --prove {story_id}` "
-              f"once it is delivered, or run it through the factory")
-        return 1
-    if result.unproven.keys:
-        print(f"deliver-by-hand: {len(result.unproven.keys)} criterion(s) into {shown(result.unproven.where)}, without "
-              f"a test line — unproven until `--prove`")
-    print(f"deliver-by-hand: {shown(result.where)} carries `status: delivered`, `delivered: {stamp}`, "
-          f"`delivered_by: hand:{who}` — delivered, claimed. Commit it with the trailer `Story: {story_id}`; "
-          f"`factory-cli.py --prove {story_id}` turns the claim into proof.")
-    return 0
-
-
-#: A claim's exit codes, as the runner reads them.
-CLAIM_EXIT = {Claim.OWN: 0, Claim.NO_REMOTE: 0, Claim.ELSEWHERE: 3, Claim.NEEDS_PERSON: 4}
-
-
-def claim_command(cwd: str, runs: str, epics: str, story_id: str) -> int:
-    """`--claim-story`: claim one story on the remote (WP-93, `ClaimStoryUseCase`). 0 claimed or own, 3 another
-    factory has it, 4 needs a person; 0 and nothing pushed where the profile names no `claim_remote:`."""
-    outcome = wiring.claim_story(cwd, epics, runs).execute(ClaimStoryCommand(StoryId(story_id)))
-    for line in outcome.said:
-        print(line)
-    return CLAIM_EXIT[outcome.claim]
-
-def undeliver_branch(cwd: str, runs: str, epics: str, story_id: str) -> int:
-    """WP-93 F: a published branch whose merge request lost the race goes back to before its delivery
-    (`TakeBackDeliveryUseCase`), so the integrate step merges the remote main line and the delivering function merges
-    again under the new rules."""
-    taken = wiring.take_back_delivery(cwd, runs, epics).execute(TakeBackDeliveryCommand(story_id))
-    if taken is None:
-        print(f"integrate: {story_id} has no published branch in this checkout")
-        return 1
-    print(f"integrate: {story_id}'s delivery taken back on its branch ({len(taken.spec_files)} spec file(s) as "
-          f"{taken.main} has them) — the integrate step merges {taken.main} and delivers it again")
-    return 0
-
-
 def spec_check(cwd: str, runs: str, epics: str) -> int:
     """Story and spec agree (WP-98, `CheckSpecUseCase`): one line per disagreement; exit 1 when there is one."""
-    checked = wiring.check_spec(runs, epics).execute(CheckSpecQuery())
+    checked = root.wiring.check_spec(runs, epics).execute(CheckSpecQuery())
     for line in checked.problems:
         print(f"spec: {line}")
     if not checked.problems:
@@ -744,30 +463,6 @@ def spec_check(cwd: str, runs: str, epics: str) -> int:
         print(f"spec: every criterion of the {count} delivered stor{'y' if count == 1 else 'ies'} stands in its "
               "spec, and every spec file holds its shape")
     return 1 if checked.problems else 0
-
-
-def prove(cwd: str, runs: str, epics: str, story_id: str) -> int:
-    """A claimed delivery checked through the adopt path (`ProveDeliveryUseCase`): the story becomes
-    `status: adopted`, its claim kept as one line of the evidence; the adopt gate then proves it and delivers it."""
-    stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    try:
-        result = story_command(lambda: wiring.prove_delivery(cwd, epics, runs).execute(
-            ProveDeliveryCommand(StoryId(story_id), Moment(stamp))))
-    except NotDelivered:
-        print(f"prove: {story_id} is not delivered — `--prove` checks a claimed delivery; an open story runs as it is")
-        return 1
-    except NothingToProve:
-        print(f"prove: {story_id} is delivered by the gate with its pass on record — nothing to prove")
-        return 1
-    if isinstance(result, CheckoutHeld):
-        print(f"prove: {', '.join(h.value for h in result.holders)} holds the checkout with unfinished code — one "
-              f"story at a time; prove {story_id} once it is delivered")
-        return 1
-    by = result.claim.by.value or "unknown"
-    print(f"prove: {story_id} is `status: adopted` — the adopt path checks it (`factory.sh run --story {story_id}`); "
-          f"the claim ({by}) is kept in {shown(result.claim_kept)}"
-          + (f", the earlier pass as {shown(result.kept)}" if result.kept else ""))
-    return 0
 
 
 # --- the carriers the profile names ------------------------------------------------------
@@ -803,7 +498,7 @@ def stages_shell(table: Model) -> int:
 
 def answer(profile_path: typing.Optional[str], question: Question, **fields: str) -> int:
     """The profile's answer to one question, a line per item (`AskProfileUseCase`)."""
-    print("\n".join(wiring.ask_profile(profile_path).execute(AskProfileQuery(question, **fields))))
+    print("\n".join(root.wiring.ask_profile(profile_path).execute(AskProfileQuery(question, **fields))))
     return 0
 
 
@@ -815,7 +510,7 @@ def follow(runs: str, story: typing.Optional[str], once: bool, fmt: str, width: 
         print("factory: follow --all names a story (--story <id>)", file=sys.stderr)
         return 2
     if every or once:
-        shown = wiring.show_stage_outputs(runs).execute(ShowStageOutputsQuery(
+        shown = root.wiring.show_stage_outputs(runs).execute(ShowStageOutputsQuery(
             story, process, request, every=every, lines=width))
         if fmt == "json":
             if every:
@@ -836,7 +531,7 @@ def follow(runs: str, story: typing.Optional[str], once: bool, fmt: str, width: 
             if every:
                 print()
         return 0
-    following = wiring.follow_output(runs)
+    following = root.wiring.follow_output(runs)
     current, offset, pending = None, 0, ""
     try:
         while True:
@@ -852,208 +547,16 @@ def follow(runs: str, story: typing.Optional[str], once: bool, fmt: str, width: 
 
 
 # --- the factory as a process of its own, and what a person asks of it (WP-91) -----------------------------------------
-def placed(profile_arg: typing.Optional[str] = None) -> None:
-    """The places as the profile names them, for a command that reads no other option."""
-    set_places(read_profile(resolve_profile(profile_arg, os.getcwd())))
-
-
-def request_command(argv: typing.Sequence[str]) -> int:
-    """`factory.sh request <kind> [<target>…] [<words>…] [--story|--epic|--record|--topic|--proposal <id>]
-    [--option <key>] [--from <stage>] [--by <who>] [--settle]` — `-` as the words reads them from stdin. `--settle`
-    settles it at once where the factory can, writing no request (exit 3 where a skill must work it)."""
-    parser = argparse.ArgumentParser(prog="factory.sh request",
-                                     description="write one request the factory works before its next story")
-    parser.add_argument("kind", choices=[k.name for k in KINDS])
-    parser.add_argument("rest", nargs="*", help="the target the kind names, then the person's words")
-    parser.add_argument("--story")
-    parser.add_argument("--epic")
-    parser.add_argument("--record")
-    parser.add_argument("--topic")
-    parser.add_argument("--proposal")
-    parser.add_argument("--option", help="an answer's option key, a correction's reason code")
-    parser.add_argument("--from", dest="start", help="with run: the stage the story starts at")
-    parser.add_argument("--by", help="who asks (default: git user.name)")
-    parser.add_argument("--file", action="append", default=[], metavar="PATH",
-                        help="a file beside the words — a picture, a PDF or a text; up to five (WP-184)")
-    parser.add_argument("--settle", action="store_true",
-                        help="settle it now where the factory can, no request written; exit 3 where a skill must work it")
-    parser.add_argument("--format", choices=("text", "json"), default="text")
-    args = parser.parse_args(argv)
-    placed()
-    kind, rest = KIND[args.kind], list(args.rest)
-    fields = {key: getattr(args, key) for key in ("story", "epic", "record", "topic", "proposal", "option")
-              if getattr(args, key)}
-    if args.start:
-        fields["from"] = args.start
-    for spec in kind.keys:
-        names = spec.split("|")
-        if any(name in fields for name in names) or not rest:
-            continue
-        if kind.name == "release":                  # every id given: the stories, or the one epic
-            fields[names[0]] = " ".join(rest)
-            rest = []
-        else:
-            fields[names[0]] = rest.pop(0)
-    words = " ".join(rest)
-    if words == "-":
-        words = sys.stdin.read()
-    if args.settle:
-        return settle_press(kind.name, fields, words, args.by or "", args.format)
-    try:
-        files = []
-        for given in args.file:
-            with open(given, "rb") as handed:
-                files.append((os.path.basename(given), handed.read()))
-    except OSError as error:
-        print(f"factory: request refused — {error.filename}: {error.strerror}", file=sys.stderr)
-        return 2
-    try:
-        written = wiring.write_request(os.getcwd()).execute(
-            WriteRequestCommand(kind.name, fields, words, args.by or "", tuple(files)))
-        request_id, path = written.id, written.path
-    except DuplicateRequest as same:
-        print(f"factory: {same}")
-        return 0
-    except (UseCaseException, GateError) as error:
-        print(f"factory: request refused — {error}", file=sys.stderr)
-        return 2
-    if args.format == "json":
-        print(json.dumps(dict(id=request_id, path=shown(path))))
-    else:
-        print(f"factory: request {request_id} written ({shown(path)}) — the factory works it before its next story")
-    return 0
-
-
-def settle_press(kind_name: str, fields: typing.Mapping[str, typing.Any], words: str, by: str, fmt: str) -> int:
-    """`request … --settle`: settled now, or exit 3 — the caller then runs the action's skill, as before."""
-    try:
-        # the runner's own lines go to stderr where the caller reads one JSON object from stdout
-        with contextlib.redirect_stdout(sys.stderr) if fmt == "json" else contextlib.nullcontext():
-            code, request_id, commit = settle_command(os.getcwd(), kind_name, fields, words, by)
-    except DuplicateRequest as same:
-        print(json.dumps(dict(id=same.existing, settled=False, queued=True)) if fmt == "json" else f"factory: {same}")
-        return 0
-    except (UseCaseException, GateError) as error:
-        print(f"factory: request refused — {error}", file=sys.stderr)
-        return 2
-    if fmt == "json":
-        print(json.dumps(dict(id=request_id, settled=code == 0, commit=commit)))
-    elif code == 0:
-        print(f"factory: {kind_name} settled by the factory, no tool" + (f" — committed {commit}" if commit else ""))
-    elif code == 3:
-        print(f"factory: {kind_name} needs its skill — nothing written")
-    return code
-
-
-def requests_command(argv: typing.Sequence[str]) -> int:
-    parser = argparse.ArgumentParser(prog="factory.sh requests", description="the requests and their state")
-    parser.add_argument("--format", choices=("text", "json"), default="text")
-    parser.add_argument("--drop", metavar="ID", help="take a request back (not while it runs)")
-    parser.add_argument("--retry", metavar="ID", help="queue a failed request again")
-    args = parser.parse_args(argv)
-    placed()
-    try:
-        if args.drop:
-            wiring.take_back_request(os.getcwd()).execute(TakeBackRequestCommand(args.drop))
-            print(f"factory: request {args.drop} dropped")
-            return 0
-        if args.retry:
-            wiring.retry_request(os.getcwd()).execute(RetryRequestCommand(args.retry))
-            print(f"factory: request {args.retry} queued again")
-            return 0
-    except (RequestRefused, OSError) as error:
-        print(f"factory: {error}", file=sys.stderr)
-        return 2
-    return requests_view(os.getcwd(), args.format)
 
 
 def pending_requests(cwd: str) -> typing.List[Model]:
     """The requests not done — what a view's press may be pending on."""
-    return wiring.pending_requests(cwd).execute(PendingRequestsQuery()).requests
+    return root.wiring.pending_requests(cwd).execute(PendingRequestsQuery()).requests
 
 
 def request_counts(cwd: str) -> Model:
     """The requests by state."""
-    return wiring.list_requests(cwd).execute(ListRequestsQuery())["counts"]
-
-
-def requests_view(cwd: str, fmt: str = "text") -> int:
-    """`factory.sh requests`: every request with its state, oldest first."""
-    model = wiring.list_requests(cwd).execute(ListRequestsQuery())
-    if fmt == "json":
-        print(json.dumps(model, indent=2, ensure_ascii=False))
-        return 0
-    rows = model["requests"]
-    if not rows:
-        print(f"requests: none — `factory.sh request <kind> …` writes one ({model['store']})")
-        return 0
-    for row in rows:
-        extra = row["error"] or (f"asks: {row['record']}" if row["record"] else "") or \
-            (f"{row['worker']} since {row['started']}" if row["state"] == "running" else "")
-        print(f"{row['id']}  {row['state']:<8} {row['kind']:<9} {row['target']}  ({row['by']})"
-              + (f" — {extra}" if extra else ""))
-    print("requests: " + ", ".join(f"{n} {s}" for s, n in model["counts"].items() if n))
-    return 0
-
-
-def up_command(argv: typing.Sequence[str]) -> int:
-    parser = argparse.ArgumentParser(prog="factory.sh up", description="start the factory in the background")
-    parser.add_argument("--serve", action="store_true", help="the page too")
-    parser.add_argument("--port", type=int)
-    parser.add_argument("--by")
-    parser.add_argument("--requests", action="store_true",
-                        help="the worker for a person's requests alone — the backlog stays as it is (the page starts it)")
-    args, run_args = parser.parse_known_args(argv)
-    allowed = {"--tool", "--parallel", "--interval", "--max-stages", "--story-budget", "--keep-going",
-               "--separate-stages", "--shared-builder", "--shared-verifier"}
-    stray = [a for a in run_args if a.startswith("-") and a not in allowed]
-    if stray:
-        print(f"factory: up takes no {' '.join(stray)} — the runner's flags it passes on: {' '.join(sorted(allowed))}",
-              file=sys.stderr)
-        return 2
-    placed()
-    return wiring.start_factory().execute(StartFactoryCommand(tuple(run_args), args.serve, args.port, args.by or "",
-                                                              backlog=not args.requests))
-
-
-def down_command(argv: typing.Sequence[str]) -> int:
-    parser = argparse.ArgumentParser(prog="factory.sh down", description="end the factory after its running stage")
-    parser.add_argument("--now", action="store_true", help="interrupt the running stage too")
-    parser.add_argument("--no-wait", action="store_true", help="say stop and return at once")
-    parser.add_argument("--by")
-    args = parser.parse_args(argv)
-    placed()
-    return wiring.stop_factory().execute(StopFactoryCommand(args.now, not args.no_wait, args.by or ""))
-
-
-def serve_command(argv: typing.Sequence[str]) -> int:
-    parser = argparse.ArgumentParser(prog="factory.sh serve", description="the factory's page, on this machine alone")
-    parser.add_argument("--port", type=int)
-    parser.add_argument("--open", action="store_true", help="open it in the browser")
-    parser.add_argument("--background", action="store_true", help="start it detached and return")
-    parser.add_argument("--stop", action="store_true",
-                        help="end the page that runs here; its requests' worker ends too unless the backlog is on")
-    parser.add_argument("--by-up", action="store_true", help=argparse.SUPPRESS)
-    parser.add_argument("--fixture", metavar="NAME",
-                        help="the page against canned views that hold every state — all-states or empty; writes nothing")
-    args = parser.parse_args(argv)
-    placed()
-    if args.fixture:
-        return web.serve_here(os.getcwd(), args.port, args.open, fixture=args.fixture)
-    if args.stop:
-        return wiring.end_page().execute(EndPageCommand())
-    if args.by_up:
-        return web.serve_here(os.getcwd(), args.port, by_up=True)
-    if args.background:
-        started = wiring.start_page().execute(StartPageCommand(args.port))
-        if started.running:
-            print(f"factory: the page runs already — {started.running['url']}")
-        return started.exit
-    served = wiring.show_running_page().execute(ShowRunningPageQuery())
-    if served:
-        print(f"factory: the page runs already — {served['url']}")
-        return 0
-    return web.serve_here(os.getcwd(), args.port, args.open)
+    return root.wiring.list_requests(cwd).execute(ListRequestsQuery())["counts"]
 
 
 def worker_command(argv: typing.Sequence[str]) -> int:
@@ -1061,7 +564,7 @@ def worker_command(argv: typing.Sequence[str]) -> int:
     parser.add_argument("--format", choices=("text", "json"), default="text")
     args = parser.parse_args(argv)
     placed()
-    info, line = wiring.show_worker().execute(ShowWorkerQuery())
+    info, line = root.wiring.show_worker().execute(ShowWorkerQuery())
     print(json.dumps(info) if args.format == "json" else line)
     return 0
 
@@ -1237,7 +740,7 @@ def main(argv: typing.Sequence[str]) -> int:
     # the runner's questions first: they read one file and print one answer
     if args.tool_probe:
         name = args.tool_probe
-        probe = wiring.probe_tool().execute(ProbeToolQuery(name))
+        probe = root.wiring.probe_tool().execute(ProbeToolQuery(name))
         if probe.outcome is Probed.UNKNOWN:
             parser.error(f"--tool-probe takes one of {', '.join(probe.known)}, not {name!r}")
         if probe.outcome is Probed.NOT_INSTALLED or not probe.found:
@@ -1253,29 +756,27 @@ def main(argv: typing.Sequence[str]) -> int:
         if args.shell:
             if args.place and args.place not in DEFAULTS:
                 parser.error(f"--place takes one of {', '.join(DEFAULTS)}")
-            return stages_shell(wiring.show_stage_table().execute(
+            return stages_shell(root.wiring.show_stage_table().execute(
                 ShowStageTableQuery((args.place,) if args.place else (), with_tools=True)))
-        table = wiring.show_stage_table().execute(ShowStageTableQuery())
+        table = root.wiring.show_stage_table().execute(ShowStageTableQuery())
         print(" ".join(row["name"] for row in table["rows"] if (args.every or row["in_order"])
                        and (args.window is None or row["window"] == args.window)))
         return 0
     if args.contract:
-        text = wiring.show_hand_over_contract(cwd, args.runs).execute(ShowHandOverContractQuery(args.contract))
+        text = root.wiring.show_hand_over_contract(cwd, args.runs).execute(ShowHandOverContractQuery(args.contract))
         if text is None:
             print(f"factory-cli: --contract takes one of {', '.join(s.value for s in workflow().order(StoryKind.STORY))}, review or glossary, not {args.contract!r}", file=sys.stderr)
             return 2
         print(text)
         return 0
     if args.files_skeleton:
-        return wiring.write_skeleton(cwd, args.runs).execute(
-            WriteSkeletonCommand(Skeleton.FILES, args.files_skeleton[0], args.files_skeleton[1]))
+        return delivery_commands.skeleton(cwd, args.runs, Skeleton.FILES, args.files_skeleton[0], args.files_skeleton[1])
     if args.plan_skeleton:
-        return wiring.write_skeleton(cwd, args.runs).execute(WriteSkeletonCommand(Skeleton.PLAN, args.plan_skeleton))
+        return delivery_commands.skeleton(cwd, args.runs, Skeleton.PLAN, args.plan_skeleton)
     if args.document_skeleton:
-        return wiring.write_skeleton(cwd, args.runs).execute(
-            WriteSkeletonCommand(Skeleton.DOCUMENT, args.document_skeleton))
+        return delivery_commands.skeleton(cwd, args.runs, Skeleton.DOCUMENT, args.document_skeleton)
     if args.migrate_layout:
-        return wiring.migrate_layout(cwd).execute(MigrateLayoutCommand())
+        return upkeep_commands.migrate_layout(cwd)
     if args.place:
         if args.place not in DEFAULTS:
             parser.error(f"--place takes one of {', '.join(DEFAULTS)}")
@@ -1286,7 +787,7 @@ def main(argv: typing.Sequence[str]) -> int:
     if args.command_heads:
         return answer(profile_path, Question.COMMAND_HEADS)
     if args.findings:
-        found = wiring.list_findings(cwd, args.epics, args.runs).execute(ListFindingsQuery())
+        found = root.wiring.list_findings(cwd, args.epics, args.runs).execute(ListFindingsQuery())
         rows = found["rows"]
         if not rows:
             print("factory: no open finding — the judges confirmed nothing that did not block, or every row is closed")
@@ -1314,7 +815,7 @@ def main(argv: typing.Sequence[str]) -> int:
         return discovery_list(cwd, args.epics, args.format, args.color)
     if args.stage_brief:
         try:
-            brief = wiring.show_brief(cwd).execute(ShowBriefQuery(StoryId(args.stage_brief[0]),
+            brief = root.wiring.show_brief(cwd).execute(ShowBriefQuery(StoryId(args.stage_brief[0]),
                                                                   StageName(args.stage_brief[1])))
         except ValueError as refused:
             print(f"factory-cli: {refused}", file=sys.stderr)
@@ -1324,7 +825,7 @@ def main(argv: typing.Sequence[str]) -> int:
     if args.kind:
         if not args.story:
             parser.error("--kind needs --story")
-        print(wiring.show_story_kind(cwd).execute(ShowStoryKindQuery(StoryId(args.story))).value)
+        print(root.wiring.show_story_kind(cwd).execute(ShowStoryKindQuery(StoryId(args.story))).value)
         return 0
     if args.resolve is not None:
         return resolve(args.epics, args.resolve)
@@ -1345,36 +846,35 @@ def main(argv: typing.Sequence[str]) -> int:
     if args.spec_check:
         return spec_check(cwd, args.runs, args.epics)
     if args.description_part:
-        view = wiring.show_part(cwd).execute(ShowPartQuery(args.description_part))
+        view = root.wiring.show_part(cwd).execute(ShowPartQuery(args.description_part))
         print(json.dumps(view, indent=2) if args.format == "json"
               else "\n\n".join(f"## {s['heading']}\n\n{s['text']}" for s in view["sections"]) or f"{view['path']}: missing")
         return 0
     if args.spec_delta:
-        view = wiring.show_spec_delta(args.runs, args.epics).execute(ShowSpecDeltaQuery(args.spec_delta))
+        view = root.wiring.show_spec_delta(args.runs, args.epics).execute(ShowSpecDeltaQuery(args.spec_delta))
         print(spec_delta_text.render(view, args.format))
         return 0
     if args.claim_story:
         return claim_command(cwd, args.runs, args.epics, args.claim_story)
     if args.claims_refresh:
-        return wiring.refresh_claims(cwd, args.epics, args.runs).execute(RefreshClaimsCommand())
+        return delivery_commands.refresh_claims(cwd, args.epics, args.runs)
     if args.release_claim:
-        return wiring.release_story_claim(cwd, args.epics, args.runs).execute(
-            ReleaseStoryClaimCommand(StoryId(args.release_claim), args.force))
+        return delivery_commands.release_claim(cwd, args.epics, args.runs, args.release_claim, args.force)
     if args.free_id:
-        print(wiring.next_free_story_id(cwd, args.epics, args.runs).execute(NextFreeStoryIdQuery(args.free_id)))
+        print(root.wiring.next_free_story_id(cwd, args.epics, args.runs).execute(NextFreeStoryIdQuery(args.free_id)))
         return 0
     if args.undeliver_branch:
         return undeliver_branch(cwd, args.runs, args.epics, args.undeliver_branch)
     if args.listening:
-        return wiring.mark_listening(cwd, args.runs).execute(MarkListeningCommand())
+        return checkout_commands.mark_listening(cwd, args.runs)
     if args.claim:
-        return wiring.take_checkout(cwd, args.runs).execute(TakeCheckoutCommand(args.claim))
+        return checkout_commands.take_checkout(cwd, args.runs, args.claim)
     if args.release is not None:
-        return wiring.give_checkout_back(cwd, args.runs).execute(GiveCheckoutBackCommand(args.release or None))
+        return checkout_commands.give_checkout_back(cwd, args.runs, args.release or None)
     if args.backfill_created:
         return backfill_created(cwd, args.epics)
     if args.ignore_journals:
-        journals = wiring.let_journals_into_git(cwd).execute(LetJournalsIntoGitCommand())
+        journals = upkeep_commands.let_journals_into_git(cwd)
         if journals:
             print(f"journals: .gitignore lets the story journals ({journals}/<story>/journal.tsv) and the page's theme "
                   f"(.dca-factory/theme/) into git — the rest of the pipeline's folder stays out")
@@ -1394,26 +894,22 @@ def main(argv: typing.Sequence[str]) -> int:
         if not args.story:
             parser.error("--window-start/--window-end need --story")
         if args.window_start:
-            return wiring.open_work_window(cwd, args.runs).execute(
-                OpenWorkWindowCommand(args.story, args.window_start, args.session_log))
-        return wiring.close_work_window(cwd, args.runs).execute(
-            CloseWorkWindowCommand(args.story, args.window_end, args.session_log))
+            return session_commands.open_window(cwd, args.runs, args.story, args.window_start, args.session_log)
+        return session_commands.close_window(cwd, args.runs, args.story, args.window_end, args.session_log)
     if args.stage_start or args.stage_end:
         if not args.story:
             parser.error("--stage-start/--stage-end need --story")
         if args.stage_start:
-            return wiring.start_session_stage(cwd, args.runs).execute(
-                StartSessionStageCommand(args.story, args.stage_start, args.session_log))
-        return wiring.end_session_stage(cwd, args.runs).execute(
-            EndSessionStageCommand(args.story, args.stage_end, args.session_log))
+            return session_commands.start_stage(cwd, args.runs, args.story, args.stage_start, args.session_log)
+        return session_commands.end_stage(cwd, args.runs, args.story, args.stage_end, args.session_log)
     if args.owned_confirm:
         return owned_confirm(args.runs, args.owned_confirm, cwd)
     if args.refusals:
         return refusals_report(args.runs, args.story, args.format)
     if args.journal_line:
-        return wiring.append_journal(cwd, args.runs).execute(AppendJournalCommand(args.journal_line, sys.stdin.read()))
+        return session_commands.append_journal(cwd, args.runs, args.journal_line, sys.stdin.read())
     if args.usage_from:
-        print("\n".join(wiring.read_tool_usage().execute(
+        print("\n".join(root.wiring.read_tool_usage().execute(
             ReadToolUsageQuery(args.usage_from[0], args.usage_from[1], args.usage_model))))
         return 0
     if args.usage:

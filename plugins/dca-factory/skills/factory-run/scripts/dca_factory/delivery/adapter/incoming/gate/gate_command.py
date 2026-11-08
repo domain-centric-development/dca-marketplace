@@ -75,17 +75,16 @@ from .....contract import CONTRACT, VERSION
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from .....sharedkernel.adapter.outgoing.profile.profile_files import (
     location, place, PROFILE_FILE, read_profile, resolve_profile, set_places)
-from ....application.backlog.check_backlog import CheckBacklogCommand, CheckBacklogInputPort
+from ....application.backlog.check_backlog import CheckBacklogInputPort
 from ....application.delivery.check_change import CheckChangeCommand, CheckChangeInputPort
 from ....application.delivery.check_parity import CheckParityCommand, CheckParityInputPort
 from ....application.delivery.check_stage import Verdict
 from ....application.delivery.pipeline_rules import decides
-from ....application.description.check_description import CheckDescriptionCommand, CheckDescriptionInputPort
+from ....application.description.check_description import CheckDescriptionInputPort
 from ....application.profile.check_profile import CheckProfileQuery, CheckProfileInputPort
 from ....domain.model.stage import Trait
-from ....domain.model.story import StoryId
-from ....domain.model.verdict import FindingState
 from ....application.delivery.pipeline_workflow import workflow
+from . import backlog_check, description_check
 
 Profile = typing.Mapping[str, typing.Any]
 Report = typing.Callable[[typing.Optional[str]], int]
@@ -134,35 +133,14 @@ def check_models(result: Verdict, profile: Profile) -> None:
 #: profile's `architecture:` was copied from at setup. Two files, two owners — the method's and the factory's —
 #: and nothing merges them, so the pair is compared and a difference is named.
 def check_project(result: Verdict, cwd: str, profile: Profile) -> bool:
-    """The two mandatory parts of the project description — the description feature's check, said as the gate
-    says its checks."""
-    checked = wiring.check_description(cwd, profile).execute(CheckDescriptionCommand())
-    for verdict in checked.verdicts:
-        getattr(result, verdict.state)(verdict.part, verdict.said)
-    return checked.complete
+    """The two mandatory parts of the project description (`description_check`)."""
+    return description_check.check_project(result, wiring.check_description(cwd, profile))
 
 
 def check_backlog(cwd: str, epics: str, profile: Profile, only: typing.Optional[str] = None) -> int:
-    """The plan gate's backlog checks over every story that is not done, or over `only` (`CheckBacklogUseCase`),
-    said one line per finding that did not pass."""
-    hint = wiring.layout_note(cwd, profile)
-    if hint:
-        print(f"gate:note layout — {hint}")
-    checked = wiring.check_backlog(cwd, epics, profile).execute(CheckBacklogCommand(StoryId(only) if only else None))
-    for verdict in checked.verdicts:
-        for finding in verdict.findings:
-            if finding.state is not FindingState.PASS:
-                print(f"gate:{finding.state.value} {verdict.label.value} {finding.check.value} — {finding.said.value}")
-    refused = [label.value for label in checked.refused]
-    if not checked.checked and not refused:
-        if only:
-            print(f"backlog: no story {only} to check under {epics}/ (not there, delivered or superseded)")
-            return 1
-        print(f"backlog: no story to check under {epics}/")
-        return 0
-    print(f"backlog: {checked.checked} story(ies) checked" + (f", refused: {', '.join(refused)}" if refused
-                                                             else " — every one holds for the plan gate"))
-    return 1 if refused else 0
+    """The plan gate's backlog checks (`backlog_check`)."""
+    return backlog_check.check_backlog(wiring.check_backlog(cwd, epics, profile), wiring.layout_note(cwd, profile),
+                                       epics, only)
 
 
 class ReportedVerdict(Verdict):

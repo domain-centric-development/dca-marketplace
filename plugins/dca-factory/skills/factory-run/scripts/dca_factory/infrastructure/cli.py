@@ -6,6 +6,7 @@ from __future__ import annotations
 import typing
 
 from ..delivery.adapter.incoming.cli import cli_command
+from ..delivery.adapter.incoming.cli import root as cli_root
 from ..delivery.adapter.incoming.runner import run_command
 from ..delivery.adapter.incoming.web import service as web_service
 from ..rulebook.adapter.incoming.cli import rules_command
@@ -17,7 +18,7 @@ from . import delivery, rulebook, runner, spec
 
 def wire() -> None:
     """Every command line of the cli given the composition root it builds its use cases from."""
-    cli_command.wire(delivery)
+    cli_root.wire(delivery)
     run_command.wire(runner)
     rules_command.wire(rulebook)
     spec_command.wire(spec)

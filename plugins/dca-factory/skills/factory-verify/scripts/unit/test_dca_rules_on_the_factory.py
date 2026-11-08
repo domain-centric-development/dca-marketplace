@@ -16,7 +16,6 @@ RULES_SOURCE = os.path.join(DCA_PYTHON, "dca-rules", "src")
 
 #: The ids the package does not hold yet (WP-188), with what stands behind them.
 NOT_YET_HELD = {
-    "DCA-USE-018": "the cli, the gate and the press settle drive the commands of several features",
 }
 
 

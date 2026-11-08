@@ -166,10 +166,13 @@ GATE_MODULE = "delivery/adapter/incoming/gate/gate_command"
 GATE_SIDE = ("contract", GATE_MODULE)
 #: The cli's command line, an incoming adapter: what shows and coordinates.
 CLI_MODULE = "delivery/adapter/incoming/cli/cli_command"
+#: The cli's commands of one feature each, beside the command line that dispatches to them.
+CLI_FEATURES = tuple(f"delivery/adapter/incoming/cli/{name}_commands" for name in (
+    "backlog", "checkout", "delivery", "lifecycle", "requests", "session", "upkeep"))
 #: The runner's process and the ports of a run's use cases on it, outgoing adapters: what starts the stages.
 RUNNER_MODULES = ("delivery/adapter/outgoing/process/runner_process", "delivery/adapter/outgoing/process/runner_ports")
-#: What is built in layers (WP-152): the building blocks, the shared kernel, the contexts, the web host, the root.
-LAYERED = ("building_blocks", "sharedkernel", "discovery", "delivery", "spec", "rulebook", "web", "infrastructure")
+#: What is built in layers (WP-152): the building blocks, the shared kernel, the contexts, the root.
+LAYERED = ("building_blocks", "sharedkernel", "discovery", "delivery", "spec", "rulebook", "infrastructure")
 
 
 def package_modules(folder):
@@ -4639,8 +4642,10 @@ def verify_setup(runner, verbose=False):
     # the cli is delivery's command line and the rulebook's (`--rules`), one entry point across them
     rules_module = "rulebook/adapter/incoming/cli/rules_command"
     rules_cli = package_text(runner, (rules_module,))[rules_module]
+    feature_clis = package_text(runner, CLI_FEATURES)
     accepted = {"gate": argparse_flags(modules[GATE_MODULE]),
-                "cli": argparse_flags(modules[CLI_MODULE]) | argparse_flags(rules_cli),
+                "cli": argparse_flags(modules[CLI_MODULE]) | argparse_flags(rules_cli)
+                       | {flag for text in feature_clis.values() for flag in argparse_flags(text)},
                 "verify": argparse_flags(open(__file__, encoding="utf-8").read()),
                 "sh": {flag for labels in re.findall(r"^\s*((?:--[\w-]+\|?)+)\)", runner_text, re.M)
                        for flag in labels.split("|")}}
