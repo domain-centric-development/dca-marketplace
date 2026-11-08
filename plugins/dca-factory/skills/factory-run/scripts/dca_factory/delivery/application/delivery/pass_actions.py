@@ -3,17 +3,46 @@ integration — through the output port StageDelivery."""
 
 from __future__ import annotations
 
+from ....building_blocks import DomainException
 from ...domain.model.stage_story import Presence
 from ...domain.model.verdict import Said
 from ...domain.model.acceptance import ACCEPTANCE, AcceptanceStep
 from ...domain.service.adopt_checks import AdoptChecks, Adoption
+from ..shared.stage_delivery import Landing
 from .check_stage import on_pass, Run
+from .deliver_story import DeliverStoryCommand
 
 DELIVERED_LEFT = "a delivered story is checked and its marks are left as they are"
 
 
 def delivered(run: Run) -> bool:
     return bool(run.story.content.written_status.value == "delivered")
+
+
+def deliver(run: Run, landing: Landing) -> bool:
+    """The delivery a passing gate makes: what goes before the story's state — the spec merged, a task's findings
+    closed —, the story delivered by the gate through its aggregate (`run.deliveries`, one input port per landing),
+    what is kept beside it. False where any of it refused, the reason in the verdict."""
+    result = run.result
+    if not run.delivery.prepare(result, run.story_id, run.story_path, run.front, landing):
+        return False
+    try:
+        done = run.deliveries[landing].execute(DeliverStoryCommand(run.story.id, run.now()))
+    except DomainException as refused:
+        result.fail("delivered", str(refused))
+        return False
+    run.delivery.delivered(result, run.story_id, run.story_path, run.front, done.delivery, landing)
+    return not result.failed
+
+
+def integrate(run: Run) -> None:
+    """The story where it lands — the main checkout takes its commit, or its own checkout is published —, delivered
+    there, and handed on: committed on the main line, or its branch pushed."""
+    landing = run.delivery.landing()
+    if not run.delivery.take_in(run.result, run.story_id, run.story_path, landing):
+        return
+    if deliver(run, landing):
+        run.delivery.hand_on(run.result, run.story_id, run.story_path, run.front, landing, run.close)
 
 
 @on_pass("plan", rule=(
@@ -76,7 +105,7 @@ def _document_passed(run: Run) -> None:
         result.ok("integrate", f"every check passed — {story_id} is delivered once its worktree is integrated into "
                                f"the main checkout (the runner's integrate step)")
         return
-    run.delivery.deliver(result, story_id, story_path, run.front)
+    deliver(run, Landing.STORY)
 
 
 @on_pass("adopt", rule="GATE-PASS-ADOPTED")
@@ -87,9 +116,9 @@ def _adopt_passed(run: Run) -> None:
         run.result.ok("integrate", f"every check passed — {run.story_id} is adopted once its tests are integrated into "
                                    f"the main checkout (the runner's integrate step)")
         return
-    run.delivery.deliver(run.result, run.story_id, run.story_path, run.front)
+    deliver(run, Landing.STORY)
 
 
 @on_pass("integrate", rule="GATE-INTEGRATED")
 def _integrate_passed(run: Run) -> None:
-    run.delivery.integrate(run.result, run.story_id, run.story_path, run.front, run.close)
+    integrate(run)

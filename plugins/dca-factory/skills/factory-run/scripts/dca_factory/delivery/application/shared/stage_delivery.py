@@ -1,12 +1,15 @@
-"""What a passing gate writes: the plan's marks, the red tree, an acceptance asked, the delivery — into the story,
-the spec and the findings —, and the story's commit on the main line or its claim published."""
+"""What a passing gate writes: the plan's marks, the red tree, an acceptance asked, what goes with a delivery — into
+the spec and the findings —, and the story's commit on the main line or its claim published. The story's own state is
+the aggregate's: the delivery itself goes through the story repository."""
 
 from __future__ import annotations
 
 import dataclasses
+import enum
 import typing
 
 from ....building_blocks import OutputPort
+from ...domain.model.story import Delivery
 from ...domain.model.story_state import Acceptance
 
 
@@ -18,6 +21,14 @@ class AcceptanceFacts:
     applies: bool
     acceptance: typing.Optional[Acceptance]
     refused: typing.Optional[str]
+
+
+class Landing(enum.Enum):
+    """Where a delivery is written: into the story where the gate read it, or into the story's own checkout, whose
+    branch is published for a person to merge."""
+
+    STORY = "story"
+    CHECKOUT = "checkout"
 
 
 class StageDelivery(OutputPort, typing.Protocol):
@@ -49,11 +60,29 @@ class StageDelivery(OutputPort, typing.Protocol):
     def in_worktree(self) -> bool:
         ...
 
-    def deliver(self, result: typing.Any, story: str, story_path: str, front: typing.Mapping[str, typing.Any]) -> None:
-        """The one write a delivering gate makes into a story, with the spec merged and the findings kept."""
+    def landing(self) -> Landing:
+        """Where the integration writes the delivery: the main checkout, or — with claims on a remote — the story's own
+        checkout, published."""
         ...
 
-    def integrate(self, result: typing.Any, story: str, story_path: str, front: typing.Mapping[str, typing.Any],
-                  close: typing.Callable[[], None]) -> None:
-        """The story on the main line: committed there — or, with claims on a remote, published."""
+    def prepare(self, result: typing.Any, story: str, story_path: str, front: typing.Mapping[str, typing.Any],
+                landing: Landing) -> bool:
+        """What goes before the story says delivered — a story's delta merged into the spec, a task's findings
+        closed; False where it could not be, the reason in `result`."""
+        ...
+
+    def delivered(self, result: typing.Any, story: str, story_path: str, front: typing.Mapping[str, typing.Any],
+                  delivery: Delivery, landing: Landing) -> None:
+        """What is kept beside a delivered story: the judge's confirmed defects that did not block, the flaky
+        tests."""
+        ...
+
+    def take_in(self, result: typing.Any, story: str, story_path: str, landing: Landing) -> bool:
+        """The story's commit taken where it lands: the main checkout fast-forwarded to it, or the status it is
+        published over kept; False where it could not be, the reason in `result`."""
+        ...
+
+    def hand_on(self, result: typing.Any, story: str, story_path: str, front: typing.Mapping[str, typing.Any],
+                landing: Landing, close: typing.Callable[[], None]) -> None:
+        """The delivery handed on: committed on the main line, or the story's branch pushed for a person to merge."""
         ...

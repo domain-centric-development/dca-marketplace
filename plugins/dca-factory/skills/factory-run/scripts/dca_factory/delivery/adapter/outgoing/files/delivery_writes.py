@@ -17,9 +17,8 @@ from .....sharedkernel.adapter.outgoing.profile.profile_files import (
     FLAKY_FINDINGS, JOURNAL, evidence_dir, evidence_rel, factory_home, place, places_in, shown)
 from .....spec.api import (
     derived, lint_context, merge, merge_context, read_delta, read_spec, render_spec, scenarios_path, story_entries)
-from ....domain.model.moment import Moment
 from ....domain.model.stage_story import Presence
-from ....domain.model.story import StoryId
+from ....domain.model.story import Delivery, StoryId
 from ....domain.model.story_state import Detail
 from ....domain.model.acceptance import AcceptanceMode, FlakyFinding
 from ..stack.commands import command_for
@@ -37,8 +36,6 @@ from .kept_files import RED_TREE, TESTS_BASELINE
 from .run_marks import write_mark
 from .snapshots import git_tree
 from .stage_evidence_files import closed_rows, closes_of
-from .journal_events import FileTransactions, JournalEventPublisher
-from .story_files import StoryFiles
 from .story_layout import journeys_hold, story_digest, story_folder, story_kind
 from .test_files import locate_tests, read_mapping
 from ....domain.model.stage_story import DONE_ROW, OPEN_ROW
@@ -170,17 +167,16 @@ def record_flaky_findings(result: typing.Any, story_path: str, story_id: str, fr
                               f"{shown(path)}: {', '.join(r[1] for r in added)}")
 
 
-def integrate_into_home(result: typing.Any, cwd: str, story_path: str, story_id: str, front: Front, runs: str,
-                        close: typing.Optional[typing.Callable[[], None]] = None) -> None:
+def take_into_home(result: typing.Any, cwd: str, story_id: str, runs: str) -> bool:
     """Every check holds on the integrated tree: the main checkout takes the story's commit — a fast-forward of
-    its branch, nothing else — and the story is delivered. A main checkout on another branch, or with changes
-    of its own in a file the commit touches, does not take it: refused (`checkout`), the person decides."""
+    its branch, nothing else —, the story is delivered there next. A main checkout on another branch, or with
+    changes of its own in a file the commit touches, does not take it: refused (`checkout`), the person decides."""
     home, target = typing.cast(str, factory_home()), integration_target(runs, story_id)
     on = git(home, "symbolic-ref", "--quiet", "--short", "HEAD")[1].strip()
     if on != target:
         result.fail("checkout", f"the main checkout is on {on or 'a detached HEAD'}, the story integrates into "
                                 f"{target} — switch back, then `factory.sh run --story {story_id} --from integrate`")
-        return
+        return False
     head = git(cwd, "rev-parse", "HEAD")[1].strip()
     done = subprocess.run(["git", "merge", "--ff-only", "--quiet", head], cwd=home, capture_output=True, text=True,
                           encoding="utf-8", errors="replace")
@@ -189,17 +185,15 @@ def integrate_into_home(result: typing.Any, cwd: str, story_path: str, story_id:
         # integrate step merges it again and holds the story to the gate once more, as for a target moved earlier.
         result.fail("moved", f"{target} moved on while the story was held to the gate — the integrate step merges "
                              f"again")
-        return
+        return False
     if done.returncode != 0:
         result.fail("checkout", f"the main checkout could not take the story's commit: "
                                 f"{(done.stderr or done.stdout).strip().splitlines()[0] if (done.stderr or done.stdout).strip() else 'git refused'}"
                                 f" — commit or stash what is in the way there, then "
                                 f"`factory.sh run --story {story_id} --from integrate`")
-        return
+        return False
     result.ok("integrated", f"{target} took the story's commit {head[:12]}")
-    deliver(result, story_path, story_id, front, runs)
-    if not result.failed:
-        commit_delivery(result, home, story_id, front, close)
+    return True
 
 
 def story_journals(home: str) -> typing.List[str]:
@@ -308,22 +302,33 @@ def merge_spec(result: typing.Any, story_path: str, story_id: str, front: Front,
     return None
 
 
-def publish_story(result: typing.Any, cwd: str, story_path: str, story_id: str, front: Front, runs: str,
-                  config: Front) -> None:
-    """WP-93 D: the factory never moves `main`. The delivering function writes into the story's worktree — the story's
-    three state lines and the merge into the spec —, the squashed commit takes them, and the story branch is pushed
-    with a lease on what this factory pushed last: only its own claim can be overwritten. A person merges it; the
-    remote main line then says delivered for every factory."""
+def checkout_story(cwd: str, story_path: str) -> str:
+    """The story's file in its own checkout <cwd>: the same place under the project as <story_path> in the main one."""
+    return os.path.join(cwd, os.path.relpath(story_path, factory_home() or cwd))
+
+
+def checkout_epics(cwd: str, epics: str) -> str:
+    """The epics folder in the story's own checkout <cwd>: the same place under the project as <epics> in the main
+    one."""
+    return os.path.join(cwd, os.path.relpath(os.path.abspath(epics), factory_home() or cwd))
+
+
+def keep_published_status(cwd: str, story_path: str, story_id: str, runs: str) -> None:
+    """The status the story is published over, kept: a take-back writes it back."""
+    with places_in(cwd):
+        before = read_front_matter(checkout_story(cwd, story_path))[0]
+        with open(os.path.join(evidence_dir(runs, story_id), "published-status"), "w", encoding="utf-8") as handle:
+            handle.write(str(before.get("status", "")).strip() + "\n")
+
+
+def publish_story(result: typing.Any, cwd: str, story_path: str, story_id: str, runs: str, config: Front) -> None:
+    """WP-93 D: the factory never moves `main`. The delivery is written into the story's worktree — the story's three
+    state lines and the merge into the spec —, the squashed commit takes them, and the story branch is pushed with a
+    lease on what this factory pushed last: only its own claim can be overwritten. A person merges it; the remote
+    main line then says delivered for every factory."""
     home = factory_home() or cwd
     rel_story = os.path.relpath(story_path, home)
-    local_story = os.path.join(cwd, rel_story)
     spec_rel = os.path.relpath(place("spec") if os.path.isabs(place("spec")) else os.path.join(home, place("spec")), home)
-    with places_in(cwd):
-        before = read_front_matter(local_story)[0]
-        mark = os.path.join(evidence_dir(runs, story_id), "published-status")
-        with open(mark, "w", encoding="utf-8") as handle:
-            handle.write(str(before.get("status", "")).strip() + "\n")
-        deliver(result, local_story, story_id, before, runs)
     git(cwd, "add", "-A", "--", spec_rel, os.path.dirname(rel_story))
     if git(cwd, *(["-c", "user.name=dca-factory", "-c", "user.email=dca-factory@localhost"]
                   if not git(cwd, "config", "user.email")[1].strip() else []),
@@ -346,27 +351,24 @@ def publish_story(result: typing.Any, cwd: str, story_path: str, story_id: str, 
                            f"its branch; `main` is not moved: a person merges it (merge request or push)")
 
 
-def deliver(result: typing.Any, story_path: str, story_id: str, front: Front, runs: str) -> None:
-    """The one write a delivering gate makes into a story — the document gate, the adopt gate and, in a story's
-    worktree, the integrate gate all call it. One end state: built or adopted, the story reads `status:
-    delivered`, `delivered:` and `delivered_by: gate`; an adopted story is no longer `adopted` (that was its
-    input: "the code exists, check it"). The judge's confirmed defects that did not block are kept beside it."""
+def prepare_delivery(result: typing.Any, story_path: str, story_id: str, front: Front, runs: str) -> bool:
+    """What a delivering gate writes before the story says delivered — the document gate, the adopt gate and the
+    integrate gate alike: a task's findings closed, a story's delta merged into its context's spec. False where the
+    merge refused."""
     if story_kind(front) == "task":
         close_findings(result, front)
-    elif merge_spec(result, story_path, story_id, front, runs) is False:
-        return
-    stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    story = StoryFiles.read(story_path)
-    story.deliver_by_gate(Moment(stamp))
+        return True
+    return merge_spec(result, story_path, story_id, front, runs) is not False
 
-    def save() -> None:
-        StoryFiles.write(story_path, story)
-        JournalEventPublisher(runs).publish_and_clear_events(story)
 
-    FileTransactions().in_transaction(save)
+def keep_beside_delivery(result: typing.Any, story_path: str, story_id: str, front: Front, runs: str,
+                         delivery: Delivery) -> None:
+    """What a delivered story keeps beside it: the judge's confirmed defects that did not block, the flaky tests.
+    The story itself — `status: delivered`, `delivered:`, `delivered_by: gate`; an adopted story no longer `adopted`,
+    that was its input — the story repository wrote."""
     result.written.append(story_folder(story_path))
-    result.ok("delivered", f"{shown(story_path)} carries `status: delivered`, `delivered: {stamp}`, "
-                           f"`delivered_by: gate`")
+    result.ok("delivered", f"{shown(story_path)} carries `status: delivered`, `delivered: {delivery.on.value}`, "
+                           f"`delivered_by: {delivery.by.value}`")
     added, open_now = record_findings(story_path, story_id, front, runs)
     if added or open_now:
         result.ok("findings", f"{added} confirmed finding(s) kept in {shown(findings_path(story_path))} — "

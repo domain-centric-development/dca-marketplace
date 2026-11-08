@@ -5,6 +5,7 @@ the gate (a window's start and end, the tree a story's diff is taken against, wh
 from __future__ import annotations
 
 import os
+import time
 import typing
 
 from ..delivery.adapter.outgoing.stack.commands import MISSING_TOOLS
@@ -15,7 +16,10 @@ from ..delivery.adapter.outgoing.files.migrations import layout_hint
 from ..delivery.adapter.outgoing.files.owned_files import observe_writes, owned_end, record_owned
 from ..delivery.adapter.outgoing.files.snapshots import record_base, record_changes
 from ..delivery.adapter.outgoing.files.backlog_entry_files import BacklogEntryFiles
+from ..delivery.adapter.outgoing.files.delivery_writes import checkout_epics
+from ..delivery.adapter.outgoing.files.journal_events import FileTransactions, JournalEventPublisher
 from ..delivery.adapter.outgoing.files.stage_delivery_files import StageDeliveryFiles
+from ..delivery.adapter.outgoing.files.story_files import StoryFiles
 from ..delivery.adapter.outgoing.files.stage_evidence_files import (
     DecisionStampFiles, MainLineEvidence, StageEvidenceFiles)
 from ..delivery.adapter.outgoing.files.story_files import story_of
@@ -31,6 +35,9 @@ from ..delivery.application.delivery import stage_checks  # noqa: F401 — regis
 from ..delivery.application.delivery.check_change import CheckChangeUseCase
 from ..delivery.application.delivery.check_parity import CheckParityUseCase
 from ..delivery.application.delivery.check_stage import run_checks, run_passed, StageRun, Verdict
+from ..delivery.application.delivery.deliver_story import DeliverStoryUseCase
+from ..delivery.application.shared.stage_delivery import Landing
+from ..delivery.domain.model.moment import Moment
 from ..delivery.application.profile.check_profile import CheckProfileUseCase
 from ..discovery.api import check_report
 from ..sharedkernel.adapter.outgoing.markdown.front_matter import GateError, read_front_matter
@@ -69,13 +76,30 @@ def stage_run(close: typing.Callable[[StageRun], None], **fields: typing.Any) ->
     run.stamps = DecisionStampFiles(run.runs, run.args.epics)
     run.describe = check_description(run.cwd, run.profile)
     run.runs_port = StageRunFiles(run.cwd, run.runs, run.profile)
-    run.delivery = StageDeliveryFiles(run.cwd, run.runs, run.profile)
+    wire_delivery(run)
     run.close = lambda: close(run)
     run.story = story_of(run.story_path, run.front, run.body, run.criteria)
     run.contract = run.evidence.gate().reads(run.evidence.declared_contract())
     # a journey is a guard over what is delivered: green at its test gate, the inverse of a story
     run.expected = "red" if run.stage.red and run.kind == "story" else "green"
     return typing.cast(StageRun, run)
+
+
+def now() -> Moment:
+    """This moment, as the factory stamps it."""
+    return Moment(time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+
+
+def wire_delivery(run: typing.Any) -> None:
+    """The ports a passing gate delivers through: its writes, the story delivered by the gate — where the gate read
+    it, and in the story's own checkout for a published delivery —, the clock."""
+    run.delivery = StageDeliveryFiles(run.cwd, run.runs, run.profile)
+    events, transactions = JournalEventPublisher(run.runs), FileTransactions()
+    run.deliveries = {
+        Landing.STORY: DeliverStoryUseCase(StoryFiles(run.cwd, run.args.epics), events, transactions),
+        Landing.CHECKOUT: DeliverStoryUseCase(StoryFiles(run.cwd, checkout_epics(run.cwd, run.args.epics)), events, transactions),
+    }
+    run.now = now
 
 
 def check_profile(profile: Profile) -> CheckProfileUseCase:

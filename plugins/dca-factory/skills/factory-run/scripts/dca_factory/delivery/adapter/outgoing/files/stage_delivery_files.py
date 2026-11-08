@@ -7,15 +7,17 @@ import typing
 
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_text
-from .....sharedkernel.adapter.outgoing.profile.profile_files import factory_home, in_worktree, shown
-from ....application.shared.stage_delivery import AcceptanceFacts
+from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter
+from .....sharedkernel.adapter.outgoing.profile.profile_files import factory_home, in_worktree, places_in, shown
+from ....application.shared.stage_delivery import AcceptanceFacts, Landing
+from ....domain.model.story import Delivery
 from ....domain.model.decision_record import RecordId
 from ....domain.model.story_state import Acceptance, AcceptanceVerdict
 from ..claims.remote_claims import claim_config_here
 from .decision_record_files import acceptance_state, record_path
 from .delivery_writes import (
-    acceptance_applies, ask_acceptance, deliver, integrate_into_home, publish_story, record_red_tree,
-    record_tests_baseline)
+    acceptance_applies, ask_acceptance, checkout_story, commit_delivery, keep_beside_delivery, keep_published_status,
+    prepare_delivery, publish_story, record_red_tree, record_tests_baseline, take_into_home)
 from .run_marks import STORY_DIGEST, write_mark
 from .plan_adoption_files import adopt_split, adopt_whole
 from .signals import journal_signal, plan_left_open
@@ -72,13 +74,36 @@ class StageDeliveryFiles(StageDelivery):
     def in_worktree(self) -> bool:
         return bool(in_worktree())
 
-    def deliver(self, result: typing.Any, story: str, story_path: str, front: typing.Mapping[str, typing.Any]) -> None:
-        deliver(result, story_path, story, front, self._runs)
+    def landing(self) -> Landing:
+        return Landing.CHECKOUT if claim_config_here(factory_home() or self._cwd) else Landing.STORY
 
-    def integrate(self, result: typing.Any, story: str, story_path: str, front: typing.Mapping[str, typing.Any],
-                  close: typing.Callable[[], None]) -> None:
-        config = claim_config_here(factory_home() or self._cwd)
-        if config:
-            publish_story(result, self._cwd, story_path, story, front, self._runs, config)
-        else:
-            integrate_into_home(result, self._cwd, story_path, story, front, self._runs, close=close)
+    def prepare(self, result: typing.Any, story: str, story_path: str, front: typing.Mapping[str, typing.Any],
+                landing: Landing) -> bool:
+        if landing is Landing.STORY:
+            return prepare_delivery(result, story_path, story, front, self._runs)
+        with places_in(self._cwd):
+            here = checkout_story(self._cwd, story_path)
+            return prepare_delivery(result, here, story, read_front_matter(here)[0], self._runs)
+
+    def delivered(self, result: typing.Any, story: str, story_path: str, front: typing.Mapping[str, typing.Any],
+                  delivery: Delivery, landing: Landing) -> None:
+        if landing is Landing.STORY:
+            keep_beside_delivery(result, story_path, story, front, self._runs, delivery)
+            return
+        with places_in(self._cwd):
+            here = checkout_story(self._cwd, story_path)
+            keep_beside_delivery(result, here, story, read_front_matter(here)[0], self._runs, delivery)
+
+    def take_in(self, result: typing.Any, story: str, story_path: str, landing: Landing) -> bool:
+        if landing is Landing.STORY:
+            return take_into_home(result, self._cwd, story, self._runs)
+        keep_published_status(self._cwd, story_path, story, self._runs)
+        return True
+
+    def hand_on(self, result: typing.Any, story: str, story_path: str, front: typing.Mapping[str, typing.Any],
+                landing: Landing, close: typing.Callable[[], None]) -> None:
+        home = factory_home() or self._cwd
+        if landing is Landing.STORY:
+            commit_delivery(result, home, story, front, close)
+            return
+        publish_story(result, self._cwd, story_path, story, self._runs, claim_config_here(home))

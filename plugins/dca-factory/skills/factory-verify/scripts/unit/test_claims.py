@@ -20,7 +20,10 @@ from dca_factory.sharedkernel.adapter.outgoing.markdown import front_matter as m
 from dca_factory.delivery.adapter.outgoing.git import worktrees, worktree_steps
 from dca_factory.delivery.adapter.outgoing.files import snapshots
 from dca_factory.delivery.adapter.outgoing.claims import remote_claims
-from dca_factory.delivery.adapter.outgoing.files import delivery_writes
+from dca_factory.delivery.adapter.outgoing.files.story_files import StoryFiles
+from dca_factory.delivery.application.delivery import pass_actions
+from dca_factory.delivery.application.delivery.check_stage import StageRun
+from dca_factory.infrastructure import gate as gate_root
 
 PROFILE = "claim_remote: origin\n"
 EPIC = "---\nintent: x\ngoal: y\nmetric: ThingShown\ndomain_contact: z\n---\n# sample\n"
@@ -38,6 +41,17 @@ depends_on: []
 
 - shows-{id_lower}: The reader sees {title}.
 """
+
+
+def publish_through_gate(result, wt, runs, epics, story, front):
+    """The integrate gate's pass over <story> in its worktree <wt>, with claims on the remote: delivered there and
+    published."""
+    path = layout.find_story(epics, story)
+    run = StageRun(result=result, cwd=wt, runs=runs, args=mock.Mock(epics=epics), profile={}, story_id=story,
+                   story_path=path, front=front, close=lambda: None)
+    gate_root.wire_delivery(run)
+    run.story = StoryFiles.read(path)
+    pass_actions.integrate(run)
 
 
 def sh(cwd, *args):
@@ -215,7 +229,7 @@ class Published(unittest.TestCase):
             front = markdown.read_front_matter(layout.find_story(epics, "S-01"))[0]
             with mock.patch.dict(os.environ, {profiles.HOME_VARIABLE: a}):
                 os.chdir(wt)
-                delivery_writes.publish_story(result, wt, layout.find_story(epics, "S-01"), "S-01", front, runs, CONFIG)
+                publish_through_gate(result, wt, runs, epics, "S-01", front)
                 os.chdir(a)
             self.assertFalse([e for e in result.entries if e[0] == "fail"], result.entries)
             published = sh(a, "show", "origin/story/S-01:product/epics/sample/S-01/story.md")
@@ -251,7 +265,7 @@ class Published(unittest.TestCase):
         front = markdown.read_front_matter(layout.find_story(epics, story))[0]
         with mock.patch.dict(os.environ, {profiles.HOME_VARIABLE: clone}):
             os.chdir(wt)
-            delivery_writes.publish_story(result, wt, layout.find_story(epics, story), story, front, runs, CONFIG)
+            publish_through_gate(result, wt, runs, epics, story, front)
             os.chdir(clone)
         self.assertFalse([e for e in result.entries if e[0] == "fail"], result.entries)
         return runs, epics, wt
