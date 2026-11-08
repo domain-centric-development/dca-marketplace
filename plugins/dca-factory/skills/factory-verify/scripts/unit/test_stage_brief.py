@@ -15,7 +15,6 @@ from dca_factory.delivery.domain.model.stage import StageName, StoryKind
 from dca_factory.delivery.domain.model.workflow_rule import RulePart
 from dca_factory.delivery.domain.model.stage_story import BriefFacts, Place
 from dca_factory.delivery.domain.model.story_state import Detail
-from dca_factory.delivery.domain.service.story_checks import StoryChecks
 from dca_factory.delivery.domain.service.stage_brief import Carrier, CarrierRole, MARKER, StageBrief, written
 
 
@@ -103,7 +102,7 @@ class BriefedTest(unittest.TestCase):
         def said(given, named):
             facts = BriefFacts(Place("runs/S/build.md"), Detail(given) if given else None,
                                Detail(named) if named else None)
-            return [(f.state.value, f.said.value) for f in StoryChecks.briefed(facts)]
+            return [(f.state.value, f.said.value) for f in facts.findings()]
         self.assertEqual([], said(None, None))                      # a stage run by hand was given none
         self.assertEqual("fail", said("abc", None)[0][0])
         self.assertIn("`brief: abc`", said("abc", None)[0][1])

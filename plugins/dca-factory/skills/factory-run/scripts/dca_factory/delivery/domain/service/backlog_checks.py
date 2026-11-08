@@ -9,8 +9,7 @@ from ..gateway.stage_evidence import StageEvidence
 from ..model.schedule import ContextName
 from ..model.stage import StoryKind
 from ..model.story import Story
-from ..model.stage_story import ContractNumber, Place
-from ..model.story_state import StatusWord
+from ..model.stage_story import ContractNumber
 from ..model.verdict import CheckName, Findings, Said
 
 APPROVED = CheckName("approved")
@@ -34,17 +33,6 @@ def normal_name(name: ContextName) -> ContextName:
 
 class BacklogChecks(DomainService):
     """The checks over the backlog around a story."""
-
-    @staticmethod
-    def release(place: Place, status: StatusWord) -> Findings:
-        """A draft is a story still being written: named, not refused. A status nobody knows is refused."""
-        if status.value == "draft":
-            return (APPROVED.note(Said(f"{place.value}: a draft — released with `status: approved` once it is "
-                                       f"written")),)
-        if status.value and status.value not in ("approved", "adopted"):
-            return (APPROVED.fail(Said(f"{place.value}: status {status.value!r} is none of draft, approved, adopted, "
-                                       f"superseded")),)
-        return ()
 
     @staticmethod
     def context_map(story: Story, evidence: StageEvidence) -> Findings:

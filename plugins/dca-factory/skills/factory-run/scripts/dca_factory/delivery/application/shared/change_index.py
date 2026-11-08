@@ -6,7 +6,7 @@ from __future__ import annotations
 import typing
 
 from ....building_blocks import OutputPort
-from ...domain.model.stage_story import Snapshot
+from ...domain.model.change import Snapshot
 
 
 class ChangeIndex(OutputPort, typing.Protocol):

@@ -10,7 +10,7 @@ from ..gateway.stage_evidence import StageEvidence
 from ..model.stage import StoryKind
 from ..model.story import Story
 from ..model.stage_story import (
-    CommandKey, ContractNumber, HandOverName, MappedTest, ScenarioKey, TestLocation, TestTable, TitleFound)
+    CommandKey, ContractNumber, HandOverName, MappedTest, TestTable, TitleFound)
 from ..model.verdict import CheckName, Findings, Said
 
 TESTS_MAPPED = CheckName("tests-mapped")
@@ -36,8 +36,9 @@ class TestChecks(DomainService):
     """The checks over the tests table and the tests it names."""
 
     @staticmethod
-    def mapped(criteria_of_story: typing.Tuple[ScenarioKey, ...], table: TestTable) -> Findings:
-        criteria = [key.value for key in criteria_of_story]
+    def mapped(story: Story, table: TestTable) -> Findings:
+        """Every criterion of the story has a test row, and every row names a criterion of the story."""
+        criteria = [key.value for key in story.content.criteria]
         mapped = {key.value for key in table.keys}
         where = table.place.value
         found = []
@@ -52,27 +53,6 @@ class TestChecks(DomainService):
                 f"{where}: test rows name criteria the story does not have: {', '.join(unknown)}")))
         if not uncovered and not unknown:
             found.append(TESTS_MAPPED.ok(Said(f"{table.tests.value} test(s) mapped to {len(criteria)} criterion(s)")))
-        return tuple(found)
-
-    @staticmethod
-    def exist(locations: typing.Tuple[TestLocation, ...]) -> Findings:
-        """A selector must point at a test that is actually there. Without this check a missing test looks exactly
-        like a red one, and the run would certify nothing."""
-        found = []
-        for test in locations:
-            selector, key = test.selector.value, test.key.value
-            cls, _sep, method = selector.partition("#")
-            if test.found is not None:
-                found.append(TESTS_EXIST.ok(Said(f"{selector} found in {test.found.value} ({key}, by "
-                                                 f"{test.shape.value})")))
-            elif test.candidate is not None:
-                found.append(TESTS_EXIST.fail(Said(
-                    f"{selector}: {test.candidate.value} has no {method} — criterion {key!r} has no test, only a row "
-                    f"in the table")))
-            else:
-                found.append(TESTS_EXIST.fail(Said(
-                    f"{selector}: no source file for {cls.rsplit('.', 1)[-1]} — criterion {key!r} has no test, and a "
-                    f"missing test is indistinguishable from a red one at the runner")))
         return tuple(found)
 
     @staticmethod

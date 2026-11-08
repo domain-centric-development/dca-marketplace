@@ -5,7 +5,6 @@ import os
 import unittest
 
 from support import evidence, gate_story, project, verdict, write
-from dca_factory import contract
 from dca_factory.delivery.adapter.outgoing.files.stage_evidence_files import DecisionStampFiles
 from dca_factory.delivery.application.delivery.pipeline_workflow import workflow
 from dca_factory.delivery.domain.model.stage import StageName, StoryKind
@@ -42,7 +41,7 @@ class IntegrateDecision(unittest.TestCase):
         result, stamps = verdict(), DecisionStampFiles(p.runs, p.epics)
         for item in DecisionChecks.check(checked, StageName(gating), evidence(p.root, p.runs),
                                          workflow().order(StoryKind.STORY)).items:
-            result.take((DecisionChecks.applied(item, stamps.apply(checked, item)),) if isinstance(item, Applying)
+            result.take((item.finding(stamps.apply(checked, item)),) if isinstance(item, Applying)
                         else (item,))
         return {(kind, check) for kind, check, _ in result.entries}, result
 

@@ -29,7 +29,7 @@ from .test_files import read_mapping
 from .test_files import locate_tests
 from ....domain.model.stage_story import Presence
 from ....domain.model.story_state import Detail
-from ....domain.service.kept_checks import KeptChecks
+from ....domain.service.kept_checks import stale
 
 
 #: A cited path usually carries where in the file it was read: `README.md:149`, `Book.cs:28-31`,
@@ -427,4 +427,4 @@ def stale_red_proof(cwd: str, runs: str, story: str, start: typing.Optional[str]
     # A tidy that runs again moved the tests itself: its gate re-proves them on the red tree (WP-151 A).
     reproof = Presence.PRESENT if start == "tidy" and red_tree(runs, story) and last_ended(
         runs, story, tuple(s.name for s in all_stages() if s.lists and not s.red)) == "tidy" else Presence.ABSENT
-    return [m.value for m in KeptChecks.stale(tuple(Detail(m) for m in moved), decided, reproof)]
+    return [m.value for m in stale(tuple(Detail(m) for m in moved), decided, reproof)]

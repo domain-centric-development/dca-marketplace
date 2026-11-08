@@ -77,7 +77,8 @@ def _story(run: Run) -> None:
     "GATE-PROFILE",
 ))
 def _contract(run: Run) -> None:
-    run.result.take(ProfileChecks.contract(run.evidence))
+    run.result.take(run.evidence.gate().profile_findings(run.evidence.declared_contract(),
+                                                         run.evidence.unknown_keys()))
 
 
 @check("status", rule="GATE-APPROVED")
@@ -114,8 +115,8 @@ def _owned(run: Run) -> None:
 def _brief(run: Run) -> None:
     for stage in workflow().briefed_at(StageName(run.stage.name), StoryKind(run.kind)):
         if stage.hand_over is not None:
-            run.result.take(StoryChecks.briefed(run.evidence.brief(StoryId(run.story_id), stage.name,
-                                                                   HandOverName(stage.hand_over.value))))
+            run.result.take(run.evidence.brief(StoryId(run.story_id), stage.name,
+                                               HandOverName(stage.hand_over.value)).findings())
 
 
 @check("spec-delta", stages=("test",), rule="GATE-SPEC-DELTA")
@@ -153,11 +154,11 @@ def read_table(run: Run) -> typing.Tuple[typing.Dict[str, typing.List[str]], typ
         return {}, {}
     table = TestTable(Place(path), tuple(ScenarioKey(key) for key in mapping),
                       Count(sum(len(selectors) for selectors in mapping.values())))
-    run.result.take(TestChecks.mapped(run.story.content.criteria, table))
+    run.result.take(TestChecks.mapped(run.story, table))
     if not mapping:
         return mapping, {}
     located, looked = run.tests.locate(mapping)
-    run.result.take(TestChecks.exist(looked))
+    run.result.take(tuple(t.finding() for t in looked))
     return mapping, located
 
 
@@ -229,7 +230,7 @@ def _decisions(run: Run) -> None:
                                    workflow().order(StoryKind.STORY))
     for item in checked.items:
         if isinstance(item, Applying):
-            run.result.take((DecisionChecks.applied(item, run.stamps.apply(run.story, item)),))
+            run.result.take((item.finding(run.stamps.apply(run.story, item)),))
         else:
             run.result.take((item,))
 
@@ -251,12 +252,13 @@ def _plan_adopts(run: Run) -> None:
 def _plan(run: Run) -> None:
     run.result.take(StoryChecks.happy_path(run.story, run.contract, run.evidence))
     run.result.take(BacklogChecks.context_map(run.story, run.evidence))
-    run.result.take(ProfileChecks.instruction_size(run.evidence))
+    found = run.evidence.instruction_file()
+    run.result.take(found.size_findings() if found is not None else ())
     # the two mandatory parts of the project description — the description feature's check, said as the gate says
     # its checks
     for verdict in run.describe.execute(CheckDescriptionCommand()).verdicts:
         getattr(run.result, verdict.state)(verdict.part, verdict.said)
-    run.result.take(ProfileChecks.models(run.evidence, workflow().order(StoryKind.STORY)))
+    run.result.take(ProfileChecks.models(run.evidence, workflow()))
 
 
 @check("document", stages=("document",), rule=(

@@ -10,7 +10,7 @@ from .story_words import Detail as Detail, StatusWord as StatusWord
 from .decision_record import DecisionState, RecordId, RecordKind
 from .stage import StageName, StoryKind
 from .story import StoryId
-from .verdict import CheckName
+from .verdict import CheckName, Finding, Said
 
 #: The schedule's states of a story that can run now: not started, begun, or stopped where it can continue.
 RUNNABLE = ("ready", "in-progress", "resumable")
@@ -123,6 +123,13 @@ class VerdictWord(Value):
     """The judge's `verdict:` — `pass`, `changes-requested`, `story-conflict` — or "" where it wrote none."""
 
     value: str
+
+    def adopt_finding(self) -> Finding:
+        """A fresh judge confirms that each mapped test asserts its scenario before the story counts as adopted."""
+        if self.value != "pass":
+            return CheckName("adopt-judged").fail(Said("judge.md carries no `verdict: pass` — a fresh judge confirms that each mapped "
+                                          "test asserts its scenario before the story counts as adopted"))
+        return CheckName("adopt-judged").ok(Said("the judge confirmed that the tests prove the scenarios"))
 
     def judged(self) -> Judged:
         """What the verdict means for the run."""

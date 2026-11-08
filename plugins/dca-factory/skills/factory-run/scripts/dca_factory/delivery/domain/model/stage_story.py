@@ -8,19 +8,13 @@ import typing
 
 from ....building_blocks import Value
 from .story import StoryContent as StoryContent
-from .story_words import Count as Count, ScenarioKey as ScenarioKey, RowId as RowId, EventName as EventName, Clause as Clause, ScenarioClauses as ScenarioClauses
+from .story_words import Count as Count, ScenarioKey as ScenarioKey, RowId as RowId, EventName as EventName, Clause as Clause, ScenarioClauses as ScenarioClauses, Place as Place
 from .decision_record import AnswerField, DecisionState, RecordId, RecordKind
 from .epic import EpicId
 from .schedule import ContextName
-from .stage import StageName, StoryKind
-from .story import DeliveredOn, StoryId
-from .story_state import Detail, HandOverText, Rounds, StatusWord
-
-
-class Place(Value):
-    """A file as the gate names it — where a person finds what a finding speaks of."""
-
-    value: str
+from .stage import StageName
+from .story_state import Detail, HandOverText, Rounds
+from .verdict import CheckName, Finding, Findings, Said
 
 
 class RowState(Value):
@@ -49,11 +43,52 @@ class ContractNumber(Value):
     value: int
 
 
+#: The checks over the profile: the contract the gate reads it as, the keys nobody reads, the instruction file's size.
+CONTRACT_CHECK = CheckName("contract")
+PROFILE = CheckName("profile")
+INSTRUCTION_SIZE = CheckName("instruction-size")
+#: Codex stops loading project documents at 32 KiB by default and truncates silently; other tools have comparable
+#: budgets.
+DOC_BUDGET_BYTES = 32 * 1024
+
+
 class GateRelease(Value):
     """The gate that checks: the contract it implements and its version."""
 
     contract: ContractNumber
     version: Detail
+
+    def reads(self, declared: ProfileText) -> ContractNumber:
+        """The contract a profile is read as: the one it declares, else the gate's own."""
+        text = declared.value.strip()
+        return ContractNumber(int(text)) if text.isdigit() else self.contract
+
+    def profile_findings(self, declared_text: ProfileText, unknown: typing.Sequence[UnknownKey]) -> Findings:
+        """Undeclared is the normal case and only a note: a profile with today's keys is what the template writes. A
+        *higher* number than this gate knows is a refusal — the project has keys this gate would ignore, and ignoring a
+        key silently is how a check disappears without anyone noticing. A key outside the profile's schema is a note,
+        named with the nearest known key: nobody reads it, which is worth knowing and no reason to stop a story."""
+        found = [PROFILE.note(Said(f"`{u.key.value}:` is no key the pipeline reads — ignored"
+                                   + (f"; did you mean `{u.near.value}:`?" if u.near else "")))
+                 for u in unknown]
+        ours, version = self.contract.value, self.version.value
+        declared = declared_text.value.strip()
+        if not declared:
+            found.append(CONTRACT_CHECK.note(Said(f"profile declares no `contract:` — read as {ours} (gate {version})")))
+        elif not declared.isdigit():
+            found.append(CONTRACT_CHECK.fail(Said(f"profile's `contract: {declared}` is not a number")))
+        elif int(declared) > ours:
+            found.append(CONTRACT_CHECK.fail(Said(
+                f"the profile is written for gate contract {declared} and this gate implements {ours} (gate {version}) "
+                f"— run `factory.sh update` before trusting a run, because this script would ignore whatever the newer "
+                f"contract added")))
+        elif int(declared) < ours:
+            found.append(CONTRACT_CHECK.note(Said(
+                f"the profile declares contract {declared} and this gate implements {ours} (gate {version}) — still "
+                f"read, and worth bringing up to date")))
+        else:
+            found.append(CONTRACT_CHECK.ok(Said(f"profile and gate agree on contract {ours} (gate {version})")))
+        return tuple(found)
 
 
 class ProfileKey(Value):
@@ -109,6 +144,21 @@ class BriefFacts(Value):
     given: typing.Optional[Detail]
     named: typing.Optional[Detail]
 
+    def findings(self) -> Findings:
+        """A stage the runner gave a brief names it in its hand-over: one that worked from another brief, or names
+        none, is refused — what it was told is not what it did."""
+        if self.given is None:
+            return ()
+        if self.named is None:
+            return (CheckName("brief").fail(Said(
+                f"{self.place.value} names no brief — end it with the line `brief: {self.given.value}`, the digest "
+                f"the brief you were given ends with, after reading that brief")),)
+        if self.named != self.given:
+            return (CheckName("brief").fail(Said(
+                f"{self.place.value} names the brief {self.named.value}, but the stage was given "
+                f"{self.given.value} — read the brief you were given and work by it")),)
+        return (CheckName("brief").ok(Said(f"the stage worked from the brief it was given ({self.given.value})")),)
+
 
 class ContextMapFacts(Value):
     """The context map a story's context is looked up on: the designed map's file where the profile names one that
@@ -128,6 +178,16 @@ class InstructionFile(Value):
 
     place: Place
     size: ByteSize
+
+    def size_findings(self) -> Findings:
+        """A note, not a check: instructions past a tool's document budget are truncated silently, so a run can be
+        missing half its rules without anything saying so."""
+        name, size = self.place.value, self.size.value
+        if size > DOC_BUDGET_BYTES:
+            return (INSTRUCTION_SIZE.skip(Said(
+                f"{name} is {size} bytes, past the {DOC_BUDGET_BYTES}-byte budget some tools load — the rest is "
+                f"truncated silently; move detail into referenced files")),)
+        return (INSTRUCTION_SIZE.ok(Said(f"{name} is {size} bytes, within a tool's budget")),)
 
 
 class EpicField(Value):
@@ -200,10 +260,26 @@ class Selector(Value):
     value: str
 
 
+#: The check over a suite's commands and runs.
+SUITE = CheckName("suite")
+
+
+def red(check: CheckName, said: Said, must: Presence, strict: Presence) -> Finding:
+    """A red check fails the verdict — unless a policy is declared and this check is not in it. Then the policy
+    decides: the red run is reported, and it is not what the commit is judged by."""
+    if strict is Presence.PRESENT and must is Presence.ABSENT:
+        return check.note(Said(said.value + " — optional (not in `required:`), so it does not decide"))
+    return check.fail(said)
+
+
 class CommandKey(Value):
     """A profile key of a test command — `test`, `e2eTest`, `test.journey`."""
 
     value: str
+
+    def missing(self, check: CheckName) -> Finding:
+        """The check skipped: the profile names no command under this key."""
+        return check.skip(Said(f"no `{self.value}:` command in the stack profile"))
 
 
 class TitleFound(enum.Enum):
@@ -248,6 +324,23 @@ class TestLocation(Value):
     found: typing.Optional[Place]
     candidate: typing.Optional[Place]
     shape: Detail
+
+    def finding(self) -> Finding:
+        """A selector must point at a test that is actually there. Without this check a missing test looks exactly
+        like a red one, and the run would certify nothing."""
+        selector, key = self.selector.value, self.key.value
+        cls, _sep, method = selector.partition("#")
+        if self.found is not None:
+            return (CheckName("tests-exist").ok(Said(f"{selector} found in {self.found.value} ({key}, by "
+                                             f"{self.shape.value})")))
+        elif self.candidate is not None:
+            return (CheckName("tests-exist").fail(Said(
+                f"{selector}: {self.candidate.value} has no {method} — criterion {key!r} has no test, only a row "
+                f"in the table")))
+        else:
+            return (CheckName("tests-exist").fail(Said(
+                f"{selector}: no source file for {cls.rsplit('.', 1)[-1]} — criterion {key!r} has no test, and a "
+                f"missing test is indistinguishable from a red one at the runner")))
 
 
 class PlanLevels(Value):
@@ -735,6 +828,19 @@ class CommandRun(Value):
     output: Detail
     reused: Detail
 
+    def finding(self, check: CheckName) -> Finding:
+        """A command the stage's gate looks up and runs: it passes or it fails."""
+        if self.code.value == 0:
+            return check.ok(Said(f"`{self.command.value}` succeeded{self.reused.value}"))
+        return check.fail(Said(f"`{self.command.value}` failed:\n{self.output.value}"))
+
+    def verdict(self, check: CheckName, must: Presence, strict: Presence) -> Finding:
+        """A command a change's checks run: green passes; red fails — unless a policy is declared that does not
+        name this check (`red`)."""
+        if self.code.value == 0:
+            return check.ok(Said(f"`{self.command.value}` succeeded"))
+        return red(check, Said(f"`{self.command.value}` failed:\n{self.output.value}"), must, strict)
+
 
 class Retried(Value):
     """A red test outside the story, run again alone: the test and the invocation that ran it."""
@@ -764,43 +870,20 @@ class SuiteCommands(Value):
     declared: typing.Tuple[typing.Tuple[CommandKey, typing.Optional[Detail]], ...]
     required: typing.FrozenSet[CommandKey]
 
+    def required_findings(self) -> Findings:
+        """The test commands the policy requires: a required key without its command fails — silently passed, the
+        stage gate would certify a suite nobody can run."""
+        if not self.required:
+            return ()
+        found = [SUITE.fail(Said(f"no `{key.value}:` command in the stack profile — and `{key.value}` is required"))
+                 for key, command in self.declared if key in self.required and command is None]
+        if not any(key in self.required for key, _command in self.declared):
+            found.append(SUITE.skip(Said("`required:` names no declared test command")))
+        return tuple(found)
 
-class Snapshot(Value):
-    """The commit's index against the working tree: why no tree could be written, the tree, what differs from it
-    outside the pipeline's own and the tools' folders, and how many files the pipeline wrote itself."""
-
-    refused: typing.Optional[Detail]
-    tree: Detail
-    drift: typing.Tuple[Detail, ...]
-    left: Count
-
-
-class ParityScenario(Value):
-    """A scenario of a parity contract: its id, its title — what binds it to a test — and whether every
-    configuration has to prove it."""
-
-    id: Detail
-    title: Detail
-    always: Presence
-
-
-class ImplementationReports(Value):
-    """One implementation's reports: its name, the glob, how many reports match, the newest, and the outcome each
-    test name has in them."""
-
-    name: Detail
-    glob: Detail
-    reports: Count
-    newest: Detail
-    outcomes: typing.Tuple[typing.Tuple[Detail, Detail], ...]
-
-
-class ParityFacts(Value):
-    """A parity config: its file, the contract's file and digest, its scenarios, and each implementation's
-    reports."""
-
-    config: Place
-    scenarios_file: Detail
-    digest: Detail
-    scenarios: typing.Tuple[ParityScenario, ...]
-    implementations: typing.Tuple[ImplementationReports, ...]
+    def task_findings(self) -> Findings:
+        """A task proves itself on the existing suite: the profile has to declare a test command."""
+        if any(command is not None for _key, command in self.declared):
+            return ()
+        return (SUITE.fail(Said("a task proves itself on the existing suite, and the stack profile declares no test "
+                                "command — declare `test:` (and its siblings)")),)

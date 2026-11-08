@@ -22,6 +22,13 @@ RED_PROOF = CheckName("red-proof")
 SUFFIX = {TestChange.CHANGED: "", TestChange.REMOVED: " (removed)", TestChange.SWITCHED_OFF: " (switched off)"}
 
 
+def stale(moved: typing.Tuple[Detail, ...], decided: Presence, reproof: Presence) -> typing.Tuple[Detail, ...]:
+    """The tests whose red proof no longer holds: changed since the test stage saw them fail — none where an
+    answered decision of the test stage changed what they expect, or where a tidy re-proves them on the tree the
+    test stage left."""
+    return () if decided is Presence.PRESENT or reproof is Presence.PRESENT else moved
+
+
 class KeptChecks(DomainService):
     """The checks over what a stage changed, over the stages of <workflow>."""
 
@@ -144,13 +151,6 @@ class KeptChecks(DomainService):
         return tuple(found)
 
     @staticmethod
-    def stale(moved: typing.Tuple[Detail, ...], decided: Presence, reproof: Presence) -> typing.Tuple[Detail, ...]:
-        """The tests whose red proof no longer holds: changed since the test stage saw them fail — none where an
-        answered decision of the test stage changed what they expect, or where a tidy re-proves them on the tree the
-        test stage left."""
-        return () if decided is Presence.PRESENT or reproof is Presence.PRESENT else moved
-
-    @staticmethod
     def red_proof(story: Story, stage: StageName, tests: typing.Tuple[MappedTest, ...],
                   evidence: StageEvidence) -> Findings:
         """At build and tidy: every test's red proof was taken against the test as it is now."""
@@ -168,7 +168,7 @@ class KeptChecks(DomainService):
             return (RED_PROOF.ok(Said(f"{entries - unbound} test(s) are the version that was seen failing")),)
         moved = ", ".join(m.value for m in proof.moved)
         decided = evidence.decided_tests(story.id)
-        if not KeptChecks.stale(proof.moved, Presence.PRESENT if decided else Presence.ABSENT, proof.reproof):
+        if not stale(proof.moved, Presence.PRESENT if decided else Presence.ABSENT, proof.reproof):
             return (RED_PROOF.ok(Said(f"{moved} changed after it was seen failing, on decision "
                                       f"{', '.join(r.record.value for r in decided)}")),)
         return (RED_PROOF.fail(Said(

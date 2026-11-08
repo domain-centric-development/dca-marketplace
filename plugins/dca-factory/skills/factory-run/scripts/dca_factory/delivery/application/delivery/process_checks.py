@@ -14,10 +14,12 @@ from ...domain.model.stage_story import (
 from ...domain.model.story_state import Detail
 from ...domain.model.verdict import CheckName, Finding, FindingState, Findings, Said
 from ...domain.gateway.stage_evidence import StageEvidence
-from ...domain.service.break_checks import BreakChecks, BreakOutcome, BreakResult
+from ...domain.model.story_state import VerdictWord
+from ...domain.service.break_checks import (
+    BreakChecks, BreakOutcome, BreakResult, missing_break, NOTHING_WRITTEN, reproof_uncompiled, RuleProof)
 from ...domain.service.design_checks import DesignChecks
 from ...domain.service.kept_checks import KeptChecks
-from ...domain.service.suite_checks import SuiteChecks
+from ...domain.model.suite import SuiteJudged
 from ...domain.model.test_verdicts import BreakProof, TestsJudged
 from ..shared.stage_runs import Located, Mapping, StageRuns, WholeRuns
 from .check_stage import check, Run, Verdict
@@ -92,7 +94,7 @@ def run_break(runs: StageRuns, profile: typing.Mapping[str, typing.Any], copy: s
         probe = Verdict()
         test_state(probe, runs.on(copy), profile, {key: [selector]}, "red",
                    {selector: located[selector]} if located.get(selector) else {})
-        return BreakChecks.verdict(findings_of(probe, "tests-red"))
+        return BreakResult.of(findings_of(probe, "tests-red"))
     finally:
         runs.apply(copy, scratch, patch, reverse=True)
 
@@ -100,7 +102,7 @@ def run_break(runs: StageRuns, profile: typing.Mapping[str, typing.Any], copy: s
 def break_proof(result: Verdict, runs: StageRuns, profile: typing.Mapping[str, typing.Any], story: str,
                 selector: str, key: str, located: Located,
                 copied: typing.Optional[typing.Tuple[str, str]] = None) -> None:
-    """A test green without ever being seen red, held to its break (`BreakChecks.proof`)."""
+    """A test green without ever being seen red, held to its break (`BreakResult.proof`)."""
     patch = runs.patch(story, selector)
     outcome = None
     if patch and copied:
@@ -108,7 +110,8 @@ def break_proof(result: Verdict, runs: StageRuns, profile: typing.Mapping[str, t
     elif patch:
         with runs.scratch() as (copy, scratch):
             outcome = run_break(runs, profile, copy, scratch, patch, selector, key, located)
-    result.take((BreakChecks.proof(Selector(selector), Detail(key), outcome, Place(runs.patch_place(story, selector))),))
+    result.take((outcome.proof(Selector(selector), Detail(key)) if outcome is not None
+                 else missing_break(Selector(selector), Detail(key), Place(runs.patch_place(story, selector))),))
 
 
 def invariant_breaks(result: Verdict, runs: StageRuns, profile: typing.Mapping[str, typing.Any], story: str,
@@ -131,7 +134,7 @@ def invariant_breaks(result: Verdict, runs: StageRuns, profile: typing.Mapping[s
     located = runs.locate({keys[sel]: [sel] for sel in rules})
     probe = Verdict()
     test_state(probe, runs, profile, {keys[sel]: [sel] for sel in sorted(rules)}, "red", located)
-    before = {sel: BreakChecks.verdict(findings_of(probe, "tests-red", sel)) for sel in rules}
+    before = {sel: BreakResult.of(findings_of(probe, "tests-red", sel)) for sel in rules}
     seen = runs.rules_seen_red(story, located)
     seen_red = {sel: presence(sel in seen) for sel in rules}
     green = [sel for sel in sorted(rules)
@@ -144,7 +147,7 @@ def invariant_breaks(result: Verdict, runs: StageRuns, profile: typing.Mapping[s
             if sel in green:
                 patch = runs.patch(story, sel)
                 under = run_break(runs, profile, copied[0], copied[1], patch, sel, keys[sel], located) if patch else None
-            proofs[sel] = BreakChecks.rule_proof(before[sel], under, seen_red[sel])
+            proofs[sel] = RuleProof.of(before[sel], under, seen_red[sel])
     if green:
         with runs.scratch() as copied:
             prove(copied)
@@ -154,15 +157,15 @@ def invariant_breaks(result: Verdict, runs: StageRuns, profile: typing.Mapping[s
                      located)
     for sel in sorted(rules):
         said = "; ".join(m for _st, _c, m in probe.entries if sel in m)
-        result.take((BreakChecks.invariant(Selector(sel), Detail(keys[sel]), proofs[sel],
+        result.take((proofs[sel].finding(Selector(sel), Detail(keys[sel]),
                                            Place(runs.patch_place(story, sel)), Detail(said)),))
 
 
 def compiles(result: Verdict, runs: StageRuns, profile: typing.Mapping[str, typing.Any]) -> None:
-    """The profile's `compile:` command passes (`SuiteChecks.command`)."""
+    """The profile's `compile:` command passes (`CommandRun.finding`)."""
     command = profile.get("compile")
-    result.take((SuiteChecks.command(COMPILES, runs.command(command)) if command
-                 else SuiteChecks.missing(COMPILES, CommandKey("compile")),))
+    result.take((runs.command(command).finding(COMPILES) if command
+                 else CommandKey("compile").missing(COMPILES),))
 
 
 def reproof(result: Verdict, runs: StageRuns, profile: typing.Mapping[str, typing.Any], story: str,
@@ -186,7 +189,7 @@ def reproof(result: Verdict, runs: StageRuns, profile: typing.Mapping[str, typin
         built = Verdict()
         compiles(built, runs.on(copy), profile)
         if built.failed:
-            result.take((BreakChecks.reproof_uncompiled(
+            result.take((reproof_uncompiled(
                 tuple(Selector(s) for s in moved),
                 Detail("\n".join(m for st, _c, m in built.entries if st == "fail")[-600:])),))
             return
@@ -196,7 +199,7 @@ def reproof(result: Verdict, runs: StageRuns, profile: typing.Mapping[str, typin
     for selector in moved:
         seen = tuple(f for f in findings_of(probe, "tests-red") if selector in f.said.value)
         timed_out = presence(any(f.state is FindingState.NOTE for f in seen))
-        found = BreakChecks.reproof(Selector(selector), BreakChecks.verdict(seen), timed_out)
+        found = BreakResult.of(seen).reproof(Selector(selector), timed_out)
         result.take((found,))
         if found.state is FindingState.PASS:
             proved.append(selector)
@@ -208,8 +211,8 @@ def reproof(result: Verdict, runs: StageRuns, profile: typing.Mapping[str, typin
 
 
 def judge_suite(result: Verdict, suite: typing.Any, required: bool, strict: bool = False) -> None:
-    """A suite's run judged (`SuiteChecks.suite`); a test noted flaky is carried in the verdict."""
-    judged = SuiteChecks.suite(suite, presence(required), presence(strict))
+    """A suite's run judged (`SuiteJudged.of`); a test noted flaky is carried in the verdict."""
+    judged = SuiteJudged.of(suite, presence(required), presence(strict))
     result.take(judged.findings)
     result.flaky += [test.value for test in judged.flaky]
 
@@ -226,7 +229,7 @@ def required_suites(result: Verdict, runs: StageRuns, profile: typing.Mapping[st
     ran whole is judged from that run — one process per command per gate, not two."""
     already = already or {}
     commands = runs.suite_commands()
-    result.take(SuiteChecks.required(commands))
+    result.take(commands.required_findings())
     required = {key.value for key in commands.required}
     seen = set()
     for key in [k for k in runs.test_keys() if k in required and profile.get(k)]:
@@ -247,7 +250,7 @@ def task_suites(result: Verdict, runs: StageRuns, profile: typing.Mapping[str, t
                 mapping: typing.Optional[Mapping]) -> None:
     """At a task's build and tidy gates: every test command the profile declares, run whole — nothing a test was
     written for, so everything the stories before delivered has to hold."""
-    found = SuiteChecks.task(runs.suite_commands())
+    found = runs.suite_commands().task_findings()
     result.take(found)
     if found:
         return
@@ -292,7 +295,7 @@ def adopt(result: Verdict, run: Run) -> None:
         mapping = dict(mapping, **rules)
     test_state(result, runs, run.profile, mapping, "green", located, run.story_id, guard=True,
                red_proof=(run.story, run.evidence))
-    result.take((BreakChecks.adopt_judged(Detail(runs.judge_verdict(run.story_id))),))
+    result.take((VerdictWord(runs.judge_verdict(run.story_id)).adopt_finding(),))
     everything = str(run.profile.get("adopt.breakProof", "")).strip().lower() == "all"
     by_selector = {sel: key for key, sels in mapping.items() for sel in sels}
     written = runs.characterization(run.story_id, by_selector)
@@ -306,7 +309,7 @@ def adopt(result: Verdict, run: Run) -> None:
                 break_proof(result, runs, run.profile, run.story_id, selector, by_selector.get(selector, OUTSIDE),
                             located, copied)
     else:
-        result.take((BreakChecks.nothing_written(),))
+        result.take((NOTHING_WRITTEN,))
 
 
 def tested(stage: Stage) -> bool:
@@ -362,5 +365,5 @@ def _commands(run: Run) -> None:
     """The gate must not *know* its checks, it looks them up: adding a capability is one line in the profile."""
     for key in run.stage.commands:
         command = run.profile.get(key)
-        run.result.take((SuiteChecks.command(CheckName(key), run.runs_port.command(command)) if command
-                         else SuiteChecks.missing(CheckName(key), CommandKey(key)),))
+        run.result.take((run.runs_port.command(command).finding(CheckName(key)) if command
+                         else CommandKey(key).missing(CheckName(key)),))

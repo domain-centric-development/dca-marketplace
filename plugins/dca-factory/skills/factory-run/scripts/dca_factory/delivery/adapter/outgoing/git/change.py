@@ -12,8 +12,8 @@ import typing
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from .....sharedkernel.adapter.outgoing.profile.profile_files import (
     DEFAULTS, evidence_rel, findings_rel, PLACES_REL, read_profile)
-from ....domain.model.stage_story import (
-    Count, ImplementationReports, ParityFacts, ParityScenario, Place, Presence, Snapshot)
+from ....domain.model.change import ImplementationReports, ParityFacts, ParityScenario, Snapshot
+from ....domain.model.stage_story import Count, Place, Presence
 from ....domain.model.story_state import Detail
 from ..stack.commands import tail, TOOL_FOLDERS
 from ..stack.test_reports import read_scenarios, reported_names

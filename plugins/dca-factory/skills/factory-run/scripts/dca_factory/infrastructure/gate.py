@@ -32,7 +32,6 @@ from ..delivery.application.delivery.check_change import CheckChangeUseCase
 from ..delivery.application.delivery.check_parity import CheckParityUseCase
 from ..delivery.application.delivery.check_stage import run_checks, run_passed, StageRun, Verdict
 from ..delivery.application.delivery.pipeline_workflow import workflow
-from ..delivery.domain.model.stage import StoryKind
 from ..delivery.domain.model.verdict import Findings
 from ..delivery.domain.service.profile_checks import ProfileChecks
 from ..sharedkernel.adapter.outgoing.markdown.front_matter import GateError, read_front_matter
@@ -74,20 +73,21 @@ def stage_run(close: typing.Callable[[StageRun], None], **fields: typing.Any) ->
     run.delivery = StageDeliveryFiles(run.cwd, run.runs, run.profile)
     run.close = lambda: close(run)
     run.story = story_of(run.story_path, run.front, run.body, run.criteria)
-    run.contract = ProfileChecks.contract_number(run.evidence)
+    run.contract = run.evidence.gate().reads(run.evidence.declared_contract())
     # a journey is a guard over what is delivered: green at its test gate, the inverse of a story
     run.expected = "red" if run.stage.red and run.kind == "story" else "green"
     return typing.cast(StageRun, run)
 
 
 def contract_findings(profile: Profile) -> Findings:
-    """The profile's contract and its unknown keys (`ProfileChecks.contract`)."""
-    return ProfileChecks.contract(StageEvidenceFiles(".", "", "", profile))
+    """The profile's contract and its unknown keys (`GateRelease.profile_findings`)."""
+    evidence = StageEvidenceFiles(".", "", "", profile)
+    return evidence.gate().profile_findings(evidence.declared_contract(), evidence.unknown_keys())
 
 
 def model_findings(profile: Profile) -> Findings:
     """The profile's model keys, each bound to a tool (`ProfileChecks.models`)."""
-    return ProfileChecks.models(StageEvidenceFiles(".", "", "", profile), workflow().order(StoryKind.STORY))
+    return ProfileChecks.models(StageEvidenceFiles(".", "", "", profile), workflow())
 
 
 def layout_note(cwd: str, profile: Profile) -> typing.Optional[str]:

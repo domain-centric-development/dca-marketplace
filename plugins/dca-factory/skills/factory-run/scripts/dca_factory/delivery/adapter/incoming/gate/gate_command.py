@@ -91,7 +91,7 @@ from ....application.delivery.pipeline_workflow import workflow
 
 
 def check_contract(result: Verdict, profile: wiring.Profile) -> None:
-    """The profile's contract and its unknown keys (`ProfileChecks.contract`)."""
+    """The profile's contract and its unknown keys (`GateRelease.profile_findings`)."""
     result.take(wiring.contract_findings(profile))
 
 

@@ -32,7 +32,7 @@ from ....domain.model.stage_story import (
     ScenarioClauses, Selector, ContextMapFacts, HandOverName, HandOverSize, PlanLevels, DecisionFacts, DecisionsFacts, HandOverAsk, ContractNumber, EpicFacts, EpicField, EventName, GateRelease, InstructionFile,
     Metric, ModelKey, OwnedFacts, OwnedPart, Place, ProfileKey, ProfileText, RoundsRecord, RowId, RowState,
     ScenarioKey, StoryContent, TestSource, UnknownKey)
-from ....domain.model.story import DeliveredOn, StoryId
+from ....domain.model.story import StoryId
 from ....domain.model.story_state import Detail, HandOverText, Rounds, StatusWord
 from ....domain.service.backlog_checks import EPIC_FIELDS, normal_name
 from ....domain.service.decision_checks import Applying
@@ -60,7 +60,6 @@ from .test_files import locate_tests, plan_levels, stage_bytes, unfinished_level
 from .....spec.api import delta_problems, derived, placement_problems, read_delta, rule_problems, story_entries, touches
 from ..spec.story_spec_files import adopt_rows, moved_tests, spec_backing, story_spec
 from ....domain.model.verdict import FindingState
-from ....domain.service.test_checks import TestChecks
 from ..git.repository import git, git_blob
 from .decision_record_files import answered_decisions, records_of
 from .kept_files import (
@@ -73,7 +72,7 @@ from .design_files import (
     adapter_shapes, asserts_at, locate_selector, MOCK_MARKERS, mocked_ports, PLAN_FILE_LINE, plan_domain_elements,
     plan_invariants, read_clause_rows, read_invariant_rows, scenario_actions, scenario_clauses)
 from .run_marks import OWNED_CHANGED
-from .story_layout import delivered_on, EPIC_FILE, epic_folder, find_story, story_kind
+from .story_layout import EPIC_FILE, epic_folder, find_story
 from ....application.shared.decision_stamps import DecisionStamps
 
 Front = typing.Mapping[str, typing.Any]
@@ -599,7 +598,7 @@ class StageEvidenceFiles:
     def _absent(self, cwd: str, wanted: typing.Mapping[str, typing.Sequence[str]]) -> typing.List[str]:
         """`<selector>: …` for each wanted test that is not there."""
         looked = locate_tests(cwd, wanted)[1]
-        return [f.said.value.split(" — ")[0] for f in TestChecks.exist(looked) if f.state is FindingState.FAIL]
+        return [f.said.value.split(" — ")[0] for f in (t.finding() for t in looked) if f.state is FindingState.FAIL]
 
     def spec_delta(self, story: Story) -> typing.Optional[SpecDelta]:
         plan_path = os.path.join(self._runs, story.id.value, "plan.md")

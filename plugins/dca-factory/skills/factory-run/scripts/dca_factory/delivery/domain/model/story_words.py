@@ -6,6 +6,7 @@ from __future__ import annotations
 import typing
 
 from ....building_blocks import Value
+from .verdict import CheckName, Findings, Said
 
 
 class Detail(Value):
@@ -14,10 +15,26 @@ class Detail(Value):
     value: str
 
 
+class Place(Value):
+    """A file as the gate names it — where a person finds what a finding speaks of."""
+
+    value: str
+
+
 class StatusWord(Value):
     """A story's `status:` as it is written, lower case — `approved`, `adopted`, `draft`, or a word nobody knows."""
 
     value: str
+
+    def release_findings(self, place: Place) -> Findings:
+        """A draft is a story still being written: named, not refused. A status nobody knows is refused."""
+        if self.value == "draft":
+            return (CheckName("approved").note(Said(f"{place.value}: a draft — released with `status: approved` once it is "
+                                       f"written")),)
+        if self.value and self.value not in ("approved", "adopted"):
+            return (CheckName("approved").fail(Said(f"{place.value}: status {self.value!r} is none of draft, approved, adopted, "
+                                       f"superseded")),)
+        return ()
 
 
 class Count(Value):

@@ -24,6 +24,14 @@ class Applying(Value):
     record: DecisionFacts
     stage: StageName
 
+    def finding(self, written: typing.Optional[Place]) -> Finding:
+        """The finding once the record is stamped — `written` the story where the answer became an `answered:` line."""
+        record = self.record
+        by = "the integrate step" if self.stage == INTEGRATE else f"stage {self.stage.value}"
+        return DECISIONS.ok(Said(
+            f"{record.record.value} applied by {by} ({answered(record).value}) — stamped in {record.place.value}"
+            + (f", the answer an `answered:` line in {written.value}" if written else "")))
+
 
 class DecisionsChecked(Value):
     """What the check found, in order: findings, and the answers to apply where they stand."""
@@ -123,12 +131,3 @@ class DecisionChecks(DomainService):
         if not facts.records and not failed_asking:
             items.append(DECISIONS.note(Said("no decision record for this story")))
         return DecisionsChecked(tuple(items))
-
-    @staticmethod
-    def applied(applying: Applying, written: typing.Optional[Place]) -> Finding:
-        """The finding once the record is stamped — `written` the story where the answer became an `answered:` line."""
-        record = applying.record
-        by = "the integrate step" if applying.stage == INTEGRATE else f"stage {applying.stage.value}"
-        return DECISIONS.ok(Said(
-            f"{record.record.value} applied by {by} ({answered(record).value}) — stamped in {record.place.value}"
-            + (f", the answer an `answered:` line in {written.value}" if written else "")))

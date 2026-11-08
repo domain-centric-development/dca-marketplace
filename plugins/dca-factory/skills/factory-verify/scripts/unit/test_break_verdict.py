@@ -7,7 +7,7 @@ import support  # noqa: F401 — puts the package on the path
 from dca_factory.delivery.domain.model.verdict import CheckName, Finding, FindingState, Said
 from dca_factory.delivery.domain.model.stage_story import Presence
 from dca_factory.delivery.domain.model.story_state import Detail
-from dca_factory.delivery.domain.service.break_checks import BreakChecks, BreakOutcome, BreakResult, RuleProof
+from dca_factory.delivery.domain.service.break_checks import BreakOutcome, BreakResult, RuleProof
 
 
 def seen(*entries):
@@ -17,19 +17,19 @@ def seen(*entries):
 class BreakVerdictTest(unittest.TestCase):
 
     def test_red_is_red(self):
-        verdict = BreakChecks.verdict(seen(("pass", "X#y is red (k)")))
+        verdict = BreakResult.of(seen(("pass", "X#y is red (k)")))
         self.assertEqual((BreakOutcome.RED, ""), (verdict.outcome, verdict.said.value))
 
     def test_red_on_a_timeout_is_red_with_the_note(self):
-        verdict = BreakChecks.verdict(seen(("pass", "X#y is red (k)"), ("note", "X#y is red on a timeout")))
+        verdict = BreakResult.of(seen(("pass", "X#y is red (k)"), ("note", "X#y is red on a timeout")))
         self.assertIs(BreakOutcome.RED, verdict.outcome)
         self.assertIn("timeout", verdict.said.value)
 
     def test_green_under_the_break_is_green(self):
-        self.assertIs(BreakOutcome.GREEN, BreakChecks.verdict(seen(("fail", "X#y passes before the build stage"))).outcome)
+        self.assertIs(BreakOutcome.GREEN, BreakResult.of(seen(("fail", "X#y passes before the build stage"))).outcome)
 
     def test_nothing_shown_is_unchecked_and_says_why_first(self):
-        verdict = BreakChecks.verdict(seen(("fail", "X#y: no test report from this run shows it ran")))
+        verdict = BreakResult.of(seen(("fail", "X#y: no test report from this run shows it ran")))
         self.assertIs(BreakOutcome.UNCHECKED, verdict.outcome)
         self.assertTrue(verdict.said.value.startswith("X#y: no test report"))
 
@@ -41,11 +41,11 @@ class RuleProofTest(unittest.TestCase):
     GREEN = BreakResult(BreakOutcome.GREEN, Detail(""))
 
     def test_green_now_and_seen_red_before_is_red(self):
-        self.assertIs(RuleProof.RED, BreakChecks.rule_proof(self.GREEN, None, Presence.PRESENT))
+        self.assertIs(RuleProof.RED, RuleProof.of(self.GREEN, None, Presence.PRESENT))
 
     def test_green_now_and_never_seen_red_needs_its_break(self):
-        self.assertIs(RuleProof.NO_BREAK, BreakChecks.rule_proof(self.GREEN, None))
-        self.assertIs(RuleProof.KILLED, BreakChecks.rule_proof(self.GREEN, BreakResult(BreakOutcome.RED, Detail(""))))
+        self.assertIs(RuleProof.NO_BREAK, RuleProof.of(self.GREEN, None))
+        self.assertIs(RuleProof.KILLED, RuleProof.of(self.GREEN, BreakResult(BreakOutcome.RED, Detail(""))))
 
 
 if __name__ == "__main__":

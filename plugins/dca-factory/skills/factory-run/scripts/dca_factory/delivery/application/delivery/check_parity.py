@@ -7,7 +7,6 @@ import typing
 
 from ....building_blocks import UseCase
 from ...domain.model.verdict import Findings
-from ...domain.service.change_checks import ChangeChecks
 from ..shared.parity_reports import ParityReports
 from .pipeline_rules import decides
 
@@ -24,11 +23,11 @@ class CheckParityInputPort(UseCase[CheckParityCommand, Findings], typing.Protoco
 
 
 class CheckParityUseCase:
-    """Every implementation's reports against one scenario contract (`ChangeChecks.parity`)."""
+    """Every implementation's reports against one scenario contract (`ParityFacts.findings`)."""
 
     def __init__(self, reports: ParityReports) -> None:
         self._reports = reports
 
     @decides("GATE-IMPLEMENTATIONS")
     def execute(self, command: CheckParityCommand) -> Findings:
-        return ChangeChecks.parity(self._reports.facts(command.config))
+        return self._reports.facts(command.config).findings()
