@@ -4,8 +4,8 @@ and which name an element, and what the check says over the tests a story maps."
 import unittest
 
 import support  # noqa: F401 — puts the package on the path
+from support import gate_story
 from dca_factory.delivery.adapter.outgoing.files.criteria_files import criteria_of
-from dca_factory.delivery.adapter.outgoing.files.stage_evidence_files import stage_story
 from dca_factory.delivery.domain.model.stage_story import (
     Clause, CommandKey, Count, MappedTest, Place, ScenarioKey, Selector, TestSource)
 from dca_factory.delivery.domain.model.story_state import Detail
@@ -37,7 +37,7 @@ BODY = """# A story
 
 
 def story(body=BODY):
-    return stage_story("S-1", "story.md", {"status": "approved", "context": "Widgets"}, body,
+    return gate_story("S-1", "story.md", {"status": "approved", "context": "Widgets"}, body,
                        criteria_of("story.md", body))
 
 

@@ -9,7 +9,8 @@ import typing
 
 from ....building_blocks import DomainService, Value
 from ..model.stage import StoryKind
-from ..model.stage_story import Place, Presence, Selector, StageStory
+from ..model.story import Story
+from ..model.stage_story import Place, Presence, Selector
 from ..model.story_state import Detail
 from ..model.verdict import CheckName, Finding, FindingState, Findings, Said
 
@@ -116,7 +117,7 @@ class BreakChecks(DomainService):
         return INVARIANT_BREAKS.fail(Said(f"{name}: no run gave it a verdict — {said.value[:300]}"))
 
     @staticmethod
-    def adopted(story: StageStory) -> Findings:
+    def adopted(story: Story) -> Findings:
         """The adopt gate is for an adopted story."""
         if story.kind is StoryKind.ADOPT:
             return ()

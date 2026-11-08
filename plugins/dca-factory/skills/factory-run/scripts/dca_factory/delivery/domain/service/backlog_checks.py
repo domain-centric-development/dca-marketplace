@@ -8,7 +8,8 @@ from ....building_blocks import DomainService
 from ..gateway.stage_evidence import StageEvidence
 from ..model.schedule import ContextName
 from ..model.stage import StoryKind
-from ..model.stage_story import ContractNumber, Place, StageStory
+from ..model.story import Story
+from ..model.stage_story import ContractNumber, Place
 from ..model.story_state import StatusWord
 from ..model.verdict import CheckName, Findings, Said
 
@@ -46,7 +47,7 @@ class BacklogChecks(DomainService):
         return ()
 
     @staticmethod
-    def context_map(story: StageStory, evidence: StageEvidence) -> Findings:
+    def context_map(story: Story, evidence: StageEvidence) -> Findings:
         """A story names the context it changes; that context must be on the map. A project without a map is not
         blocked — it has nothing to contradict yet."""
         found = evidence.context_map()
@@ -54,15 +55,15 @@ class BacklogChecks(DomainService):
             return (CONTEXT_MAP.fail(Said(f"the profile's `domain: {found.domain_missing.value}` names no file")),)
         if found.map is None:
             return (CONTEXT_MAP.skip(Said("the project keeps no context map")),)
-        context, where = story.context.value, found.map.value
-        if normal_name(story.context) in found.names:
+        context, where = story.content.context.value, found.map.value
+        if normal_name(story.content.context) in found.names:
             return (CONTEXT_MAP.ok(Said(f"context {context!r} is on {where}")),)
         return (CONTEXT_MAP.fail(Said(
             f"{where}: context {context!r} does not appear — a story either changes a context that exists on the map, "
             f"or it is a scoping question, not a story")),)
 
     @staticmethod
-    def epic(story: StageStory, evidence: StageEvidence) -> Findings:
+    def epic(story: Story, evidence: StageEvidence) -> Findings:
         epic = evidence.epic(story)
         if epic.unreadable is not None:
             return (EPIC.fail(Said(epic.unreadable.value)),)
@@ -84,16 +85,16 @@ class BacklogChecks(DomainService):
         return tuple(found)
 
     @staticmethod
-    def outcome(story: StageStory, contract: ContractNumber, evidence: StageEvidence) -> Findings:
+    def outcome(story: Story, contract: ContractNumber, evidence: StageEvidence) -> Findings:
         """The event a story declares under `publishes:` is the epic's outcome event — a word of its `metric:`. Two
         names for one outcome are found here, before a line of code is written."""
-        if story.kind is not StoryKind.STORY or contract.value < OUTCOME_CONTRACT.value or not story.publishes:
+        if story.kind is not StoryKind.STORY or contract.value < OUTCOME_CONTRACT.value or not story.content.publishes:
             return ()
         epic = evidence.epic(story)
         if epic.unreadable is not None:
             return ()                                   # `epic` refuses the story already
         metric, name = epic.metric.value, epic.name.value
-        events = [e.value for e in story.publishes]
+        events = [e.value for e in story.content.publishes]
         foreign = [e for e in events if not re.search(rf"(?<!\w){re.escape(e)}(?!\w)", metric)]
         if foreign:
             return (OUTCOME.fail(Said(

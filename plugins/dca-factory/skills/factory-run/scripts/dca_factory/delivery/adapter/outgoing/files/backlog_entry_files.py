@@ -12,7 +12,7 @@ from ....domain.model.stage_story import Place
 from ....domain.model.story import StoryId
 from ....domain.model.story_state import Detail, StatusWord
 from .criteria_files import criteria_of
-from .stage_evidence_files import stage_story
+from .story_files import story_of
 from .story_layout import duplicate_ids, is_delivered, story_files, story_folder
 from ....application.shared.backlog_entries import BacklogEntries
 
@@ -38,7 +38,7 @@ class BacklogEntryFiles(BacklogEntries):
             label = StoryId(str(front.get("id") or folder.value).strip())
             status = StatusWord(str(front.get("status", "")).strip().lower())
             try:
-                story = stage_story(label.value, path, front, body, criteria_of(path, body, front))
+                story = story_of(path, front, body, criteria_of(path, body, front))
             except MarkdownError as error:
                 yield BacklogEntry(label, folder, Place(path), status, is_delivered(front), None, Detail(str(error)))
                 continue

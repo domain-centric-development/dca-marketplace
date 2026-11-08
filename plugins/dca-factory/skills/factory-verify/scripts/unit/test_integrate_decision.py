@@ -39,7 +39,7 @@ class IntegrateDecision(unittest.TestCase):
     def checks(self, p, story, gating):
         front, body = read_front_matter(story)
         checked = gate_story("S-1", story, front, body)
-        result, stamps = verdict(), DecisionStampFiles(p.runs)
+        result, stamps = verdict(), DecisionStampFiles(p.runs, p.epics)
         for item in DecisionChecks.check(checked, StageName(gating), evidence(p.root, p.runs),
                                          workflow().order(StoryKind.STORY)).items:
             result.take((DecisionChecks.applied(item, stamps.apply(checked, item)),) if isinstance(item, Applying)

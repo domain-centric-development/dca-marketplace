@@ -10,11 +10,12 @@ import typing
 from ....building_blocks import DomainGateway
 from ..model.decision_record import RecordId
 from ..model.stage import StageName
+from ..model.story import Story
 from ..model.stage_story import (
     BriefFacts, DecidedRecord, DocumentFacts, PlanAdoption, Integration, MainTests, KeptTests, OutcomeFacts, PipelineFacts, ProposalFacts, ReviewFacts, SpecDelta,
     StoryPass, SpecTests, StoryCommit, MappedTest, PlannedTestChange, RedProof, StageChanges,
     AssertionFact, ClauseRow, CommandKey, ContextMapFacts, Count, InvariantFacts, PlannedFile, PortName, Selector, DecisionsFacts, EpicFacts, GateRelease, HandOverName, HandOverSize,
-    InstructionFile, ModelKey, OwnedFacts, Place, PlanLevels, ProfileText, RoundsRecord, RowId, RowState, StageStory, TestSource, UnknownKey)
+    InstructionFile, ModelKey, OwnedFacts, Place, PlanLevels, ProfileText, RoundsRecord, RowId, RowState, TestSource, UnknownKey)
 from ..model.story import StoryId
 from ..model.story_state import Detail
 
@@ -37,11 +38,15 @@ class StageEvidence(DomainGateway, typing.Protocol):
         """The profile's `model` and `model.…` keys."""
         ...
 
+    def place_of(self, story: StoryId) -> Place:
+        """Where the story's file is — what a finding about it names."""
+        ...
+
     def rounds(self, story: StoryId) -> typing.Optional[RoundsRecord]:
         """The story's round counter — None where it ran no round."""
         ...
 
-    def owned(self, story: StageStory) -> OwnedFacts:
+    def owned(self, story: Story) -> OwnedFacts:
         ...
 
     def brief(self, story: StoryId, stage: StageName, hand_over: HandOverName) -> BriefFacts:
@@ -55,7 +60,7 @@ class StageEvidence(DomainGateway, typing.Protocol):
         """The first instruction file the project keeps — None where it keeps none."""
         ...
 
-    def epic(self, story: StageStory) -> EpicFacts:
+    def epic(self, story: Story) -> EpicFacts:
         """The story's epic, or why there is none: the story names none, or the epic has no file."""
         ...
 
@@ -63,11 +68,11 @@ class StageEvidence(DomainGateway, typing.Protocol):
         """Where the named finding row stands — None where there is no such row."""
         ...
 
-    def decisions(self, story: StageStory) -> DecisionsFacts:
+    def decisions(self, story: Story) -> DecisionsFacts:
         """The story's decision records and the stages' hand-overs — or why the store cannot be read."""
         ...
 
-    def record_place(self, story: StageStory, record: RecordId) -> Place:
+    def record_place(self, story: Story, record: RecordId) -> Place:
         """Where the record by this id belongs."""
         ...
 
@@ -84,7 +89,7 @@ class StageEvidence(DomainGateway, typing.Protocol):
         """The hand-overs of these names the story's run holds, with the bytes the stage wrote of each."""
         ...
 
-    def invariants(self, story: StageStory) -> typing.Optional[InvariantFacts]:
+    def invariants(self, story: Story) -> typing.Optional[InvariantFacts]:
         """The plan's domain types and their invariants, and the tests' table of them — None where there is no plan."""
         ...
 
@@ -142,27 +147,27 @@ class StageEvidence(DomainGateway, typing.Protocol):
         """The red ledger against the tests as they are — None where the story has none."""
         ...
 
-    def spec_delta(self, story: StageStory) -> typing.Optional[SpecDelta]:
+    def spec_delta(self, story: Story) -> typing.Optional[SpecDelta]:
         """The plan's spec delta as the spec reads it — None where there is no plan or the story changes no spec."""
         ...
 
-    def spec_backing(self, story: StageStory) -> typing.Optional[Detail]:
+    def spec_backing(self, story: Story) -> typing.Optional[Detail]:
         """What backs a change of what holds: the story's `## Changed expectations`, or a decision a person answered
         — None where nothing does."""
         ...
 
-    def spec_tests(self, story: StageStory, tests: typing.Tuple[MappedTest, ...]) -> typing.Optional[SpecTests]:
+    def spec_tests(self, story: Story, tests: typing.Tuple[MappedTest, ...]) -> typing.Optional[SpecTests]:
         """The tests the story's spec names — None where the story changes no spec."""
         ...
 
-    def story_commit(self, story: StageStory, tests: typing.Tuple[MappedTest, ...]) -> typing.Optional[StoryCommit]:
+    def story_commit(self, story: Story, tests: typing.Tuple[MappedTest, ...]) -> typing.Optional[StoryCommit]:
         """The story's commit against its test files — None where it names no test file."""
         ...
 
-    def story_pass(self, story: StageStory) -> StoryPass:
+    def story_pass(self, story: Story) -> StoryPass:
         ...
 
-    def outcome(self, story: StageStory) -> OutcomeFacts:
+    def outcome(self, story: Story) -> OutcomeFacts:
         """The story's published events in the production code."""
         ...
 

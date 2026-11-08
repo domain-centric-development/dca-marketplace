@@ -6,16 +6,11 @@ import enum
 import typing
 
 from ....building_blocks import Value
+from .story_words import ContextName as ContextName
 from .epic import EpicId
 from .stage import StageName
 from .story import StoryId
 from .story_state import Detail, Standing
-
-
-class ContextName(Value):
-    """The bounded context a story changes, as its `context:` names it — "" where it names none."""
-
-    value: str
 
 
 class Liveness(enum.Enum):

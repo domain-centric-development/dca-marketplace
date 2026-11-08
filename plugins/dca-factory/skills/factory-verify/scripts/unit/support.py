@@ -25,7 +25,10 @@ from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as p
 from dca_factory.delivery.adapter.outgoing.files import story_layout as layout
 from dca_factory.sharedkernel.adapter.outgoing.markdown import front_matter as markdown
 from dca_factory.delivery.application.delivery.check_stage import Verdict
-from dca_factory.delivery.adapter.outgoing.files.stage_evidence_files import StageEvidenceFiles, stage_story
+from dca_factory.delivery.adapter.outgoing.files.stage_evidence_files import StageEvidenceFiles, story_content
+from dca_factory.delivery.adapter.outgoing.files.story_files import status_of
+from dca_factory.delivery.domain.model.epic import EpicId
+from dca_factory.delivery.domain.model.story import KindWord, Story, StoryId
 
 
 STORY = """---
@@ -129,6 +132,8 @@ def evidence(root, runs):
     return StageEvidenceFiles(root, runs, profiles.place("epics"), {})
 
 
-def gate_story(story_id, path="", front=None, body=""):
+def gate_story(story_id, path="", front=None, body="", criteria=()):
     """The story under a gate, read off its front matter and its body (no criteria)."""
-    return stage_story(story_id, path, front or {}, body, ())
+    front = front or {}
+    return Story(StoryId(story_id), EpicId(str(front.get("epic") or "")), status_of(front.get("status")),
+                 named_kind=KindWord(str(front.get("kind") or "")), content=story_content(front, body, criteria))

@@ -10,8 +10,9 @@ import typing
 from ....building_blocks import DomainService
 from ..gateway.stage_evidence import StageEvidence
 from ..model.stage import StoryKind
+from ..model.story import Story
 from ..model.stage_story import (
-    AssertionAt, Clause, CommandKey, ContractNumber, Count, FileChange, MappedTest, Place, Presence, ScenarioKey, StageStory)
+    AssertionAt, Clause, CommandKey, ContractNumber, Count, FileChange, MappedTest, Place, Presence, ScenarioKey)
 from ..model.story_state import Detail
 from ..model.verdict import CheckName, Findings, Said
 
@@ -76,7 +77,7 @@ class DesignChecks(DomainService):
     """The checks over the plan's and the tests' design tables."""
 
     @staticmethod
-    def invariants(story: StageStory, contract: ContractNumber, tests: typing.Tuple[MappedTest, ...],
+    def invariants(story: Story, contract: ContractNumber, tests: typing.Tuple[MappedTest, ...],
                    evidence: StageEvidence) -> Findings:
         """Every domain type the plan changes names its invariants — its rules, the guards included, one per `;` —
         and every rule has its own unit test in tests.md's `gate:invariants` table: a selector that exists as class
@@ -156,7 +157,7 @@ class DesignChecks(DomainService):
                                    f"({sum(len(r) for r in named.values())} rules, {len(facts.rows)} rows)")),)
 
     @staticmethod
-    def clauses(story: StageStory, contract: ContractNumber, tests: typing.Tuple[MappedTest, ...],
+    def clauses(story: Story, contract: ContractNumber, tests: typing.Tuple[MappedTest, ...],
                 evidence: StageEvidence) -> Findings:
         """Every expectation of every scenario — its `Then` and each `And` after it — names the line of the test that
         asserts it, in tests.md's `gate:clauses` table, with the level it runs at. A clause without a line is an
@@ -165,16 +166,16 @@ class DesignChecks(DomainService):
         page shows the request's input again, the incoming adapter's own translation (`states_stored`)."""
         if story.kind is not StoryKind.STORY or contract.value < CLAUSES_CONTRACT.value:
             return ()
-        if not story.clauses:
+        if not story.content.clauses:
             return ()
-        rows = evidence.clause_rows(story.story)
+        rows = evidence.clause_rows(story.id)
         if rows is None:
             return (CLAUSES.fail(Said(
                 f"tests.md has no `{CLAUSES_MARKER}` table under `## Clauses` — `factory-cli.py --files-skeleton "
                 f"<story> test` writes one row per `Then`/`And`; fill in each row's `<File>:<line>` and level")),)
         given = {(row.key.value, row.number.value): (row.location.value, row.level.value) for row in rows}
         problems, state_on_stub, counted = [], [], 0
-        for scenario in story.clauses:
+        for scenario in story.content.clauses:
             key = scenario.key.value
             own = tuple(t.place for t in tests if t.key == scenario.key and t.place is not None)
             for clause in scenario.clauses:
@@ -214,7 +215,7 @@ class DesignChecks(DomainService):
         return (CLAUSES.ok(Said(f"every expectation of every scenario names its assertion ({counted} clause(s))")),)
 
     @staticmethod
-    def tests_real(story: StageStory, tests: typing.Tuple[MappedTest, ...], evidence: StageEvidence) -> Findings:
+    def tests_real(story: Story, tests: typing.Tuple[MappedTest, ...], evidence: StageEvidence) -> Findings:
         """A criterion's test above the unit level runs through the real use case — it does not declare a double of
         an input port. "The list stays unchanged" checked against a stub proves the stub. A unit test mocks what it
         wants; an output port may be replaced at any level; and a criterion the plan gave `integration (adapter: …)`
@@ -225,7 +226,7 @@ class DesignChecks(DomainService):
         without a double of an input port; that one is the port's proof. Without it the port shape is missing."""
         if not any(test.place is not None for test in tests):
             return ()
-        plan = evidence.plan_levels(story.story)
+        plan = evidence.plan_levels(story.id)
         adapter_keys = plan.adapter if plan else frozenset()
         both_keys = plan.both if plan else frozenset()
         wrong: typing.Set[str] = set()
@@ -254,10 +255,10 @@ class DesignChecks(DomainService):
                                    "port, or is the adapter's beside one that does")),)
 
     @staticmethod
-    def plan_files(story: StageStory, evidence: StageEvidence) -> Findings:
+    def plan_files(story: Story, evidence: StageEvidence) -> Findings:
         """The plan's file list holds after the build — a file it says `removed` is gone, one it says `new` is there.
         A deviation the build's file explains is still one: the plan changes, or the file does."""
-        planned = evidence.plan_files(story.story)
+        planned = evidence.plan_files(story.id)
         if planned is None:
             return (PLAN_FILES.skip(Said("plan.md has no `## Files` section — nothing to hold the build to")),)
         wrong, held = [], 0

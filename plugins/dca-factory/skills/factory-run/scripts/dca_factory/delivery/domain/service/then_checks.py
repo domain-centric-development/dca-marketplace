@@ -10,7 +10,8 @@ import typing
 from ....building_blocks import DomainService
 from ..gateway.stage_evidence import StageEvidence
 from ..model.stage import StoryKind
-from ..model.stage_story import Clause, MappedTest, Place, ShownLiteral, StageStory, TestSource
+from ..model.story import Story
+from ..model.stage_story import Clause, MappedTest, Place, ShownLiteral, TestSource
 from ..model.verdict import CheckName, Findings, Said
 
 TESTS_ASSERT_THEN = CheckName("tests-assert-then")
@@ -59,16 +60,16 @@ class ThenChecks(DomainService):
     """The check over what a criterion's tests say."""
 
     @staticmethod
-    def asserted(story: StageStory, tests: typing.Tuple[MappedTest, ...], evidence: StageEvidence) -> Findings:
+    def asserted(story: Story, tests: typing.Tuple[MappedTest, ...], evidence: StageEvidence) -> Findings:
         """Every text a scenario's `Then` and each `And`/`But` after it quote as shown stands in the whole source of a
         test the tests table maps to that scenario — the file, not only the method, since a text often sits in a
         constant. A scenario whose tests have no source file is named, never guessed at: `tests-exist` says why; one
         without a row is `tests-mapped`'s."""
-        if story.kind is not StoryKind.STORY or not story.clauses or not tests:
+        if story.kind is not StoryKind.STORY or not story.content.clauses or not tests:
             return ()
         missing, unfound, held = [], [], 0
         sources: typing.Dict[Place, typing.Optional[TestSource]] = {}
-        for scenario in story.clauses:
+        for scenario in story.content.clauses:
             literals = [literal for clause in scenario.clauses for literal in shown_literals(clause)]
             if not literals:
                 continue

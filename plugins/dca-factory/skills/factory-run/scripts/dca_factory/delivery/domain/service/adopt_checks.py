@@ -9,7 +9,8 @@ import typing
 from ....building_blocks import DomainService
 from ..gateway.stage_evidence import StageEvidence
 from ..model.stage import StoryKind
-from ..model.stage_story import PlanAdoption, Presence, ScenarioKey, StageStory
+from ..model.story import Story
+from ..model.stage_story import PlanAdoption, Presence, ScenarioKey
 from ..model.verdict import CheckName, Findings, Said
 
 PLAN_ADOPTS = CheckName("plan-adopts")
@@ -26,22 +27,22 @@ class Adoption(enum.Enum):
 class AdoptChecks(DomainService):
 
     @staticmethod
-    def outcome(story: StageStory, adoption: typing.Optional[PlanAdoption]) -> Adoption:
+    def outcome(story: Story, adoption: typing.Optional[PlanAdoption]) -> Adoption:
         """The whole story where every criterion holds, a split where some do, nothing where the plan adopts none."""
         if adoption is None or not adoption.rows or story.kind is not StoryKind.STORY:
             return Adoption.NONE
         held = {row.key.value for row in adoption.rows}
-        return Adoption.WHOLE if held >= {key.value for key in story.criteria} else Adoption.SPLIT
+        return Adoption.WHOLE if held >= {key.value for key in story.content.criteria} else Adoption.SPLIT
 
     @staticmethod
-    def found(story: StageStory, evidence: StageEvidence) -> Findings:
+    def found(story: Story, evidence: StageEvidence) -> Findings:
         """The plan's `## Adopt` names criteria of this story, each with a test that is there; a split leaves the rest
         its happy path — where it would not, the plan asks instead."""
-        adoption = evidence.plan_adoption(story.story)
+        adoption = evidence.plan_adoption(story.id)
         outcome = AdoptChecks.outcome(story, adoption)
         if adoption is None or outcome is Adoption.NONE:
             return ()
-        criteria = {key.value for key in story.criteria}
+        criteria = {key.value for key in story.content.criteria}
         unknown = [row.key.value for row in adoption.rows if row.key.value not in criteria]
         if unknown:
             return (PLAN_ADOPTS.fail(Said(f"`## Adopt` names what is no criterion of the story: {', '.join(unknown)}")),)
@@ -53,7 +54,7 @@ class AdoptChecks(DomainService):
         if outcome is Adoption.WHOLE:
             return (PLAN_ADOPTS.ok(Said(f"every scenario holds today ({keys}) — the story becomes `status: adopted`")),)
         held = {row.key.value for row in adoption.rows}
-        if story.happy_paths and all(key.value in held for key in story.happy_paths):
+        if story.content.happy_paths and all(key.value in held for key in story.content.happy_paths):
             return (PLAN_ADOPTS.fail(Said(
                 f"the scenarios that hold ({keys}) include the story's happy path, and the rest would have none — "
                 f"that is the person's to settle: a decision record instead of `## Adopt`")),)

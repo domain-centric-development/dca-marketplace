@@ -6,7 +6,8 @@ import dataclasses
 import typing
 
 from ....building_blocks import OutputPort
-from ...domain.model.stage_story import Place, StageStory
+from ...domain.model.story import Story
+from ...domain.model.stage_story import Place
 from ...domain.model.story import StoryId
 from ...domain.model.story_state import Detail, StatusWord
 
@@ -21,7 +22,7 @@ class BacklogEntry:
     place: Place
     status: typing.Optional[StatusWord]
     delivered: bool
-    story: typing.Optional[StageStory]
+    story: typing.Optional[Story]
     unreadable: typing.Optional[Detail]
 
 

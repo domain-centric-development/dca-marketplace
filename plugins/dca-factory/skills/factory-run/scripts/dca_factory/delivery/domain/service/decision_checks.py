@@ -8,7 +8,8 @@ from ....building_blocks import DomainService, Value
 from ..gateway.stage_evidence import StageEvidence
 from ..model.decision_record import DecisionState, RecordKind
 from ..model.stage import StageName
-from ..model.stage_story import DecisionFacts, Place, StageStory
+from ..model.story import Story
+from ..model.stage_story import DecisionFacts, Place
 from ..model.story_state import Detail
 from ..model.verdict import CheckName, Finding, Said
 
@@ -42,7 +43,7 @@ class DecisionChecks(DomainService):
     story's run order."""
 
     @staticmethod
-    def check(story: StageStory, gating: StageName, evidence: StageEvidence,
+    def check(story: Story, gating: StageName, evidence: StageEvidence,
               order: typing.Sequence[StageName]) -> DecisionsChecked:
         facts = evidence.decisions(story)
         if facts.unreadable is not None:

@@ -65,7 +65,9 @@ on the stories it worked on.
 
 **Definition:** One work order small enough for a single run: acceptance criteria under keys, the feature it changes,
 its dependencies. Its state is in its front matter: a draft until a person releases it, approved until a gate
-delivers it, delivered after; history once delivered — what holds is the spec's.
+delivers it, delivered after; history once delivered — what holds is the spec's. What it says — criteria, context, dependencies, what it
+publishes, its status as written — is its `content` (`StoryContent`), read with it and never changed by it; the gate
+checks it.
 
 **Type:** Aggregate Root
 
@@ -436,10 +438,11 @@ line (`brief: <digest>`), and the gate after the stage compares (`GATE-BRIEF`, `
 
 ### Check · Finding (Finding) · Stage evidence (StageEvidence)
 
-**Definition:** A gate is a set of checks, each a domain service over the story as the gate reads it (`StageStory`)
-— `StoryChecks`, `ProfileChecks`, `BacklogChecks`, `DecisionChecks`, `TestChecks`, `DesignChecks`, `ThenChecks`, `KeptChecks`,
-`SpecChecks`, `DeliveryChecks`, `IntegrationChecks`, `TestVerdicts`, `SuiteChecks`, `BreakChecks`, `ChangeChecks`,
-`AcceptanceRules`. The use case `check_stage` registers them against the workflow's stages and runs them, those that start
+**Definition:** A gate is a set of checks, each a domain service over the story — the aggregate `Story`, its
+`content` what the gate reads — and its evidence: `StoryChecks`, `ProfileChecks`, `BacklogChecks`, `DecisionChecks`,
+`TestChecks`, `DesignChecks`, `ThenChecks`, `KeptChecks`, `SpecChecks`, `DeliveryChecks`, `IntegrationChecks`,
+`SuiteChecks`, `BreakChecks`, `ChangeChecks`; what a test run proves is `TestsJudged.of`, what the acceptance says
+`AcceptanceStep`. The use case `check_stage` registers them against the workflow's stages and runs them, those that start
 no process first; what they run or write goes through output ports (`StageTests`, `StageRuns`, `StageMarks`,
 `DecisionStamps`, `StageDelivery`). Outside a stage the same checks run as use cases of their own: `check_backlog`
 over every story not yet done (`BacklogEntries`), `check_change` over a commit or the working tree (`ChangeIndex`,

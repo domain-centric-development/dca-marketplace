@@ -23,6 +23,7 @@ from ....domain.model.decision_record import (
 from ....domain.model.epic import EpicId
 from ....domain.model.schedule import ContextName
 from ....domain.model.stage import StageName, StoryKind
+from ....domain.model.story import Story
 from ....domain.model.stage_story import (
     AssertionAt, AdoptRow, BriefFacts, ChangedTest, PlanAdoption, Rename, RenamedTest, SymbolName, DocumentFacts, Integration, MainTestLines, MainTests, MappedTest, OutcomeEvent, OutcomeFacts, PassGap,
     PipelineFacts, PlannedDigest, ProposalFacts, ReviewFacts, StoryPass, SpecDelta, SpecTests, StoryCommit, DecidedRecord, KeptTests, PlannedTestChange, RedProof, StageChanges,
@@ -30,7 +31,7 @@ from ....domain.model.stage_story import (
     ElementName, ElementRules, FileChange, InvariantFacts, InvariantRow, PlannedFile, PortName, Presence, Rule,
     ScenarioClauses, Selector, ContextMapFacts, HandOverName, HandOverSize, PlanLevels, DecisionFacts, DecisionsFacts, HandOverAsk, ContractNumber, EpicFacts, EpicField, EventName, GateRelease, InstructionFile,
     Metric, ModelKey, OwnedFacts, OwnedPart, Place, ProfileKey, ProfileText, RoundsRecord, RowId, RowState,
-    ScenarioKey, StageStory, TestSource, UnknownKey)
+    ScenarioKey, StoryContent, TestSource, UnknownKey)
 from ....domain.model.story import DeliveredOn, StoryId
 from ....domain.model.story_state import Detail, HandOverText, Rounds, StatusWord
 from ....domain.service.backlog_checks import EPIC_FIELDS, normal_name
@@ -196,15 +197,10 @@ def contract_of(profile: typing.Mapping[str, typing.Any]) -> int:
     return int(declared) if declared.isdigit() else CONTRACT
 
 
-def stage_story(story_id: str, story_path: str, front: Front, body: str,
-                criteria: typing.Sequence[typing.Tuple[str, str]]) -> StageStory:
-    """The story under a gate, read off its front matter and its criteria."""
-    named = front.get("epic")
-    return StageStory(
-        StoryId(story_id), Place(story_path),
-        EpicId(str(named)) if named and not isinstance(named, list) else None,
-        ContextName(str(front.get("context", "")).strip()), StoryKind(story_kind(front)),
-        StatusWord(str(front.get("status", "")).strip().lower()), DeliveredOn(delivered_on(front)),
+def story_content(front: Front, body: str, criteria: typing.Sequence[typing.Tuple[str, str]]) -> StoryContent:
+    """What a story says, read off its front matter, its body and its criteria."""
+    return StoryContent(
+        ContextName(str(front.get("context", "")).strip()), StatusWord(str(front.get("status", "")).strip().lower()),
         tuple(ScenarioKey(key) for key, _text in criteria), tuple(ScenarioKey(k) for k in happy_paths(body)),
         tuple(StoryId(s) for s in depends_on_of(front)), tuple(RowId(r) for r in closes_of(front)),
         tuple(EventName(e) for e in publishes_of(front)),
@@ -216,9 +212,11 @@ def stage_story(story_id: str, story_path: str, front: Front, body: str,
         Detail(str(front.get("feature") or "").strip()))
 
 
-def spec_front(story: StageStory) -> typing.Dict[str, typing.Any]:
+def spec_front(story: Story) -> typing.Dict[str, typing.Any]:
     """The fields of the story's front matter that place it in the spec."""
-    return {"context": story.context.value, "feature": story.feature.value or None, "status": story.status.value,
+    content = story.content
+    return {"context": content.context.value, "feature": content.feature.value or None,
+            "status": content.written_status.value,
             "kind": story.kind.value if story.kind in (StoryKind.JOURNEY, StoryKind.TASK) else ""}
 
 
@@ -234,6 +232,9 @@ class StageEvidenceFiles:
 
     def gate(self) -> GateRelease:
         return GateRelease(ContractNumber(CONTRACT), Detail(VERSION))
+
+    def place_of(self, story: StoryId) -> Place:
+        return Place(str(find_story(self._epics, story.value)))
 
     def declared_contract(self) -> ProfileText:
         return ProfileText(str(self._profile.get("contract", "")))
@@ -255,13 +256,13 @@ class StageEvidenceFiles:
         except (ValueError, GateError):
             return RoundsRecord(Place(path), None)
 
-    def owned(self, story: StageStory) -> OwnedFacts:
-        marked = os.path.join(evidence_dir(self._runs, story.story.value), OWNED_CHANGED)
+    def owned(self, story: Story) -> OwnedFacts:
+        marked = os.path.join(evidence_dir(self._runs, story.id.value), OWNED_CHANGED)
         if os.path.isfile(marked):
             parts = [line.split(":", 1)[1].strip() for line in read_text(marked).splitlines()
                      if line.startswith("changed:")]
             return OwnedFacts(tuple(OwnedPart(p) for p in parts), None)
-        changed = owned_changes(self._runs, story.story.value, story.place.value)
+        changed = owned_changes(self._runs, story.id.value, self.place_of(story.id).value)
         return OwnedFacts((), tuple(OwnedPart(p) for p in changed) if changed is not None else None)
 
     def brief(self, story: StoryId, stage: StageName, hand_over: HandOverName) -> BriefFacts:
@@ -292,11 +293,11 @@ class StageEvidenceFiles:
                 return InstructionFile(Place(name), ByteSize(os.path.getsize(path)))
         return None
 
-    def epic(self, story: StageStory) -> EpicFacts:
+    def epic(self, story: Story) -> EpicFacts:
         try:
-            epic_path, epic_name = epic_of(story.place.value, read_front_matter(story.place.value)[0], self._epics)
+            epic_path, epic_name = epic_of(self.place_of(story.id).value, read_front_matter(self.place_of(story.id).value)[0], self._epics)
         except GateError as error:
-            return EpicFacts(story.place, EpicId(""), (), None, None, Metric(""), Detail(str(error)))
+            return EpicFacts(self.place_of(story.id), EpicId(""), (), None, None, Metric(""), Detail(str(error)))
         front = read_front_matter(epic_path)[0]
         # A key with no value parses as an empty list, and `str([])` is "[]" — non-empty, so the field would count as
         # filled. A mandatory field is a sentence, so only a non-empty string counts.
@@ -313,10 +314,10 @@ class StageEvidenceFiles:
         path, found = closed_rows(row.value)
         return RowState(found[6]) if path and found else None
 
-    def decisions(self, story: StageStory) -> DecisionsFacts:
-        story_id = story.story.value
+    def decisions(self, story: Story) -> DecisionsFacts:
+        story_id = story.id.value
         try:
-            place_of = story.place.value or find_story(place("epics"), story_id)
+            place_of = self.place_of(story.id).value or find_story(place("epics"), story_id)
             store = decisions_store(place_of)
             read = read_decisions(store, story_id)
         except GateError as error:
@@ -342,8 +343,8 @@ class StageEvidenceFiles:
                                               tuple(RecordId(i) for i in ids) if ids is not None else None))
         return DecisionsFacts(Place(shown(store)), tuple(records), tuple(hand_overs))
 
-    def record_place(self, story: StageStory, record: RecordId) -> Place:
-        return Place(shown(record_path(story.story.value, record.value, story.place.value)))
+    def record_place(self, story: Story, record: RecordId) -> Place:
+        return Place(shown(record_path(story.id.value, record.value, self.place_of(story.id).value)))
 
 
     def command(self, key: CommandKey) -> typing.Optional[ProfileText]:
@@ -372,11 +373,11 @@ class StageEvidenceFiles:
         path = os.path.join(self._runs, story.value, name)
         return read_text(path) if os.path.isfile(path) else None
 
-    def invariants(self, story: StageStory) -> typing.Optional[InvariantFacts]:
-        plan = self._run_file(story.story, "plan.md")
+    def invariants(self, story: Story) -> typing.Optional[InvariantFacts]:
+        plan = self._run_file(story.id, "plan.md")
         if plan is None:
             return None
-        tests = self._run_file(story.story, "tests.md")
+        tests = self._run_file(story.id, "tests.md")
         named = plan_invariants(plan) or {}
         listed = sum(1 for line in section_of(plan, "invariants") or [] if line.strip().startswith("-"))
         rows = read_invariant_rows(tests) if tests is not None else None
@@ -600,11 +601,11 @@ class StageEvidenceFiles:
         looked = locate_tests(cwd, wanted)[1]
         return [f.said.value.split(" — ")[0] for f in TestChecks.exist(looked) if f.state is FindingState.FAIL]
 
-    def spec_delta(self, story: StageStory) -> typing.Optional[SpecDelta]:
-        plan_path = os.path.join(self._runs, story.story.value, "plan.md")
+    def spec_delta(self, story: Story) -> typing.Optional[SpecDelta]:
+        plan_path = os.path.join(self._runs, story.id.value, "plan.md")
         if not os.path.isfile(plan_path):
             return None
-        front, body = spec_front(story), read_front_matter(story.place.value)[1]
+        front, body = spec_front(story), read_front_matter(self.place_of(story.id).value)[1]
         target, spec, features, feature = story_spec(front)
         if not target:
             return None
@@ -619,19 +620,19 @@ class StageEvidenceFiles:
                          tuple(ScenarioKey(k) for k in (touches(entries, spec, delta) if not problems else [])),
                          Count(sum(v == "adds" for v in found.values())), Count(sum(v == "holds" for v in found.values())))
 
-    def spec_backing(self, story: StageStory) -> typing.Optional[Detail]:
-        body = read_front_matter(story.place.value)[1]
-        backing = spec_backing(self._cwd, story.story.value, body, story.place.value or None)
+    def spec_backing(self, story: Story) -> typing.Optional[Detail]:
+        body = read_front_matter(self.place_of(story.id).value)[1]
+        backing = spec_backing(self._cwd, story.id.value, body, self.place_of(story.id).value or None)
         return Detail(backing) if backing else None
 
-    def spec_tests(self, story: StageStory, tests: typing.Tuple[MappedTest, ...]) -> typing.Optional[SpecTests]:
+    def spec_tests(self, story: Story, tests: typing.Tuple[MappedTest, ...]) -> typing.Optional[SpecTests]:
         target, spec, _features, _feature = story_spec(spec_front(story))
         if not target:
             return None
-        plan = os.path.join(self._runs, story.story.value, "plan.md")
+        plan = os.path.join(self._runs, story.id.value, "plan.md")
         # a criterion the story takes away takes its test with it (WP-106 B): the delta's removals are not asked for
         removed = set(read_delta(read_text(plan))["removes"]) if os.path.isfile(plan) else set()
-        moved = moved_tests(self._runs, story.story.value)
+        moved = moved_tests(self._runs, story.id.value)
         # a row names the test as it is now: the old one is gone, and the delivery writes the row into the spec
         absent = self._absent(self._cwd, moved) if moved else []
         if absent:
@@ -646,7 +647,7 @@ class StageEvidenceFiles:
             missing = [m for m in missing if m.split(":")[0] in gone_there]
         return SpecTests(Place(shown(target)), (), Count(len(wanted)), tuple(Detail(m) for m in missing))
 
-    def story_commit(self, story: StageStory, tests: typing.Tuple[MappedTest, ...]) -> typing.Optional[StoryCommit]:
+    def story_commit(self, story: Story, tests: typing.Tuple[MappedTest, ...]) -> typing.Optional[StoryCommit]:
         cwd = self._cwd
         target, spec, _features, _feature = story_spec(spec_front(story))
         wanted: typing.Dict[str, typing.List[str]] = {}
@@ -679,8 +680,8 @@ class StageEvidenceFiles:
                 missing.append(f"{rel} differs from it")
         return StoryCommit(Detail(head), Count(len(files)), tuple(Detail(m) for m in missing))
 
-    def story_pass(self, story: StageStory) -> StoryPass:
-        runs, story_id = self._runs, story.story.value
+    def story_pass(self, story: Story) -> StoryPass:
+        runs, story_id = self._runs, story.id.value
         order = order_for(story.kind.value)
         folder = os.path.join(runs, story_id)
         texts = current_stage_files(runs, story_id, order)
@@ -689,19 +690,19 @@ class StageEvidenceFiles:
                      for s in order if s not in texts)
         planned = os.path.join(evidence_dir(runs, story_id), STORY_DIGEST)
         digest = PlannedDigest.MISSING if not os.path.isfile(planned) else \
-            PlannedDigest.SAME if read_text(planned).strip() == story_digest(story.place.value) else PlannedDigest.CHANGED
+            PlannedDigest.SAME if read_text(planned).strip() == story_digest(self.place_of(story.id).value) else PlannedDigest.CHANGED
         return StoryPass(gaps, Detail(verdict_in(texts["judge"]) or "" if "judge" in texts else ""), digest)
 
-    def outcome(self, story: StageStory) -> OutcomeFacts:
+    def outcome(self, story: Story) -> OutcomeFacts:
         cwd = self._cwd
         texts = {rel: read_text(os.path.join(cwd, rel)) for rel in production_files(cwd)}
-        record = os.path.join(evidence_dir(self._runs, story.story.value), "changed.txt")
+        record = os.path.join(evidence_dir(self._runs, story.id.value), "changed.txt")
         changed: typing.Optional[typing.FrozenSet[Place]] = None
         if os.path.isfile(record) and not read_text(record).startswith(NOT_OBSERVED):
             changed = frozenset(Place(parts[1]) for parts in (line.split("\t", 1) for line in read_text(record).splitlines())
                                 if len(parts) == 2 and parts[0] in ("added", "modified"))
         events = []
-        for name in story.publishes:
+        for name in story.content.publishes:
             event = name.value
             declares = re.compile(rf"\b(?:class|record|interface|struct|enum|object|type)\s+{re.escape(event)}\b")
             declared = [rel for rel, text in texts.items() if declares.search(text)]
@@ -867,20 +868,22 @@ class StageEvidenceFiles:
 class DecisionStampFiles(DecisionStamps):
     """The decision records beside the story and its `## Assumptions`, the journal under the run folder <runs>."""
 
-    def __init__(self, runs: str) -> None:
+    def __init__(self, runs: str, epics: str) -> None:
         self._runs = runs
+        self._epics = epics
 
-    def apply(self, story: StageStory, applying: Applying) -> typing.Optional[Place]:
+    def apply(self, story: Story, applying: Applying) -> typing.Optional[Place]:
         rid = applying.record.record.value
+        where = find_story(self._epics, story.id.value)
         found = next(((path, body, answer) for path, front, body, _state, answer
-                      in read_decisions(decisions_store(story.place.value), story.story.value)
+                      in read_decisions(decisions_store(where), story.id.value)
                       if str(front["id"]).strip() == rid), None)
         if found is None:
             return None
         path, body, answer = found
         stamp_applied(path, applying.stage.value)
-        written = write_answered(story.place.value, self._runs, rid, answer_sentence(body, answer))
-        return Place(shown(story.place.value)) if written else None
+        written = write_answered(where, self._runs, rid, answer_sentence(body, answer))
+        return Place(shown(where)) if written else None
 
 
 class MainLineEvidence(StageEvidenceFiles):
@@ -890,10 +893,10 @@ class MainLineEvidence(StageEvidenceFiles):
     def _main_line(self) -> typing.ContextManager[None]:
         return places_in(self._cwd) if claim_config_here(factory_home() or self._cwd) else contextlib.nullcontext()
 
-    def spec_delta(self, story: StageStory) -> typing.Optional[SpecDelta]:
+    def spec_delta(self, story: Story) -> typing.Optional[SpecDelta]:
         with self._main_line():
             return super().spec_delta(story)
 
-    def spec_backing(self, story: StageStory) -> typing.Optional[Detail]:
+    def spec_backing(self, story: Story) -> typing.Optional[Detail]:
         with self._main_line():
             return super().spec_backing(story)

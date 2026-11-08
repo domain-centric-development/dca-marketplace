@@ -7,6 +7,8 @@ import re
 import typing
 
 from ....building_blocks import Value
+from .story import StoryContent as StoryContent
+from .story_words import Count as Count, ScenarioKey as ScenarioKey, RowId as RowId, EventName as EventName, Clause as Clause, ScenarioClauses as ScenarioClauses
 from .decision_record import AnswerField, DecisionState, RecordId, RecordKind
 from .epic import EpicId
 from .schedule import ContextName
@@ -17,22 +19,6 @@ from .story_state import Detail, HandOverText, Rounds, StatusWord
 
 class Place(Value):
     """A file as the gate names it — where a person finds what a finding speaks of."""
-
-    value: str
-
-
-class Count(Value):
-    value: int
-
-
-class ScenarioKey(Value):
-    """A criterion's key — the name the test stage binds."""
-
-    value: str
-
-
-class RowId(Value):
-    """A finding row a task closes: `<story>#<n>`, or `<name>#<n>` of a project finding file."""
 
     value: str
 
@@ -55,35 +41,6 @@ class FindingKey(Value):
 
     place: Place
     defect: Detail
-
-
-class EventName(Value):
-    """An outcome event, as a story's `publishes:` names it."""
-
-    value: str
-
-
-class StageStory(Value):
-    """One story under a gate: what its front matter and its criteria say."""
-
-    story: StoryId
-    place: Place
-    epic: typing.Optional[EpicId]
-    context: ContextName
-    kind: StoryKind
-    status: StatusWord
-    delivered_on: DeliveredOn
-    criteria: typing.Tuple[ScenarioKey, ...]
-    happy_paths: typing.Tuple[ScenarioKey, ...]
-    depends_on: typing.Tuple[StoryId, ...]
-    closes: typing.Tuple[RowId, ...]
-    publishes: typing.Tuple[EventName, ...]
-    #: what each scenario says is observed: its `Then` and every `And` or `But` after it
-    clauses: typing.Tuple[ScenarioClauses, ...] = ()
-    #: the lines of its `## Changed expectations` a person wrote
-    changed_expectations: Count = Count(0)
-    #: the feature of its context it changes, as its `feature:` names it — "" where it names none
-    feature: Detail = Detail("")
 
 
 class ContractNumber(Value):
@@ -351,21 +308,6 @@ class InvariantFacts(Value):
     elements: typing.Tuple[ElementName, ...]
     named: typing.Tuple[ElementRules, ...]
     rows: typing.Optional[typing.Tuple[InvariantRow, ...]]
-
-
-class Clause(Value):
-    """An expectation of a scenario — its `Then` or an `And`/`But` after it — numbered from 1."""
-
-    number: Count
-    text: Detail
-
-
-class ScenarioClauses(Value):
-    """A scenario's expectations, and its `When` steps — what the person does or enters."""
-
-    key: ScenarioKey
-    clauses: typing.Tuple[Clause, ...]
-    actions: typing.Tuple[Detail, ...]
 
 
 class ShownLiteral(Value):

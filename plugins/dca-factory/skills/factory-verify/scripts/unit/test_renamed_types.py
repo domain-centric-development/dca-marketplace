@@ -37,7 +37,7 @@ class Renamed(unittest.TestCase):
             os.remove(os.path.join(p.root, rel))
         for rel, text in files.items():
             write(os.path.join(p.root, rel), text)
-        return evidence(p.root, p.runs).kept_tests(gate_story("S-1").story)
+        return evidence(p.root, p.runs).kept_tests(gate_story("S-1").id)
 
     def test_a_renamed_type_is_followed_and_noted(self):
         with project() as p:

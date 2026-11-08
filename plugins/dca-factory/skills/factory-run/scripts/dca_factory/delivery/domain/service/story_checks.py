@@ -6,7 +6,8 @@ from __future__ import annotations
 from ....building_blocks import DomainService
 from ..gateway.stage_evidence import StageEvidence
 from ..model.stage import StoryKind
-from ..model.stage_story import BriefFacts, ContractNumber, OPEN_ROW, StageStory
+from ..model.story import Story
+from ..model.stage_story import BriefFacts, ContractNumber, OPEN_ROW
 from ..model.story_state import MAX_ROUNDS
 from ..model.verdict import CheckName, Findings, Said
 
@@ -27,42 +28,42 @@ class StoryChecks(DomainService):
     """The story's own checks, over the story as the gate reads it."""
 
     @staticmethod
-    def context(story: StageStory) -> Findings:
-        if not story.context.value:
-            return (STORY.fail(Said(f"{story.place.value}: front matter has no `context:` — a story names the bounded "
+    def context(story: Story, evidence: StageEvidence) -> Findings:
+        if not story.content.context.value:
+            return (STORY.fail(Said(f"{evidence.place_of(story.id).value}: front matter has no `context:` — a story names the bounded "
                                     f"context it changes")),)
-        return (STORY.ok(Said(f"{story.story.value} in context {story.context.value} with {len(story.criteria)} "
+        return (STORY.ok(Said(f"{story.id.value} in context {story.content.context.value} with {len(story.content.criteria)} "
                               f"criterion(s)")),)
 
     @staticmethod
-    def status(story: StageStory) -> Findings:
+    def status(story: Story, evidence: StageEvidence) -> Findings:
         """A story a human has not released is not a story the pipeline builds. A story without the field at all is
         not blocked — the project may not use the field."""
-        status = story.status.value
+        status = story.content.written_status.value
         if not status:
-            return (APPROVED.skip(Said(f"{story.place.value}: no `status:` field — nothing to release")),)
+            return (APPROVED.skip(Said(f"{evidence.place_of(story.id).value}: no `status:` field — nothing to release")),)
         if status == "approved":
             return (APPROVED.ok(Said("story is approved")),)
         if status == "adopted":
             return (APPROVED.ok(Said("story is adopted — it describes behaviour the project already has; adopted, "
                                      "never built")),)
         if status == "delivered":
-            return (APPROVED.ok(Said(f"story is delivered ({story.delivered_on.value or 'no date'}) — checked, "
+            return (APPROVED.ok(Said(f"story is delivered ({(story.delivery.on.value if story.delivery else '') or 'no date'}) — checked, "
                                      f"nothing runs")),)
         return (APPROVED.fail(Said(
-            f"{story.place.value}: status is {status!r} — a human releases the story (`status: approved`) before code "
+            f"{evidence.place_of(story.id).value}: status is {status!r} — a human releases the story (`status: approved`) before code "
             f"is written. The most expensive mistake is well-built wrong code.")),)
 
     @staticmethod
-    def happy_path(story: StageStory, contract: ContractNumber, evidence: StageEvidence) -> Findings:
+    def happy_path(story: Story, contract: ContractNumber, evidence: StageEvidence) -> Findings:
         """Exactly one happy path per story, marked in the backlog — never picked by a plan. A journey has none: it is
         a guard, not acceptance, and it names the stories it depends on. A task has no criterion at all."""
         if story.kind is StoryKind.JOURNEY:
-            if not story.depends_on:
+            if not story.content.depends_on:
                 return (JOURNEY.fail(Said(
-                    f"{story.place.value}: a `kind: journey` item names the stories whose steps it walks under "
+                    f"{evidence.place_of(story.id).value}: a `kind: journey` item names the stories whose steps it walks under "
                     f"`depends_on:` — it becomes ready when they are delivered")),)
-            return (JOURNEY.ok(Said(f"journey over {', '.join(s.value for s in story.depends_on)}")),)
+            return (JOURNEY.ok(Said(f"journey over {', '.join(s.value for s in story.content.depends_on)}")),)
         if story.kind is StoryKind.TASK:
             return StoryChecks.task(story, evidence)
         if story.kind is StoryKind.ADOPT:
@@ -70,25 +71,25 @@ class StoryChecks(DomainService):
         if contract.value < HAPPY_PATH_CONTRACT.value:
             return (HAPPY_PATH.skip(Said(f"the profile declares contract {contract.value} — the happy-path mark is "
                                          f"contract {HAPPY_PATH_CONTRACT.value}'s")),)
-        marked = [key.value for key in story.happy_paths]
+        marked = [key.value for key in story.content.happy_paths]
         if len(marked) == 1:
             return (HAPPY_PATH.ok(Said(f"happy path: {marked[0]}")),)
         return (HAPPY_PATH.fail(Said(
-            f"{story.place.value}: {len(marked)} scenarios marked `(happy path)` — exactly one per story shows its value "
+            f"{evidence.place_of(story.id).value}: {len(marked)} scenarios marked `(happy path)` — exactly one per story shows its value "
             f"and gets the end-to-end test; mark it in the backlog (`#### <key> (happy path)`)"
             + (f": {', '.join(marked)}" if marked else ""))),)
 
     @staticmethod
-    def task(story: StageStory, evidence: StageEvidence) -> Findings:
+    def task(story: Story, evidence: StageEvidence) -> Findings:
         """A task changes nothing an actor sees — so it has no criterion (a criterion is behaviour, and behaviour is a
         story's, with a red test), and the finding rows it closes are there and open."""
-        if story.criteria:
+        if story.content.criteria:
             return (TASK.fail(Said(
-                f"{story.place.value}: a `kind: task` has acceptance criteria "
-                f"({', '.join(key.value for key in story.criteria)}) — a criterion is behaviour; behaviour that "
+                f"{evidence.place_of(story.id).value}: a `kind: task` has acceptance criteria "
+                f"({', '.join(key.value for key in story.content.criteria)}) — a criterion is behaviour; behaviour that "
                 f"changes is a story with a red test")),)
         wrong = []
-        for row in story.closes:
+        for row in story.content.closes:
             state = evidence.finding_row(row)
             if state is None:
                 wrong.append(f"{row.value} (no such finding row)")
@@ -98,15 +99,15 @@ class StoryChecks(DomainService):
             return (TASK.fail(Said(
                 f"`closes:` names rows a task cannot close: {'; '.join(wrong)} — `<story>#<n>`, an open row of that "
                 f"story's findings.md, or `<name>#<n>` of a project finding file")),)
-        closes = [row.value for row in story.closes]
+        closes = [row.value for row in story.content.closes]
         return (TASK.ok(Said("a task: no criterion, the existing suite is its evidence"
                              + (f"; closes {', '.join(closes)}" if closes else ""))),)
 
     @staticmethod
-    def rounds(story: StageStory, evidence: StageEvidence) -> Findings:
+    def rounds(story: Story, evidence: StageEvidence) -> Findings:
         """The repeat counter lives in a file, so an in-session run cannot lose count and a resumed run sees the same
         number."""
-        record = evidence.rounds(story.story)
+        record = evidence.rounds(story.id)
         if record is None:
             return ()
         if record.rounds is None:
@@ -119,13 +120,13 @@ class StoryChecks(DomainService):
         return (ROUNDS.ok(Said(f"round {rounds + 1} of at most {MAX_ROUNDS}")),)
 
     @staticmethod
-    def owned(story: StageStory, evidence: StageEvidence) -> Findings:
+    def owned(story: Story, evidence: StageEvidence) -> Findings:
         """Inside a window, and after one that changed what is the person's, the gate refuses."""
         owned = evidence.owned(story)
         if owned.marked:
             return (OWNED.fail(Said(
                 f"{', '.join(p.value for p in owned.marked)} changed under a stage — a person looks at it and "
-                f"confirms (`factory-cli.py --owned-confirm {story.story.value}`) before the story runs on")),)
+                f"confirms (`factory-cli.py --owned-confirm {story.id.value}`) before the story runs on")),)
         if owned.changed:
             return (OWNED.fail(Said(
                 f"{', '.join(p.value for p in owned.changed)} changed while this stage runs — the story and the "

@@ -4,10 +4,9 @@ that shows each; the plan gate adopts the whole story or splits those scenarios 
 import os
 import unittest
 
-from support import evidence, project, verdict, write
+from support import evidence, gate_story, project, verdict, write
 from dca_factory.delivery.adapter.outgoing.files.plan_adoption_files import split_off
 from dca_factory.delivery.adapter.outgoing.files.stage_delivery_files import StageDeliveryFiles
-from dca_factory.delivery.adapter.outgoing.files.stage_evidence_files import stage_story
 from dca_factory.delivery.domain.service.adopt_checks import AdoptChecks, Adoption
 from dca_factory.sharedkernel.adapter.outgoing.markdown import front_matter as markdown
 
@@ -67,7 +66,7 @@ class PlanAdopts(unittest.TestCase):
     def story(self):
         front, body = markdown.read_front_matter(self.path)
         keys = [("shows-the-name", ""), ("shows-the-price", ""), ("says-the-shelf-is-empty", "")]
-        return stage_story("S-1", self.path, front, body, [(k, t) for k, t in keys if f"#### {k}" in body])
+        return gate_story("S-1", self.path, front, body, [(k, t) for k, t in keys if f"#### {k}" in body])
 
     def found(self):
         return verdict(AdoptChecks.found(self.story(), evidence(self.p.root, self.p.runs)))
@@ -75,7 +74,7 @@ class PlanAdopts(unittest.TestCase):
     def test_a_plan_without_adopt_adopts_nothing(self):
         self.p.run_file("S-1", "plan.md", "# Plan\n")
         self.assertIs(AdoptChecks.outcome(self.story(), evidence(self.p.root, self.p.runs).plan_adoption(
-            self.story().story)), Adoption.NONE)
+            self.story().id)), Adoption.NONE)
 
     def test_scenarios_that_hold_without_the_happy_path_are_split_off(self):
         self.p.run_file("S-1", "plan.md", adopt(("shows-the-price", "WidgetPageTest#showsThePrice"),
@@ -101,7 +100,7 @@ class PlanAdopts(unittest.TestCase):
                                                 ("shows-the-price", "WidgetPageTest#showsThePrice"),
                                                 ("says-the-shelf-is-empty", "WidgetPageTest#saysTheShelfIsEmpty")))
         self.assertFalse(self.found().failed)
-        adoption = evidence(self.p.root, self.p.runs).plan_adoption(self.story().story)
+        adoption = evidence(self.p.root, self.p.runs).plan_adoption(self.story().id)
         self.assertIs(AdoptChecks.outcome(self.story(), adoption), Adoption.WHOLE)
         StageDeliveryFiles(self.p.root, self.p.runs, {}).adopt(
             verdict(), "S-1", self.path, [(r.key.value, r.test.value) for r in adoption.rows], True)

@@ -6,6 +6,7 @@ import enum
 import typing
 
 from ....building_blocks import Value
+from .story_words import Detail as Detail, StatusWord as StatusWord
 from .decision_record import DecisionState, RecordId, RecordKind
 from .stage import StageName, StoryKind
 from .story import StoryId
@@ -61,24 +62,12 @@ ENDED = frozenset((StateName.DELIVERED, StateName.SUPERSEDED))
 ENDED_WORDS = frozenset(state.value for state in ENDED)
 
 
-class Detail(Value):
-    """Why a story stands where it stands, for a person — "" where nothing needs saying."""
-
-    value: str
-
-
 class Standing(Value):
     """A story's state, the stage it runs from (None where it runs from none), and why."""
 
     state: StateName
     start: typing.Optional[StageName]
     detail: Detail
-
-
-class StatusWord(Value):
-    """A story's `status:` as it is written, lower case — `approved`, `adopted`, `draft`, or a word nobody knows."""
-
-    value: str
 
 
 class Claimant(Value):

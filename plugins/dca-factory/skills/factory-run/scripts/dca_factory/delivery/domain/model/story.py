@@ -10,6 +10,7 @@ from .epic import EpicId
 from .moment import Moment
 from .person import Person
 from .stage import StoryKind
+from .story_words import Count, ContextName, Detail, EventName, RowId, ScenarioClauses, ScenarioKey, StatusWord
 
 
 class StoryId(Id):
@@ -131,15 +132,38 @@ class NothingToProve(DomainException):
         self.story = story
 
 
+class StoryContent(Value):
+    """What a story says, read-only: its context, its criteria and what each observes, the happy paths, what it
+    depends on, closes and publishes, the feature it changes, the status as written — the part of the aggregate the
+    gate reads, never writes."""
+
+    context: ContextName
+    #: its `status:` as written — "" where it has none; the aggregate's `status` is what the factory knows of it
+    written_status: StatusWord
+    criteria: typing.Tuple[ScenarioKey, ...]
+    happy_paths: typing.Tuple[ScenarioKey, ...]
+    depends_on: typing.Tuple[StoryId, ...]
+    closes: typing.Tuple[RowId, ...]
+    publishes: typing.Tuple[EventName, ...]
+    #: what each scenario says is observed: its `Then` and every `And` or `But` after it
+    clauses: typing.Tuple[ScenarioClauses, ...] = ()
+    #: the lines of its `## Changed expectations` a person wrote
+    changed_expectations: Count = Count(0)
+    #: the feature of its context it changes, as its `feature:` names it — "" where it names none
+    feature: Detail = Detail("")
+
+
 class Story(AggregateRoot[StoryId]):
-    """One story: its status, its epic, the assumptions it carries, its delivery. Released, a draft becomes approved
+    """One story: its status, its epic, the assumptions it carries, its delivery, and what it says (`content`: its
+    criteria, what it depends on and publishes — read-only, what the gate checks). Released, a draft becomes approved
     and its release an answered assumption. Delivered, it is taken back for a correction, handed to the adopt path to
     prove a claimed delivery, or — built by a person — delivered by hand."""
 
     def __init__(self, story_id: StoryId, epic: EpicId, status: StoryStatus,
                  assumptions: typing.Sequence[Assumption] = (), delivery: typing.Optional[Delivery] = None,
-                 named_kind: KindWord = KindWord("")) -> None:
+                 named_kind: KindWord = KindWord(""), *, content: StoryContent) -> None:
         super().__init__()
+        self._content = content
         self._named_kind = named_kind
         self._id = story_id
         self._epic = epic
@@ -170,6 +194,11 @@ class Story(AggregateRoot[StoryId]):
     @property
     def assumptions(self) -> typing.Tuple[Assumption, ...]:
         return tuple(self._assumptions)
+
+    @property
+    def content(self) -> StoryContent:
+        """What the story says — its criteria, context, dependencies; never changed by the aggregate."""
+        return self._content
 
     def release(self, answered: Assumption) -> None:
         """A person's go: the draft becomes approved, the release kept as the answered assumption."""

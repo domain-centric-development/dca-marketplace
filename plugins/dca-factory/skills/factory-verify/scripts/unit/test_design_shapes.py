@@ -6,8 +6,8 @@ import tempfile
 import unittest
 
 import support  # noqa: F401 — puts the package on the path
+from support import gate_story
 from dca_factory.delivery.adapter.outgoing.files.design_files import adapter_shapes, plan_invariants
-from dca_factory.delivery.adapter.outgoing.files.stage_evidence_files import stage_story
 from dca_factory.delivery.domain.model.stage_story import Clause, Count
 from dca_factory.delivery.domain.model.story_state import Detail
 from dca_factory.delivery.domain.service.design_checks import states_stored as stored
@@ -78,8 +78,8 @@ class StatesStored(unittest.TestCase):
         self.assertTrue(states_stored("And the field „Name“ still shows the stored name"))
 
     def test_a_field_holding_the_texts_and_counts_the_when_names_is_the_adapters_translation(self):
-        story = stage_story("S-1", "story.md", {"status": "approved"}, ECHO_STORY, ())
-        scenario = story.clauses[0]
+        story = gate_story("S-1", "story.md", {"status": "approved"}, ECHO_STORY)
+        scenario = story.content.clauses[0]
         self.assertEqual(("When the person adds a thing whose name is 201 characters „a“", "And presses „Add“"),
                          tuple(a.value for a in scenario.actions))
         echo, record = scenario.clauses

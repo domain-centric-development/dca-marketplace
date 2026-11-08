@@ -8,9 +8,9 @@ import re
 import typing
 
 from ...domain.model.stage import Stage, StageName, StoryKind, Trait
+from ...domain.model.story import Story
 from ...domain.model.stage_story import (
-    CommandKey, ContractNumber, Expectation, MappedTest, Place, Presence, ScenarioKey, Selector, SELECTOR_FORM,
-    StageStory)
+    CommandKey, ContractNumber, Expectation, MappedTest, Place, Presence, ScenarioKey, Selector, SELECTOR_FORM)
 from ...domain.model.story_state import Detail
 from ...domain.model.verdict import CheckName, Finding, FindingState, Findings, Said
 from ...domain.gateway.stage_evidence import StageEvidence
@@ -44,7 +44,7 @@ def findings_of(probe: Verdict, check_name: str, about: typing.Optional[str] = N
 def test_state(result: Verdict, runs: StageRuns, profile: typing.Mapping[str, typing.Any], mapping: Mapping,
                expected: str, located: typing.Optional[Located] = None, story: typing.Optional[str] = None,
                guard: bool = False, whole_for: typing.Iterable[str] = (),
-               red_proof: typing.Optional[typing.Tuple[StageStory, StageEvidence]] = None) -> WholeRuns:
+               red_proof: typing.Optional[typing.Tuple[Story, StageEvidence]] = None) -> WholeRuns:
     """Expected 'red': every mapped test must fail; 'green': all must pass (`TestsJudged.of`) — the tests run first,
     their outcomes judged against the red ledger. A break proof the judgement asks for is run here; a test it proves
     counts as red, one it does not keeps its earlier proof. Returns the commands run whole, so the suite check reads

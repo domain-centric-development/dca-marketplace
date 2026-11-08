@@ -8,7 +8,8 @@ import typing
 from ....building_blocks import DomainService
 from ..gateway.stage_evidence import StageEvidence
 from ..model.stage import StageName, Trait
-from ..model.stage_story import MappedTest, Presence, StageStory, TestChange, Unobserved
+from ..model.story import Story
+from ..model.stage_story import MappedTest, Presence, TestChange, Unobserved
 from ..model.story_state import Detail
 from ..model.verdict import CheckName, Finding, Findings, Said
 from ..model.workflow import Workflow
@@ -27,13 +28,13 @@ class KeptChecks(DomainService):
     def __init__(self, workflow: Workflow) -> None:
         self._workflow = workflow
 
-    def files_listed(self, story: StageStory, stage: StageName, tests: typing.Tuple[MappedTest, ...],
+    def files_listed(self, story: Story, stage: StageName, tests: typing.Tuple[MappedTest, ...],
                      evidence: StageEvidence) -> Findings:
         """The test, build and tidy hand-overs name every file the stage changed, so the next stage can read those
         instead of searching — checked against what the stage changed, never against the claim. A test file the
         stage put back to the version the test stage saw red is not the stage's change to list: it was restored, not
         changed."""
-        facts = evidence.stage_changes(story.story, stage, tests)
+        facts = evidence.stage_changes(story.id, stage, tests)
         name = stage.value
         own = self._workflow.hand_over(stage)
         hand_over = own.value if own else "?"
@@ -71,10 +72,10 @@ class KeptChecks(DomainService):
                                           f"changed{put_back}")))
         return tuple(found)
 
-    def tests_kept(self, story: StageStory, evidence: StageEvidence) -> Findings:
+    def tests_kept(self, story: Story, evidence: StageEvidence) -> Findings:
         """A test that existed before the story keeps every line it expected; it changes only where a decision is
         about it, or where the story says that behaviour changes and the plan lists the test with what backs it."""
-        kept = evidence.kept_tests(story.story)
+        kept = evidence.kept_tests(story.id)
         if kept is None:
             return (TESTS_KEPT.skip(Said("no baseline of the tests that existed before this story (the plan gate "
                                          "records one in a git repository)")),)
@@ -100,9 +101,9 @@ class KeptChecks(DomainService):
         entries = [(test.place.value, test.place.value + SUFFIX[test.how]) for test in kept.changed]
         # A decision changes the tests it is about, not any test: one the test or the build stage asked about a
         # test, one whose record names the file, or — for a plan's question — the tests the re-plan lists.
-        decided = evidence.decided_tests(story.story)
+        decided = evidence.decided_tests(story.id)
         listing = frozenset(s.name for s in self._workflow.having(Trait.LISTS))
-        planned = {change.place.value: change.cites.value for change in evidence.planned_test_changes(story.story)}
+        planned = {change.place.value: change.cites.value for change in evidence.planned_test_changes(story.id)}
 
         def covers(rel: str) -> bool:
             return rel in planned or any((record.stage in listing) or rel.rsplit("/", 1)[-1] in record.text.value
@@ -115,8 +116,8 @@ class KeptChecks(DomainService):
             return tuple(found)
         # The story may say itself that behaviour changes (`## Changed expectations`); the plan names the tests that
         # change with it (`## Changed tests`), each backed by that section or by a decision a human answered.
-        story_says = story.changed_expectations.value > 0
-        answered = {record.value for record in evidence.answered_records(story.story)}
+        story_says = story.content.changed_expectations.value > 0
+        answered = {record.value for record in evidence.answered_records(story.id)}
         backed, unbacked, unlisted = [], [], []
         for rel, entry in entries:
             if rel not in planned:
@@ -150,10 +151,10 @@ class KeptChecks(DomainService):
         return () if decided is Presence.PRESENT or reproof is Presence.PRESENT else moved
 
     @staticmethod
-    def red_proof(story: StageStory, stage: StageName, tests: typing.Tuple[MappedTest, ...],
+    def red_proof(story: Story, stage: StageName, tests: typing.Tuple[MappedTest, ...],
                   evidence: StageEvidence) -> Findings:
         """At build and tidy: every test's red proof was taken against the test as it is now."""
-        proof = evidence.red_proof(story.story, stage, tests)
+        proof = evidence.red_proof(story.id, stage, tests)
         if proof is None:
             return ()
         if proof.reproof is Presence.PRESENT:
@@ -166,7 +167,7 @@ class KeptChecks(DomainService):
         if not proof.moved:
             return (RED_PROOF.ok(Said(f"{entries - unbound} test(s) are the version that was seen failing")),)
         moved = ", ".join(m.value for m in proof.moved)
-        decided = evidence.decided_tests(story.story)
+        decided = evidence.decided_tests(story.id)
         if not KeptChecks.stale(proof.moved, Presence.PRESENT if decided else Presence.ABSENT, proof.reproof):
             return (RED_PROOF.ok(Said(f"{moved} changed after it was seen failing, on decision "
                                       f"{', '.join(r.record.value for r in decided)}")),)

@@ -7,7 +7,8 @@ import typing
 
 from ....building_blocks import DomainService
 from ..gateway.stage_evidence import StageEvidence
-from ..model.stage_story import Presence, StageStory
+from ..model.story import Story
+from ..model.stage_story import Presence
 from ..model.verdict import CheckName, Finding, Findings, Said
 
 INTEGRATE = CheckName("integrate")
@@ -20,17 +21,17 @@ class IntegrationChecks(DomainService):
     """The integrate gate's own checks."""
 
     @staticmethod
-    def integrated(story: StageStory, evidence: StageEvidence) -> Findings:
+    def integrated(story: Story, evidence: StageEvidence) -> Findings:
         """No unmerged path, no conflict marker in a file the story's commit changes, and its commit sits on the
         target's tip — a target that moved since is integrated again (`moved`), not refused."""
-        facts = evidence.integration(story.story)
+        facts = evidence.integration(story.id)
         if facts.worktree is Presence.ABSENT:
             return (INTEGRATE.fail(Said(
                 f"the integrate gate runs in the story's worktree, with {facts.home_variable.value} naming the main "
                 f"checkout — the runner's integrate step starts it")),)
         if facts.recorded is Presence.ABSENT:
             return (INTEGRATE.fail(Said(
-                f"no target recorded for {story.story.value} (<evidence>/<story>/target) — the worktree was not made "
+                f"no target recorded for {story.id.value} (<evidence>/<story>/target) — the worktree was not made "
                 f"by the runner")),)
         if facts.unmerged:
             return (CONFLICTS.fail(Said("unmerged: " + ", ".join(p.value for p in facts.unmerged)
@@ -44,11 +45,11 @@ class IntegrationChecks(DomainService):
         return tuple(found)
 
     @staticmethod
-    def main_tests(story: StageStory, evidence: StageEvidence) -> Findings:
+    def main_tests(story: Story, evidence: StageEvidence) -> Findings:
         """A line the main line added to a test while the story ran — another story's case — that the story's tree
         lacks is the resolution's change, never the story's: refused here by name, and the runner sends it back to
         the integrate stage."""
-        facts = evidence.main_tests(story.story)
+        facts = evidence.main_tests(story.id)
         if facts is None:
             return ()
         found: typing.List[Finding] = []

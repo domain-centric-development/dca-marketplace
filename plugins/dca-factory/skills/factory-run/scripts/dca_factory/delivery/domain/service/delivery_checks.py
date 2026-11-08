@@ -9,7 +9,8 @@ import typing
 from ....building_blocks import DomainService, Value
 from ..gateway.stage_evidence import StageEvidence
 from ..model.stage import HandOver, StageName, StoryKind
-from ..model.stage_story import ContractNumber, PlannedDigest, Presence, StageStory
+from ..model.story import Story
+from ..model.stage_story import ContractNumber, PlannedDigest, Presence
 from ..model.verdict import CheckName, Findings, Said
 
 STORY_PASS = CheckName("story-pass")
@@ -36,7 +37,7 @@ class DeliveryChecks(DomainService):
     """The document gate's checks."""
 
     @staticmethod
-    def story_pass(story: StageStory, evidence: StageEvidence, judge: typing.Optional[HandOver]) -> StoryPassChecked:
+    def story_pass(story: Story, evidence: StageEvidence, judge: typing.Optional[HandOver]) -> StoryPassChecked:
         """Every stage of this pass wrote its file after the one before it, the judge passed it, and the story is the
         one that was planned. A document written for an earlier pass, or over a judge who asked for changes,
         delivers nothing. <judge> is the file the judge stage writes."""
@@ -58,7 +59,7 @@ class DeliveryChecks(DomainService):
                                          "was planned is not checked"))
         elif facts.planned is PlannedDigest.CHANGED:
             found = STORY_PASS.fail(Said(
-                f"{story.place.value} changed after it was planned — a criterion no stage planned, tested or built "
+                f"{evidence.place_of(story.id).value} changed after it was planned — a criterion no stage planned, tested or built "
                 f"cannot be delivered; the story runs again from plan"))
         else:
             found = STORY_PASS.ok(Said("every stage of this pass ran in order, the judge passed it, and the story is "
@@ -66,11 +67,11 @@ class DeliveryChecks(DomainService):
         return StoryPassChecked((found,), Presence.PRESENT)
 
     @staticmethod
-    def outcome_raised(story: StageStory, contract: ContractNumber, evidence: StageEvidence) -> Findings:
+    def outcome_raised(story: Story, contract: ContractNumber, evidence: StageEvidence) -> Findings:
         """Delivered means the outcome event exists: every event of `publishes:` is a type the production code
         declares, and a production file the story changed — the aggregate that raises it or the use case that
         publishes it — refers to it beyond the declaration."""
-        if story.kind is not StoryKind.STORY or contract.value < OUTCOME_CONTRACT.value or not story.publishes:
+        if story.kind is not StoryKind.STORY or contract.value < OUTCOME_CONTRACT.value or not story.content.publishes:
             return ()
         facts = evidence.outcome(story)
         scope = "the story changed" if facts.changed is not None else \
@@ -98,10 +99,10 @@ class DeliveryChecks(DomainService):
         return (OUTCOME.ok(Said("the outcome event exists: " + "; ".join(found))),)
 
     @staticmethod
-    def documented(story: StageStory, evidence: StageEvidence) -> Findings:
+    def documented(story: Story, evidence: StageEvidence) -> Findings:
         """The document stage may only write statements that can be checked: a file it says it updated exists, and
         every row names how it was checked. A documented path that does not resolve outlives the story."""
-        facts = evidence.document(story.story)
+        facts = evidence.document(story.id)
         where = facts.place.value
         if facts.unreadable is not None:
             return (DOCUMENTED.fail(Said(facts.unreadable.value)),)
@@ -123,10 +124,10 @@ class DeliveryChecks(DomainService):
         return tuple(found)
 
     @staticmethod
-    def proposals_landed(story: StageStory, evidence: StageEvidence) -> Findings:
+    def proposals_landed(story: Story, evidence: StageEvidence) -> Findings:
         """Every term the plan proposed is either in a glossary now or named as still open under `## Not
         documented`. A proposal that quietly disappears is how a model's private vocabulary enters a code base."""
-        facts = evidence.proposals(story.story)
+        facts = evidence.proposals(story.id)
         if facts is None:
             return ()
         if facts.glossary is Presence.ABSENT:
@@ -141,11 +142,11 @@ class DeliveryChecks(DomainService):
         return (GLOSSARY.ok(Said(f"{facts.proposed.value} proposed term(s) accounted for")),)
 
     @staticmethod
-    def reviews(story: StageStory, evidence: StageEvidence) -> Findings:
+    def reviews(story: Story, evidence: StageEvidence) -> Findings:
         """One review file per perspective in the review skills' report format. A missing file is a note — the
         judge then ran that pass itself and says so —, a file that is no report is refused: the judge would converge
         from nothing while the report claims a perspective."""
-        facts = evidence.reviews(story.story)
+        facts = evidence.reviews(story.id)
         if facts.malformed:
             return (REVIEWS.fail(Said(
                 f"reviews/{', reviews/'.join(m.value for m in facts.malformed)}.md carries no must-fix, should-fix or "
@@ -167,10 +168,10 @@ class DeliveryChecks(DomainService):
         return tuple(found)
 
     @staticmethod
-    def pipeline_untouched(story: StageStory, evidence: StageEvidence) -> Findings:
+    def pipeline_untouched(story: Story, evidence: StageEvidence) -> Findings:
         """No stage of the story changed the installed pipeline: a change made by any stage is refused at the next
         gate, whichever stage made it. Silent without a record."""
-        facts = evidence.pipeline(story.story)
+        facts = evidence.pipeline(story.id)
         if facts.touched is None:
             return ()
         folder = facts.folder.value
@@ -180,4 +181,4 @@ class DeliveryChecks(DomainService):
                 f"a stage changed the installed pipeline: {', '.join(touched[:6])}{' …' if len(touched) > 6 else ''} "
                 f"— a stage reads {folder} and never writes it; put it back (`factory.sh update`, or git) and the "
                 f"stage runs again")),)
-        return (PIPELINE.ok(Said(f"no stage of {story.story.value} changed {folder}")),)
+        return (PIPELINE.ok(Said(f"no stage of {story.id.value} changed {folder}")),)

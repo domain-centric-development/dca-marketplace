@@ -7,7 +7,8 @@ import typing
 
 from ....building_blocks import DomainService
 from ..gateway.stage_evidence import StageEvidence
-from ..model.stage_story import MappedTest, StageStory
+from ..model.story import Story
+from ..model.stage_story import MappedTest
 from ..model.verdict import CheckName, Findings, Said
 
 SPEC_DELTA = CheckName("spec-delta")
@@ -19,7 +20,7 @@ class SpecChecks(DomainService):
     """The checks between a story and the spec."""
 
     @staticmethod
-    def delta(story: StageStory, evidence: StageEvidence) -> Findings:
+    def delta(story: Story, evidence: StageEvidence) -> Findings:
         """What follows from comparing the story with the spec the spec's rules derive; what the plan names must agree
         with it, and every change or removal of what holds needs a person's sentence behind it — the plan stage asks
         where there is none."""
@@ -43,7 +44,7 @@ class SpecChecks(DomainService):
                                    f"holds changes")),)
 
     @staticmethod
-    def tests(story: StageStory, tests: typing.Tuple[MappedTest, ...], evidence: StageEvidence) -> Findings:
+    def tests(story: Story, tests: typing.Tuple[MappedTest, ...], evidence: StageEvidence) -> Findings:
         """Every `Test:` line of the spec the story changes still names a test that is there — one this story renamed
         or moved is named under tests.md's `## Moved tests` (or is the story's own criterion), and the gate writes
         the new selector at delivery."""
@@ -65,7 +66,7 @@ class SpecChecks(DomainService):
         return (SPEC_TESTS.ok(Said(f"every test line of {target} names a test that is there")),)
 
     @staticmethod
-    def committed(story: StageStory, tests: typing.Tuple[MappedTest, ...], evidence: StageEvidence) -> Findings:
+    def committed(story: Story, tests: typing.Tuple[MappedTest, ...], evidence: StageEvidence) -> Findings:
         """What the main line takes is the story's commit, not its worktree: every test the story maps, and every one
         a `Test:` line of its spec names, sits in a file that commit holds as the worktree has it."""
         commit = evidence.story_commit(story, tests)

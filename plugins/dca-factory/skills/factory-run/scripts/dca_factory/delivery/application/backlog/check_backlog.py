@@ -82,8 +82,8 @@ class CheckBacklogUseCase:
                 found.append(STORY.fail(Said(entry.unreadable.value if entry.unreadable else "")))
             else:
                 story = entry.story
-                found.extend(StoryChecks.context(story))
-                if story.context.value:
+                found.extend(StoryChecks.context(story, self._evidence))
+                if story.content.context.value:
                     found.extend(BacklogChecks.context_map(story, self._evidence))
                 found.extend(BacklogChecks.epic(story, self._evidence))
                 found.extend(BacklogChecks.outcome(story, contract, self._evidence))

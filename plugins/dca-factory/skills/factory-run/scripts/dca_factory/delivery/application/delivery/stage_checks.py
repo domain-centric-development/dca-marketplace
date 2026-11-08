@@ -69,7 +69,7 @@ def mapped(run: Run) -> typing.Tuple[MappedTest, ...]:
 
 @check("story", rule="GATE-STORY")
 def _story(run: Run) -> None:
-    run.result.take(StoryChecks.context(run.story))
+    run.result.take(StoryChecks.context(run.story, run.evidence))
 
 
 @check("contract", rule=(
@@ -82,7 +82,7 @@ def _contract(run: Run) -> None:
 
 @check("status", rule="GATE-APPROVED")
 def _status(run: Run) -> None:
-    run.result.take(StoryChecks.status(run.story))
+    run.result.take(StoryChecks.status(run.story, run.evidence))
 
 
 @check("epic", rule="GATE-EPIC")
@@ -153,7 +153,7 @@ def read_table(run: Run) -> typing.Tuple[typing.Dict[str, typing.List[str]], typ
         return {}, {}
     table = TestTable(Place(path), tuple(ScenarioKey(key) for key in mapping),
                       Count(sum(len(selectors) for selectors in mapping.values())))
-    run.result.take(TestChecks.mapped(run.story.criteria, table))
+    run.result.take(TestChecks.mapped(run.story.content.criteria, table))
     if not mapping:
         return mapping, {}
     located, looked = run.tests.locate(mapping)

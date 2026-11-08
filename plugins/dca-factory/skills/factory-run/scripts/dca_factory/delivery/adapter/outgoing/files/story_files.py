@@ -9,7 +9,7 @@ import typing
 from .story_layout import (
     delivered_by, delivered_on, epic_folder, find_story, story_files, story_folder, story_id_of, story_ids)
 from .....sharedkernel.adapter.outgoing.profile.profile_files import place
-from .....sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError, read_front_matter, read_text
+from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError, MarkdownError, read_front_matter, read_text
 from .....sharedkernel.adapter.outgoing.markdown.sections import section_of
 from .owned_files import write_story_fields
 from ....application.shared.requests import ID_WORD
@@ -17,7 +17,9 @@ from ....application.shared.story_repository import StoryNotFound
 from ....domain.model.epic import EpicId
 from ....domain.model.story import (
     Assumption, DeliveredBy, DeliveredOn, Delivery, KindWord, Story, StoryId, StoryStatus)
+from .criteria_files import criteria_of
 from .epic_files import epic_dir
+from .stage_evidence_files import story_content
 from .request_files import write_atomic
 from ....application.shared.story_repository import StoryRepository
 
@@ -114,8 +116,23 @@ class StoryFiles(StoryRepository):
     @staticmethod
     def read(path: str) -> Story:
         front, body = read_front_matter(path)
-        assumptions = [Assumption(line.rstrip()) for line in section_of(body, ASSUMPTIONS) or [] if line.strip()]
-        on, by = delivered_on(front), delivered_by(front)
-        delivery = Delivery(DeliveredOn(on), DeliveredBy(by)) if on or by else None
-        return Story(StoryId(story_id_of(path, front)), EpicId(os.path.basename(epic_folder(path))),
-                     status_of(front.get("status")), assumptions, delivery, KindWord(str(front.get("kind") or "")))
+        return story_of(path, front, body)
+
+
+def story_of(path: str, front: typing.Mapping[str, typing.Any], body: str,
+             criteria: typing.Optional[typing.Sequence[typing.Tuple[str, str]]] = None) -> Story:
+    """The story at <path>, read off its front matter and body; <criteria> where a caller read them already."""
+    assumptions = [Assumption(line.rstrip()) for line in section_of(body, ASSUMPTIONS) or [] if line.strip()]
+    on, by = delivered_on(front), delivered_by(front)
+    delivery = Delivery(DeliveredOn(on), DeliveredBy(by)) if on or by else None
+    said = criteria
+    if said is None:
+        # the story's life — release, delivery, a take-back — does not rest on how its criteria are written; the gate
+        # reads them itself and refuses a malformed one there
+        try:
+            said = criteria_of(path, body, front)
+        except GateError:
+            said = ()
+    return Story(StoryId(story_id_of(path, front)), EpicId(os.path.basename(epic_folder(path))),
+                 status_of(front.get("status")), assumptions, delivery, KindWord(str(front.get("kind") or "")),
+                 content=story_content(front, body, said))

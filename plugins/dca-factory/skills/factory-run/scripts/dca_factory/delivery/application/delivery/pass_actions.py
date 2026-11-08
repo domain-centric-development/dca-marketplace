@@ -13,7 +13,7 @@ DELIVERED_LEFT = "a delivered story is checked and its marks are left as they ar
 
 
 def delivered(run: Run) -> bool:
-    return bool(run.story.status.value == "delivered")
+    return bool(run.story.content.written_status.value == "delivered")
 
 
 @on_pass("plan", rule=(
@@ -27,7 +27,7 @@ def _plan_passed(run: Run) -> None:
         run.result.note("story", f"{run.story_id} is delivered — checked, its marks are left as they are")
     else:
         run.delivery.plan_marks(run.story_id, run.story_path)
-        adoption = run.evidence.plan_adoption(run.story.story)
+        adoption = run.evidence.plan_adoption(run.story.id)
         outcome = AdoptChecks.outcome(run.story, adoption)
         if adoption is not None and outcome is not Adoption.NONE:
             run.delivery.adopt(run.result, run.story_id, run.story_path,

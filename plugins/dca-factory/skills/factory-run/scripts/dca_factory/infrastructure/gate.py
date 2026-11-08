@@ -17,7 +17,8 @@ from ..delivery.adapter.outgoing.files.snapshots import record_base, record_chan
 from ..delivery.adapter.outgoing.files.backlog_entry_files import BacklogEntryFiles
 from ..delivery.adapter.outgoing.files.stage_delivery_files import StageDeliveryFiles
 from ..delivery.adapter.outgoing.files.stage_evidence_files import (
-    DecisionStampFiles, MainLineEvidence, StageEvidenceFiles, stage_story)
+    DecisionStampFiles, MainLineEvidence, StageEvidenceFiles)
+from ..delivery.adapter.outgoing.files.story_files import story_of
 from ..delivery.adapter.outgoing.files.stage_marks_files import StageMarkFiles
 from ..delivery.adapter.outgoing.files.story_layout import find_story, story_folder, story_kind
 from ..delivery.adapter.outgoing.files.test_files import StageTestFiles
@@ -67,12 +68,12 @@ def stage_run(close: typing.Callable[[StageRun], None], **fields: typing.Any) ->
     run.tests = StageTestFiles(run.cwd, run.runs, run.profile)
     run.main_line = MainLineEvidence(run.cwd, run.runs, run.args.epics, run.profile)
     run.marks = StageMarkFiles(run.cwd, run.runs, run.kind)
-    run.stamps = DecisionStampFiles(run.runs)
+    run.stamps = DecisionStampFiles(run.runs, run.args.epics)
     run.describe = check_description(run.cwd, run.profile)
     run.runs_port = StageRunFiles(run.cwd, run.runs, run.profile)
     run.delivery = StageDeliveryFiles(run.cwd, run.runs, run.profile)
     run.close = lambda: close(run)
-    run.story = stage_story(run.story_id, run.story_path, run.front, run.body, run.criteria)
+    run.story = story_of(run.story_path, run.front, run.body, run.criteria)
     run.contract = ProfileChecks.contract_number(run.evidence)
     # a journey is a guard over what is delivered: green at its test gate, the inverse of a story
     run.expected = "red" if run.stage.red and run.kind == "story" else "green"
