@@ -5,7 +5,7 @@ from __future__ import annotations
 import enum
 import typing
 
-from ....building_blocks import AggregateRoot, DomainException, Id, Value
+from ....building_blocks import AggregateRoot, DomainEvent, DomainException, Id, Value
 from .epic import EpicId
 from .moment import Moment
 from .person import Person
@@ -166,6 +166,42 @@ class StoryContent(Value):
     feature: Detail = Detail("")
 
 
+class StoryReleased(DomainEvent):
+    """A person released the draft: it is approved and may be built."""
+
+    story: StoryId
+    at: Moment
+
+
+class StoryReopened(DomainEvent):
+    """A delivered story was taken back for a correction: approved again, it runs from plan."""
+
+    story: StoryId
+    at: Moment
+
+
+class StoryAdoptedForProof(DomainEvent):
+    """A claimed delivery was handed to the adopt path, to be proven by the existing tests."""
+
+    story: StoryId
+    at: Moment
+
+
+class StoryDeliveredByHand(DomainEvent):
+    """A person built the story and delivered it — claimed, not proven."""
+
+    story: StoryId
+    by: Person
+    at: Moment
+
+
+class StoryDeliveredByGate(DomainEvent):
+    """The gate delivered the story: built or adopted, it holds."""
+
+    story: StoryId
+    at: Moment
+
+
 class Story(AggregateRoot[StoryId]):
     """One story: its status, its epic, the assumptions it carries, its delivery, and what it says (`content`: its
     criteria, what it depends on and publishes — read-only, what the gate checks). Released, a draft becomes approved
@@ -237,21 +273,23 @@ class Story(AggregateRoot[StoryId]):
         """What the story says — its criteria, context, dependencies; never changed by the aggregate."""
         return self._content
 
-    def release(self, answered: Assumption) -> None:
+    def release(self, answered: Assumption, at: Moment) -> None:
         """A person's go: the draft becomes approved, the release kept as the answered assumption."""
         if self._status is not StoryStatus.DRAFT:
             raise NotADraft(self._id, self._status)
         self._status = StoryStatus.APPROVED
         self._assumptions.append(answered)
+        self.register_event(StoryReleased(self._id, at))
 
-    def reopen(self) -> None:
+    def reopen(self, at: Moment) -> None:
         """Taken back for a correction: approved again, it runs from plan, and no longer says delivered."""
         if self._status is not StoryStatus.DELIVERED:
             raise NotDelivered(self._id)
         self._status = StoryStatus.APPROVED
         self._delivery = None
+        self.register_event(StoryReopened(self._id, at))
 
-    def adopt_for_proof(self, gate_pass: GatePass) -> Delivery:
+    def adopt_for_proof(self, gate_pass: GatePass, at: Moment) -> Delivery:
         """A claimed delivery handed to the adopt path: adopted, without its delivered lines — the claim they made is
         returned, to be kept. A delivery by the gate whose pass is on record has nothing to prove."""
         if self._status is not StoryStatus.DELIVERED:
@@ -261,6 +299,7 @@ class Story(AggregateRoot[StoryId]):
             raise NothingToProve(self._id)
         self._status = StoryStatus.ADOPTED
         self._delivery = None
+        self.register_event(StoryAdoptedForProof(self._id, at))
         return claim
 
     def deliver_by_hand(self, by: Person, at: Moment) -> Delivery:
@@ -271,6 +310,7 @@ class Story(AggregateRoot[StoryId]):
             raise NothingToDeliver(self._id)
         self._status = StoryStatus.DELIVERED
         self._delivery = Delivery(DeliveredOn(at.value), DeliveredBy.hand(by))
+        self.register_event(StoryDeliveredByHand(self._id, by, at))
         return self._delivery
 
     def deliver_by_gate(self, at: Moment) -> Delivery:
@@ -280,4 +320,5 @@ class Story(AggregateRoot[StoryId]):
             raise AlreadyDelivered(self._id, self._delivery.by if self._delivery else DeliveredBy(""))
         self._status = StoryStatus.DELIVERED
         self._delivery = Delivery(DeliveredOn(at.value), BY_GATE)
+        self.register_event(StoryDeliveredByGate(self._id, at))
         return self._delivery

@@ -13,6 +13,8 @@ dataclass by its base: it declares its fields and carries no decorator of its ow
     InputPort, UseCase         the entry to the application; one user action or system operation
     OutputPort                 what the application needs from outside, implemented by an outgoing adapter
     Repository, Store          aggregates with a life cycle; operational data recorded or looked up without one
+    DomainEventPublisher       publishes an aggregate's events once it is saved
+    TransactionBoundary        runs a use case's writes as one unit
     UseCaseException           a use case's failure about the request, not about an invariant
     OutputPortException        a failure an output port reports, outside what the model or the request can say
     BoundedContext, Upstream   a context's declaration, `__dca__` in its package, and the contexts it depends on
@@ -240,6 +242,33 @@ class Repository(OutputPort, typing.Protocol[AGGREGATE, ID_IN]):
 
     def delete_by_id(self, aggregate_id: ID_IN) -> None:
         """Remove the aggregate from the collection."""
+        ...
+
+
+class DomainEventPublisher(OutputPort, typing.Protocol):
+    """Marker for the port that publishes an aggregate's domain events once it is saved — the use case calls it inside
+    its transaction, then the events are cleared, so none is published twice."""
+
+    def publish(self, event: DomainEvent) -> None:
+        """Publish one event."""
+        ...
+
+    def publish_and_clear_events(self, aggregate: AggregateRoot[typing.Any]) -> None:
+        """Publish every event the aggregate registered, in order, then clear them."""
+        for event in aggregate.domain_events():
+            self.publish(event)
+        aggregate.clear_domain_events()
+
+
+T = typing.TypeVar("T")
+
+
+class TransactionBoundary(OutputPort, typing.Protocol):
+    """Marker for the port that runs a use case's writes as one unit: the aggregate saved and its events published
+    together, or neither."""
+
+    def in_transaction(self, work: typing.Callable[[], T]) -> T:
+        """Run <work> inside the boundary and return what it returned."""
         ...
 
 

@@ -32,6 +32,7 @@ from ..delivery.adapter.outgoing.files.made_items import MadeItemFiles
 from ..delivery.adapter.outgoing.files.request_files import RequestFiles
 from ..delivery.adapter.outgoing.files.status_facts import StatusFactFiles
 from .description import show_part as show_part
+from ..delivery.adapter.outgoing.files.journal_events import FileTransactions, JournalEventPublisher
 from ..delivery.adapter.outgoing.files.request_files import (
     default_by as default_by, factory_dir as factory_dir, stamp_utc as stamp_utc)
 from ..delivery.adapter.outgoing.process.factory_process import (
@@ -145,8 +146,10 @@ def pending_requests(cwd: str) -> PendingRequestsUseCase:
 
 def settlement(cwd: str, runs: str) -> Settlement:
     stories, records = StoryFiles(cwd), DecisionRecordFiles(cwd)
-    return Settlement(AcceptDeliveryUseCase(stories, records), AnswerQuestionUseCase(records),
-                      ReleaseStoriesUseCase(stories, records, StoryJournalFiles(cwd, runs)))
+    events, transactions = JournalEventPublisher(runs), FileTransactions()
+    return Settlement(AcceptDeliveryUseCase(stories, records, events, transactions),
+                      AnswerQuestionUseCase(records, events, transactions),
+                      ReleaseStoriesUseCase(stories, records, StoryJournalFiles(cwd, runs), events, transactions))
 
 
 def book_request_cost(cwd: str, runs: str) -> BookRequestCostUseCase:
@@ -179,16 +182,18 @@ def show_help(cwd: str, epics: str, runs: str) -> ShowHelpUseCase:
 
 
 def reopen_story(cwd: str, epics: str, runs: str) -> ReopenStoryUseCase:
-    return ReopenStoryUseCase(StoryFiles(cwd, epics), AcceptanceFiles(cwd, epics), StoryRunFiles(cwd, epics, runs))
+    return ReopenStoryUseCase(StoryFiles(cwd, epics), AcceptanceFiles(cwd, epics), StoryRunFiles(cwd, epics, runs),
+                              JournalEventPublisher(runs), FileTransactions())
 
 
 def prove_delivery(cwd: str, epics: str, runs: str) -> ProveDeliveryUseCase:
-    return ProveDeliveryUseCase(StoryFiles(cwd, epics), StoryRunFiles(cwd, epics, runs))
+    return ProveDeliveryUseCase(StoryFiles(cwd, epics), StoryRunFiles(cwd, epics, runs), JournalEventPublisher(runs),
+                                FileTransactions())
 
 
 def deliver_by_hand(cwd: str, epics: str, runs: str) -> DeliverByHandUseCase:
     return DeliverByHandUseCase(StoryFiles(cwd, epics), RemoteStoryClaims(cwd, runs), StorySpecFiles(epics),
-                                StoryJournalFiles(cwd, runs))
+                                StoryJournalFiles(cwd, runs), JournalEventPublisher(runs), FileTransactions())
 
 
 def confirm_owned(cwd: str, runs: str) -> ConfirmOwnedUseCase:

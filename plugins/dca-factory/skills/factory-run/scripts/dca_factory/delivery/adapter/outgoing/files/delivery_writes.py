@@ -37,6 +37,7 @@ from .kept_files import RED_TREE, TESTS_BASELINE
 from .run_marks import write_mark
 from .snapshots import git_tree
 from .stage_evidence_files import closed_rows, closes_of
+from .journal_events import FileTransactions, JournalEventPublisher
 from .story_files import StoryFiles
 from .story_layout import journeys_hold, story_digest, story_folder, story_kind
 from .test_files import locate_tests, read_mapping
@@ -357,7 +358,12 @@ def deliver(result: typing.Any, story_path: str, story_id: str, front: Front, ru
     stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     story = StoryFiles.read(story_path)
     story.deliver_by_gate(Moment(stamp))
-    StoryFiles.write(story_path, story)
+
+    def save() -> None:
+        StoryFiles.write(story_path, story)
+        JournalEventPublisher(runs).publish_and_clear_events(story)
+
+    FileTransactions().in_transaction(save)
     result.written.append(story_folder(story_path))
     result.ok("delivered", f"{shown(story_path)} carries `status: delivered`, `delivered: {stamp}`, "
                            f"`delivered_by: gate`")

@@ -6,7 +6,7 @@ import enum
 import re
 import typing
 
-from ....building_blocks import AggregateRoot, DomainException, Id, Value
+from ....building_blocks import AggregateRoot, DomainEvent, DomainException, Id, Value
 from .moment import Moment
 from .person import Person
 from .stage import StageName
@@ -111,6 +111,30 @@ class Answer(Value):
     at: Moment
 
 
+class QuestionAnswered(DomainEvent):
+    """A person answered a question a run could not answer itself."""
+
+    record: RecordId
+    story: typing.Optional[StoryId]
+    at: Moment
+
+
+class DeliveryAccepted(DomainEvent):
+    """A person looked at a delivered story and accepted it."""
+
+    record: RecordId
+    story: typing.Optional[StoryId]
+    at: Moment
+
+
+class CorrectionAsked(DomainEvent):
+    """A person looked at a delivered story and asked for a correction."""
+
+    record: RecordId
+    story: typing.Optional[StoryId]
+    at: Moment
+
+
 class AlreadyAnswered(DomainException):
     """An answer is never overwritten — a change of mind is a new question."""
 
@@ -208,6 +232,12 @@ class DecisionRecord(AggregateRoot[RecordId]):
             raise AlreadyAnswered(self._id, self._state)
         self._answer = answer
         self._state = DecisionState.ANSWERED
+        if self._kind is RecordKind.QUESTION:
+            self.register_event(QuestionAnswered(self._id, self._story, answer.at))
+        elif answer.given == ACCEPTED:
+            self.register_event(DeliveryAccepted(self._id, self._story, answer.at))
+        else:
+            self.register_event(CorrectionAsked(self._id, self._story, answer.at))
 
     def accept(self, by: Person, at: Moment) -> None:
         """An acceptance answered `accepted`: the delivery is what the person wanted."""

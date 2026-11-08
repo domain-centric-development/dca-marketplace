@@ -5,8 +5,9 @@ from __future__ import annotations
 import dataclasses
 import typing
 
-from ....building_blocks import UseCase
+from ....building_blocks import DomainEventPublisher, TransactionBoundary, UseCase
 from ...domain.model.decision_record import RecordId
+from ...domain.model.moment import Moment
 from ...domain.model.story import StoryId
 from ..shared.acceptances import Acceptances
 from ..shared.story_repository import StoryRepository
@@ -16,6 +17,7 @@ from ..shared.story_runs import StoryRuns
 @dataclasses.dataclass(frozen=True)
 class ReopenStoryCommand:
     story: StoryId
+    at: Moment
 
 
 @dataclasses.dataclass(frozen=True)
@@ -64,14 +66,17 @@ class ReopenStoryUseCase(ReopenStoryInputPort):
     a story was accepted every answer is a correction; after an acceptance, one that changes a criterion as accepted
     is a new wish. The pass the story ran is kept aside, and the story runs again from plan."""
 
-    def __init__(self, stories: StoryRepository, acceptances: Acceptances, runs: StoryRuns) -> None:
+    def __init__(self, stories: StoryRepository, acceptances: Acceptances, runs: StoryRuns,
+                 events: DomainEventPublisher, transactions: TransactionBoundary) -> None:
+        self._events = events
+        self._transactions = transactions
         self._stories = stories
         self._acceptances = acceptances
         self._runs = runs
 
     def execute(self, command: ReopenStoryCommand) -> ReopenStoryResult:
         story = self._stories.get(command.story)
-        story.reopen()
+        story.reopen(command.at)
         record = self._acceptances.correction_of(story.id)
         if record is None:
             return NoCorrection()
@@ -84,5 +89,10 @@ class ReopenStoryUseCase(ReopenStoryInputPort):
         if changed:
             return NewWish(changed)
         kept = self._runs.keep_pass(story.id)
-        self._stories.save(story)
+
+        def save() -> None:
+            self._stories.save(story)
+            self._events.publish_and_clear_events(story)
+
+        self._transactions.in_transaction(save)
         return Reopened(record, kept)

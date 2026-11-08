@@ -646,7 +646,7 @@ def reopen(cwd: str, runs: str, epics: str, story_id: str) -> int:
     """Take a delivered story back for a correction a human gave on looking at it (`ReopenStoryUseCase`)."""
     try:
         result = story_command(lambda: wiring.reopen_story(cwd, epics, runs).execute(
-            ReopenStoryCommand(StoryId(story_id))))
+            ReopenStoryCommand(StoryId(story_id), Moment(time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())))))
     except NotDelivered:
         print(f"reopen: {story_id} is not delivered — a correction before delivery goes into the story, "
               f"and the schedule runs it from plan")

@@ -5,7 +5,7 @@ from __future__ import annotations
 import dataclasses
 import typing
 
-from ....building_blocks import UseCase
+from ....building_blocks import DomainEventPublisher, TransactionBoundary, UseCase
 from ...domain.model.epic import EpicId
 from ...domain.model.moment import Moment
 from ...domain.model.person import Person
@@ -44,8 +44,11 @@ class ReleaseStoriesUseCase(ReleaseStoriesInputPort):
     answered assumption — of an epic, only where every draft is such a one. Anything else needs the backlog skill,
     which asks what the drafts leave open."""
 
-    def __init__(self, stories: StoryRepository, records: DecisionRecordRepository, journal: StoryJournal) -> None:
+    def __init__(self, stories: StoryRepository, records: DecisionRecordRepository, journal: StoryJournal,
+                 events: DomainEventPublisher, transactions: TransactionBoundary) -> None:
         self._stories = stories
+        self._events = events
+        self._transactions = transactions
         self._records = records
         self._journal = journal
 
@@ -59,10 +62,15 @@ class ReleaseStoriesUseCase(ReleaseStoriesInputPort):
             return NeedsSkill("a draft whose question pass did not run on it as it stands, or a record holds it")
         answered = Assumption(f"- answered: the story is released for building (request {command.request}, "
                               f"{command.by.value}, {command.at.value}).")
-        for story in drafts:
-            story.release(answered)
-            self._stories.save(story)
-        return Released(tuple(story.id for story in drafts))
+
+        def release() -> Released:
+            for story in drafts:
+                story.release(answered, command.at)
+                self._stories.save(story)
+                self._events.publish_and_clear_events(story)
+            return Released(tuple(story.id for story in drafts))
+
+        return self._transactions.in_transaction(release)
 
     def _releasable(self, story: Story) -> bool:
         return story.status is StoryStatus.DRAFT and self._journal.question_pass_ran(story.id) \

@@ -5,7 +5,7 @@ from __future__ import annotations
 import dataclasses
 import typing
 
-from ....building_blocks import UseCase
+from ....building_blocks import DomainEventPublisher, TransactionBoundary, UseCase
 from ...domain.model.moment import Moment
 from ...domain.model.person import Person
 from ...domain.model.story import Delivery, StoryId
@@ -60,7 +60,10 @@ class DeliverByHandUseCase(DeliverByHandInputPort):
     with force, and that is journaled; one that changes what holds is not delivered by hand."""
 
     def __init__(self, stories: StoryRepository, claims: StoryClaims, spec: StorySpec,
-                 journal: StoryJournal) -> None:
+                 journal: StoryJournal,
+                 events: DomainEventPublisher, transactions: TransactionBoundary) -> None:
+        self._events = events
+        self._transactions = transactions
         self._stories = stories
         self._claims = claims
         self._spec = spec
@@ -77,5 +80,10 @@ class DeliverByHandUseCase(DeliverByHandInputPort):
         changing = self._spec.changing(story.id)
         if changing.keys:
             return ChangesWhatHolds(changing)
-        self._stories.save(story)
+
+        def save() -> None:
+            self._stories.save(story)
+            self._events.publish_and_clear_events(story)
+
+        self._transactions.in_transaction(save)
         return DeliveredByHand(delivery, self._spec.take_unproven(story.id), self._stories.path_of(story.id))

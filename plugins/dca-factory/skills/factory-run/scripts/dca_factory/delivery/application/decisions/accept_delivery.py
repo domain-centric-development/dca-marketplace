@@ -5,7 +5,7 @@ from __future__ import annotations
 import dataclasses
 import typing
 
-from ....building_blocks import UseCase
+from ....building_blocks import DomainEventPublisher, TransactionBoundary, UseCase
 from ...domain.model.decision_record import RecordId
 from ...domain.model.moment import Moment
 from ...domain.model.person import Person
@@ -37,7 +37,10 @@ class AcceptDeliveryInputPort(UseCase[AcceptDeliveryCommand, AcceptDeliveryResul
 class AcceptDeliveryUseCase(AcceptDeliveryInputPort):
     """The story's open acceptance takes `answer: accepted`."""
 
-    def __init__(self, stories: StoryRepository, records: DecisionRecordRepository) -> None:
+    def __init__(self, stories: StoryRepository, records: DecisionRecordRepository, events: DomainEventPublisher,
+                 transactions: TransactionBoundary) -> None:
+        self._events = events
+        self._transactions = transactions
         self._stories = stories
         self._records = records
 
@@ -47,5 +50,10 @@ class AcceptDeliveryUseCase(AcceptDeliveryInputPort):
         if record is None:
             return NeedsSkill("the story waits for no acceptance")
         record.accept(command.by, command.at)
-        self._records.save(record)
+
+        def save() -> None:
+            self._records.save(record)
+            self._events.publish_and_clear_events(record)
+
+        self._transactions.in_transaction(save)
         return Accepted(record.id)
