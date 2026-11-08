@@ -12,7 +12,7 @@ from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from ..pipeline.stage_rows import stage_windows, stage_files
 from .story_layout import EPIC_FILE, epic_folder
 from ....domain.model.stage import StoryKind
-from ....domain.model.story_state import AcceptanceVerdict, HandOverText
+from ....domain.model.story_state import Judged, AcceptanceVerdict, HandOverText
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir
 from .decision_record_files import acceptance_records, latest_verdict
 from .journal_files import journal_events
@@ -73,6 +73,14 @@ def verdict_in(text: str) -> str:
         if line.strip().lower().startswith("verdict:"):
             return line.split(":", 1)[1].strip().strip("`\"' ").lower()
     return ""
+
+
+def judged_of(word: str) -> Judged:
+    """What a judge's `verdict:` word means — none written is missing, a word that is none of the three unknown."""
+    if not word:
+        return Judged.MISSING
+    return next((judged for judged in Judged if judged.value == word and judged not in (Judged.MISSING, Judged.UNKNOWN)),
+                Judged.UNKNOWN)
 
 
 def back_in(text: str) -> str:

@@ -4,6 +4,8 @@ for, the review reports are reports — and no stage changed the installed pipel
 
 from __future__ import annotations
 
+from ..model.story_state import Judged
+
 import typing
 
 from ....building_blocks import DomainService, Value
@@ -49,10 +51,10 @@ class DeliveryChecks(DomainService):
             return StoryPassChecked((STORY_PASS.fail(Said(
                 f"{gaps} — the document gate delivers a story whose stages all ran, in order, in this pass; the story "
                 f"runs on from the first of them")),), Presence.ABSENT)
-        verdict = facts.verdict.value
-        if verdict != "pass":
+        if facts.verdict is not Judged.PASS:
+            said = "none" if facts.verdict is Judged.MISSING else facts.verdict.value
             return StoryPassChecked((STORY_PASS.fail(Said(
-                f"{judge.value if judge else 'judge.md'} says `verdict: {verdict or 'none'}` — only a judge's `pass` "
+                f"{judge.value if judge else 'judge.md'} says `verdict: {said}` — only a judge's `pass` "
                 f"lets a story be delivered")),), Presence.ABSENT)
         if facts.planned is PlannedDigest.MISSING:
             found = STORY_PASS.skip(Said("no .story-digest from the plan gate — whether the story changed since it "

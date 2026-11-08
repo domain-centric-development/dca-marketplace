@@ -22,7 +22,8 @@ from ..files.decision_record_files import project_record_path
 from ....application.shared.request_skill import HandedFileRead, SkillRun
 from ....application.shared.backlog_schedule import ScheduleRead
 from ....domain.model.stage import StageName, StoryKind
-from ....domain.model.story_state import GateReport, Rounds, VerdictWord
+from ....domain.model.story_state import GateReport, Judged, Rounds
+from ..files.run_marks import judged_of
 from ..files.decision_record_files import request_records
 from ....application.shared.requests import KIND, Kind, Request
 from ....application.shared.backlog_worker import Child
@@ -270,8 +271,8 @@ class RunnerStages(StoryStages):
         start = self._run.start_stage(story)
         return StageName(start) if start and start != "none" else None
 
-    def verdict(self, story: str) -> VerdictWord:
-        return VerdictWord(self._run.verdict_of(story) or "")
+    def verdict(self, story: str) -> Judged:
+        return judged_of(self._run.verdict_of(story) or "")
 
     def back(self, story: str) -> typing.Optional[StageName]:
         back = self._run.back_to(story)

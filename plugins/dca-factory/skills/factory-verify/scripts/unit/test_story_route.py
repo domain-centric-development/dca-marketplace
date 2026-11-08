@@ -11,7 +11,8 @@ from dca_factory.delivery.application.delivery.run_story import RunStoryCommand,
 from dca_factory.delivery.domain.model.jump import Jump, Next, RuleId, Target
 from dca_factory.delivery.domain.model.workflow_rule import Outcome, OutcomeState, RulePart, RuleText, WorkflowRule
 from dca_factory.delivery.domain.model.stage import StageName, StoryKind, Window
-from dca_factory.delivery.domain.model.story_state import GateReport, HandOverText, Rounds, VerdictWord
+from dca_factory.delivery.domain.model.story_state import GateReport, HandOverText, Rounds
+from dca_factory.delivery.adapter.outgoing.files.run_marks import judged_of
 from dca_factory.delivery.application.delivery.integrate_story import IntegrateStoryCommand, IntegrateStoryUseCase
 from dca_factory.delivery.domain.model.route import Around, Move
 from dca_factory.delivery.domain.model.story_state import Judged, Refusal
@@ -97,9 +98,9 @@ class Route(unittest.TestCase):
         self.assertEqual(workflow().again_from(StageName("tidy"), StageName("judge")), StageName("tidy"))
 
     def test_the_verdict_the_rounds_and_the_environment(self):
-        self.assertIs(VerdictWord("changes-requested").judged(), Judged.AGAIN)
-        self.assertIs(VerdictWord("").judged(), Judged.MISSING)
-        self.assertIs(VerdictWord("maybe").judged(), Judged.UNKNOWN)
+        self.assertIs(judged_of("changes-requested"), Judged.AGAIN)
+        self.assertIs(judged_of(""), Judged.MISSING)
+        self.assertIs(judged_of("maybe"), Judged.UNKNOWN)
         self.assertIsNone(Rounds(2).converged())
         self.assertIsNotNone(Rounds(3).converged())
         report = GateReport("gate:fail environment — no java on the PATH\ngate:fail story S stage build")
@@ -275,7 +276,7 @@ class Stages:
         return None
 
     def verdict(self, story):
-        return VerdictWord(self.verdicts.pop(0) if len(self.verdicts) > 1 else self.verdicts[0])
+        return judged_of(self.verdicts.pop(0) if len(self.verdicts) > 1 else self.verdicts[0])
 
     def back(self, story):
         return None

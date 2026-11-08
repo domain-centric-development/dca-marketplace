@@ -10,11 +10,15 @@ from ..model.stage import HandOver, StageName, StoryKind
 from ..model.story import ReleaseState, Story, StoryStatus
 from ..model.workflow import Workflow
 from ..model.story_state import (
-    AcceptanceVerdict, Detail, Mark, MAX_ROUNDS, RunFacts, StateName, Standing, StoryMarks, VerdictWord)
+    AcceptanceVerdict, Detail, Judged, Mark, Refusal, RunFacts, StateName, Standing, StoryMarks)
+from ..model.verdict import CheckName
 
 PLAN, BUILD, TEST, JUDGE, DOCUMENT = (StageName(n) for n in ("plan", "build", "test", "judge", "document"))
 ADOPT, INTEGRATE = StageName("adopt"), StageName("integrate")
-NO_VERDICT = VerdictWord("")
+
+
+#: The document gate's check that the code raises the outcome event — the build adds it, not the document stage.
+OUTCOME = CheckName("outcome")
 
 
 class StoryStanding(DomainService):
@@ -86,8 +90,9 @@ class StoryStanding(DomainService):
             stage = min(answered, key=lambda s: order.index(s) if s in order else 0)
             return Standing(StateName.RESUMABLE, stage, Detail(
                 f"decision {answered[stage].value} answered — its stage applies it"))
-        if run.rounds.value >= MAX_ROUNDS:
-            return Standing(StateName.STOPPED, None, Detail(f"{MAX_ROUNDS} rounds did not converge"))
+        stuck = run.rounds.converged()
+        if stuck is not None:
+            return Standing(StateName.STOPPED, None, stuck)
         if Mark.PLAN_REFUSED in run.marks:
             # Repaired since: the story or its epic is not what the plan gate refused, so the plan gate asks again.
             if Mark.REPAIRED not in run.marks:
@@ -96,9 +101,9 @@ class StoryStanding(DomainService):
             return Standing(StateName.IN_PROGRESS, PLAN, Detail(
                 "the story changed after the plan gate refused it — planned again"))
         judge = texts.get(JUDGE)
-        verdict = judge.verdict if judge else NO_VERDICT
+        verdict = judge.verdict if judge else Judged.MISSING
         conflict = (judge.asks if judge else None) or ()
-        if verdict.value == "story-conflict" and conflict and all(i in resolved for i in conflict):
+        if verdict is Judged.CONFLICT and conflict and all(i in resolved for i in conflict):
             applied_at = max((resolved[i] for i in conflict), key=lambda s: order.index(s) if s in order else 0)
             after = order[min(order.index(applied_at) + 1, len(order) - 1)] if applied_at in order else BUILD
             return Standing(StateName.IN_PROGRESS, after, Detail(f"the story conflict was answered and applied at "
@@ -111,16 +116,16 @@ class StoryStanding(DomainService):
                 return Standing(StateName.STOPPED, None, Detail(
                     f"{self._file_of(stage).value} ends in `## needs-human` without an open "
                     f"record"))
-        if verdict.value == "story-conflict":
+        if verdict is Judged.CONFLICT:
             return Standing(StateName.STOPPED, None, Detail("the judge found a story conflict"))
         if Mark.INTEGRATE_REFUSED in run.marks:
-            report = run.integrate_report.value if run.integrate_report else ""
-            if "gate:fail checkout" in report:
+            refused = run.integrate_report.integration() if run.integrate_report else frozenset()
+            if Refusal.CHECKOUT in refused:
                 return Standing(StateName.STOPPED, None, Detail(
                     "the main checkout could not take the story's commit — see "
                     ".gate-integrate.txt; then `factory.sh run --story "
                     + story.id.value + " --from integrate`"))
-            if "gate:fail moved" in report:
+            if Refusal.MOVED in refused:
                 return Standing(StateName.IN_PROGRESS, INTEGRATE, Detail(
                     "the main line moved on — the story is merged with "
                     "it again"))
@@ -139,14 +144,14 @@ class StoryStanding(DomainService):
                     f"pass's {self._file_of(stale[0]).value} — the story runs on from "
                     f"{stale[0].value}"))
             # The outcome event is code: the document stage cannot write it, the build can.
-            if first == DOCUMENT and run.document_report and "gate:fail outcome" in run.document_report.value:
+            if first == DOCUMENT and run.document_report and OUTCOME in run.document_report.refused_checks():
                 return Standing(StateName.IN_PROGRESS, BUILD, Detail(
                     "the document gate found no outcome event in the code — "
                     "the build adds it"))
             return Standing(StateName.IN_PROGRESS, first, Detail(
                 f"the {first.value} gate refused — the stage runs again"))
         adopt, integrating = story.kind == StoryKind.ADOPT, Mark.WORKTREE in run.marks
-        if adopt and verdict.value == "pass":
+        if adopt and verdict is Judged.PASS:
             if integrating and Mark.ADOPT_PASSED in run.marks:
                 return Standing(StateName.IN_PROGRESS, INTEGRATE, Detail(
                     "the adopt gate passed — its worktree is integrated "
@@ -165,7 +170,7 @@ class StoryStanding(DomainService):
                 "document.md is written, its gate has not passed yet"))
         if not texts:
             return Standing(StateName.READY, PLAN, Detail(""))
-        if verdict.value == "changes-requested":
+        if verdict is Judged.AGAIN:
             return Standing(StateName.IN_PROGRESS, self._workflow.judged_back(story.kind, texts[JUDGE].text),
                             Detail("the judge requested changes"))
         missing = next(stage for stage in self._workflow.order(story.kind) if stage not in texts)

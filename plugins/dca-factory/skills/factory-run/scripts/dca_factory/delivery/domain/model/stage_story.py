@@ -13,7 +13,7 @@ from .decision_record import RecordId
 from .epic import EpicId
 from .schedule import ContextName
 from .stage import StageName
-from .story_state import Detail, HandOverText, Rounds
+from .story_state import Detail, HandOverText, Judged, Rounds
 from .verdict import CheckName, Finding, Findings, Said
 
 
@@ -649,7 +649,7 @@ class StoryPass(Value):
     judge's verdict, and the story against the one planned."""
 
     gaps: typing.Tuple[PassGap, ...]
-    verdict: Detail
+    verdict: Judged
     planned: PlannedDigest
 
 

@@ -3,6 +3,9 @@ commands, a test's break on a scratch copy, the rules' proofs, a test re-proved 
 
 from __future__ import annotations
 
+from ....domain.model.story_state import Judged
+from ..files.run_marks import judged_of
+
 import contextlib
 import os
 import typing
@@ -135,6 +138,6 @@ class StageRunFiles(StageRuns):
     def characterization(self, story: str, by_selector: typing.Mapping[str, str]) -> typing.List[str]:
         return [qualify_selector(sel, by_selector, self._cwd) for sel in characterization_tests(self._runs, story)]
 
-    def judge_verdict(self, story: str) -> str:
+    def judge_verdict(self, story: str) -> Judged:
         path = os.path.join(self._runs, story, "judge.md")
-        return verdict_in(read_text(path)) or "" if os.path.isfile(path) else ""
+        return judged_of(verdict_in(read_text(path)) if os.path.isfile(path) else "")

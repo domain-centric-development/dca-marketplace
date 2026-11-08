@@ -302,8 +302,7 @@ class RunStoryUseCase(RunStoryInputPort):
     @decides("RUN-VERDICT-1")
     def _judged(self, story: str, kind: StoryKind) -> typing.Optional[Ended]:
         """The judge's verdict decides what comes next — read from its file, never assumed. None to go on."""
-        verdict = self._stages.verdict(story)
-        judged = verdict.judged()
+        judged = self._stages.verdict(story)
         judge = self._stages.artefact(story, JUDGE.value)
         if judged is Judged.PASS:
             self._lines.out("factory: judge verdict 'pass'.")
@@ -325,7 +324,7 @@ class RunStoryUseCase(RunStoryInputPort):
         if judged is Judged.MISSING:
             self._lines.err(f"factory: {judge} carries no 'verdict:' line — the judge stage is not finished.")
             return 1
-        self._lines.err(f"factory: judge verdict '{verdict.value}' is not one of pass|changes-requested|story-conflict.")
+        self._lines.err(f"factory: {judge} carries a verdict that is not one of pass|changes-requested|story-conflict.")
         return 1
 
     @decides("RUN-ADOPT-1")

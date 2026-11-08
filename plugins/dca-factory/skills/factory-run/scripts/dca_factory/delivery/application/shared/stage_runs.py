@@ -3,6 +3,8 @@ what it keeps of the runs: the red ledger, the rules' proofs, a re-proved test."
 
 from __future__ import annotations
 
+from ...domain.model.story_state import Judged
+
 import typing
 
 from ....building_blocks import OutputPort
@@ -105,5 +107,5 @@ class StageRuns(OutputPort, typing.Protocol):
         """The tests the adoption wrote itself, named as the reports name them."""
         ...
 
-    def judge_verdict(self, story: str) -> str:
+    def judge_verdict(self, story: str) -> Judged:
         ...

@@ -6,7 +6,7 @@ import typing
 
 from ....building_blocks import OutputPort
 from ...domain.model.stage import StageName, StoryKind
-from ...domain.model.story_state import GateReport, Rounds, VerdictWord
+from ...domain.model.story_state import GateReport, Judged, Rounds
 
 
 class StoryStages(OutputPort, typing.Protocol):
@@ -107,7 +107,7 @@ class StoryStages(OutputPort, typing.Protocol):
         """Where the story's state says it runs from now; None where it runs nowhere."""
         ...
 
-    def verdict(self, story: str) -> VerdictWord:
+    def verdict(self, story: str) -> Judged:
         ...
 
     def back(self, story: str) -> typing.Optional[StageName]:

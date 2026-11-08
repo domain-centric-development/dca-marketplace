@@ -13,7 +13,7 @@ from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_di
 from ....domain.model.decision_record import RecordId
 from ....domain.model.stage import StageName
 from ....domain.model.story_state import (
-    Acceptance, AcceptanceVerdict, Claimant, Detail, GateReport, HandOverFacts, HandOverText, Mark, Rounds, RunFacts, StoryMarks, VerdictWord)
+    Acceptance, AcceptanceVerdict, Claimant, Detail, GateReport, HandOverFacts, HandOverText, Mark, Rounds, RunFacts, StoryMarks)
 from ..claims.remote_claims import cached_claims, PUBLISHED
 from ....domain.model.decision_record import DecisionRecord
 from ....domain.model.story import Story
@@ -22,7 +22,7 @@ from ..git.worktrees import has_worktree
 from .decision_record_files import acceptance_state, needs_human_ids, record_of, records_of
 from .journal_files import journal_events
 from .run_marks import (
-    backlog_digest, current_stage_files, gate_passed_since, OWNED_CHANGED, pass_marks, STORY_DIGEST, verdict_in)
+    backlog_digest, current_stage_files, gate_passed_since, OWNED_CHANGED, pass_marks, STORY_DIGEST, judged_of, verdict_in)
 from .story_layout import story_digest
 from ....application.shared.story_facts import StoryFacts
 
@@ -67,7 +67,7 @@ class StoryFactsFiles(StoryFacts):
     @staticmethod
     def hand_over(text: str) -> HandOverFacts:
         asks = needs_human_ids(text)
-        return HandOverFacts(HandOverText(text), VerdictWord(verdict_in(text)),
+        return HandOverFacts(HandOverText(text), judged_of(verdict_in(text)),
                              tuple(RecordId(i) for i in asks) if asks is not None else None)
 
     def records(self, story: Story) -> typing.Sequence[DecisionRecord]:

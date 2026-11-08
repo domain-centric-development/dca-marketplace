@@ -14,7 +14,6 @@ from ...domain.model.stage_story import (
 from ...domain.model.story_state import Detail
 from ...domain.model.verdict import CheckName, Finding, FindingState, Findings, Said
 from ...domain.gateway.stage_evidence import StageEvidence
-from ...domain.model.story_state import VerdictWord
 from ...domain.service.break_checks import (
     BreakChecks, BreakOutcome, BreakResult, missing_break, NOTHING_WRITTEN, reproof_uncompiled, RuleProof)
 from ...domain.service.design_checks import DesignChecks
@@ -295,7 +294,7 @@ def adopt(result: Verdict, run: Run) -> None:
         mapping = dict(mapping, **rules)
     test_state(result, runs, run.profile, mapping, "green", located, run.story_id, guard=True,
                red_proof=(run.story, run.evidence))
-    result.take((VerdictWord(runs.judge_verdict(run.story_id)).adopt_finding(),))
+    result.take((runs.judge_verdict(run.story_id).adopt_finding(),))
     everything = str(run.profile.get("adopt.breakProof", "")).strip().lower() == "all"
     by_selector = {sel: key for key, sels in mapping.items() for sel in sels}
     written = runs.characterization(run.story_id, by_selector)

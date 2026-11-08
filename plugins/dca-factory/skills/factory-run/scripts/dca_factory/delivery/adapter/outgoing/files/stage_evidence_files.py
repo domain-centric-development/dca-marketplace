@@ -48,7 +48,7 @@ from .delivery_files import (
     proposal_words, REVIEW_RANKS)
 from .decision_record_files import NOTHING
 from .kept_files import bare_path, row_cells
-from .run_marks import current_stage_files, STORY_DIGEST, verdict_in
+from .run_marks import current_stage_files, STORY_DIGEST, judged_of, verdict_in
 from .snapshots import NOT_OBSERVED
 from .story_layout import depends_on, journeys_hold, story_digest
 from ..claims.remote_claims import claim_config_here
@@ -680,7 +680,7 @@ class StageEvidenceFiles:
         planned = os.path.join(evidence_dir(runs, story_id), STORY_DIGEST)
         digest = PlannedDigest.MISSING if not os.path.isfile(planned) else \
             PlannedDigest.SAME if read_text(planned).strip() == story_digest(self.place_of(story.id).value) else PlannedDigest.CHANGED
-        return StoryPass(gaps, Detail(verdict_in(texts["judge"]) or "" if "judge" in texts else ""), digest)
+        return StoryPass(gaps, judged_of(verdict_in(texts["judge"]) if "judge" in texts else ""), digest)
 
     def outcome(self, story: Story) -> OutcomeFacts:
         cwd = self._cwd

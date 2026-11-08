@@ -31,6 +31,14 @@ class Judged(enum.Enum):
     MISSING = "missing"                 # no `verdict:` line: the judge stage is not finished
     UNKNOWN = "unknown"                 # a word that is none of the three
 
+    def adopt_finding(self) -> Finding:
+        """A fresh judge confirms that each mapped test asserts its scenario before the story counts as adopted."""
+        if self is not Judged.PASS:
+            return CheckName("adopt-judged").fail(Said("judge.md carries no `verdict: pass` — a fresh judge confirms "
+                                                       "that each mapped test asserts its scenario before the story "
+                                                       "counts as adopted"))
+        return CheckName("adopt-judged").ok(Said("the judge confirmed that the tests prove the scenarios"))
+
 
 class Refusal(enum.Enum):
     """What the integrate gate refused the story for on the main line."""
@@ -122,31 +130,12 @@ class HandOverText(Value):
     value: str
 
 
-class VerdictWord(Value):
-    """The judge's `verdict:` — `pass`, `changes-requested`, `story-conflict` — or "" where it wrote none."""
-
-    value: str
-
-    def adopt_finding(self) -> Finding:
-        """A fresh judge confirms that each mapped test asserts its scenario before the story counts as adopted."""
-        if self.value != "pass":
-            return CheckName("adopt-judged").fail(Said("judge.md carries no `verdict: pass` — a fresh judge confirms that each mapped "
-                                          "test asserts its scenario before the story counts as adopted"))
-        return CheckName("adopt-judged").ok(Said("the judge confirmed that the tests prove the scenarios"))
-
-    def judged(self) -> Judged:
-        """What the verdict means for the run."""
-        if not self.value:
-            return Judged.MISSING
-        return next((judged for judged in Judged if judged.value == self.value), Judged.UNKNOWN)
-
-
 class HandOverFacts(Value):
     """A current stage file: its text, its `verdict:`, and the records its `## needs-human` names (None without
     one)."""
 
     text: HandOverText
-    verdict: VerdictWord
+    verdict: Judged
     asks: typing.Optional[typing.Tuple[RecordId, ...]]
 
 
