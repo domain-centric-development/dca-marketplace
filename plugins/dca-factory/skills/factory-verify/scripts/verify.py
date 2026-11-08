@@ -538,6 +538,11 @@ done
 exit $code
 """
 
+#: The file contract this checkout's gate implements — a profile written for it declares the same number.
+GATE_CONTRACT = int(re.search(r"^CONTRACT = (\d+)", open(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "..", "factory-run", "scripts", "dca_factory", "contract.py"),
+    encoding="utf-8").read(), re.M).group(1))
+
 PROFILE = """compile: true
 test: sh runner.sh src/test/java
 test.pages: sh runner.sh src/test-pages/java
@@ -3763,8 +3768,11 @@ def verify_setup(runner, verbose=False):
             lines = active_lines(profile_of(root)) or []
             if python is None:
                 python = next((l.split()[1] for l in lines if l.startswith("test:") and "pytest" in l), None)
-            wanted = ["contract: " + re.search(r"^contract: (\d+)", open(os.path.join(
-                source, "factory-run", "templates", "factory.profile.yaml.tmpl"), encoding="utf-8").read(), re.M).group(1)]
+            template = open(os.path.join(source, "factory-run", "templates", "factory.profile.yaml.tmpl"),
+                            encoding="utf-8").read()
+            wanted = ["contract: " + re.search(r"^contract: (\d+)", template, re.M).group(1)]
+            # the template's own policy lines, as it writes them into every new profile
+            wanted += re.findall(r"^release: \S+$", template, re.M)
             wanted += [l.replace("{py}", python or "python3") for l in PRESET_GOLDEN[name]]
             check(f"presets: the {name} fixture gets the profile the installer wrote before the presets",
                   code == 0 and lines == wanted, f"exit {code}; got {lines}; want {wanted}")
@@ -5266,6 +5274,11 @@ def run_groups(args):
         (Case("plan: a story without status is skipped, not refused", "plan", 0,
               must_skip=("approved",)),
          dict(story=STORY.replace("status: approved\n", ""))),
+        (Case("plan: with release: required a story without status is refused before any stage runs", "plan", 1,
+              must_fail=("approved",), text=("release: required",)),
+         dict(story=STORY.replace("status: approved\n", ""), profile=PROFILE + "release: required\n")),
+        (Case("plan: with release: required an approved story passes", "plan", 0, must_pass=("approved",)),
+         dict(profile=PROFILE + "release: required\n")),
         (Case("plan: a context that is not on the map is refused", "plan", 1,
               must_fail=("context-map",)),
          dict(context_map="# Context map\n\n| Context |\n|---|\n| Something else |\n")),
@@ -5973,7 +5986,7 @@ def run_groups(args):
         (Case("profile: a key nobody reads is a note naming the nearest known key, and the stage passes", "plan", 0,
               must_pass=("contract",),
               text=("gate:note profile", "`requried:` is no key the pipeline reads", "did you mean `required:`?")),
-         dict(profile="contract: 26\nrequried: compile\n" + PROFILE)),
+         dict(profile=f"contract: {GATE_CONTRACT}\nrequried: compile\n" + PROFILE)),
         (Case("profile: the keys of a family and the schema's own keys are not flagged", "plan", 0,
               absent=("no key the pipeline reads",)),
          dict(profile=PROFILE + "test.integration: true\ncovers.test.integration: **\nreview.security: review-x\n"

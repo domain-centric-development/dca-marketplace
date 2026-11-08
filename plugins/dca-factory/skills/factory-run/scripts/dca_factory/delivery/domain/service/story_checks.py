@@ -50,9 +50,11 @@ class StoryChecks(DomainService):
         if state is ReleaseState.DELIVERED:
             on = story.delivery.on.value if story.delivery else ""
             return (APPROVED.ok(Said(f"story is delivered ({on or 'no date'}) — checked, nothing runs")),)
+        written = story.content.written_status.value
+        said = f"status is {written!r}" if written else "no `status:` — the profile's `release: required` reads it as a draft"
         return (APPROVED.fail(Said(
-            f"{where}: status is {story.content.written_status.value!r} — a human releases the story "
-            f"(`status: approved`) before code is written. The most expensive mistake is well-built wrong code.")),)
+            f"{where}: {said} — a human releases the story (`status: approved`) before code is written. The most "
+            f"expensive mistake is well-built wrong code.")),)
 
     @staticmethod
     def happy_path(story: Story, contract: ContractNumber, evidence: StageEvidence) -> Findings:

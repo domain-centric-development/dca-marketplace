@@ -134,10 +134,11 @@ def evidence(root, runs):
     return StageEvidenceFiles(root, runs, profiles.place("epics"), {})
 
 
-def gate_story(story_id, path="", front=None, body="", criteria=()):
+def gate_story(story_id, path="", front=None, body="", criteria=(), releasing=None):
     """The story under a gate, read off its front matter and its body (no criteria)."""
     front = front or {}
     on = delivered_on(front)
     delivery = Delivery(DeliveredOn(on), deliverer_of(front)) if on or front.get("delivered_by") else None
     return Story.restore(StoryId(story_id), EpicId(str(front.get("epic") or "")), status_of(front.get("status")),
-                         delivery=delivery, named_kind=named_kind(front), content=story_content(front, body, criteria))
+                         delivery=delivery, named_kind=named_kind(front), content=story_content(front, body, criteria),
+                         **({"releasing": releasing} if releasing is not None else {}))

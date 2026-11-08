@@ -84,9 +84,20 @@ PLACES: typing.Dict[str, str] = {}
 PLACES_REL: typing.Dict[str, str] = {}
 
 
+#: What the profile says about releasing, read with the places: `release: required` — or nothing.
+RELEASE: typing.Dict[str, str] = {}
+
+
+def release_required() -> bool:
+    """The profile's `release: required`: only a story a person released is delivered — a draft, or one without
+    `status:`, never. Without the line a story without `status:` is not held back, as before the key existed."""
+    return RELEASE.get("release", "") == "required"
+
+
 def set_places(profile: typing.Mapping[str, typing.Any], **given: typing.Any) -> None:
     PLACES.clear()
     PLACES_REL.clear()
+    RELEASE["release"] = str(profile.get("release") or "").strip().lower()
     home = factory_home() if in_worktree() else None
     for key in DEFAULTS:
         relative = str(given.get(key) or "").strip().replace("\\", "/") or location(profile, key)
@@ -231,6 +242,8 @@ PROFILE_KEYS = frozenset((
     "filterFlag", "filterFormat", "filterJoin", "testReport", "testEvidence",
     # what the project has, and what must hold
     "required", "checks.backlog", "browser", "screenshots", "integration", "http.stub", "adopt.breakProof", "acceptance", "run",
+    # whether only a released story is delivered — a draft, or a story without `status:`, never (WP-192)
+    "release",
     # where things are (DEFAULTS), the generated map and the glossary; `backlog` is the older layout's, named by
     # the layout hint
     *DEFAULTS, "contextMap", "glossary", "backlog",

@@ -18,7 +18,7 @@ from dca_factory.delivery.domain.model.moment import Moment
 from dca_factory.delivery.domain.model.person import Person
 from dca_factory.delivery.domain.model.stage import StageName
 from dca_factory.delivery.domain.model.story import (
-    PLAN_ADOPT, AlreadyDelivered, DeliveredBy, GatePass, StoryAdoptedForProof, Assumption, CitedCorrection, NothingToDeliver, NotReleased, PublicationTakenBack,
+    PLAN_ADOPT, AlreadyDelivered, Releasing, DeliveredBy, GatePass, StoryAdoptedForProof, Assumption, CitedCorrection, NothingToDeliver, NotReleased, PublicationTakenBack,
     StoryAdoptedOnPlan, StoryDeliveredByGate, StoryId, StoryReleased, StoryReopened, StoryStatus)
 from dca_factory.delivery.domain.model.story_words import Detail
 
@@ -121,6 +121,22 @@ class Transitions(unittest.TestCase):
         self.assertEqual(cells(event), ["into=S-1-holds", "scenarios=a,b"])
         self.assertEqual(cells(StoryAdoptedForProof(StoryId("S-1"), DeliveredBy.hand(Person("jane")), AT)),
                          ["claimed_by=hand:jane"])
+
+    def test_where_a_release_is_required_a_draft_or_a_story_without_status_is_never_delivered(self):
+        for front in ({"status": "draft"}, {}):
+            with self.assertRaises(NotReleased, msg=front):
+                gate_story("S-1", front=front, releasing=Releasing.REQUIRED).deliver_by_gate(AT)
+            with self.assertRaises(NotReleased, msg=front):
+                gate_story("S-1", front=front, releasing=Releasing.REQUIRED).deliver_by_hand(Person("jane"), AT)
+        unmarked = gate_story("S-1", front={}, releasing=Releasing.REQUIRED)
+        unmarked.release(Person("jane"), Detail("R1"), AT)
+        self.assertIs(unmarked.status, StoryStatus.APPROVED)
+        unmarked.deliver_by_gate(AT)
+        self.assertIs(unmarked.status, StoryStatus.DELIVERED)
+
+    def test_without_the_profile_line_a_story_without_status_and_a_hand_delivered_draft_go_through_as_before(self):
+        gate_story("S-1", front={}).deliver_by_gate(AT)
+        gate_story("S-1", front={"status": "draft"}).deliver_by_hand(Person("jane"), AT)
 
     def test_an_answered_record_is_applied_once(self):
         applied = record(state=DecisionState.ANSWERED, written="a")

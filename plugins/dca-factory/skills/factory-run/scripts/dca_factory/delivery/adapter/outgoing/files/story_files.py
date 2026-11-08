@@ -11,7 +11,7 @@ from .plan_adoption_files import split_off
 from .story_layout import STORY_FILE
 from .story_layout import (
     deliverer_of, named_kind, delivered_by, delivered_on, epic_folder, find_story, story_files, story_folder, story_id_of, story_ids)
-from .....sharedkernel.adapter.outgoing.profile.profile_files import place, shown
+from .....sharedkernel.adapter.outgoing.profile.profile_files import place, release_required, shown
 from ....domain.model.stage_story import Place
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError, MarkdownError, read_front_matter, read_text
 from .....sharedkernel.adapter.outgoing.markdown.sections import section_of
@@ -20,7 +20,7 @@ from ....application.shared.requests import ID_WORD
 from ....application.shared.story_repository import StoryNotFound
 from ....domain.model.epic import EpicId
 from ....domain.model.story import (
-    Assumption, DeliveredOn, Delivery, Story, StoryId, StoryStatus)
+    Assumption, DeliveredOn, Delivery, Releasing, Story, StoryId, StoryStatus)
 from .criteria_files import criteria_of
 from .epic_files import epic_dir
 from .stage_evidence_files import story_content
@@ -188,4 +188,5 @@ def story_of(path: str, front: typing.Mapping[str, typing.Any], body: str,
             said = ()
     return Story.restore(StoryId(story_id_of(path, front)), EpicId(os.path.basename(epic_folder(path))),
                  status_of(front.get("status")), assumptions, delivery, named_kind(front),
-                 content=story_content(front, body, said))
+                 content=story_content(front, body, said),
+                 releasing=Releasing.REQUIRED if release_required() else Releasing.OPTIONAL)

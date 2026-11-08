@@ -33,6 +33,14 @@ class StoryStatus(enum.Enum):
     OTHER = ""
 
 
+class Releasing(enum.Enum):
+    """What the project asks before a story is delivered: a person's release (`release: required` in its profile),
+    or nothing more than that a story is not a draft — a story without `status:` not held back."""
+
+    REQUIRED = "required"
+    OPTIONAL = "optional"
+
+
 class ReleaseState(enum.Enum):
     """Whether a person released the story to be built, as its `status:` says it."""
 
@@ -296,8 +304,11 @@ class Story(AggregateRoot[StoryId]):
 
     def __init__(self, story_id: StoryId, epic: EpicId, status: StoryStatus,
                  assumptions: typing.Sequence[Assumption] = (), delivery: typing.Optional[Delivery] = None,
-                 named_kind: NamedKind = NamedKind.NONE, *, content: StoryContent) -> None:
+                 named_kind: NamedKind = NamedKind.NONE, *, content: StoryContent,
+                 releasing: Releasing = Releasing.OPTIONAL) -> None:
         super().__init__()
+        #: whether the project delivers only what a person released: a draft, or a story without `status:`, never
+        self._release_required = releasing is Releasing.REQUIRED
         self._content = content
         #: whether the story carries a `status:` line — a project may not use the field; any transition writes one
         self._marked = bool(content.written_status.value)
@@ -316,9 +327,10 @@ class Story(AggregateRoot[StoryId]):
     @classmethod
     def restore(cls, story_id: StoryId, epic: EpicId, status: StoryStatus,
                 assumptions: typing.Sequence[Assumption] = (), delivery: typing.Optional[Delivery] = None,
-                named_kind: NamedKind = NamedKind.NONE, *, content: StoryContent) -> Story:
-        """The story as it was kept — the one way a repository builds it."""
-        return cls(story_id, epic, status, assumptions, delivery, named_kind, content=content)
+                named_kind: NamedKind = NamedKind.NONE, *, content: StoryContent,
+                releasing: Releasing = Releasing.OPTIONAL) -> Story:
+        """The story as it was kept — the one way a repository builds it; <releasing> the project's rule."""
+        return cls(story_id, epic, status, assumptions, delivery, named_kind, content=content, releasing=releasing)
 
     @property
     def id(self) -> StoryId:
@@ -348,7 +360,8 @@ class Story(AggregateRoot[StoryId]):
         """Whether a person released the story: no `status:` is unmarked, `approved` released, `adopted` and
         `delivered` are what they say, any other word is not released."""
         if not self._marked:
-            return ReleaseState.UNMARKED
+            # no `status:` at all: a draft where the project requires a release, else not held back
+            return ReleaseState.UNRELEASED if self._release_required else ReleaseState.UNMARKED
         return {StoryStatus.APPROVED: ReleaseState.RELEASED, StoryStatus.ADOPTED: ReleaseState.ADOPTED,
                 StoryStatus.DELIVERED: ReleaseState.DELIVERED}.get(self._status, ReleaseState.UNRELEASED)
 
@@ -384,7 +397,7 @@ class Story(AggregateRoot[StoryId]):
     def release(self, by: Person, request: Detail, at: Moment) -> None:
         """A person's go, through the request they made: the draft becomes approved, the release kept as an answered
         assumption naming who, when and the request."""
-        if self._status is not StoryStatus.DRAFT:
+        if self._status is not StoryStatus.DRAFT and self._marked:
             raise NotADraft(self._id, self._status)
         self._status = StoryStatus.APPROVED
         self._marked = True
@@ -484,6 +497,8 @@ class Story(AggregateRoot[StoryId]):
             raise AlreadyDelivered(self._id, self._delivery.by if self._delivery else BY_NOBODY_KNOWN)
         if self._status is StoryStatus.SUPERSEDED:
             raise NothingToDeliver(self._id)
+        if self._release_required and self.release_state() is ReleaseState.UNRELEASED:
+            raise NotReleased(self._id, self._status)
         self._status = StoryStatus.DELIVERED
         self._marked = True
         self._delivery = Delivery(DeliveredOn(at.value), DeliveredBy.hand(by))

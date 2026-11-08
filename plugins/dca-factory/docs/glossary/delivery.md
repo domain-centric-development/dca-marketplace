@@ -87,7 +87,8 @@ a status past them.
   the gate; a draft or an unknown status is refused (`NotReleased`), a superseded one too (`NothingToDeliver`)
   (`StoryDeliveredByGate`);
 - deliver by hand (`deliver_by_hand`) — a story a person built, delivered and claimed by them
-  (`StoryDeliveredByHand`);
+  (`StoryDeliveredByHand`); where the project requires a release (`Releasing`, the profile's `release: required`), a
+  draft — or a story without `status:`, which then counts as one — is refused, by hand as by the gate;
 - adopt on plan (`adopt_on_plan`) — the plan found every scenario holding: adopted, the plan's finding its answered
   line (`StoryAdoptedOnPlan`);
 - split off (`split_off`) — the plan found some scenarios holding: they move into an adopted story `<id>-holds`,

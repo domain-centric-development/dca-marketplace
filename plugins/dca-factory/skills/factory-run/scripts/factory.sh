@@ -422,6 +422,11 @@ update_project() {                          # update_project <explicit skill fol
     echo "factory: the stack profile declares contract $declared — raise it to 'contract: $after_contract' once" >&2
     echo "factory:   the profile uses what that contract describes; the gate reads it as older until then." >&2
   fi
+  # without `release:` a story without `status:` is still delivered, and a draft by hand — said, never written
+  if [ -z "$(cli --get release 2>/dev/null)" ]; then
+    echo "factory: the stack profile has no 'release:' — add 'release: required' to deliver only what a person" >&2
+    echo "factory:   released (a draft, or a story without status:, never — by the gate or by hand)." >&2
+  fi
   # an older layout (`project/`, `project/backlog/`, …) is not read by the new gate; the move is said here as well
   cli --schedule 2>/dev/null | sed -n 's/^layout: /factory: /p' >&2
   echo "factory: review and commit the changed files — the update commits nothing. 'factory.sh setup --check'"

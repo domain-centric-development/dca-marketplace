@@ -143,6 +143,9 @@
 # contextMap   the context map generated from the code, "as built" (found by convention when absent);
 #              a difference to `domain` is a finding, not a duplicate
 # glossary     file name of a bounded context's glossary (default: glossary.md anywhere)
+# release      `required`: only a story a person released is delivered — a draft, or a story without
+#              `status:`, never, neither by the gate nor by hand. Without the line a story without
+#              `status:` is not held back, as before the key existed. /factory-setup writes `required`
 # acceptance   `none` (default), `pages` or `all`: which stories wait for a human's look before they
 #              are delivered. `pages` holds a story with a criterion the end-user command tests in a
 #              project with a browser. The document gate then writes an acceptance record instead of
@@ -177,8 +180,9 @@
 # Which gate file contract this profile is written for. The gate refuses a run when the number is
 # higher than the gate it is asked to run against — the project would be relying on keys that copy
 # of the script does not know, and a key ignored in silence is a check that has quietly gone.
-contract: 26
+contract: 27
 
+release: required
 compile: {{COMPILE_COMMAND}}
 test: {{TEST_COMMAND}}
 e2eTest: {{E2E_TEST_COMMAND}}
