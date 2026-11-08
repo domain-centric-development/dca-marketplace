@@ -4,7 +4,7 @@ release it, which id is free."""
 import unittest
 
 import support  # noqa: F401 — puts the package on the path
-from dca_factory.delivery.domain.model.claim import Claim, ClaimedFor, ClaimTitle, Fate, IdPrefix, Meeting, Worker
+from dca_factory.delivery.domain.model.claim import Claim, ClaimedFor, ClaimTitle, ClaimTrace, Fate, IdPrefix, Meeting, Worker
 from dca_factory.delivery.domain.model.epic import EpicId
 from dca_factory.delivery.domain.model.stage_story import Presence
 from dca_factory.delivery.domain.model.story import StoryId, StoryStatus
@@ -23,11 +23,11 @@ class Claims(unittest.TestCase):
 
     def test_delivered_on_the_main_line_releases_missing_without_a_trace_orphans(self):
         absent, present = Presence.ABSENT, Presence.PRESENT
-        self.assertIs(Fate.of(StoryStatus.DELIVERED, absent, absent), Fate.RELEASED)
-        self.assertIs(Fate.of(None, absent, absent), Fate.ORPHAN)
-        self.assertIs(Fate.of(None, present, absent), Fate.HOLDS)
-        self.assertIs(Fate.of(None, absent, present), Fate.HOLDS)
-        self.assertIs(Fate.of(StoryStatus.APPROVED, absent, absent), Fate.HOLDS)
+        self.assertIs(ClaimTrace(StoryStatus.DELIVERED, absent, absent).fate(), Fate.RELEASED)
+        self.assertIs(ClaimTrace(None, absent, absent).fate(), Fate.ORPHAN)
+        self.assertIs(ClaimTrace(None, present, absent).fate(), Fate.HOLDS)
+        self.assertIs(ClaimTrace(None, absent, present).fate(), Fate.HOLDS)
+        self.assertIs(ClaimTrace(StoryStatus.APPROVED, absent, absent).fate(), Fate.HOLDS)
 
     def test_only_an_own_claim_is_released_without_force(self):
         self.assertIs(Claim(YOU, STORY).released_by(ME, Presence.ABSENT), Presence.ABSENT)

@@ -6,7 +6,7 @@ from __future__ import annotations
 import typing
 
 from ....building_blocks import Value
-from .stage_story import CommandKey, Count, Place, Presence
+from .stage_story import CommandKey, Count, Place, Presence, Requirement
 from .story_state import Detail
 from .verdict import CheckName, Finding, Findings, Said
 
@@ -185,19 +185,20 @@ def out_of_scope(check: CheckName, required: typing.Tuple[CommandKey, ...]) -> F
         if required else "")))
 
 
-def test_out_of_scope(key: CommandKey, required: Presence) -> Finding:
+def test_out_of_scope(key: CommandKey, requirement: Requirement) -> Finding:
     return CheckName(key.value).skip(Said("not run in this scope" + (
-        " — it is required, so a later scope (CI) has to run it" if required is Presence.PRESENT else "")))
+        " — it is required, so a later scope (CI) has to run it" if requirement is Requirement.REQUIRED else "")))
 
 
 def missing_test(key: CommandKey) -> Finding:
     return TEST.fail(Said(f"no `{key.value}:` command in the stack profile — and `{key.value}` is required"))
 
 
-def missing(check: CheckName, key: CommandKey, must: Presence) -> Finding:
+def missing(check: CheckName, key: CommandKey, requirement: Requirement) -> Finding:
+    required = requirement is Requirement.REQUIRED
     said = Said(f"no `{key.value}:` command in the stack profile"
-                + (f" — and `{check.value}` is required" if must is Presence.PRESENT else ""))
-    return check.fail(said) if must is Presence.PRESENT else check.skip(said)
+                + (f" — and `{check.value}` is required" if required else ""))
+    return check.fail(said) if required else check.skip(said)
 
 
 def index_changed(before: Detail, after: Detail) -> Finding:

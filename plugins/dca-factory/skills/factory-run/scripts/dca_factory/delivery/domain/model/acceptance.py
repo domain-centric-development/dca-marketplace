@@ -16,6 +16,18 @@ from ..model.verdict import CheckName, Findings, Said
 ACCEPTANCE = CheckName("acceptance")
 
 
+class Viewing(Value):
+    """What a person could look at in the story: whether the project runs a browser, and whether one of its criteria
+    is shown by a test the end-user command runs."""
+
+    browser: Presence
+    end_user_test: Presence
+
+    def shows_a_page(self) -> bool:
+        """Something to look at in a browser."""
+        return self.browser is Presence.PRESENT and self.end_user_test is Presence.PRESENT
+
+
 class AcceptanceMode(enum.Enum):
     """Which stories wait for a person's look before they count as delivered: none, those with something to look
     at in a browser, all."""
@@ -24,15 +36,12 @@ class AcceptanceMode(enum.Enum):
     PAGES = "pages"
     ALL = "all"
 
-    def asks(self, browser: Presence, end_user_test: Presence) -> Presence:
-        """Whether this story waits for a person before it is delivered. `pages`: it has a criterion whose test the
-        end-user command runs, in a project with a browser — something to look at."""
+    def asks(self, viewing: Viewing) -> bool:
+        """Whether this story waits for a person before it is delivered. `pages`: it shows a page — something to look
+        at."""
         if self is AcceptanceMode.NONE:
-            return Presence.ABSENT
-        if self is AcceptanceMode.ALL:
-            return Presence.PRESENT
-        return Presence.PRESENT if browser is Presence.PRESENT and end_user_test is Presence.PRESENT \
-            else Presence.ABSENT
+            return False
+        return self is AcceptanceMode.ALL or viewing.shows_a_page()
 
 
 class AcceptanceStep(Value):

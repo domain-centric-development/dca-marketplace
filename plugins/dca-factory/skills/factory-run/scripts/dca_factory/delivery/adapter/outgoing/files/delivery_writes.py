@@ -20,7 +20,7 @@ from .....spec.api import (
 from ....domain.model.stage_story import Presence
 from ....domain.model.story import Delivery, StoryId
 from ....domain.model.story_state import Detail
-from ....domain.model.acceptance import AcceptanceMode, FlakyFinding
+from ....domain.model.acceptance import AcceptanceMode, FlakyFinding, Viewing
 from ..stack.commands import command_for
 from ..stack.suite_runs import test_files
 from ..claims.remote_claims import PUBLISHED
@@ -100,8 +100,8 @@ def acceptance_applies(cwd: str, runs: str, story_id: str, profile: Front) -> bo
         with contextlib.suppress(GateError):
             located = locate_tests(cwd, read_mapping(runs, story_id)[1])[0]
             end_user = any(command_for(profile, path)[0] == "e2eTest" for path in located.values())
-    return mode.asks(Presence.PRESENT if browser else Presence.ABSENT,
-                                Presence.PRESENT if end_user else Presence.ABSENT) is Presence.PRESENT
+    return mode.asks(Viewing(Presence.PRESENT if browser else Presence.ABSENT,
+                             Presence.PRESENT if end_user else Presence.ABSENT))
 
 
 def record_flaky_findings(result: typing.Any, story_path: str, story_id: str, front: Front, runs: str) -> None:

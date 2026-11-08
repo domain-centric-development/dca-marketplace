@@ -26,7 +26,7 @@ from ....domain.model.story import Story
 from ....domain.model.stage_story import (
     AssertionAt, AdoptRow, BriefFacts, ChangedTest, PlanAdoption, Rename, RenamedTest, SymbolName, DocumentFacts, Integration, MainTestLines, MainTests, MappedTest, OutcomeEventPlaces, OutcomeFacts, PassGap,
     PipelineFacts, PlannedDigest, ProposalFacts, ReviewFacts, StoryPass, SpecDelta, SpecTests, StoryCommit, DecidedRecord, KeptTests, PlannedTestChange, RedProof, StageChanges,
-    TestChange, TestEdit, Unobserved, AssertionFact, ByteSize, Clause, ClauseRow, CommandKey, Count,
+    TestChange, TestDiff, TestEdit, Unobserved, AssertionFact, ByteSize, Clause, ClauseRow, CommandKey, Count,
     ElementName, ElementRules, FileChange, InvariantFacts, InvariantRow, PlannedFile, PortName, Presence, Rule,
     ScenarioClauses, Selector, ContextMapFacts, HandOverName, HandOverSize, PlanLevels, DecisionsFacts, HandOverAsk, ContractNumber, EpicFacts, EpicField, EventName, GateRelease, InstructionFile,
     Metric, ModelKey, OwnedFacts, OwnedPart, Place, ProfileKey, ProfileText, RoundsRecord, RowId, RowState,
@@ -533,7 +533,7 @@ class StageEvidenceFiles:
                 # A name the story renamed, read from the tree: the test holds its assertions under the new name.
                 renames = renames_in(cwd, base, "\n".join(was), "\n".join(now), os.path.splitext(rel)[1])
                 held = bool(renames) and assertions_kept("\n".join(was), "\n".join(now), renames)
-            edit = TestEdit.of(*(Presence.PRESENT if fact else Presence.ABSENT for fact in (off, kept, held)))
+            edit = TestDiff(*(Presence.PRESENT if fact else Presence.ABSENT for fact in (off, kept, held))).edit()
             if edit is TestEdit.SWITCHED_OFF:
                 changed.append(ChangedTest(Place(rel), TestChange.SWITCHED_OFF))
             elif edit is TestEdit.ARRANGED and renames:

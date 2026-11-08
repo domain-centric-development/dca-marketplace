@@ -9,6 +9,7 @@ import typing
 
 from ...domain.model.stage import Stage, StageName, StoryKind, Trait
 from ...domain.model.story import Story
+from ...domain.model.stage_story import Requirement
 from ...domain.model.stage_story import (
     CommandKey, ContractNumber, Expectation, MappedTest, Place, Presence, ScenarioKey, Selector, SELECTOR_FORM)
 from ...domain.model.story_state import Detail
@@ -209,9 +210,17 @@ def reproof(result: Verdict, runs: StageRuns, profile: typing.Mapping[str, typin
             runs.reproved(story, selector)
 
 
-def judge_suite(result: Verdict, suite: typing.Any, required: bool, strict: bool = False) -> None:
+def requirement_of(required: typing.Collection[str], keys: typing.Iterable[str]) -> Requirement:
+    """How the policy `required:` ranks the check run under <keys>: no policy declared, one of them required, or
+    optional."""
+    if not required:
+        return Requirement.UNDECLARED
+    return Requirement.REQUIRED if any(key in required for key in keys) else Requirement.OPTIONAL
+
+
+def judge_suite(result: Verdict, suite: typing.Any, requirement: Requirement) -> None:
     """A suite's run judged (`SuiteJudged.of`); a test noted flaky is carried in the verdict."""
-    judged = SuiteJudged.of(suite, presence(required), presence(strict))
+    judged = SuiteJudged.of(suite, requirement)
     result.take(judged.findings)
     result.flaky += [test.value for test in judged.flaky]
 
@@ -239,9 +248,9 @@ def required_suites(result: Verdict, runs: StageRuns, profile: typing.Mapping[st
         if profile[key] in already:
             _key, code, output, ran = already[profile[key]]
             judge_suite(result, runs.suite(key, profile[key], story, mapping or {}, (code, output, ran),
-                                           reused=" (the run the mapped tests were read from)"), True, True)
+                                           reused=" (the run the mapped tests were read from)"), Requirement.REQUIRED)
         else:
-            judge_suite(result, runs.suite(key, profile[key], story, mapping or {}), True, True)
+            judge_suite(result, runs.suite(key, profile[key], story, mapping or {}), Requirement.REQUIRED)
         suite_named(result, before)
 
 
@@ -259,7 +268,7 @@ def task_suites(result: Verdict, runs: StageRuns, profile: typing.Mapping[str, t
             continue
         seen.add(profile[key])
         before = len(result.entries)
-        judge_suite(result, runs.suite(key, profile[key], story, mapping or {}), True, True)
+        judge_suite(result, runs.suite(key, profile[key], story, mapping or {}), Requirement.REQUIRED)
         suite_named(result, before)
 
 

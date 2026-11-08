@@ -73,6 +73,8 @@ class Outcome(Value):
 
 
 class WorkflowRule(AggregateRoot[RuleId]):
+    # A root without a transition, like the workflow: a rule file is changed by a person, the factory reads it whole
+    # and holds its outcomes to the workflow's targets — one rule, one unit, through its repository.
     """One rule: its id, the code that binds it, when it applies, why, its outcomes — and the stages, kinds and
     report names that narrow it where it is narrower than the code that binds it. A retired rule keeps its id and
     says why, with no outcome."""

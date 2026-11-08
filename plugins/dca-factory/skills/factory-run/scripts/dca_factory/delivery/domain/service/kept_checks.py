@@ -3,6 +3,7 @@ the story still expect what they did, and every test is the version the test sta
 
 from __future__ import annotations
 
+import enum
 import typing
 
 from ....building_blocks import DomainService
@@ -22,11 +23,19 @@ RED_PROOF = CheckName("red-proof")
 SUFFIX = {TestChange.CHANGED: "", TestChange.REMOVED: " (removed)", TestChange.SWITCHED_OFF: " (switched off)"}
 
 
-def stale(moved: typing.Tuple[Detail, ...], decided: Presence, reproof: Presence) -> typing.Tuple[Detail, ...]:
-    """The tests whose red proof no longer holds: changed since the test stage saw them fail — none where an
-    answered decision of the test stage changed what they expect, or where a tidy re-proves them on the tree the
-    test stage left."""
-    return () if decided is Presence.PRESENT or reproof is Presence.PRESENT else moved
+class ProofExcuse(enum.Enum):
+    """Why tests changed since the test stage saw them fail still stand on their red proof: an answered decision of
+    the test stage changed what they expect, a tidy re-proves them on the tree the test stage left — or nothing."""
+
+    NONE = "none"
+    DECIDED = "decided"
+    REPROVEN = "reproven"
+
+
+def stale(moved: typing.Tuple[Detail, ...], excuse: ProofExcuse) -> typing.Tuple[Detail, ...]:
+    """The tests whose red proof no longer holds: changed since the test stage saw them fail, and nothing excuses
+    them."""
+    return moved if excuse is ProofExcuse.NONE else ()
 
 
 class KeptChecks(DomainService):
@@ -168,7 +177,7 @@ class KeptChecks(DomainService):
             return (RED_PROOF.ok(Said(f"{entries - unbound} test(s) are the version that was seen failing")),)
         moved = ", ".join(m.value for m in proof.moved)
         decided = evidence.decided_tests(story.id)
-        if not stale(proof.moved, Presence.PRESENT if decided else Presence.ABSENT, proof.reproof):
+        if not stale(proof.moved, ProofExcuse.DECIDED if decided else ProofExcuse.NONE):
             return (RED_PROOF.ok(Said(f"{moved} changed after it was seen failing, on decision "
                                       f"{', '.join(r.record.value for r in decided)}")),)
         return (RED_PROOF.fail(Said(

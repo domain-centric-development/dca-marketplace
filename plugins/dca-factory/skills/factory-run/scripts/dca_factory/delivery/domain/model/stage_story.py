@@ -248,12 +248,20 @@ class Selector(Value):
 SUITE = CheckName("suite")
 
 
-def red(check: CheckName, said: Said, must: Presence, strict: Presence) -> Finding:
-    """A red check fails the verdict — unless a policy is declared and this check is not in it. Then the policy
-    decides: the red run is reported, and it is not what the commit is judged by."""
-    if strict is Presence.PRESENT and must is Presence.ABSENT:
-        return check.note(Said(said.value + " — optional (not in `required:`), so it does not decide"))
-    return check.fail(said)
+class Requirement(enum.Enum):
+    """How the project's policy ranks a check: no policy declared — every check decides —, required by it, or
+    declared and not named in it — optional."""
+
+    UNDECLARED = "undeclared"
+    REQUIRED = "required"
+    OPTIONAL = "optional"
+
+    def red(self, check: CheckName, said: Said) -> Finding:
+        """A red check fails the verdict — unless it is optional: the red run is reported, and it is not what the
+        commit is judged by."""
+        if self is Requirement.OPTIONAL:
+            return check.note(Said(said.value + " — optional (not in `required:`), so it does not decide"))
+        return check.fail(said)
 
 
 class CommandKey(Value):
@@ -496,15 +504,23 @@ class TestEdit(enum.Enum):
     SWITCHED_OFF = "switched off"
     CHANGED = "changed"
 
-    @classmethod
-    def of(cls, switched_off: Presence, lines_kept: Presence, assertions_kept: Presence) -> TestEdit:
+
+
+class TestDiff(Value):
+    """What a test's diff against the version before the story showed."""
+
+    switched_off: Presence
+    lines_kept: Presence
+    assertions_kept: Presence
+
+    def edit(self) -> TestEdit:
         """An added line that switches the test off outweighs all; every line still there in its order is kept;
         every assertion still there is an arrangement; anything else changes what the test expects."""
-        if switched_off is Presence.PRESENT:
-            return cls.SWITCHED_OFF
-        if lines_kept is Presence.PRESENT:
-            return cls.KEPT
-        return cls.ARRANGED if assertions_kept is Presence.PRESENT else cls.CHANGED
+        if self.switched_off is Presence.PRESENT:
+            return TestEdit.SWITCHED_OFF
+        if self.lines_kept is Presence.PRESENT:
+            return TestEdit.KEPT
+        return TestEdit.ARRANGED if self.assertions_kept is Presence.PRESENT else TestEdit.CHANGED
 
 
 class ChangedTest(Value):
@@ -832,12 +848,11 @@ class CommandRun(Value):
             return check.ok(Said(f"`{self.command.value}` succeeded{self.reused.value}"))
         return check.fail(Said(f"`{self.command.value}` failed:\n{self.output.value}"))
 
-    def verdict(self, check: CheckName, must: Presence, strict: Presence) -> Finding:
-        """A command a change's checks run: green passes; red fails — unless a policy is declared that does not
-        name this check (`red`)."""
+    def verdict(self, check: CheckName, requirement: Requirement) -> Finding:
+        """A command a change's checks run: green passes; red fails — unless the policy ranks it optional."""
         if self.code.value == 0:
             return check.ok(Said(f"`{self.command.value}` succeeded"))
-        return red(check, Said(f"`{self.command.value}` failed:\n{self.output.value}"), must, strict)
+        return requirement.red(check, Said(f"`{self.command.value}` failed:\n{self.output.value}"))
 
 
 class Retried(Value):

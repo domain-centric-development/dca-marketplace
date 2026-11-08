@@ -96,7 +96,7 @@ def deliver_by_hand(cwd: str, runs: str, epics: str, story_id: str, who: typing.
     if result.unproven.keys:
         print(f"deliver-by-hand: {len(result.unproven.keys)} criterion(s) into {shown(result.unproven.where)}, without "
               f"a test line — unproven until `--prove`")
-    print(f"deliver-by-hand: {shown(result.where)} carries `status: delivered`, `delivered: {stamp}`, "
+    print(f"deliver-by-hand: {result.where.value} carries `status: delivered`, `delivered: {stamp}`, "
           f"`delivered_by: hand:{who}` — delivered, claimed. Commit it with the trailer `Story: {story_id}`; "
           f"`factory-cli.py --prove {story_id}` turns the claim into proof.")
     return 0

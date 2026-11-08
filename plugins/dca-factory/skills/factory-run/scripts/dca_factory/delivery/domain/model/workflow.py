@@ -47,7 +47,13 @@ class MissingRole(DomainException):
 
 class Workflow(AggregateRoot[WorkflowName]):
     """The stages in their order: each name once, each hand-over written by one stage, each hand-over a gate weighs
-    written by a stage of it. Where each stage is written, as a person finds it, where the repository says."""
+    written by a stage of it, each role played by one stage. Where each stage is written, as a person finds it, where
+    the repository says.
+
+    An aggregate root without a transition and without events: the stage files are changed by a person, never by
+    the factory, so nothing here changes state — but the invariants above hold across every stage at once, and a
+    workflow is loaded and checked as one unit through its repository. That is the consistency boundary the root
+    marks."""
 
     def __init__(self, name: WorkflowName, stages: typing.Sequence[Stage],
                  written: typing.Optional[typing.Mapping[StageName, Written]] = None,

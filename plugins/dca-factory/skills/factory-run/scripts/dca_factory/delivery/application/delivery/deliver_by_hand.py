@@ -8,6 +8,7 @@ import typing
 from ....building_blocks import DomainEventPublisher, TransactionBoundary, UseCase
 from ...domain.model.moment import Moment
 from ...domain.model.person import Person
+from ...domain.model.stage_story import Place
 from ...domain.model.story import Delivery, StoryId
 from ..shared.story_claims import ClaimHeld, StoryClaims
 from ..shared.story_journal import StoryJournal
@@ -30,7 +31,7 @@ class DeliveredByHand:
 
     delivery: Delivery
     unproven: SpecChange
-    where: str
+    where: Place
 
 
 @dataclasses.dataclass(frozen=True)
@@ -87,4 +88,4 @@ class DeliverByHandUseCase(DeliverByHandInputPort):
             return self._spec.take_unproven(story.id)
 
         unproven = self._transactions.in_transaction(save)
-        return DeliveredByHand(delivery, unproven, self._stories.path_of(story.id))
+        return DeliveredByHand(delivery, unproven, self._stories.place_of(story.id))

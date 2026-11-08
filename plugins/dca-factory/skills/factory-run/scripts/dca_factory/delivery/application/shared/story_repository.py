@@ -6,6 +6,7 @@ import typing
 
 from ....building_blocks import Repository, UseCaseException
 from ...domain.model.epic import EpicId
+from ...domain.model.stage_story import Place
 from ...domain.model.story import Story, StoryId
 
 
@@ -25,8 +26,8 @@ class StoryRepository(Repository[Story, StoryId], typing.Protocol):
         """Every story of the epic, in the order of its folders."""
         ...
 
-    def path_of(self, story_id: StoryId) -> str:
-        """Where the story's file is; StoryNotFound with the reason where no single story has the id."""
+    def place_of(self, story_id: StoryId) -> Place:
+        """Where the story's file is, as a person finds it; StoryNotFound otherwise."""
         ...
 
     def ids(self) -> typing.Sequence[StoryId]:

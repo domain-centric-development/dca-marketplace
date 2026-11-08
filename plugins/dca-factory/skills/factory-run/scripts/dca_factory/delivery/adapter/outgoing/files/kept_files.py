@@ -29,7 +29,7 @@ from .test_files import read_mapping
 from .test_files import locate_tests
 from ....domain.model.stage_story import Presence
 from ....domain.model.story_state import Detail
-from ....domain.service.kept_checks import stale
+from ....domain.service.kept_checks import ProofExcuse, stale
 
 
 #: A cited path usually carries where in the file it was read: `README.md:149`, `Book.cs:28-31`,
@@ -423,8 +423,12 @@ def stale_red_proof(cwd: str, runs: str, story: str, start: typing.Optional[str]
     except GateError:
         return []
     moved = unproven_tests(cwd, locate_tests(cwd, mapping)[0] if mapping else {}, digests)
-    decided = Presence.PRESENT if moved and answered_decisions(cwd, story, "test") else Presence.ABSENT
+    if moved and answered_decisions(cwd, story, "test"):
+        excuse = ProofExcuse.DECIDED
     # A tidy that runs again moved the tests itself: its gate re-proves them on the red tree (WP-151 A).
-    reproof = Presence.PRESENT if start == "tidy" and red_tree(runs, story) and last_ended(
-        runs, story, tuple(s.name for s in all_stages() if s.lists and not s.red)) == "tidy" else Presence.ABSENT
-    return [m.value for m in stale(tuple(Detail(m) for m in moved), decided, reproof)]
+    elif start == "tidy" and red_tree(runs, story) and last_ended(
+            runs, story, tuple(s.name for s in all_stages() if s.lists and not s.red)) == "tidy":
+        excuse = ProofExcuse.REPROVEN
+    else:
+        excuse = ProofExcuse.NONE
+    return [m.value for m in stale(tuple(Detail(m) for m in moved), excuse)]

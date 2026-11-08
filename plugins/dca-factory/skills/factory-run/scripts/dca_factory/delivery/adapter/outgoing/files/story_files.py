@@ -11,7 +11,8 @@ from .plan_adoption_files import split_off
 from .story_layout import STORY_FILE
 from .story_layout import (
     deliverer_of, named_kind, delivered_by, delivered_on, epic_folder, find_story, story_files, story_folder, story_id_of, story_ids)
-from .....sharedkernel.adapter.outgoing.profile.profile_files import place
+from .....sharedkernel.adapter.outgoing.profile.profile_files import place, shown
+from ....domain.model.stage_story import Place
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError, MarkdownError, read_front_matter, read_text
 from .....sharedkernel.adapter.outgoing.markdown.sections import section_of
 from .owned_files import write_story_fields
@@ -87,6 +88,9 @@ class StoryFiles(StoryRepository):
             return str(find_story(self._epics, story_id.value))
         except MarkdownError as error:
             raise StoryNotFound(f"no story {story_id.value} under {place('epics')}/ — {error}") from None
+
+    def place_of(self, story_id: StoryId) -> Place:
+        return Place(shown(self.path_of(story_id)))
 
     def get(self, story_id: StoryId) -> Story:
         return self.read(self.path_of(story_id))

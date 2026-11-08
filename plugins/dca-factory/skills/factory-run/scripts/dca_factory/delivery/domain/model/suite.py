@@ -6,7 +6,7 @@ from __future__ import annotations
 import typing
 
 from ....building_blocks import Value
-from .stage_story import Count, Presence, red, SUITE, SuiteRun
+from .stage_story import Count, Presence, Requirement, SUITE, SuiteRun
 from .story_state import Detail
 from .verdict import CheckName, Finding, Findings, Said  # noqa: F401
 
@@ -21,7 +21,7 @@ class SuiteJudged(Value):
     flaky: typing.Tuple[Detail, ...]
 
     @classmethod
-    def of(cls, suite: SuiteRun, required: Presence, strict: Presence) -> SuiteJudged:
+    def of(cls, suite: SuiteRun, requirement: Requirement) -> SuiteJudged:
         """A test command passes only when its reports show it executed tests and none failed. A red test outside the
         story that is green on its own run is noted flaky and counts as green; red again, the run stays red."""
         found: typing.List[Finding] = []
@@ -38,8 +38,8 @@ class SuiteJudged(Value):
         run, key = suite.run, suite.key.value
         executed, failed = suite.executed.value, suite.failed.value
         if run.code.value != 0 or failed:
-            found.append(red(TEST, Said(f"`{run.command.value}` ({key}) failed — {failed} failing case(s):\n"
-                                        f"{run.output.value}"), required, strict))
+            found.append(requirement.red(TEST, Said(f"`{run.command.value}` ({key}) failed — {failed} failing "
+                                                    f"case(s):\n{run.output.value}")))
         elif executed:
             found.append(TEST.ok(Said(f"`{run.command.value}` ({key}) ran {executed} case(s), none "
                                       f"failed{run.reused.value}")))
@@ -49,8 +49,8 @@ class SuiteJudged(Value):
         else:
             said = Said(f"`{run.command.value}` ({key}) exited 0, but no report written by this run shows an executed "
                         f"test — a runner that matched nothing exits 0 too")
-            found.append(TEST.fail(said) if required is Presence.PRESENT else
-                         TEST.note(said) if strict is Presence.PRESENT else TEST.skip(said))
+            found.append({Requirement.REQUIRED: TEST.fail, Requirement.OPTIONAL: TEST.note,
+                          Requirement.UNDECLARED: TEST.skip}[requirement](said))
         return cls(tuple(found), tuple(r.test for r in suite.flaky))
 
     @staticmethod

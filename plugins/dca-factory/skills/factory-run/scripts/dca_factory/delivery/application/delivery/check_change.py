@@ -16,7 +16,7 @@ from ..shared.change_index import ChangeIndex
 from ..shared.stage_runs import StageRuns
 from .check_stage import Verdict
 from .pipeline_rules import decides
-from .process_checks import judge_suite
+from .process_checks import judge_suite, requirement_of
 
 
 def names(text: typing.Any) -> typing.List[str]:
@@ -54,7 +54,6 @@ class CheckChangeUseCase(CheckChangeInputPort):
     def execute(self, command: CheckChangeCommand) -> Verdict:
         result, profile = Verdict(), self._profile
         required = set(names(profile.get("required")))
-        strict = Presence.PRESENT if required else Presence.ABSENT
         result.take(CheckKeys(tuple(CommandKey(r) for r in sorted(required))).policy_findings())
         tree = None
         installs = self._index.pipeline_paths() if command.staged and not names(command.only) else None
@@ -95,15 +94,15 @@ class CheckChangeUseCase(CheckChangeInputPort):
             if check == "test":
                 self._tests(result, scope, test_keys, test_scope, required)
                 continue
-            must = Presence.PRESENT if check in required else Presence.ABSENT
+            requirement = requirement_of(required, (check,))
             if check not in scope:
-                result.take((change.test_out_of_scope(CommandKey(check), must),))
+                result.take((change.test_out_of_scope(CommandKey(check), requirement),))
                 continue
             line = profile.get(check)
             if not line:
-                result.take((change.missing(CheckName(check), CommandKey(check), must),))
+                result.take((change.missing(CheckName(check), CommandKey(check), requirement),))
                 continue
-            result.take((self._runs.command(line).verdict(CheckName(check), must, strict),))
+            result.take((self._runs.command(line).verdict(CheckName(check), requirement),))
         if tree:
             after = self._index.tree()
             if after != tree:
@@ -119,8 +118,7 @@ class CheckChangeUseCase(CheckChangeInputPort):
         commands: typing.Dict[str, typing.List[str]] = {}
         for key in test_keys:
             if test_scope is not None and key not in test_scope:
-                result.take((change.test_out_of_scope(
-                    CommandKey(key), Presence.PRESENT if key in required else Presence.ABSENT),))
+                result.take((change.test_out_of_scope(CommandKey(key), requirement_of(required, (key,))),))
                 continue
             if self._profile.get(key):
                 commands.setdefault(self._profile[key], []).append(key)
@@ -129,5 +127,4 @@ class CheckChangeUseCase(CheckChangeInputPort):
         if not commands and not required_tests:
             result.take((NO_TEST,))
         for line, keys in commands.items():
-            judge_suite(result, self._runs.suite("/".join(keys), line, None, {}),
-                        any(k in required for k in keys), bool(required))
+            judge_suite(result, self._runs.suite("/".join(keys), line, None, {}), requirement_of(required, keys))

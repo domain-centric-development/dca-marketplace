@@ -65,15 +65,24 @@ class Fate(enum.Enum):
     #: the remote main line has no such story, and nothing here says it is coming: a person releases it
     ORPHAN = "orphan"
 
-    @classmethod
-    def of(cls, on_main: typing.Optional[StoryStatus], published: Presence, branch: Presence) -> Fate:
+
+
+class ClaimTrace(Value):
+    """What a fetch of the remote found of a claimed story: its status on the remote main line (None where the main
+    line has no such story), whether this factory published it, whether a local story branch carries it."""
+
+    on_main: typing.Optional[StoryStatus]
+    published: Presence
+    branch: Presence
+
+    def fate(self) -> Fate:
         """A claim whose story is delivered on the remote main line goes; one whose story the main line does not
         have — and that no published mark or local story branch says is on its way — is an orphan."""
-        if on_main is StoryStatus.DELIVERED:
-            return cls.RELEASED
-        if on_main is None and published is Presence.ABSENT and branch is Presence.ABSENT:
-            return cls.ORPHAN
-        return cls.HOLDS
+        if self.on_main is StoryStatus.DELIVERED:
+            return Fate.RELEASED
+        if self.on_main is None and self.published is Presence.ABSENT and self.branch is Presence.ABSENT:
+            return Fate.ORPHAN
+        return Fate.HOLDS
 
 
 class Claim(Value):
