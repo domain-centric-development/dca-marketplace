@@ -126,13 +126,13 @@ class RuleFiles(WorkflowRuleRepository):
         retired = front.get("retired")
         if str(front.get("part") or "") == RulePart.TOLD.value:
             section, see, order = front.get("section"), front.get("see"), str(front.get("order") or "")
-            return WorkflowRule(
+            return WorkflowRule.restore(
                 rule_id, RulePart.TOLD, RuleText(""), RuleText(""), (), (),
                 [StageName(s) for s in listed(front.get("stages"))], [StoryKind(k) for k in listed(front.get("kinds"))],
                 RuleText(str(retired)) if retired else None, self._written(path), RuleText(told_of(body, rule_id)),
                 RuleText(str(section)) if section else None, Written(str(see)) if see else None,
                 RuleOrder(int(order)) if order.isdigit() else None)
-        return WorkflowRule(
+        return WorkflowRule.restore(
             rule_id, RulePart(str(front.get("part") or "decision")), RuleText(paragraph(body, WHEN)),
             RuleText(paragraph(body, WHY)), outcomes, [CheckName(n) for n in listed(front.get("reports"))],
             [StageName(s) for s in listed(front.get("stages"))], [StoryKind(k) for k in listed(front.get("kinds"))],

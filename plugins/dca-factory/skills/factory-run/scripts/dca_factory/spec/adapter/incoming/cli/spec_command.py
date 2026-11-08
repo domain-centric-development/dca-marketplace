@@ -9,8 +9,23 @@ import os
 import sys
 import typing
 
-from .....infrastructure import spec as wiring
-from ....application.showspec.show_spec import ShowSpecQuery
+from ....application.showspec.show_spec import ShowSpecQuery, ShowSpecUseCase
+
+
+class SpecRoot(typing.Protocol):
+    """What this command line takes from the composition root — given at start (`wire`), never imported."""
+
+    def show_spec(self, cwd: str) -> ShowSpecUseCase: ...
+
+
+#: the composition root, given by `wire` before the command line runs
+wiring: SpecRoot
+
+
+def wire(root: SpecRoot) -> None:
+    """The composition root this command line builds its use cases from."""
+    global wiring
+    wiring = root
 
 Model = typing.Dict[str, typing.Any]
 

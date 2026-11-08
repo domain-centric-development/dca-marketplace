@@ -15,10 +15,52 @@ import signal
 import sys
 import typing
 
-from .....infrastructure import runner as wiring
 from ....application.shared.run_stop import SIGNAL_EXITS, Stopped
 from ....domain.model.stage import Trait
 from ....application.delivery.pipeline_workflow import workflow
+from ....application.requests.work_request import RequestWorked
+from ....application.shared.requests import Request
+
+
+class RunSession(typing.Protocol):
+    """One run as the composition root builds it: what the command line asks of it."""
+
+    #: the exit a signal asked for, taken at the next step; whether the run sleeps between steps now
+    pending: typing.Optional[int]
+    sleeping: bool
+
+    def checkpoint(self) -> None: ...
+    def cli(self, *args: str, quiet: bool = True, merge: bool = False, cwd: typing.Optional[str] = None,
+            env: typing.Optional[typing.Mapping[str, str]] = None) -> typing.Tuple[int, str]: ...
+    def guard_pipeline_start(self) -> int: ...
+    def take_checkout(self) -> int: ...
+    def release(self) -> None: ...
+    def drop_lock(self) -> int: ...
+    def reset_rounds(self, story: str, given_from: str) -> None: ...
+    def run_story(self, story: str, tool: str, start: typing.Optional[str], dry: bool) -> int: ...
+    def work_request(self, request_id: str, tool: str) -> RequestWorked: ...
+    def default_tool(self) -> str: ...
+    def tools_ready(self, tool: str) -> int: ...
+    def run_backlog(self, tool: str, watch: bool, interval: int, dry: bool) -> int: ...
+
+
+class RunRoot(typing.Protocol):
+    """What the runner's command line takes from the composition root — given at start (`wire`), never imported."""
+
+    def run_for(self, options: argparse.Namespace) -> RunSession: ...
+    def request_run_for(self, options: argparse.Namespace, worker: typing.Optional[str]) -> RunSession: ...
+    def settle(self, cwd: str, kind_name: str, fields: typing.Mapping[str, str], words: str, by: str,
+               options: argparse.Namespace) -> typing.Tuple[Request, typing.Optional[RequestWorked]]: ...
+
+
+#: the composition root, given by `wire` before the command line runs
+wiring: RunRoot
+
+
+def wire(root: RunRoot) -> None:
+    """The composition root this command line builds its use cases from."""
+    global wiring
+    wiring = root
 
 
 def err(text: str) -> None:

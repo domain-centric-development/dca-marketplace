@@ -480,7 +480,7 @@ def record_of(name: str, front: Front, body: str, state: str, answer: typing.Map
     """The record in a file named <name>, read off its front matter, its body, its state and its `## Answer`."""
     story = str(front.get("story", "")).strip()
     stage = str(front.get("stage", "")).strip() if state in WAITING_WORDS else resume_stage(front, answer)
-    return DecisionRecord(
+    return DecisionRecord.restore(
         RecordId(str(front.get("id", name)).strip()),
         RecordKind.ACCEPTANCE if is_acceptance(front) else RecordKind.QUESTION,
         Asker.REQUEST if str(front.get("request", "")).strip() else Asker.STAGE,

@@ -184,6 +184,13 @@ class Story(AggregateRoot[StoryId]):
         self._assumptions = list(assumptions)
         self._delivery = delivery
 
+    @classmethod
+    def restore(cls, story_id: StoryId, epic: EpicId, status: StoryStatus,
+                assumptions: typing.Sequence[Assumption] = (), delivery: typing.Optional[Delivery] = None,
+                named_kind: KindWord = KindWord(""), *, content: StoryContent) -> Story:
+        """The story as it was kept — the one way a repository builds it."""
+        return cls(story_id, epic, status, assumptions, delivery, named_kind, content=content)
+
     @property
     def id(self) -> StoryId:
         return self._id

@@ -133,6 +133,6 @@ def story_of(path: str, front: typing.Mapping[str, typing.Any], body: str,
             said = criteria_of(path, body, front)
         except GateError:
             said = ()
-    return Story(StoryId(story_id_of(path, front)), EpicId(os.path.basename(epic_folder(path))),
+    return Story.restore(StoryId(story_id_of(path, front)), EpicId(os.path.basename(epic_folder(path))),
                  status_of(front.get("status")), assumptions, delivery, KindWord(str(front.get("kind") or "")),
                  content=story_content(front, body, said))

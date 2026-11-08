@@ -69,7 +69,7 @@ class StageFiles(WorkflowRepository):
         stages = [stage for _, stage in sorted(read, key=lambda r: r[0])]
         every = os.path.join(os.path.dirname(self._folder), EVERY_STAGE)
         frame = read_text(every).split(FRAME, 1)[-1].strip("\n") if os.path.isfile(every) else ""
-        return Workflow(aggregate_id, stages, {s.name: self._written(s.name) for s in stages},
+        return Workflow.restore(aggregate_id, stages, {s.name: self._written(s.name) for s in stages},
                         StageText(frame) if frame else None)
 
     def save(self, aggregate: Workflow) -> Workflow:

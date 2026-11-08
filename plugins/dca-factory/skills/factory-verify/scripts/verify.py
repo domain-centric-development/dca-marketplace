@@ -8257,7 +8257,7 @@ def run_groups(args):
              "tests = tuple(MappedTest(ScenarioKey(key), Selector(selector), Place(root + '/' + test), None, None)\n"
              "              for key, selector in (('shows-widget', 'com.example.WidgetPageTest#shows'),\n"
              "                                    ('refuses-get', 'com.example.WidgetPageTest#refuses')))\n"
-             "story = Story(StoryId('S-1'), EpicId(''), StoryStatus.OTHER, content=story_content({}, body, ()))\n"
+             "story = Story.restore(StoryId('S-1'), EpicId(''), StoryStatus.OTHER, content=story_content({}, body, ()))\n"
              "found = DesignChecks.clauses(story, ev.gate().reads(ev.declared_contract()), tests, ev)\n"
              "entries = [(f.state.value, f.check.value, f.said.value) for f in found]\n"
              "print(json.dumps({'entries': entries, 'clauses': g.scenario_clauses(body)}))\n")

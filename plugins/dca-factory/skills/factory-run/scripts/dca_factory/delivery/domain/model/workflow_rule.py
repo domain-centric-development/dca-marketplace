@@ -111,6 +111,17 @@ class WorkflowRule(AggregateRoot[RuleId]):
         self._order = order
         self._title = title
 
+    @classmethod
+    def restore(cls, rule_id: RuleId, part: RulePart, when: RuleText, why: RuleText,
+                outcomes: typing.Sequence[Outcome] = (), reports: typing.Sequence[CheckName] = (),
+                stages: typing.Sequence[StageName] = (), kinds: typing.Sequence[StoryKind] = (),
+                retired: typing.Optional[RuleText] = None, written: typing.Optional[Written] = None,
+                told: typing.Optional[RuleText] = None, section: typing.Optional[RuleText] = None,
+                see: typing.Optional[Written] = None, order: typing.Optional[RuleOrder] = None,
+                title: typing.Optional[RuleText] = None) -> WorkflowRule:
+        """The workflow rule as it was kept — the one way a repository builds it."""
+        return cls(rule_id, part, when, why, outcomes, reports, stages, kinds, retired, written, told, section, see, order, title)
+
     @property
     def id(self) -> RuleId:
         return self._id

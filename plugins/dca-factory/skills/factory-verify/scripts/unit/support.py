@@ -19,6 +19,7 @@ from dca_factory.infrastructure import schedule  # noqa: E402,F401
 from dca_factory.infrastructure.workflow import load_workflow  # noqa: E402
 
 load_workflow()                                   # the stages and the rules, as every composition root loads them
+from dca_factory.infrastructure import cli as _cli  # noqa: E402,F401 — wires the command lines, as the cli does
 from dca_factory.delivery.adapter.outgoing.pipeline.stage_rows import stage_files  # noqa: E402
 from dca_factory.delivery.adapter.outgoing.files import journal_files as journal
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
@@ -135,5 +136,5 @@ def evidence(root, runs):
 def gate_story(story_id, path="", front=None, body="", criteria=()):
     """The story under a gate, read off its front matter and its body (no criteria)."""
     front = front or {}
-    return Story(StoryId(story_id), EpicId(str(front.get("epic") or "")), status_of(front.get("status")),
+    return Story.restore(StoryId(story_id), EpicId(str(front.get("epic") or "")), status_of(front.get("status")),
                  named_kind=KindWord(str(front.get("kind") or "")), content=story_content(front, body, criteria))

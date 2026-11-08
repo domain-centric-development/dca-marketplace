@@ -124,7 +124,7 @@ class ContextSpecFiles(ContextSpecs):
                                                       for item in parse_spec(read_text(path))[1]))
                     for feature, path in files]
         glossary = os.path.join(folder, GLOSSARY_FILE)
-        return ContextSpec(ContextName(name), Statement(said[0]), Subdomain(said[1]), terms_of(glossary), features,
+        return ContextSpec.restore(ContextName(name), Statement(said[0]), Subdomain(said[1]), terms_of(glossary), features,
                            identities_of(glossary), mentions_of(glossary))
 
     def shared_kernel(self) -> typing.Optional[SharedKernel]:

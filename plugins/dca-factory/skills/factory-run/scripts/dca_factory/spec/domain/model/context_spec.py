@@ -218,6 +218,13 @@ class ContextSpec(AggregateRoot[ContextName]):
         self._identities = tuple(identities)
         self._mentions = frozenset(mentions)
 
+    @classmethod
+    def restore(cls, name: ContextName, purpose: Statement, subdomain: Subdomain,
+                terms: typing.Sequence[Term], features: typing.Sequence[Feature],
+                identities: typing.Sequence[TermName] = (), mentions: typing.AbstractSet[TermName] = frozenset()) -> ContextSpec:
+        """The context spec as it was kept — the one way a repository builds it."""
+        return cls(name, purpose, subdomain, terms, features, identities, mentions)
+
     @property
     def id(self) -> ContextName:
         return self._name

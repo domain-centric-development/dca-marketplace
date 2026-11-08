@@ -154,6 +154,13 @@ class DecisionRecord(AggregateRoot[RecordId]):
         self._story = story
         self._answer = answer
 
+    @classmethod
+    def restore(cls, record_id: RecordId, kind: RecordKind, asker: Asker, state: DecisionState,
+                options: typing.Sequence[OptionKey] = (), story: typing.Optional[StoryId] = None,
+                answer: typing.Optional[Answer] = None, *, content: RecordContent) -> DecisionRecord:
+        """The decision record as it was kept — the one way a repository builds it."""
+        return cls(record_id, kind, asker, state, options, story, answer, content=content)
+
     @property
     def id(self) -> RecordId:
         return self._id

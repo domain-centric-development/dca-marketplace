@@ -9,8 +9,23 @@ import os
 import sys
 import typing
 
-from .....infrastructure import rulebook as wiring
-from ....application.show_rulebook import ShowRulebookQuery
+from ....application.show_rulebook import ShowRulebookQuery, ShowRulebookUseCase
+
+
+class RulesRoot(typing.Protocol):
+    """What this command line takes from the composition root — given at start (`wire`), never imported."""
+
+    def show_rulebook(self, cwd: str) -> ShowRulebookUseCase: ...
+
+
+#: the composition root, given by `wire` before the command line runs
+wiring: RulesRoot
+
+
+def wire(root: RulesRoot) -> None:
+    """The composition root this command line builds its use cases from."""
+    global wiring
+    wiring = root
 from .rules_view import render
 
 

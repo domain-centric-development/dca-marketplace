@@ -56,9 +56,6 @@ from .....contract import CONTRACT, VERSION
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from .....sharedkernel.adapter.outgoing.profile.profile_files import (
     DEFAULTS, place, PROFILE_FILE, read_profile, resolve_profile, set_places, shown)
-from .....infrastructure.schedule import schedule_data, start_of
-from .....infrastructure.profile import ask_profile
-from .....infrastructure.description import show_part
 from ....application.description.show_part import ShowPartQuery
 from ....application.profile.ask_profile import AskProfileQuery, Question
 from ....application.status.show_status import ShowStatusQuery
@@ -85,7 +82,6 @@ from ....application.delivery.reopen_story import CheckoutHeld, NewWish, NoCorre
 from ....domain.model.moment import Moment
 from ....domain.model.person import Person
 from ....domain.model.story import AlreadyDelivered, NotDelivered, NothingToDeliver, NothingToProve, StoryId
-from .....infrastructure import delivery as wiring
 from ....application.run.resolve_run_argument import ResolveRunArgumentQuery
 from ....application.status.show_refusals import ShowRefusalsQuery
 from ....application.status.show_journal_story import ShowJournalStoryQuery
@@ -139,6 +135,138 @@ from .schedule_view import schedule_lines, start_lines
 from .help_view import render_help_md, render_help_text
 from ....domain.model.decision_record import WAITING_WORDS
 from ....application.delivery.pipeline_workflow import workflow
+
+from ....application.backlog.backfill_created import BackfillCreatedUseCase
+from ....application.checkout.give_checkout_back import GiveCheckoutBackUseCase
+from ....application.checkout.mark_listening import MarkListeningUseCase
+from ....application.checkout.take_checkout import TakeCheckoutUseCase
+from ....application.cost.read_tool_usage import ReadToolUsageUseCase
+from ....application.cost.show_spent import ShowSpentUseCase
+from ....application.decisions.list_decisions import ListDecisionsUseCase
+from ....application.delivery.check_spec import CheckSpecUseCase
+from ....application.delivery.claim_story import ClaimStoryUseCase
+from ....application.delivery.confirm_owned import ConfirmOwnedUseCase
+from ....application.delivery.deliver_by_hand import DeliverByHandUseCase
+from ....application.delivery.next_free_story_id import NextFreeStoryIdUseCase
+from ....application.delivery.probe_tool import ProbeToolUseCase
+from ....application.delivery.prove_delivery import ProveDeliveryUseCase
+from ....application.delivery.refresh_claims import RefreshClaimsUseCase
+from ....application.delivery.release_story_claim import ReleaseStoryClaimUseCase
+from ....application.delivery.reopen_story import ReopenStoryUseCase
+from ....application.delivery.show_brief import ShowBriefUseCase
+from ....application.delivery.show_hand_over_contract import ShowHandOverContractUseCase
+from ....application.delivery.show_spec_delta import ShowSpecDeltaUseCase
+from ....application.delivery.show_stage_table import ShowStageTableUseCase
+from ....application.delivery.show_story_kind import ShowStoryKindUseCase
+from ....application.delivery.take_back_delivery import TakeBackDeliveryUseCase
+from ....application.delivery.write_skeleton import WriteSkeletonUseCase
+from ....application.description.show_part import ShowPartUseCase
+from ....application.lifecycle.end_page import EndPageUseCase
+from ....application.lifecycle.show_running_page import ShowRunningPageUseCase
+from ....application.lifecycle.show_worker import ShowWorkerUseCase
+from ....application.lifecycle.start_factory import StartFactoryUseCase
+from ....application.lifecycle.start_page import StartPageUseCase
+from ....application.lifecycle.stop_factory import StopFactoryUseCase
+from ....application.profile.ask_profile import AskProfileUseCase
+from ....application.requests.list_requests import ListRequestsUseCase
+from ....application.requests.pending_requests import PendingRequestsUseCase
+from ....application.requests.retry_request import RetryRequestUseCase
+from ....application.requests.take_back_request import TakeBackRequestUseCase
+from ....application.requests.write_request import WriteRequestUseCase
+from ....application.run.resolve_run_argument import ResolveRunArgumentUseCase
+from ....application.schedule.start_story import Start
+from ....application.session.append_journal import AppendJournalUseCase
+from ....application.session.close_work_window import CloseWorkWindowUseCase
+from ....application.session.end_session_stage import EndSessionStageUseCase
+from ....application.session.open_work_window import OpenWorkWindowUseCase
+from ....application.session.start_session_stage import StartSessionStageUseCase
+from ....application.status.follow_output import FollowOutputUseCase
+from ....application.status.list_findings import ListFindingsUseCase
+from ....application.status.show_discovery import ShowDiscoveryUseCase
+from ....application.status.show_epic import ShowEpicUseCase
+from ....application.status.show_help import ShowHelpUseCase
+from ....application.status.show_journal_story import ShowJournalStoryUseCase
+from ....application.status.show_refusals import ShowRefusalsUseCase
+from ....application.status.show_stage_outputs import ShowStageOutputsUseCase
+from ....application.status.show_status import ShowStatusUseCase
+from ....application.status.show_story import ShowStoryUseCase
+from ....application.upkeep.let_journals_into_git import LetJournalsIntoGitUseCase
+from ....application.upkeep.migrate_layout import MigrateLayoutUseCase
+
+
+class CliRoot(typing.Protocol):
+    """What the cli's command line takes from the composition root: its use cases and the schedule's read model —
+    given at start (`wire`), never imported."""
+
+    def append_journal(self, cwd: str, runs: str) -> AppendJournalUseCase: ...
+    def ask_profile(self, path: typing.Optional[str]) -> AskProfileUseCase: ...
+    def backfill_created(self, cwd: str, epics: str) -> BackfillCreatedUseCase: ...
+    def check_spec(self, runs: str, epics: str) -> CheckSpecUseCase: ...
+    def claim_story(self, cwd: str, epics: str, runs: str) -> ClaimStoryUseCase: ...
+    def close_work_window(self, cwd: str, runs: str) -> CloseWorkWindowUseCase: ...
+    def confirm_owned(self, cwd: str, runs: str) -> ConfirmOwnedUseCase: ...
+    def deliver_by_hand(self, cwd: str, epics: str, runs: str) -> DeliverByHandUseCase: ...
+    def end_page(self) -> EndPageUseCase: ...
+    def end_session_stage(self, cwd: str, runs: str) -> EndSessionStageUseCase: ...
+    def follow_output(self, runs: str) -> FollowOutputUseCase: ...
+    def give_checkout_back(self, cwd: str, runs: str) -> GiveCheckoutBackUseCase: ...
+    def let_journals_into_git(self, cwd: str) -> LetJournalsIntoGitUseCase: ...
+    def list_decisions(self, cwd: str) -> ListDecisionsUseCase: ...
+    def list_findings(self, cwd: str, epics: str, runs: str) -> ListFindingsUseCase: ...
+    def list_requests(self, cwd: str) -> ListRequestsUseCase: ...
+    def mark_listening(self, cwd: str, runs: str) -> MarkListeningUseCase: ...
+    def migrate_layout(self, cwd: str) -> MigrateLayoutUseCase: ...
+    def next_free_story_id(self, cwd: str, epics: str, runs: str) -> NextFreeStoryIdUseCase: ...
+    def open_work_window(self, cwd: str, runs: str) -> OpenWorkWindowUseCase: ...
+    def pending_requests(self, cwd: str) -> PendingRequestsUseCase: ...
+    def probe_tool(self) -> ProbeToolUseCase: ...
+    def prove_delivery(self, cwd: str, epics: str, runs: str) -> ProveDeliveryUseCase: ...
+    def read_tool_usage(self) -> ReadToolUsageUseCase: ...
+    def refresh_claims(self, cwd: str, epics: str, runs: str) -> RefreshClaimsUseCase: ...
+    def release_story_claim(self, cwd: str, epics: str, runs: str) -> ReleaseStoryClaimUseCase: ...
+    def reopen_story(self, cwd: str, epics: str, runs: str) -> ReopenStoryUseCase: ...
+    def resolve_run_argument(self, cwd: str) -> ResolveRunArgumentUseCase: ...
+    def retry_request(self, cwd: str) -> RetryRequestUseCase: ...
+    def schedule_data(self, cwd: str, epics: str, runs: str, slots: typing.Optional[int] = None,
+                      busy: typing.Iterable[str] = (), skip: typing.Iterable[str] = ()) -> Model: ...
+    def show_brief(self, cwd: str) -> ShowBriefUseCase: ...
+    def show_discovery(self, cwd: str) -> ShowDiscoveryUseCase: ...
+    def show_epic(self, cwd: str, epics: str, runs: str) -> ShowEpicUseCase: ...
+    def show_hand_over_contract(self, cwd: str, runs: str) -> ShowHandOverContractUseCase: ...
+    def show_help(self, cwd: str, epics: str, runs: str) -> ShowHelpUseCase: ...
+    def show_journal_story(self, cwd: str, epics: str, runs: str) -> ShowJournalStoryUseCase: ...
+    def show_part(self, cwd: str) -> ShowPartUseCase: ...
+    def show_refusals(self, runs: str) -> ShowRefusalsUseCase: ...
+    def show_running_page(self) -> ShowRunningPageUseCase: ...
+    def show_spec_delta(self, runs: str, epics: str) -> ShowSpecDeltaUseCase: ...
+    def show_spent(self, runs: str) -> ShowSpentUseCase: ...
+    def show_stage_outputs(self, runs: str) -> ShowStageOutputsUseCase: ...
+    def show_stage_table(self) -> ShowStageTableUseCase: ...
+    def show_status(self, cwd: str, epics: str, runs: str) -> ShowStatusUseCase: ...
+    def show_story(self, cwd: str, epics: str, runs: str) -> ShowStoryUseCase: ...
+    def show_story_kind(self, cwd: str) -> ShowStoryKindUseCase: ...
+    def show_worker(self) -> ShowWorkerUseCase: ...
+    def start_factory(self) -> StartFactoryUseCase: ...
+    def start_of(self, cwd: str, epics: str, runs: str, story_id: str, slots: typing.Optional[int] = None) -> typing.Optional[Start]: ...
+    def start_page(self) -> StartPageUseCase: ...
+    def start_session_stage(self, cwd: str, runs: str) -> StartSessionStageUseCase: ...
+    def stop_factory(self) -> StopFactoryUseCase: ...
+    def take_back_delivery(self, cwd: str, runs: str, epics: str) -> TakeBackDeliveryUseCase: ...
+    def take_back_request(self, cwd: str) -> TakeBackRequestUseCase: ...
+    def take_checkout(self, cwd: str, runs: str) -> TakeCheckoutUseCase: ...
+    def write_request(self, cwd: str) -> WriteRequestUseCase: ...
+    def write_skeleton(self, cwd: str, runs: str) -> WriteSkeletonUseCase: ...
+
+
+#: the composition root, given by `wire` before the command line runs
+wiring: CliRoot
+
+
+def wire(root: CliRoot) -> None:
+    """The composition root this command line builds its use cases from."""
+    global wiring
+    wiring = root
+
 
 Model = typing.Dict[str, typing.Any]
 RESULT = typing.TypeVar("RESULT")
@@ -345,7 +473,7 @@ def schedule(cwd: str, epics: str, runs: str, slots: typing.Optional[int] = None
              busy: typing.Sequence[str] = (), skip: typing.Sequence[str] = ()) -> int:
     """Print every story's state and the next one to run; return 0. The runner and the tests read these lines
     (`schedule_view.py`)."""
-    data = schedule_data(cwd, epics, runs, slots, busy, skip)
+    data = wiring.schedule_data(cwd, epics, runs, slots, busy, skip)
     spent = wiring.show_spent(runs).execute(ShowSpentQuery(tuple(data["order"]))).by_story
     for line in schedule_lines(data, epics, {story: spent_text(spent[story]) for story in data["order"]}):
         print(line)
@@ -355,7 +483,7 @@ def schedule(cwd: str, epics: str, runs: str, slots: typing.Optional[int] = None
 def start(cwd: str, epics: str, runs: str, story_id: str, slots: typing.Optional[int] = None) -> int:
     """Where the story starts, printed as `state:`, `start:` (a stage, or `none`) and `detail:`. Exit 2 for an
     unknown story."""
-    found = start_of(cwd, epics, runs, story_id, slots)
+    found = wiring.start_of(cwd, epics, runs, story_id, slots)
     if found is None:
         print(f"factory: no story {story_id} under {epics}/", file=sys.stderr)
         return 2
@@ -675,7 +803,7 @@ def stages_shell(table: Model) -> int:
 
 def answer(profile_path: typing.Optional[str], question: Question, **fields: str) -> int:
     """The profile's answer to one question, a line per item (`AskProfileUseCase`)."""
-    print("\n".join(ask_profile(profile_path).execute(AskProfileQuery(question, **fields))))
+    print("\n".join(wiring.ask_profile(profile_path).execute(AskProfileQuery(question, **fields))))
     return 0
 
 
@@ -1217,7 +1345,7 @@ def main(argv: typing.Sequence[str]) -> int:
     if args.spec_check:
         return spec_check(cwd, args.runs, args.epics)
     if args.description_part:
-        view = show_part(cwd).execute(ShowPartQuery(args.description_part))
+        view = wiring.show_part(cwd).execute(ShowPartQuery(args.description_part))
         print(json.dumps(view, indent=2) if args.format == "json"
               else "\n\n".join(f"## {s['heading']}\n\n{s['text']}" for s in view["sections"]) or f"{view['path']}: missing")
         return 0

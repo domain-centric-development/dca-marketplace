@@ -31,15 +31,14 @@ from ..delivery.application.delivery import stage_checks  # noqa: F401 — regis
 from ..delivery.application.delivery.check_change import CheckChangeUseCase
 from ..delivery.application.delivery.check_parity import CheckParityUseCase
 from ..delivery.application.delivery.check_stage import run_checks, run_passed, StageRun, Verdict
-from ..delivery.application.delivery.pipeline_workflow import workflow
-from ..delivery.domain.model.verdict import Findings
-from ..delivery.domain.service.profile_checks import ProfileChecks
+from ..delivery.application.profile.check_profile import CheckProfileUseCase
+from ..discovery.api import check_report
 from ..sharedkernel.adapter.outgoing.markdown.front_matter import GateError, read_front_matter
 from .workflow import load_workflow
 
 # the stages and the rules, from their repositories — once per process, held against every binding
 load_workflow()
-from .description import check_description
+from .description import check_description as check_description
 
 Profile = typing.Mapping[str, typing.Any]
 #: The gate's report of a run over a story, said for the story's id; its exit.
@@ -79,15 +78,15 @@ def stage_run(close: typing.Callable[[StageRun], None], **fields: typing.Any) ->
     return typing.cast(StageRun, run)
 
 
-def contract_findings(profile: Profile) -> Findings:
-    """The profile's contract and its unknown keys (`GateRelease.profile_findings`)."""
-    evidence = StageEvidenceFiles(".", "", "", profile)
-    return evidence.gate().profile_findings(evidence.declared_contract(), evidence.unknown_keys())
+def check_profile(profile: Profile) -> CheckProfileUseCase:
+    """The profile checked on its own: its contract and unknown keys, its model keys."""
+    return CheckProfileUseCase(StageEvidenceFiles(".", "", "", profile))
 
 
-def model_findings(profile: Profile) -> Findings:
-    """The profile's model keys, each bound to a tool (`ProfileChecks.models`)."""
-    return ProfileChecks.models(StageEvidenceFiles(".", "", "", profile), workflow())
+def check_discovery(cwd: str, folder: str, topic: str) -> typing.Tuple[bool, str]:
+    """The discovery report of one topic checked, in discovery's words: whether it passed, and what it says."""
+    checked = check_report(cwd, folder, topic)
+    return checked.passed, checked.said
 
 
 def layout_note(cwd: str, profile: Profile) -> typing.Optional[str]:
@@ -140,3 +139,11 @@ def gate_story(result: Verdict, args: typing.Any, cwd: str, profile: Profile, re
     if not result.failed:
         run_passed(run)
     return journal_gate(result, args, story_id, story_path, report(story_id))
+
+
+def main(argv: typing.Sequence[str]) -> int:
+    """The gate's command line, given the composition root it builds its use cases from."""
+    from ..delivery.adapter.incoming.gate import gate_command
+    from . import gate as root
+    gate_command.wire(root)
+    return gate_command.main(argv)

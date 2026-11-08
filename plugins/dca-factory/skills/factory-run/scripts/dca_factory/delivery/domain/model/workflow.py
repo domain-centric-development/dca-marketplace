@@ -61,6 +61,13 @@ class Workflow(AggregateRoot[WorkflowName]):
         self._written = dict(written or {})
         self._every_stage = every_stage
 
+    @classmethod
+    def restore(cls, name: WorkflowName, stages: typing.Sequence[Stage],
+                written: typing.Optional[typing.Mapping[StageName, Written]] = None,
+                every_stage: typing.Optional[StageText] = None) -> Workflow:
+        """The workflow as it was kept — the one way a repository builds it."""
+        return cls(name, stages, written, every_stage)
+
     @property
     def id(self) -> WorkflowName:
         return self._id
