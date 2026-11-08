@@ -1,5 +1,6 @@
 ---
 name: integrate
+role: integrates
 order: 8
 hand_over: integrate.md
 kinds:

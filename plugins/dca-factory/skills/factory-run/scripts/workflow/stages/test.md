@@ -1,5 +1,6 @@
 ---
 name: test
+role: tests
 order: 2
 hand_over: tests.md
 window: builder

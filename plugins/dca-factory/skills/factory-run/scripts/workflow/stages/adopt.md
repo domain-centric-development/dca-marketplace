@@ -1,5 +1,6 @@
 ---
 name: adopt
+role: adopts
 order: 7
 kinds:
 - adopt

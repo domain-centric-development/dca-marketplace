@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from ..model.stage import Role, StoryKind
+
+from ..model.workflow import Workflow
+
 import typing
 
 from ....building_blocks import DomainService, Value
@@ -14,7 +18,6 @@ from ..model.story_words import Detail
 from ..model.verdict import CheckName, Finding, Said
 
 DECISIONS = CheckName("decisions")
-INTEGRATE = StageName("integrate")
 
 
 class Applying(Value):
@@ -27,10 +30,12 @@ class Applying(Value):
     said: Detail
     #: the record's file
     place: Place
+    #: who applies it where it is no stage of its own — the integrate step; "" for a stage
+    by: Detail = Detail("")
 
     def finding(self, written: typing.Optional[Place]) -> Finding:
         """The finding once the record is stamped — `written` the story where the answer became an `answered:` line."""
-        by = "the integrate step" if self.stage == INTEGRATE else f"stage {self.stage.value}"
+        by = self.by.value or f"stage {self.stage.value}"
         return DECISIONS.ok(Said(
             f"{self.record.value} applied by {by} ({self.said.value}) — stamped in {self.place.value}"
             + (f", the answer an `answered:` line in {written.value}" if written else "")))
@@ -50,8 +55,9 @@ class DecisionChecks(DomainService):
     story's run order."""
 
     @staticmethod
-    def check(story: Story, gating: StageName, evidence: StageEvidence,
-              order: typing.Sequence[StageName]) -> DecisionsChecked:
+    def check(story: Story, gating: StageName, evidence: StageEvidence, workflow: Workflow) -> DecisionsChecked:
+        order = workflow.order(StoryKind.STORY)
+        integrate = workflow.role(Role.INTEGRATES)
         facts = evidence.decisions(story)
         records = evidence.decision_records(story)
         if facts.unreadable is not None:
@@ -91,11 +97,12 @@ class DecisionChecks(DomainService):
                 items.append(DECISIONS.fail(Said(
                     f"{rid} has an `## Answer` that is not confirmed — {missing} missing in {where}. A draft unblocks "
                     f"nothing; the person deciding signs it with a name and a time.")))
-            elif record.state is DecisionState.ANSWERED and stage == INTEGRATE:
+            elif record.state is DecisionState.ANSWERED and stage == integrate:
                 # The integrate step has no stage file of its own to cite an answer in, and its agent runs only on a
                 # conflict: the step applies the answer when it runs — its gate stamps it; every gate before it waits.
-                if gating == INTEGRATE:
-                    items.append(Applying(record.id, INTEGRATE, record.answer_said(), Place(where)))
+                if gating == integrate:
+                    items.append(Applying(record.id, integrate, record.answer_said(), Place(where), Detail(
+                        "the integrate step")))
                 else:
                     items.append(DECISIONS.note(Said(f"{rid} is answered ({record.answer_said().value}) — the integrate step "
                                                      f"applies it; its gate stamps it.")))

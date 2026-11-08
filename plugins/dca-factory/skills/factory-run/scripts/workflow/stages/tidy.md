@@ -1,5 +1,6 @@
 ---
 name: tidy
+role: tidies
 order: 4
 hand_over: tidy.md
 window: builder

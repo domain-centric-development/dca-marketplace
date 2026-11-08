@@ -1,5 +1,6 @@
 ---
 name: document
+role: delivers
 order: 6
 hand_over: document.md
 window: verifier

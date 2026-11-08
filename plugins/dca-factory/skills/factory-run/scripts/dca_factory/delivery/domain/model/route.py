@@ -10,7 +10,6 @@ from ....building_blocks import Value
 from .stage import StageName, StoryKind
 from .story_state import Detail
 
-JUDGE = StageName("judge")
 
 
 class Move(enum.Enum):

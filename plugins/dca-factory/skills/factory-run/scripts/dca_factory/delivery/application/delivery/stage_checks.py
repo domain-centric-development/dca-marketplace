@@ -6,7 +6,7 @@ from __future__ import annotations
 import typing
 
 from ....building_blocks import DomainException
-from ...domain.model.stage import Stage, StageName, StoryKind, TESTED_KINDS, Trait
+from ...domain.model.stage import Role, Stage, StageName, StoryKind, TESTED_KINDS, Trait
 from ...domain.model.stage_story import ContractNumber, Count, HandOverName, MappedTest, Place, ScenarioKey, Selector, TestTable
 from ...domain.model.story import StoryId
 from ...domain.model.verdict import CheckName, Said
@@ -228,8 +228,7 @@ def _suites(run: Run) -> None:
 @check("decisions", rule="GATE-DECISIONS")
 def _decisions(run: Run) -> None:
     """An answer applied is stamped in its record and becomes an `answered:` line of the story before it is said."""
-    checked = DecisionChecks.check(run.story, StageName(run.stage.name), run.evidence,
-                                   workflow().order(StoryKind.STORY))
+    checked = DecisionChecks.check(run.story, StageName(run.stage.name), run.evidence, workflow())
     for item in checked.items:
         if isinstance(item, Applying):
             try:
@@ -277,7 +276,7 @@ def _plan(run: Run) -> None:
     "GATE-JUDGE-PERSPECTIVE",
 ))
 def _document(run: Run) -> None:
-    passed = DeliveryChecks.story_pass(run.story, run.evidence, workflow().hand_over(StageName("judge")))
+    passed = DeliveryChecks.story_pass(run.story, run.evidence, workflow().hand_over(workflow().role(Role.JUDGES)))
     run.result.take(passed.findings)
     if passed.judge_passed is Presence.PRESENT:
         run.marks.judge_passed(run.story_id)

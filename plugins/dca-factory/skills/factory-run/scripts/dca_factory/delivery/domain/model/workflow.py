@@ -7,11 +7,11 @@ from __future__ import annotations
 import re
 import typing
 
-from ....building_blocks import AggregateRoot, Id
+from ....building_blocks import AggregateRoot, DomainException, Id
 from .journal_marks import JournalMarks, MarkKind, MarkName, Seq
 from .jump import AGAIN, Jump, Next, RuleId, STOP, Target
-from .route import Around, JUDGE, Move, REVIEWED_KINDS, RouteStep, SKIP_REASONS
-from .stage import HandOver, Stage, StageName, StageText, StoryKind, Trait, Window
+from .route import Around, Move, REVIEWED_KINDS, RouteStep, SKIP_REASONS
+from .stage import HandOver, Role, Stage, StageName, StageText, StoryKind, Trait, Window
 from .story_state import Detail, HandOverText
 from .workflow_rule import Written
 
@@ -32,6 +32,19 @@ class WorkflowName(Id):
 DELIVERY = WorkflowName("delivery")
 
 
+class InconsistentWorkflow(DomainException):
+    """The stage files do not make one workflow: a stage named twice or after a target, a hand-over written twice or
+    weighed but never written, a role given twice."""
+
+
+class MissingRole(DomainException):
+    """The factory asked for a stage by its role, and no stage of the workflow plays it."""
+
+    def __init__(self, name: WorkflowName, role: Role) -> None:
+        super().__init__(f"workflow {name.value}: no stage is `role: {role.value}`")
+        self.role = role
+
+
 class Workflow(AggregateRoot[WorkflowName]):
     """The stages in their order: each name once, each hand-over written by one stage, each hand-over a gate weighs
     written by a stage of it. Where each stage is written, as a person finds it, where the repository says."""
@@ -42,20 +55,26 @@ class Workflow(AggregateRoot[WorkflowName]):
         super().__init__()
         names = [s.name.value for s in stages]
         if not names:
-            raise ValueError(f"workflow {name.value}: has no stage")
+            raise InconsistentWorkflow(f"workflow {name.value}: has no stage")
         twice = sorted({n for n in names if names.count(n) > 1})
         if twice:
-            raise ValueError(f"workflow {name.value}: names the stage {', '.join(twice)} twice")
+            raise InconsistentWorkflow(f"workflow {name.value}: names the stage {', '.join(twice)} twice")
         reserved = [n for n in names if n in (AGAIN, STOP)]
         if reserved:
-            raise ValueError(f"workflow {name.value}: a stage named {', '.join(reserved)} — a target, not a stage")
+            raise InconsistentWorkflow(f"workflow {name.value}: a stage named {', '.join(reserved)} — a target, "
+                                       f"not a stage")
         files = [s.hand_over.value for s in stages if s.hand_over is not None]
         shared = sorted({f for f in files if files.count(f) > 1})
         if shared:
-            raise ValueError(f"workflow {name.value}: several stages write {', '.join(shared)}")
+            raise InconsistentWorkflow(f"workflow {name.value}: several stages write {', '.join(shared)}")
         unwritten = sorted({h.value for s in stages for h in s.sizes} - set(files))
         if unwritten:
-            raise ValueError(f"workflow {name.value}: a gate weighs {', '.join(unwritten)}, which no stage writes")
+            raise InconsistentWorkflow(f"workflow {name.value}: a gate weighs {', '.join(unwritten)}, which no "
+                                       f"stage writes")
+        roles = [s.role.value for s in stages if s.role is not None]
+        given_twice = sorted({r for r in roles if roles.count(r) > 1})
+        if given_twice:
+            raise InconsistentWorkflow(f"workflow {name.value}: several stages are `role: {', '.join(given_twice)}`")
         self._id = name
         self._stages = tuple(stages)
         self._written = dict(written or {})
@@ -71,6 +90,13 @@ class Workflow(AggregateRoot[WorkflowName]):
     @property
     def id(self) -> WorkflowName:
         return self._id
+
+    def role(self, role: Role) -> StageName:
+        """The stage that plays <role>; MissingRole where none does."""
+        found = next((s.name for s in self._stages if s.role is role), None)
+        if found is None:
+            raise MissingRole(self._id, role)
+        return found
 
     @property
     def stages(self) -> typing.Tuple[Stage, ...]:
@@ -184,14 +210,14 @@ class Workflow(AggregateRoot[WorkflowName]):
                 steps.append(RouteStep(stage.name, Move.CARRIED if built else Move.BUILDER, frozenset(around)))
                 built = True
                 continue
-            if stage.name == JUDGE and kind in REVIEWED_KINDS:
+            if stage.role is Role.JUDGES and kind in REVIEWED_KINDS:
                 around.add(Around.REVIEWS)
             if Window.VERIFIER in shared and stage.window is Window.VERIFIER:
                 steps.append(RouteStep(stage.name, Move.VERIFIER, frozenset(around)))
                 break
             if Trait.POST_GATED in stage.traits:
                 around.add(Around.GATE_AFTER)
-            if stage.name == JUDGE:
+            if stage.role is Role.JUDGES:
                 around.add(Around.VERDICT)
             steps.append(RouteStep(stage.name, Move.STAGE, frozenset(around)))
         return tuple(steps)
@@ -281,8 +307,9 @@ class Workflow(AggregateRoot[WorkflowName]):
         for line in judge.value.splitlines():
             if line.strip().lower().startswith("back:"):
                 named = line.split(":", 1)[1].strip().strip("`\"' ").lower()
-                return self.back_for(kind, StageName("test") if named == "test" else StageName("build"))
-        return self.back_for(kind, StageName("build"))
+                tests = self.role(Role.TESTS)
+                return self.back_for(kind, tests if named == tests.value else self.role(Role.BUILDS))
+        return self.back_for(kind, self.role(Role.BUILDS))
 
     def back_for(self, kind: StoryKind, stage: StageName) -> StageName:
         """Where a round goes back to: <stage>, or the last builder stage before it the kind runs."""

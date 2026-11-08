@@ -9,7 +9,9 @@ from ....building_blocks import DomainEventPublisher, TransactionBoundary, UseCa
 from ...domain.model.decision_record import DecisionRecord, RecordId
 from ...domain.model.moment import Moment
 from ...domain.model.story import StoryId
+from ...domain.model.stage import Role
 from ..shared.decision_record_repository import DecisionRecordRepository
+from .pipeline_workflow import role_of
 
 
 @dataclasses.dataclass(frozen=True)
@@ -40,7 +42,7 @@ class AskAcceptanceUseCase(AskAcceptanceInputPort):
 
     def execute(self, command: AskAcceptanceCommand) -> AcceptanceAskedFor:
         record = DecisionRecord.ask_acceptance(self._records.next_acceptance_id(command.story), command.story,
-                                               command.at)
+                                               role_of(Role.DELIVERS), command.at)
 
         def save() -> None:
             self._records.save(record)

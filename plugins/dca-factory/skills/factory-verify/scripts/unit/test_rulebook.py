@@ -18,8 +18,8 @@ from dca_factory.delivery.application.delivery.check_stage import CHECKS, check,
 from dca_factory.delivery.application.delivery.pipeline_workflow import load as load_stages, workflow
 from dca_factory.delivery.adapter.outgoing.workflow.rule_files import RuleFiles
 from dca_factory.delivery.adapter.outgoing.workflow.stage_files import StageFiles
-from dca_factory.delivery.domain.model.stage import HandOver, Stage, StageName
-from dca_factory.delivery.domain.model.workflow import DELIVERY, Workflow, WorkflowName
+from dca_factory.delivery.domain.model.stage import HandOver, Role, Stage, StageName
+from dca_factory.delivery.domain.model.workflow import DELIVERY, InconsistentWorkflow, MissingRole, Workflow, WorkflowName
 from dca_factory.delivery.application.delivery import pipeline_rules as bound_rules
 from dca_factory.delivery.domain.model.jump import RuleId, Target
 from dca_factory.delivery.domain.model.workflow_rule import Outcome, OutcomeState, RulePart, RuleText, WorkflowRule
@@ -176,16 +176,21 @@ class StageFilesTest(unittest.TestCase):
 
     def test_a_workflow_names_each_stage_once_and_weighs_what_its_stages_write(self):
         plan = Stage(StageName("plan"), HandOver("plan.md"))
-        with self.assertRaises(ValueError):
+        with self.assertRaises(InconsistentWorkflow):
             Workflow(DELIVERY, [plan, plan])
-        with self.assertRaises(ValueError):
+        with self.assertRaises(InconsistentWorkflow):
             Workflow(DELIVERY, [Stage(StageName("stop"))])
-        with self.assertRaises(ValueError):
+        with self.assertRaises(InconsistentWorkflow):
             Workflow(DELIVERY, [Stage(StageName("test"), HandOver("plan.md")), plan])
-        with self.assertRaises(ValueError):
+        with self.assertRaises(InconsistentWorkflow):
             Workflow(DELIVERY, [Stage(StageName("build"), sizes=(HandOver("build.md"),))])
-        with self.assertRaises(ValueError):
+        with self.assertRaises(InconsistentWorkflow):
             Workflow(DELIVERY, [])
+        with self.assertRaises(InconsistentWorkflow):
+            Workflow(DELIVERY, [Stage(StageName("a"), role=Role.JUDGES), Stage(StageName("b"), role=Role.JUDGES)])
+        with self.assertRaises(MissingRole):
+            Workflow(DELIVERY, [plan]).role(Role.JUDGES)
+        self.assertEqual(workflow().role(Role.DELIVERS), StageName("document"))
 
     def test_the_rulebook_names_each_stage_by_its_file(self):
         view = show_rulebook(".").execute(ShowRulebookQuery())

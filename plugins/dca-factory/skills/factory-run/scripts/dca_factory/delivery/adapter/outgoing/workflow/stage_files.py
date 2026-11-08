@@ -31,7 +31,7 @@ from __future__ import annotations
 import os
 import typing
 
-from ....domain.model.stage import HandOver, ProfileCommand, Stage, StageName, StageText, StoryKind, Trait, Window
+from ....domain.model.stage import HandOver, ProfileCommand, Role, Stage, StageName, StageText, StoryKind, Trait, Window
 from ....domain.model.workflow import DELIVERY, Workflow, WorkflowName
 from ....domain.model.workflow_rule import Written
 from ....application.shared.workflow_repository import WorkflowRepository
@@ -123,12 +123,13 @@ class StageFiles(WorkflowRepository):
             frozenset(Trait(t) for t in listed(front.get("traits"))),
             tuple(ProfileCommand(c) for c in listed(front.get("commands"))),
             tuple(HandOver(h) for h in listed(front.get("sizes"))), about_of(body.split(FRAME, 1)[0], name),
-            frame_of(body))
+            frame_of(body), Role(str(front["role"])) if front.get("role") else None)
 
     @staticmethod
     def text(stage: Stage, place: int) -> str:
         """The stage's file: the front matter the factory reads, the body a person reads."""
-        lines = ["---", f"name: {stage.name.value}", f"order: {place}"]
+        lines = ["---", f"name: {stage.name.value}"] + ([f"role: {stage.role.value}"] if stage.role else []) + [
+            f"order: {place}"]
         if stage.hand_over is not None:
             lines.append(f"hand_over: {stage.hand_over.value}")
         if stage.window is not None:

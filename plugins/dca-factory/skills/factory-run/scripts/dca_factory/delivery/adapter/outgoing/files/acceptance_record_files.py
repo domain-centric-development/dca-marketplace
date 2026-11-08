@@ -25,10 +25,11 @@ class AcceptanceRecordFiles(DecisionRecordFiles):
 
     def save(self, aggregate: DecisionRecord) -> DecisionRecord:
         if aggregate.asked is not None and aggregate.story is not None:
-            self._write_asked(aggregate.story.value, aggregate.id.value, aggregate.asked.value)
+            self._write_asked(aggregate.story.value, aggregate.id.value, aggregate.asked.value,
+                              aggregate.content.stage.value if aggregate.content.stage else "")
         return super().save(aggregate)
 
-    def _write_asked(self, story_id: str, rid: str, asked: str) -> None:
+    def _write_asked(self, story_id: str, rid: str, asked: str, stage: str) -> None:
         story_path = find_story(self._epics, story_id)
         store = decisions_store(story_path)
         path = os.path.join(store, rid[len(story_id) + 1:] + ".md")
@@ -45,7 +46,7 @@ class AcceptanceRecordFiles(DecisionRecordFiles):
         os.makedirs(store, exist_ok=True)
         with open(path, "w", encoding="utf-8") as handle:
             handle.write(
-                f"---\nid: {rid}\nstory: {story_id}\nstage: document\nkind: {ACCEPTANCE_KIND}\n"
+                f"---\nid: {rid}\nstory: {story_id}\nstage: {stage}\nkind: {ACCEPTANCE_KIND}\n"
                 f"asked: {asked}\ndigest: {story_digest(story_path)}\n---\n\n"
                 f"# Accept {story_id}?\n\n## Question\n"
                 f"Every gate passed. Look at what the story delivers before it counts as delivered:\n\n"

@@ -101,6 +101,21 @@ class Trait(enum.Enum):
     IN_ORDER = "in_order"
 
 
+class Role(enum.Enum):
+    """What a stage is for in the run — what the factory's own steps ask the workflow for, never a stage's name:
+    the first step, the stage that writes the tests, builds, tidies, judges, the one that delivers, the adoption and
+    the integration after the run order."""
+
+    PLANS = "plans"
+    TESTS = "tests"
+    BUILDS = "builds"
+    TIDIES = "tidies"
+    JUDGES = "judges"
+    DELIVERS = "delivers"
+    ADOPTS = "adopts"
+    INTEGRATES = "integrates"
+
+
 ALL_KINDS = frozenset(StoryKind)
 
 #: The kinds whose criteria are proven by tests: a task has none — the existing suite, run whole, is its evidence.
@@ -124,3 +139,5 @@ class Stage(Value):
     about: typing.Optional[StageText] = None
     #: what it is told, around its told rules: the text, each rule a `<!-- rule: <id> -->` line where its words go
     frame: typing.Optional[StageText] = None
+    #: what it is for in the run
+    role: typing.Optional[Role] = None

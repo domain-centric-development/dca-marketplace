@@ -1,5 +1,6 @@
 ---
 name: build
+role: builds
 order: 3
 hand_over: build.md
 window: builder

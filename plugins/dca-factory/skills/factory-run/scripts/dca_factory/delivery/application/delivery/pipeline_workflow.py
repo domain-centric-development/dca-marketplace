@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import typing
 
+from ...domain.model.stage import Role, StageName
 from ...domain.model.workflow import DELIVERY, Workflow
 from ..shared.workflow_repository import WorkflowRepository
 
@@ -30,6 +31,11 @@ def load(repository: WorkflowRepository) -> Workflow:
 
 def loaded() -> bool:
     return bool(LOADED)
+
+
+def role_of(role: Role) -> StageName:
+    """The stage that plays <role> in the loaded workflow."""
+    return workflow().role(role)
 
 
 def workflow() -> Workflow:

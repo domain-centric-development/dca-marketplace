@@ -171,10 +171,6 @@ class AcceptanceAsked(DomainEvent):
     at: Moment
 
 
-#: The stage an acceptance is asked at: the one that delivers.
-ACCEPTANCE_STAGE = StageName("document")
-
-
 class AnswerApplied(DomainEvent):
     """A stage applied the person's answer: the record says by which, and when."""
 
@@ -300,10 +296,10 @@ class DecisionRecord(AggregateRoot[RecordId]):
         return self._answer
 
     @classmethod
-    def ask_acceptance(cls, record_id: RecordId, story: StoryId, at: Moment) -> DecisionRecord:
-        """A new acceptance: open, asked at the delivering stage, for a person's look at the story."""
+    def ask_acceptance(cls, record_id: RecordId, story: StoryId, delivering: StageName, at: Moment) -> DecisionRecord:
+        """A new acceptance: open, asked at the stage that delivers, for a person's look at the story."""
         record = cls(record_id, RecordKind.ACCEPTANCE, Asker.STAGE, DecisionState.OPEN, (), story,
-                     content=RecordContent(Detail(f"Accept {story.value}?"), ACCEPTANCE_STAGE, Detail(""), Detail(""),
+                     content=RecordContent(Detail(f"Accept {story.value}?"), delivering, Detail(""), Detail(""),
                                            ANSWER_FIELDS))
         record._asked = at
         record.register_event(AcceptanceAsked(record_id, story, at))

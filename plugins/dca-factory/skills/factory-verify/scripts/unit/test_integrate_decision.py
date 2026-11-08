@@ -54,8 +54,7 @@ class IntegrateDecision(unittest.TestCase):
         answers = ApplyAnswerUseCase(DecisionRecordFiles(p.root, p.epics), StoryFiles(p.root, p.epics),
                                      DecisionStampFiles(p.runs, p.epics),
                                      JournalEventPublisher(p.runs), Directly())
-        for item in DecisionChecks.check(checked, StageName(gating), evidence(p.root, p.runs),
-                                         workflow().order(StoryKind.STORY)).items:
+        for item in DecisionChecks.check(checked, StageName(gating), evidence(p.root, p.runs), workflow()).items:
             if isinstance(item, Applying):
                 applied = answers.execute(ApplyAnswerCommand(checked.id, item.record, item.stage,
                                                              Moment("2026-11-08T10:00:00Z")))

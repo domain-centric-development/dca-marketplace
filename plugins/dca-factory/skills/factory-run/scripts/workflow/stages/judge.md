@@ -1,5 +1,6 @@
 ---
 name: judge
+role: judges
 order: 5
 hand_over: judge.md
 window: verifier

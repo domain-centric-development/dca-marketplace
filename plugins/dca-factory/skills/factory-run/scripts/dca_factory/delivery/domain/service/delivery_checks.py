@@ -25,7 +25,6 @@ PIPELINE = CheckName("pipeline")
 
 #: The contract that holds a delivered story to its outcome event.
 OUTCOME_CONTRACT = ContractNumber(14)
-JUDGE = StageName("judge")
 
 
 class StoryPassChecked(Value):
