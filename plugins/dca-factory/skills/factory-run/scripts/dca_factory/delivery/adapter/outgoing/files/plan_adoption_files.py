@@ -1,21 +1,11 @@
-"""The plan gate's write where the plan found scenarios that hold on today's code alone (WP-165): the whole story
-becomes `status: adopted`, or those scenarios move into an adopted story of their own beside it. A gate's write,
-never a stage's — the story is the person's file, and the runner reads the changed kind on its next pass."""
+"""A story's text split by scenario (WP-165): the scenarios the plan found holding on today's code, with their rules,
+apart from the rest — the story repository's text work when the story's aggregate splits them off."""
 
 from __future__ import annotations
 
-import os
 import re
-import time
 import typing
 
-from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter
-from ....domain.model.story import PLAN_ADOPT as PLAN_ADOPT_LINE
-from .owned_files import write_answered
-from .story_layout import STORY_FILE
-
-#: The record id the gate's `answered:` line cites: no decision record, the plan's own `## Adopt`.
-PLAN_ADOPT = PLAN_ADOPT_LINE.value
 
 CRITERIA = re.compile(r"^##\s+acceptance criteria\s*$", re.I)
 RULE = re.compile(r"^###\s")
@@ -66,32 +56,3 @@ def split_off(lines: typing.List[str], keys: typing.Collection[str]
         current.append(line)
     close_rule()
     return lines[:start + 1] + kept + lines[end:], moved
-
-
-def adopt_split(runs: str, story_path: str, story_id: str, held: typing.Sequence[typing.Tuple[str, str]]) -> str:
-    """The scenarios that hold move into `<story>-holds`, an adopted story in the same epic; returns its id."""
-    front, _body = read_front_matter(story_path)
-    with open(story_path, encoding="utf-8", newline="") as handle:
-        text = handle.read()
-    newline = "\r\n" if "\r\n" in text else "\n"
-    rest, moved = split_off(text.split(newline), {k for k, _t in held})
-    new_id = f"{story_id}-holds"
-    folder = os.path.join(os.path.dirname(os.path.dirname(story_path)), new_id)
-    title = str(front.get("title") or story_id).strip()
-    fields = [f"id: {new_id}"] + [f"{k}: {front[k]}" for k in ("epic", "context", "feature") if front.get(k)] + [
-        "status: adopted", f"created: {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}",
-        f"title: {title} — what holds today"]
-    body = ["---", *fields, "---", "", f"# {title} — what holds today", "", "## Story", "",
-            f"Split from story `{story_id}` by its plan: these scenarios hold on today's code, and no delivered story "
-            "carries them.", "", "## Acceptance criteria", "", *[l for l in moved], "",
-            "## Assumptions", "",
-            f"- answered: split from `{story_id}` — " + ", ".join(f"{k} ({t})" for k, t in held)
-            + f" ({PLAN_ADOPT})", ""]
-    os.makedirs(folder, exist_ok=True)
-    with open(os.path.join(folder, STORY_FILE), "w", encoding="utf-8", newline="") as handle:
-        handle.write(newline.join(re.sub(r"\s*\(happy path\)\s*$", "", l) for l in body))
-    with open(story_path, "w", encoding="utf-8", newline="") as handle:
-        handle.write(newline.join(rest))
-    write_answered(story_path, runs, PLAN_ADOPT, f"{', '.join(k for k, _t in held)} hold on today's code, and no "
-                   f"delivered story carries them — the plan split them into the adopted story `{new_id}`")
-    return new_id

@@ -20,7 +20,6 @@ from .delivery_writes import (
     prepare_delivery, publish_story, record_red_tree, record_tests_baseline, take_into_home)
 from .run_marks import STORY_DIGEST, write_mark
 from .owned_files import regard_gate_line
-from .plan_adoption_files import adopt_split
 from .signals import journal_signal, plan_left_open
 from .story_layout import story_digest
 from ....application.shared.stage_delivery import StageDelivery
@@ -44,13 +43,11 @@ class StageDeliveryFiles(StageDelivery):
         regard_gate_line(story_path, self._runs)
         result.ok("plan-adopts", f"{story} is `status: adopted` now — the runner goes on with the adoption")
 
-    def split_off(self, result: typing.Any, story: str, story_path: str,
-                  held: typing.Sequence[typing.Tuple[str, str]]) -> None:
-        new_id = adopt_split(self._runs, story_path, story, held)
+    def split_kept(self, result: typing.Any, story: str, story_path: str, into: str,
+                   scenarios: typing.Sequence[str]) -> None:
         # the story as planned is the story without what moved: the digest the later gates compare takes it
-        write_mark(self._runs, story, STORY_DIGEST, story_digest(story_path))
-        result.ok("plan-adopts", f"{', '.join(k for k, _t in held)} moved into the adopted story {new_id}; {story} "
-                                 f"builds the rest")
+        regard_gate_line(story_path, self._runs)
+        result.ok("plan-adopts", f"{', '.join(scenarios)} moved into the adopted story {into}; {story} builds the rest")
 
     def red_tree(self, result: typing.Any, story: str) -> None:
         record_red_tree(result, self._cwd, self._runs, story)

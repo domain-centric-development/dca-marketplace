@@ -13,6 +13,7 @@ from .check_stage import on_pass, Run
 from .adopt_on_plan import AdoptOnPlanCommand
 from .ask_acceptance import AskAcceptanceCommand
 from .deliver_story import DeliverStoryCommand
+from .split_off_on_plan import SplitOffOnPlanCommand
 
 DELIVERED_LEFT = "a delivered story is checked and its marks are left as they are"
 
@@ -68,8 +69,13 @@ def _plan_passed(run: Run) -> None:
                 return
             run.delivery.adopted(run.result, run.story_id, run.story_path)
         elif adoption is not None and outcome is not Adoption.NONE:
-            run.delivery.split_off(run.result, run.story_id, run.story_path,
-                                   [(row.key.value, row.test.value) for row in adoption.rows])
+            try:
+                split = run.splits.execute(SplitOffOnPlanCommand(run.story.id, adoption, run.now()))
+            except DomainException as refused:
+                run.result.fail("plan-adopts", str(refused))
+                return
+            run.delivery.split_kept(run.result, run.story_id, run.story_path, split.into.value,
+                                    [key.value for key in adoption.keys()])
 
 
 @on_pass("test", rule="GATE-PASS-RED-TREE")

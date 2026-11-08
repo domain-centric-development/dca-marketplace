@@ -84,5 +84,5 @@ class StoryRunFiles(StoryRuns):
         os.makedirs(evidence, exist_ok=True)
         path = os.path.join(evidence, CLAIM_FILE)
         with open(path, "a", encoding="utf-8") as handle:
-            handle.write(f"{at.value}\tdelivered_by={claim.by.value or 'unknown'}\tdelivered={claim.on.value}\n")
+            handle.write(f"{at.value}\tdelivered_by={claim.by.line().value or 'unknown'}\tdelivered={claim.on.value}\n")
         return path

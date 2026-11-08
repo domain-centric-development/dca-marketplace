@@ -140,36 +140,6 @@ def owned_changes(runs: str, story_id: str,
     return sorted(part for part in set(before) | set(now) if before.get(part) != now.get(part))
 
 
-def write_answered(story_path: str, runs: str, rid: str, sentence: str) -> bool:
-    """One `- answered: <sentence> (<id>)` line under the story's `## Assumptions` — the gate's write when it stamps
-    an answer applied; the section is made where the story has none. The line corrects the story so far that it
-    can be carried out; it is not a requirement of its own and is never merged into a spec. In the same write the
-    planned digest (`.story-digest`) and an open window's owned digest take the new text, so the gate's own line
-    does not read as "the story changed after it was planned"; any other change still does."""
-    with open(story_path, encoding="utf-8", newline="") as handle:
-        text = handle.read()
-    if f"({rid})" in text:
-        return False
-    newline = "\r\n" if "\r\n" in text else "\n"
-    line = f"- answered: {sentence} ({rid})"
-    lines = text.split(newline)
-    start = next((i for i, l in enumerate(lines) if l.strip().lower().startswith("## assumptions")), None)
-    if start is None:
-        while lines and not lines[-1].strip():
-            lines.pop()
-        lines += ["", "## Assumptions", "", line, ""]
-    else:
-        end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("## ")), len(lines))
-        last = max((i for i in range(start + 1, end) if lines[i].strip()), default=start)
-        lines.insert(last + 1, line)
-        if last == start:
-            lines.insert(last + 1, "")
-    with open(story_path, "w", encoding="utf-8", newline="") as handle:
-        handle.write(newline.join(lines))
-    regard_gate_line(story_path, runs)
-    return True
-
-
 def regard_gate_line(story_path: str, runs: str) -> None:
     """A line the gate wrote into the story is its own: the planned digest (`.story-digest`) and an open window's
     owned digest take the new text, so it does not read as "the story changed after it was planned"; any other

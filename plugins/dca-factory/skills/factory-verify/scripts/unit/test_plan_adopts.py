@@ -10,8 +10,9 @@ from dca_factory.delivery.adapter.outgoing.files.journal_events import JournalEv
 from dca_factory.delivery.adapter.outgoing.files.stage_delivery_files import StageDeliveryFiles
 from dca_factory.delivery.adapter.outgoing.files.story_files import StoryFiles
 from dca_factory.delivery.application.delivery.adopt_on_plan import AdoptOnPlanCommand, AdoptOnPlanUseCase
+from dca_factory.delivery.application.delivery.split_off_on_plan import SplitOffOnPlanCommand, SplitOffOnPlanUseCase
 from dca_factory.delivery.domain.model.moment import Moment
-from dca_factory.delivery.domain.model.story import StoryAdoptedOnPlan
+from dca_factory.delivery.domain.model.story import ScenariosSplitOff, StoryAdoptedOnPlan
 from dca_factory.delivery.domain.service.adopt_checks import AdoptChecks, Adoption
 from dca_factory.sharedkernel.adapter.outgoing.markdown import front_matter as markdown
 
@@ -105,7 +106,14 @@ class PlanAdopts(unittest.TestCase):
         self.assertFalse(self.found().failed)
         held = [("shows-the-price", "WidgetPageTest#showsThePrice"),
                 ("says-the-shelf-is-empty", "WidgetPageTest#saysTheShelfIsEmpty")]
-        StageDeliveryFiles(self.p.root, self.p.runs, {}).split_off(verdict(), "S-1", self.path, held)
+        adoption = evidence(self.p.root, self.p.runs).plan_adoption(self.story().id)
+        events = Recorded()
+        split = SplitOffOnPlanUseCase(StoryFiles(self.p.root), events, Directly()).execute(
+            SplitOffOnPlanCommand(self.story().id, adoption, Moment("2026-11-08T10:00:00Z")))
+        self.assertEqual(split.into.value, "S-1-holds")
+        self.assertEqual([type(e) for e in events.published], [StoryAdoptedOnPlan, ScenariosSplitOff])
+        StageDeliveryFiles(self.p.root, self.p.runs, {}).split_kept(verdict(), "S-1", self.path, "S-1-holds",
+                                                                    [k for k, _t in held])
         rest = markdown.read_text(self.path)
         self.assertIn("#### shows-the-name (happy path)", rest)
         self.assertNotIn("shows-the-price", rest.split("## Assumptions")[0])

@@ -16,6 +16,9 @@ from dca_factory.delivery.adapter.outgoing.files import story_layout as layout
 from dca_factory.sharedkernel.adapter.outgoing.markdown import front_matter as markdown
 from dca_factory.delivery.adapter.outgoing.files import owned_files as owned
 from dca_factory.delivery.adapter.outgoing.files import run_marks
+from dca_factory.delivery.adapter.outgoing.files.story_files import StoryFiles
+from dca_factory.delivery.domain.model.moment import Moment
+from dca_factory.delivery.domain.model.story_words import Detail
 
 DELIVERED = """---
 id: {id}
@@ -150,6 +153,17 @@ def sentence(body, given):
     return records.record_of("S-1-01", {"id": "S-1-01", "story": "S-1"}, body, "answered", answer).answer_sentence().value
 
 
+def take_answer(path, runs, rid, said):
+    """The story takes the answer as its answered line through its aggregate and its repository; the gate regards the
+    line as its own. Whether the story took it."""
+    story = StoryFiles.read(path)
+    taken = story.take_answer(Detail(said), Detail(rid), Moment("2026-11-08T10:00:00Z"))
+    if taken:
+        StoryFiles.write(path, story)
+        owned.regard_gate_line(path, runs)
+    return taken
+
+
 class Answered(unittest.TestCase):
 
     def test_an_option_label_reads_as_the_options_text_and_a_free_answer_as_itself(self):
@@ -178,8 +192,8 @@ class Answered(unittest.TestCase):
             path = p.story("S-1", text="---\nid: S-1\nstatus: approved\n---\n# S\n\n## Assumptions\n\n"
                                        "- open: which way?\n\n## Out of scope\n- nothing\n")
             p.evidence("S-1", ".story-digest", layout.story_digest(path) + "\n")
-            self.assertTrue(owned.write_answered(path, p.runs, "S-1-01", "The first way."))
-            self.assertFalse(owned.write_answered(path, p.runs, "S-1-01", "The first way."))
+            self.assertTrue(take_answer(path, p.runs, "S-1-01", "The first way."))
+            self.assertFalse(take_answer(path, p.runs, "S-1-01", "The first way."))
             text = read(path)
             self.assertIn("- open: which way?\n- answered: The first way. (S-1-01)\n\n## Out of scope", text)
             mark = read(os.path.join(profiles.evidence_dir(p.runs, "S-1"), ".story-digest"))
@@ -188,7 +202,7 @@ class Answered(unittest.TestCase):
     def test_a_story_without_assumptions_gains_the_section(self):
         with project() as p:
             path = p.story("S-1")
-            owned.write_answered(path, p.runs, "S-1-01", "Yes.")
+            take_answer(path, p.runs, "S-1-01", "Yes.")
             self.assertTrue(read(path).endswith("## Assumptions\n\n- answered: Yes. (S-1-01)\n"))
 
 

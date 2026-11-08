@@ -77,7 +77,7 @@ def deliver_by_hand(cwd: str, runs: str, epics: str, story_id: str, who: typing.
         result = story_command(lambda: root.wiring.deliver_by_hand(cwd, epics, runs).execute(
             DeliverByHandCommand(StoryId(story_id), Person(who), Moment(stamp), force)))
     except AlreadyDelivered as error:
-        print(f"deliver-by-hand: {story_id} is delivered already ({error.by.value or 'before delivered_by'}) — "
+        print(f"deliver-by-hand: {story_id} is delivered already ({error.by.line().value or 'before delivered_by'}) — "
               f"a change of its behaviour is a new story with `## Changed expectations`")
         return 1
     except NothingToDeliver:
@@ -146,7 +146,7 @@ def prove(cwd: str, runs: str, epics: str, story_id: str) -> int:
         print(f"prove: {', '.join(h.value for h in result.holders)} holds the checkout with unfinished code — one "
               f"story at a time; prove {story_id} once it is delivered")
         return 1
-    by = result.claim.by.value or "unknown"
+    by = result.claim.by.line().value or "unknown"
     print(f"prove: {story_id} is `status: adopted` — the adopt path checks it (`factory.sh run --story {story_id}`); "
           f"the claim ({by}) is kept in {shown(result.claim_kept)}"
           + (f", the earlier pass as {shown(result.kept)}" if result.kept else ""))

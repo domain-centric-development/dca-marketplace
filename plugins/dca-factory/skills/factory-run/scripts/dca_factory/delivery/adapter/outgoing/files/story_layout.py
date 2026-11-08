@@ -13,7 +13,8 @@ from .....sharedkernel.adapter.outgoing.markdown.front_matter import (
     MarkdownError as GateError, read_front_matter, read_text, split_front)
 from .....sharedkernel.adapter.outgoing.profile.profile_files import shown
 from ....application.shared.front import CREATED_KEY
-from ....domain.model.story import KindWord, StoryStatus
+from ....domain.model.story import BY_GATE, BY_NOBODY_KNOWN, DeliveredBy, NamedKind, StoryStatus
+from ....domain.model.person import Person
 from ....domain.model.stage import SpecHome, StoryKind
 
 #: The epic is `<epics>/<epic>/epic.md` beside its story folders — one shape for both, a folder and its file.
@@ -126,6 +127,22 @@ def delivered_on(front: typing.Mapping[str, typing.Any]) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
+def named_kind(front: typing.Mapping[str, typing.Any]) -> NamedKind:
+    """The story's `kind:` — `journey`, `task`; any other word, or none, names none."""
+    word = str(front.get("kind") or "").strip().lower()
+    return next((kind for kind in NamedKind if kind.value == word), NamedKind.NONE)
+
+
+def deliverer_of(front: typing.Mapping[str, typing.Any]) -> DeliveredBy:
+    """Who the story's `delivered_by:` says claims the delivery — a word it does not know reads as nobody known."""
+    line = delivered_by(front)
+    if line == BY_GATE.line().value:
+        return BY_GATE
+    if line.startswith("hand:") and line[len("hand:"):].strip():
+        return DeliveredBy.hand(Person(line[len("hand:"):]))
+    return BY_NOBODY_KNOWN
+
+
 def delivered_by(front: typing.Mapping[str, typing.Any]) -> str:
     """Who claims the delivery: `gate`, `hand:<who>`, or "" for a story delivered before the line existed."""
     value = front.get("delivered_by", "")
@@ -179,7 +196,7 @@ def story_kind(front: typing.Mapping[str, typing.Any]) -> str:
     already has; plan, test and judge map it to green tests, the adopt gate delivers it."""
     status = str(front.get("status", "")).strip().lower()
     known = next((s for s in StoryStatus if s.value == status), StoryStatus.OTHER)
-    return KindWord(str(front.get("kind") or "")).kind(known).value
+    return named_kind(front).kind(known).value
 
 
 def journeys_hold(front: typing.Mapping[str, typing.Any]) -> bool:

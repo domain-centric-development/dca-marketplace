@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import enum
 import typing
 
@@ -45,18 +46,19 @@ class ReleaseState(enum.Enum):
     UNRELEASED = "unreleased"
 
 
-class KindWord(Value):
-    """A story's `kind:` as written — `journey`, `task`, or nothing."""
+class NamedKind(enum.Enum):
+    """A story's `kind:` as its front matter names it — `journey`, `task`, or none (any other word names none)."""
 
-    value: str
+    JOURNEY = "journey"
+    TASK = "task"
+    NONE = ""
 
     def kind(self, status: StoryStatus) -> StoryKind:
         """What the story is: a `journey` — a guard over an epic's delivered stories —, a `task` — a change no actor
         sees —, an adoption where its status is `adopted` — behaviour the project already has —, else a story."""
-        named = self.value.strip().lower()
-        if named == StoryKind.JOURNEY.value:
+        if self is NamedKind.JOURNEY:
             return StoryKind.JOURNEY
-        if named == StoryKind.TASK.value:
+        if self is NamedKind.TASK:
             return StoryKind.TASK
         return StoryKind.ADOPT if status is StoryStatus.ADOPTED else StoryKind.STORY
 
@@ -86,18 +88,38 @@ class DeliveredOn(Value):
     value: str
 
 
-class DeliveredBy(Value):
-    """Who claims a delivery: `gate`, `hand:<who>`, or "" for one delivered before the line existed."""
+class Deliverer(enum.Enum):
+    """Who claims a delivery: the gate after the stages, a person by hand, or nobody known — a story delivered before
+    the line existed."""
 
-    value: str
+    GATE = "gate"
+    HAND = "hand"
+    UNKNOWN = "unknown"
+
+
+class DeliveredBy(Value):
+    """Who claims a delivery, and the person where it was a hand delivery."""
+
+    deliverer: Deliverer
+    person: typing.Optional[Person] = None
 
     @classmethod
     def hand(cls, person: Person) -> DeliveredBy:
-        return cls(f"hand:{person.value}")
+        return cls(Deliverer.HAND, person)
+
+    def line(self) -> Detail:
+        """The claim as the story's `delivered_by:` says it: `gate`, `hand:<who>`, or nothing."""
+        if self.deliverer is Deliverer.GATE:
+            return Detail(Deliverer.GATE.value)
+        if self.deliverer is Deliverer.HAND:
+            return Detail(f"{Deliverer.HAND.value}:{self.person.value if self.person else ''}")
+        return Detail("")
 
 
 #: The gate that delivered a story after its stages.
-BY_GATE = DeliveredBy("gate")
+BY_GATE = DeliveredBy(Deliverer.GATE)
+#: A delivery whose claimant nobody recorded.
+BY_NOBODY_KNOWN = DeliveredBy(Deliverer.UNKNOWN)
 
 
 class GatePass(enum.Enum):
@@ -133,7 +155,7 @@ class AlreadyDelivered(DomainException):
     """A delivered story is not delivered a second time: a change of delivered behaviour is a new story."""
 
     def __init__(self, story: StoryId, by: DeliveredBy) -> None:
-        super().__init__(f"{story.value} is delivered already ({by.value or 'before delivered_by'})")
+        super().__init__(f"{story.value} is delivered already ({by.line().value or 'before delivered_by'})")
         self.story = story
         self.by = by
 
@@ -238,6 +260,16 @@ class AnswerTaken(DomainEvent):
     at: Moment
 
 
+class ScenariosSplitOff(DomainEvent):
+    """The plan found some scenarios of the released story holding on today's code: they moved into an adopted story
+    of their own, the story builds the rest."""
+
+    story: StoryId
+    into: StoryId
+    scenarios: typing.Tuple[ScenarioKey, ...]
+    at: Moment
+
+
 class StoryDeliveredByHand(DomainEvent):
     """A person built the story and delivered it — claimed, not proven."""
 
@@ -261,7 +293,7 @@ class Story(AggregateRoot[StoryId]):
 
     def __init__(self, story_id: StoryId, epic: EpicId, status: StoryStatus,
                  assumptions: typing.Sequence[Assumption] = (), delivery: typing.Optional[Delivery] = None,
-                 named_kind: KindWord = KindWord(""), *, content: StoryContent) -> None:
+                 named_kind: NamedKind = NamedKind.NONE, *, content: StoryContent) -> None:
         super().__init__()
         self._content = content
         #: whether the story carries a `status:` line — a project may not use the field; any transition writes one
@@ -272,11 +304,16 @@ class Story(AggregateRoot[StoryId]):
         self._status = status
         self._assumptions = list(assumptions)
         self._delivery = delivery
+        #: a story made in this life of the aggregate by a split: where it came from, when
+        self._split_from: typing.Optional[StoryId] = None
+        self._created: typing.Optional[Moment] = None
+        #: the scenarios this story gave away in this life of the aggregate
+        self._split_off: typing.Tuple[ScenarioKey, ...] = ()
 
     @classmethod
     def restore(cls, story_id: StoryId, epic: EpicId, status: StoryStatus,
                 assumptions: typing.Sequence[Assumption] = (), delivery: typing.Optional[Delivery] = None,
-                named_kind: KindWord = KindWord(""), *, content: StoryContent) -> Story:
+                named_kind: NamedKind = NamedKind.NONE, *, content: StoryContent) -> Story:
         """The story as it was kept — the one way a repository builds it."""
         return cls(story_id, epic, status, assumptions, delivery, named_kind, content=content)
 
@@ -322,6 +359,21 @@ class Story(AggregateRoot[StoryId]):
         return self._content.depends_on if self.kind is StoryKind.JOURNEY else ()
 
     @property
+    def split_from(self) -> typing.Optional[StoryId]:
+        """The story this one was split from in this life of the aggregate — None for one read as it was kept."""
+        return self._split_from
+
+    @property
+    def created(self) -> typing.Optional[Moment]:
+        """When a story made in this life of the aggregate was made."""
+        return self._created
+
+    @property
+    def split_off_scenarios(self) -> typing.Tuple[ScenarioKey, ...]:
+        """The scenarios this story gave away in this life of the aggregate."""
+        return self._split_off
+
+    @property
     def content(self) -> StoryContent:
         """What the story says — its criteria, context, dependencies; never changed by the aggregate."""
         return self._content
@@ -349,7 +401,7 @@ class Story(AggregateRoot[StoryId]):
         returned, to be kept. A delivery by the gate whose pass is on record has nothing to prove."""
         if self._status is not StoryStatus.DELIVERED:
             raise NotDelivered(self._id)
-        claim = self._delivery or Delivery(DeliveredOn(""), DeliveredBy(""))
+        claim = self._delivery or Delivery(DeliveredOn(""), BY_NOBODY_KNOWN)
         if claim.by == BY_GATE and gate_pass is GatePass.ON_RECORD:
             raise NothingToProve(self._id)
         self._status = StoryStatus.ADOPTED
@@ -371,7 +423,7 @@ class Story(AggregateRoot[StoryId]):
         """The plan found every scenario holding: the released story is adopted, the plan's finding kept as its
         answered assumption."""
         if self._status is StoryStatus.DELIVERED:
-            raise AlreadyDelivered(self._id, self._delivery.by if self._delivery else DeliveredBy(""))
+            raise AlreadyDelivered(self._id, self._delivery.by if self._delivery else BY_NOBODY_KNOWN)
         if self.release_state() not in (ReleaseState.RELEASED, ReleaseState.UNMARKED):
             raise NotReleased(self._id, self._status)
         self._status = StoryStatus.ADOPTED
@@ -390,10 +442,41 @@ class Story(AggregateRoot[StoryId]):
         self._delivery = None
         self.register_event(PublicationTakenBack(self._id, at))
 
+    def split_off(self, scenarios: typing.Tuple[ScenarioKey, ...], held: Detail, at: Moment) -> Story:
+        """The plan found these scenarios holding, not the whole story: they move into an adopted story of their own,
+        `<id>-holds`, in the same epic; this story keeps the rest and says where they went. Returns the new story."""
+        if self._status is StoryStatus.DELIVERED:
+            raise AlreadyDelivered(self._id, self._delivery.by if self._delivery else BY_NOBODY_KNOWN)
+        if self.release_state() not in (ReleaseState.RELEASED, ReleaseState.UNMARKED):
+            raise NotReleased(self._id, self._status)
+        into = StoryId(f"{self._id.value}-holds")
+        moved = set(scenarios)
+        kept = self._content
+        split = Story(into, self._epic, StoryStatus.ADOPTED,
+                      [Assumption.answered(Detail(f"split from `{self._id.value}` — {held.value}"), PLAN_ADOPT)],
+                      content=dataclasses.replace(
+                          kept, written_status=StatusWord(StoryStatus.ADOPTED.value),
+                          criteria=tuple(scenarios), happy_paths=(), depends_on=(),
+                          closes=(), publishes=(), clauses=tuple(c for c in kept.clauses if c.key in moved),
+                          changed_expectations=Count(0)))
+        split._split_from = self._id
+        split._created = at
+        split.register_event(StoryAdoptedOnPlan(into, at))
+        self._content = dataclasses.replace(
+            kept, criteria=tuple(k for k in kept.criteria if k not in moved),
+            happy_paths=tuple(k for k in kept.happy_paths if k not in moved),
+            clauses=tuple(c for c in kept.clauses if c.key not in moved))
+        self._split_off = tuple(scenarios)
+        self._assumptions.append(Assumption.answered(
+            Detail(f"{', '.join(k.value for k in scenarios)} hold on today's code, and no delivered story carries "
+                   f"them — the plan split them into the adopted story `{into.value}`"), PLAN_ADOPT))
+        self.register_event(ScenariosSplitOff(self._id, into, tuple(scenarios), at))
+        return split
+
     def deliver_by_hand(self, by: Person, at: Moment) -> Delivery:
         """A person built it: delivered, claimed by them — not proven. Returns the delivery."""
         if self._status is StoryStatus.DELIVERED:
-            raise AlreadyDelivered(self._id, self._delivery.by if self._delivery else DeliveredBy(""))
+            raise AlreadyDelivered(self._id, self._delivery.by if self._delivery else BY_NOBODY_KNOWN)
         if self._status is StoryStatus.SUPERSEDED:
             raise NothingToDeliver(self._id)
         self._status = StoryStatus.DELIVERED
@@ -407,7 +490,7 @@ class Story(AggregateRoot[StoryId]):
         delivery. Only what a person released, or the project already has, is delivered; a story without a `status:`
         is not held back — the project may not use the field."""
         if self._status is StoryStatus.DELIVERED:
-            raise AlreadyDelivered(self._id, self._delivery.by if self._delivery else DeliveredBy(""))
+            raise AlreadyDelivered(self._id, self._delivery.by if self._delivery else BY_NOBODY_KNOWN)
         if self._status is StoryStatus.SUPERSEDED:
             raise NothingToDeliver(self._id)
         if self.release_state() is ReleaseState.UNRELEASED:

@@ -529,7 +529,15 @@ class PlanAdoption(Value):
         """Why the whole story is adopted, as its answered line says it: every scenario holds, with the test that
         shows it."""
         return Detail("every scenario holds on today's code, and no delivered story carries it — the plan adopted the "
-                      "story: " + ", ".join(f"{row.key.value} ({row.test.value})" for row in self.rows))
+                      "story: " + self.held().value)
+
+    def held(self) -> Detail:
+        """The scenarios that hold, each with the test that shows it: `key (test), …`."""
+        return Detail(", ".join(f"{row.key.value} ({row.test.value})" for row in self.rows))
+
+    def keys(self) -> typing.Tuple[ScenarioKey, ...]:
+        """The scenarios that hold."""
+        return tuple(row.key for row in self.rows)
 
 
 class SymbolName(Value):

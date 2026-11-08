@@ -38,9 +38,10 @@ class StageDelivery(OutputPort, typing.Protocol):
         """The story's digest as planned, the baseline of the tests that existed before it, the plan's signal."""
         ...
 
-    def split_off(self, result: typing.Any, story: str, story_path: str,
-                  held: typing.Sequence[typing.Tuple[str, str]]) -> None:
-        """The scenarios the plan found holding, `(key, test)`, split off into an adopted story beside it."""
+    def split_kept(self, result: typing.Any, story: str, story_path: str, into: str,
+                   scenarios: typing.Sequence[str]) -> None:
+        """Scenarios split off by the story's aggregate: the story as planned is the story without them, its answered
+        line the gate's own."""
         ...
 
     def adopted(self, result: typing.Any, story: str, story_path: str) -> None:

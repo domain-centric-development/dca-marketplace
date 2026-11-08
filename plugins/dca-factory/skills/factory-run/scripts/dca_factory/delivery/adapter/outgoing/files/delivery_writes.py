@@ -335,7 +335,7 @@ def keep_beside_delivery(result: typing.Any, story_path: str, story_id: str, fro
     that was its input — the story repository wrote."""
     result.written.append(story_folder(story_path))
     result.ok("delivered", f"{shown(story_path)} carries `status: delivered`, `delivered: {delivery.on.value}`, "
-                           f"`delivered_by: {delivery.by.value}`")
+                           f"`delivered_by: {delivery.by.line().value}`")
     added, open_now = record_findings(story_path, story_id, front, runs)
     if added or open_now:
         result.ok("findings", f"{added} confirmed finding(s) kept in {shown(findings_path(story_path))} — "

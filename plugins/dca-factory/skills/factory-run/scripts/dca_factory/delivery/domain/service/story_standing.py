@@ -38,7 +38,7 @@ class StoryStanding(DomainService):
         # Delivered is delivered: the gate wrote it into the story, and nothing under the run folder — a refusal
         # left from an earlier round, a deleted folder — changes that.
         if story.status is StoryStatus.DELIVERED:
-            by = story.delivery.by.value if story.delivery else ""
+            by = story.delivery.by.line().value if story.delivery else ""
             return Standing(StateName.DELIVERED, None, Detail(f"claimed by {by}" if by.startswith("hand") else ""))
         # Several factories (WP-93): a story this factory published waits for its merge; one another factory
         # claimed is theirs — read off the last fetch, written only where the profile opts in.

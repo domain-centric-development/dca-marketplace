@@ -41,6 +41,7 @@ from ..delivery.application.delivery.adopt_on_plan import AdoptOnPlanUseCase
 from ..delivery.application.delivery.apply_answer import ApplyAnswerUseCase
 from ..delivery.application.delivery.ask_acceptance import AskAcceptanceUseCase
 from ..delivery.application.delivery.deliver_story import DeliverStoryUseCase
+from ..delivery.application.delivery.split_off_on_plan import SplitOffOnPlanUseCase
 from ..delivery.application.shared.stage_delivery import Landing
 from ..delivery.domain.model.moment import Moment
 from ..delivery.application.profile.check_profile import CheckProfileUseCase
@@ -104,6 +105,7 @@ def wire_delivery(run: typing.Any) -> None:
         Landing.CHECKOUT: DeliverStoryUseCase(StoryFiles(run.cwd, checkout_epics(run.cwd, run.args.epics)), events, transactions),
     }
     run.adoptions = AdoptOnPlanUseCase(StoryFiles(run.cwd, run.args.epics), events, transactions)
+    run.splits = SplitOffOnPlanUseCase(StoryFiles(run.cwd, run.args.epics), events, transactions)
     run.answers = ApplyAnswerUseCase(DecisionRecordFiles(run.cwd, run.args.epics), StoryFiles(run.cwd, run.args.epics),
                                      DecisionStampFiles(run.runs, run.args.epics), events, transactions)
     run.acceptances = AskAcceptanceUseCase(AcceptanceRecordFiles(run.cwd, run.args.epics, run.runs, run.profile),

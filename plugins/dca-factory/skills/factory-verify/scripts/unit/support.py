@@ -29,7 +29,8 @@ from dca_factory.delivery.application.delivery.check_stage import Verdict
 from dca_factory.delivery.adapter.outgoing.files.stage_evidence_files import StageEvidenceFiles, story_content
 from dca_factory.delivery.adapter.outgoing.files.story_files import status_of
 from dca_factory.delivery.domain.model.epic import EpicId
-from dca_factory.delivery.domain.model.story import KindWord, Story, StoryId
+from dca_factory.delivery.domain.model.story import DeliveredOn, Delivery, Story, StoryId
+from dca_factory.delivery.adapter.outgoing.files.story_layout import delivered_on, deliverer_of, named_kind
 
 
 STORY = """---
@@ -136,5 +137,7 @@ def evidence(root, runs):
 def gate_story(story_id, path="", front=None, body="", criteria=()):
     """The story under a gate, read off its front matter and its body (no criteria)."""
     front = front or {}
+    on = delivered_on(front)
+    delivery = Delivery(DeliveredOn(on), deliverer_of(front)) if on or front.get("delivered_by") else None
     return Story.restore(StoryId(story_id), EpicId(str(front.get("epic") or "")), status_of(front.get("status")),
-                 named_kind=KindWord(str(front.get("kind") or "")), content=story_content(front, body, criteria))
+                         delivery=delivery, named_kind=named_kind(front), content=story_content(front, body, criteria))

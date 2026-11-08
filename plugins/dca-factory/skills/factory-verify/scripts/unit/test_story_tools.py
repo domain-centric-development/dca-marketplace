@@ -1,4 +1,4 @@
-"""A story's kind (`KindWord`), the skeletons a stage starts from, and a tool's probe — as the cli asks them."""
+"""A story's kind (`NamedKind`), the skeletons a stage starts from, and a tool's probe — as the cli asks them."""
 
 import unittest
 
@@ -7,7 +7,8 @@ from dca_factory.delivery.application.delivery.probe_tool import Probed, ProbeTo
 from dca_factory.delivery.application.delivery.write_skeleton import Skeleton, WriteSkeletonCommand, WriteSkeletonUseCase
 from dca_factory.delivery.application.shared.tool_binaries import Probe
 from dca_factory.delivery.domain.model.stage import StoryKind
-from dca_factory.delivery.domain.model.story import KindWord, StoryStatus
+from dca_factory.delivery.adapter.outgoing.files.story_layout import named_kind
+from dca_factory.delivery.domain.model.story import StoryStatus
 
 
 class Skeletons:
@@ -41,10 +42,10 @@ class Tools:
 class KindTest(unittest.TestCase):
 
     def test_a_named_journey_or_task_is_that_an_adopted_status_an_adoption_else_a_story(self):
-        self.assertIs(StoryKind.JOURNEY, KindWord(" Journey ").kind(StoryStatus.APPROVED))
-        self.assertIs(StoryKind.TASK, KindWord("task").kind(StoryStatus.ADOPTED))
-        self.assertIs(StoryKind.ADOPT, KindWord("").kind(StoryStatus.ADOPTED))
-        self.assertIs(StoryKind.STORY, KindWord("feature").kind(StoryStatus.DRAFT))
+        self.assertIs(StoryKind.JOURNEY, named_kind({"kind": " Journey "}).kind(StoryStatus.APPROVED))
+        self.assertIs(StoryKind.TASK, named_kind({"kind": "task"}).kind(StoryStatus.ADOPTED))
+        self.assertIs(StoryKind.ADOPT, named_kind({}).kind(StoryStatus.ADOPTED))
+        self.assertIs(StoryKind.STORY, named_kind({"kind": "feature"}).kind(StoryStatus.DRAFT))
 
 
 class SkeletonTest(unittest.TestCase):
