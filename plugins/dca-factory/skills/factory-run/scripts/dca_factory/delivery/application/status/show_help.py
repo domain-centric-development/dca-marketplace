@@ -8,7 +8,7 @@ import typing
 from ....building_blocks import UseCase
 from ..shared.project_facts import ProjectFacts
 from ..shared.status_facts import StatusFacts
-from .actions import make_action, RUNNER
+from ..shared.actions import make_action, RUNNER
 from .show_status import ShowStatusInputPort, ShowStatusQuery
 from ...domain.model.story_state import ENDED_WORDS
 

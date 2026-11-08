@@ -9,7 +9,7 @@ from ...domain.model.jump import RuleId
 from ...domain.model.workflow_rule import WorkflowRule
 
 
-class RuleRepository(Repository[WorkflowRule, RuleId], typing.Protocol):
+class WorkflowRuleRepository(Repository[WorkflowRule, RuleId], typing.Protocol):
     """Every rule of the gate and the runner, retired ones included."""
 
     def all(self) -> typing.Sequence[WorkflowRule]:

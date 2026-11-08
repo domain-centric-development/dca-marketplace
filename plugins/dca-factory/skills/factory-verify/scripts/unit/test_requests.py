@@ -13,14 +13,14 @@ from support import project, write
 from dca_factory.delivery.adapter.incoming.cli import cli_command as cli
 from dca_factory.delivery.domain.model.correction import REASON_CODES
 from dca_factory.delivery.adapter.outgoing.process import factory_process as service
-from dca_factory.delivery.application.status.actions import request_of
+from dca_factory.delivery.application.shared.actions import request_of
 from dca_factory.delivery.adapter.incoming.runner.usage import book_request_usage
 from dca_factory.delivery.adapter.outgoing.files import request_files
 from dca_factory.delivery.adapter.outgoing.files.decision_record_files import project_record_path, request_records
 from dca_factory.delivery.adapter.outgoing.files.journal_files import mark_questioned
 from dca_factory.delivery.adapter.outgoing.files.story_files import names_story
 from dca_factory.delivery.application.requests.check_request import CheckRequestCommand
-from dca_factory.delivery.application.requests.pending import mark_pending, pending_id
+from dca_factory.delivery.application.shared.pending import mark_pending, pending_id
 from dca_factory.delivery.application.requests.retry_request import RetryRequestCommand
 from dca_factory.delivery.application.requests.take_back_request import TakeBackRequestCommand
 from dca_factory.delivery.application.requests.write_request import WriteRequestCommand

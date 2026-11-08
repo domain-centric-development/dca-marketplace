@@ -14,6 +14,7 @@ dataclass by its base: it declares its fields and carries no decorator of its ow
     OutputPort                 what the application needs from outside, implemented by an outgoing adapter
     Repository, Store          aggregates with a life cycle; operational data recorded or looked up without one
     UseCaseException           a use case's failure about the request, not about an invariant
+    OutputPortException        a failure an output port reports, outside what the model or the request can say
     BoundedContext, Upstream   a context's declaration, `__dca__` in its package, and the contexts it depends on
     SharedKernel               the shared kernel's declaration
 
@@ -257,6 +258,11 @@ class UseCaseException(Exception):
     stays the platform's own. It names no transport vocabulary — the incoming adapter maps it onto its protocol's
     answer.
     """
+
+
+class OutputPortException(Exception):
+    """The base of every failure an output port reports to the application: the outside did not answer as it should,
+    or ended the work. It names no technology — the adapter translates its own failure into it."""
 
 
 class Translation(enum.Enum):

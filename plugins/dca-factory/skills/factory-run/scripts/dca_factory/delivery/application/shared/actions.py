@@ -11,7 +11,7 @@ import typing
 from ...domain.model.correction import REASON_CODES
 from ...domain.model.run_argument import ArgumentMeaning, RunArgument
 from ...domain.model.story import StoryId
-from ..shared.requests import ID_WORD, KIND
+from .requests import ID_WORD, KIND
 
 #: A request as an action offers it: {kind, fields, words, open} — `open` names what the person still has to give.
 Offer = typing.Dict[str, typing.Any]

@@ -24,7 +24,7 @@ from ....domain.model.schedule import ContextName
 from ....domain.model.stage import StageName, StoryKind
 from ....domain.model.story import Story
 from ....domain.model.stage_story import (
-    AssertionAt, AdoptRow, BriefFacts, ChangedTest, PlanAdoption, Rename, RenamedTest, SymbolName, DocumentFacts, Integration, MainTestLines, MainTests, MappedTest, OutcomeEvent, OutcomeFacts, PassGap,
+    AssertionAt, AdoptRow, BriefFacts, ChangedTest, PlanAdoption, Rename, RenamedTest, SymbolName, DocumentFacts, Integration, MainTestLines, MainTests, MappedTest, OutcomeEventPlaces, OutcomeFacts, PassGap,
     PipelineFacts, PlannedDigest, ProposalFacts, ReviewFacts, StoryPass, SpecDelta, SpecTests, StoryCommit, DecidedRecord, KeptTests, PlannedTestChange, RedProof, StageChanges,
     TestChange, TestEdit, Unobserved, AssertionFact, ByteSize, Clause, ClauseRow, CommandKey, Count,
     ElementName, ElementRules, FileChange, InvariantFacts, InvariantRow, PlannedFile, PortName, Presence, Rule,
@@ -711,7 +711,7 @@ class StageEvidenceFiles:
                 body = IMPORT_LINE.sub("", text)
                 return bool(constructs.search(declares.sub("", body))) if rel in declared else bool(mention.search(body))
             raising = [rel for rel, text in texts.items() if raises(rel, text)] if declared else []
-            events.append(OutcomeEvent(name, tuple(Place(d) for d in declared), tuple(Place(r) for r in raising)))
+            events.append(OutcomeEventPlaces(name, tuple(Place(d) for d in declared), tuple(Place(r) for r in raising)))
         return OutcomeFacts(tuple(events), changed)
 
     def document(self, story: StoryId) -> DocumentFacts:

@@ -346,7 +346,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         kind = shown.kind.value
         self.send_response(200)
         self.send_header("Content-Type", kind + ("; charset=utf-8" if page or shown.kind.text else ""))
-        self.send_header("Content-Length", str(len(shown.data)))
+        self.send_header("Content-Length", str(len(shown.data.value)))
         self.send_header("Content-Disposition", "inline")
         self.common_headers(framed=page)
         self.send_header("Content-Security-Policy",
@@ -354,7 +354,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                          "form-action 'none'; frame-ancestors 'self'; sandbox" if page
                          else "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox")
         self.end_headers()
-        self.wfile.write(shown.data)
+        self.wfile.write(shown.data.value)
         return None
 
     def font(self, name):

@@ -8,7 +8,7 @@ import re
 import typing
 
 from ....building_blocks import Value
-from .handed_file import MAX_BYTES, ByteSize, FileName, kind_of
+from .handed_file import MAX_BYTES, ByteSize, FileBytes, FileName, kind_of
 from .moment import Moment
 from .project_path import ProjectPath
 from .stage_story import CommandKey
@@ -72,14 +72,14 @@ class TakenFile(Value):
 
     relative: ProjectPath
     name: FileName
-    head: bytes
+    head: FileBytes
     size: ByteSize
     written: Instant
 
 
 def kept(files: typing.Iterable[TakenFile], since: Instant) -> typing.List[TakenFile]:
     """The pictures of a run brought to the story's place: those it took, newest first, at most `SHOWN`."""
-    taken = [f for f in files if taken_by_the_run(f.name, f.head, f.size, f.written, since)]
+    taken = [f for f in files if taken_by_the_run(f.name, f.head.value, f.size, f.written, since)]
     return sorted(taken, key=lambda f: -f.written.value)[:SHOWN]
 
 
@@ -102,12 +102,12 @@ class FoundShot(Value):
 
     shot: Shot
     written: Instant
-    head: bytes
+    head: FileBytes
 
 
 def shown(found: typing.Iterable[FoundShot]) -> typing.List[Shot]:
     """The pictures a story shows: pictures only, newest first, at most `SHOWN`."""
     def picture(f: FoundShot) -> bool:
-        kind = kind_of(f.head, f.shot.name)
+        kind = kind_of(f.head.value, f.shot.name)
         return bool(kind and kind.picture)
     return [f.shot for f in sorted(filter(picture, found), key=lambda f: -f.written.value)[:SHOWN]]

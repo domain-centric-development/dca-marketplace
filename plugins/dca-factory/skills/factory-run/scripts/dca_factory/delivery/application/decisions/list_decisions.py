@@ -6,11 +6,11 @@ import dataclasses
 import typing
 
 from ....building_blocks import UseCase
-from ..requests.pending import mark_pending
+from ..shared.pending import mark_pending
 from ..shared.decision_inbox import DecisionInbox, Facts
 from ..shared.requests import PENDING, RequestStore, place_of
 from ..shared.story_repository import StoryRepository
-from ..status.actions import Action, make_action, NamesStory, offered
+from ..shared.actions import Action, make_action, NamesStory, offered
 from ..status.texts import parse_time
 from ...domain.model.decision_record import ANSWERED_WORDS, WAITING_WORDS
 

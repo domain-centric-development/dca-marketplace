@@ -10,7 +10,7 @@ import enum
 import typing
 
 from ....building_blocks import Value
-from .handed_file import MAX_BYTES, FileKind, FileName, kind_of
+from .handed_file import MAX_BYTES, FileBytes, FileKind, FileName, kind_of
 from .project_path import ProjectPath
 
 #: A mockup is one static page, small.
@@ -81,22 +81,23 @@ class ShownFile(Value):
     only as a picture, a PDF or a text."""
 
     kind: FileKind
-    data: bytes
+    data: FileBytes
     shown_as: ShownAs
 
     @staticmethod
-    def of(path: ShownPath, data: bytes) -> "ShownFile":
+    def of(path: ShownPath, data: FileBytes) -> "ShownFile":
+        raw = data.value
         if path.mockup:
-            if len(data) > MOCKUP_BYTES:
+            if len(raw) > MOCKUP_BYTES:
                 raise FileNotShown(Refusal.TOO_LARGE, "a mockup is at most 512 KB")
             try:
-                data.decode("utf-8")
+                raw.decode("utf-8")
             except UnicodeDecodeError:
                 raise FileNotShown(Refusal.KIND, "a mockup is a page in UTF-8") from None
             return ShownFile(FileKind("text/html"), data, ShownAs.PAGE)
-        if len(data) > MAX_BYTES:
+        if len(raw) > MAX_BYTES:
             raise FileNotShown(Refusal.TOO_LARGE, "a file shown is at most 10 MB")
-        kind = kind_of(data, path.name)
+        kind = kind_of(raw, path.name)
         if not kind:
             raise FileNotShown(Refusal.KIND, "a picture, a PDF or a text is shown — not this file")
         return ShownFile(kind, data, ShownAs.FILE)

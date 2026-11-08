@@ -6,7 +6,7 @@ import dataclasses
 import typing
 
 from ....building_blocks import UseCase
-from ...domain.model.handed_file import FileName, FileRefused, HandedFile, HandedFiles
+from ...domain.model.handed_file import FileBytes, FileName, FileRefused, HandedFile, HandedFiles
 from ..shared.handed_file_store import HandedFileStore
 from ..shared.request_check import RequestCheck
 from ..shared.requests import RequestRefused, RequestStore
@@ -64,6 +64,6 @@ class WriteRequestUseCase:
     def _handed(command: WriteRequestCommand) -> HandedFiles:
         """The files as the domain takes them."""
         try:
-            return HandedFiles(tuple(HandedFile(FileName(name), data) for name, data in command.files))
+            return HandedFiles(tuple(HandedFile(FileName(name), FileBytes(data)) for name, data in command.files))
         except FileRefused as refused:
             raise RequestRefused(str(refused)) from None

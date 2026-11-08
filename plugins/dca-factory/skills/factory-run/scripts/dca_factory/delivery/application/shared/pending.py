@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import typing
 
-from ..shared.requests import Request
+from .requests import Request
 
 #: An action as a view draws it: its text, skill, shell form, label — and `request`, what pressing it writes.
 Action = typing.Dict[str, typing.Any]

@@ -9,7 +9,7 @@ import shutil
 import time
 import typing
 
-from ....domain.model.handed_file import ByteSize, FileName
+from ....domain.model.handed_file import ByteSize, FileBytes, FileName
 from ....domain.model.moment import Moment
 from ....domain.model.project_path import ProjectPath
 from ....domain.model.shot import SHOTS, FoundShot, Instant, Shot, TakenFile, kept, shot_name, shown
@@ -35,7 +35,7 @@ def shots_of(cwd: str, runs: str, story: str) -> typing.List[Shot]:
         written = os.path.getmtime(path)
         at = Moment(time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(written)))
         shot = Shot.of(ProjectPath(os.path.relpath(path, cwd).replace(os.sep, "/")), FileName(name), at)
-        found.append(FoundShot(shot, Instant(written), head_of(path)))
+        found.append(FoundShot(shot, Instant(written), FileBytes(head_of(path))))
     return shown(found)
 
 
@@ -53,7 +53,7 @@ def collect_shots(cwd: str, folder: str, story_folder: str, key: str, since: Ins
             if os.path.islink(path) or not os.path.isfile(path):
                 continue
             files.append(TakenFile(ProjectPath(os.path.relpath(path, source).replace(os.sep, "/")), FileName(name),
-                                   head_of(path), ByteSize(os.path.getsize(path)), Instant(os.path.getmtime(path))))
+                                   FileBytes(head_of(path)), ByteSize(os.path.getsize(path)), Instant(os.path.getmtime(path))))
     target, copied = os.path.join(story_folder, SHOTS), []
     for taken in kept(files, since):
         kept_as = shot_name(CommandKey(key), taken.relative)

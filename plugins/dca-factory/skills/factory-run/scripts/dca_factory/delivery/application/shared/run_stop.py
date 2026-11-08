@@ -3,11 +3,13 @@ raise it between two steps; the runner's entry point turns it into the exit code
 
 from __future__ import annotations
 
+from ....building_blocks import OutputPortException
+
 #: The exits of the signals that end a run: a TERM, a hang-up, an interrupt.
 SIGNAL_EXITS = {"SIGTERM": 143, "SIGHUP": 129, "SIGINT": 130}
 
 
-class Stopped(Exception):
+class Stopped(OutputPortException):
     """The run ends here with this exit code — the pipeline changed under it, a signal arrived."""
 
     def __init__(self, code: int) -> None:

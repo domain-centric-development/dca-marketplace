@@ -1,5 +1,5 @@
 """The rules the pipeline decides by, bound by their ids where they are decided — the rules themselves come from the
-rules' repository (`RuleRepository`, Markdown files beside the pipeline today), loaded once per process by its
+rules' repository (`WorkflowRuleRepository`, Markdown files beside the pipeline today), loaded once per process by its
 composition root (`load`).
 
 A gate check binds its rules where it registers (`@check(..., rule="GATE-…")`), a pass action where it registers
@@ -18,7 +18,7 @@ import typing
 from ...domain.model.jump import Jump, RuleId
 from ...domain.model.stage import StoryKind
 from ...domain.model.workflow_rule import OutcomeState, RulePart, WorkflowRule
-from ..shared.rule_repository import RuleRepository
+from ..shared.workflow_rule_repository import WorkflowRuleRepository
 from .pipeline_workflow import workflow
 
 Function = typing.TypeVar("Function", bound=typing.Callable[..., typing.Any])
@@ -85,7 +85,7 @@ def held(bound: typing.Iterable[Bound]) -> None:
         raise ValueError(f"rule {', '.join(other)}: its file names another part than the code that binds it")
 
 
-def load(repository: RuleRepository) -> None:
+def load(repository: WorkflowRuleRepository) -> None:
     """The rules from <repository>, held against every rule bound so far and against the loaded workflow — every
     target a stage of it, `again` or `stop` — once per process, by its composition root, after the workflow."""
     found = {r.id.value: r for r in repository.all()}

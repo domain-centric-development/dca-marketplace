@@ -20,13 +20,6 @@ NOT_YET_HELD = {
     "DCA-HEX-007": "an incoming adapter imports another context's api",
     "DCA-MAP-008": "the same import, past the anti-corruption layer delivery declares toward discovery",
     "DCA-TAC-023": "outgoing adapters construct roots instead of restoring them",
-    "DCA-TAC-025": "bytes fields in the domain",
-    "DCA-TAC-016": "a repository named after another type than its root",
-    "DCA-TAC-018": "a store carries the repository role",
-    "DCA-CYC-005": "a cycle between two features of delivery",
-    "DCA-ERR-003": "an application exception outside the port exception hierarchy",
-    "DCA-USE-006": "a class named Result in an incoming adapter",
-    "DCA-ADV-001": "a class named an event that is no DomainEvent",
 }
 
 

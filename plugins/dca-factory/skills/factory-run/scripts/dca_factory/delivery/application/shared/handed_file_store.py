@@ -5,12 +5,12 @@ from __future__ import annotations
 
 import typing
 
-from ....building_blocks import OutputPort
+from ....building_blocks import Store
 from ...domain.model.handed_file import HandedFile, HandedFileId, HandedFileRef
 from ...domain.model.project_path import ProjectPath
 
 
-class HandedFileStore(OutputPort, typing.Protocol):
+class HandedFileStore(Store, typing.Protocol):
     def keep(self, file: HandedFile) -> HandedFileRef:
         """Keeps one file and names it by a fresh id."""
         ...

@@ -135,7 +135,7 @@ def check_backlog(cwd: str, epics: str, profile: wiring.Profile, only: typing.Op
     return 1 if refused else 0
 
 
-class Result(Verdict):
+class ReportedVerdict(Verdict):
     """A gate run's verdict, as the gate reports it."""
 
     def report(self, story_id: typing.Optional[str], stage: str, as_json: bool, brief: bool = False) -> int:
@@ -277,7 +277,7 @@ def main(argv: typing.Sequence[str]) -> int:
     if args.check_backlog:
         return check_backlog(cwd, args.epics, read_profile(resolve_profile(args.profile, cwd)), args.story)
     if args.check_contract:
-        result = Result()
+        result = ReportedVerdict()
         profile = read_profile(resolve_profile(args.profile, cwd))
         check_contract(result, profile)
         check_models(result, profile)
@@ -303,7 +303,7 @@ def main(argv: typing.Sequence[str]) -> int:
             wiring.stage_changes(cwd, args.runs, args.story, args.record_changes)
         return 0
     if args.check_discovery:
-        result = Result()
+        result = ReportedVerdict()
         try:
             folder = location(read_profile(resolve_profile(args.profile, cwd)), "discovery")
             checked = check_report(cwd, folder, args.check_discovery)
@@ -314,7 +314,7 @@ def main(argv: typing.Sequence[str]) -> int:
             print(f"gate:{state} {check} — {message}")
         return 1 if result.failed else 0
     if args.project:
-        result = Result()
+        result = ReportedVerdict()
         try:
             profile = read_profile(resolve_profile(args.profile, cwd))
             check_project(result, cwd, profile)
@@ -327,7 +327,7 @@ def main(argv: typing.Sequence[str]) -> int:
             print(f"gate:{state} {check} — {message}")
         return 1 if result.failed else (3 if any(e[0] == "note" for e in result.entries) else 0)
     if args.change or args.parity:
-        result, label = Result(), "change" if args.change else "parity"
+        result, label = ReportedVerdict(), "change" if args.change else "parity"
         try:
             if args.change:
                 profile = read_profile(resolve_profile(args.profile, cwd))
@@ -346,7 +346,7 @@ def main(argv: typing.Sequence[str]) -> int:
     if not args.story or not args.stage:
         parser.error("--story and --stage are required (or --change, --parity, --check-backlog, --project; "
                      "status, schedule, usage and the inbox are factory-cli.py's)")
-    result = Result()
+    result = ReportedVerdict()
     profile = read_profile(resolve_profile(args.profile, cwd))
     hint = wiring.layout_note(cwd, profile)
     if hint:

@@ -24,6 +24,12 @@ TEXT_EXTENSIONS = {"txt": "text/plain", "md": "text/markdown", "csv": "text/csv"
 FILE_ID = re.compile(r"^f[0-9a-f]{16}$")
 
 
+class FileBytes(Value):
+    """The content of a file, as its bytes."""
+
+    value: bytes
+
+
 class FileRefused(ValueError):
     """A file the factory does not take: its kind, its size, its number, or nothing in it."""
 
@@ -114,19 +120,19 @@ class HandedFile(Value):
     not empty, at most `MAX_BYTES`."""
 
     given_name: FileName
-    data: bytes
+    data: FileBytes
 
     def __post_init__(self) -> None:
-        if not self.data:
+        if not self.data.value:
             raise FileRefused("the file is empty")
-        if len(self.data) > MAX_BYTES:
+        if len(self.data.value) > MAX_BYTES:
             raise FileRefused(f"a file is at most {MAX_BYTES // (1024 * 1024)} MB")
-        if not kind_of(self.data, self.given_name):
+        if not kind_of(self.data.value, self.given_name):
             raise FileRefused("a picture (png, jpg, gif, webp), a PDF or a text (txt, md, csv, json) — not this one")
 
     @property
     def kind(self) -> FileKind:
-        return typing.cast(FileKind, kind_of(self.data, self.given_name))
+        return typing.cast(FileKind, kind_of(self.data.value, self.given_name))
 
     @property
     def name(self) -> FileName:
@@ -138,7 +144,7 @@ class HandedFile(Value):
 
     @property
     def size(self) -> ByteSize:
-        return ByteSize(len(self.data))
+        return ByteSize(len(self.data.value))
 
 
 class HandedFileRef(Value):

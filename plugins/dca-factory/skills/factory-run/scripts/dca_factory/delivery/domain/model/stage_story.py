@@ -639,7 +639,7 @@ class StoryPass(Value):
     planned: PlannedDigest
 
 
-class OutcomeEvent(Value):
+class OutcomeEventPlaces(Value):
     """An outcome event the story publishes: the production files that declare it, and those that raise it."""
 
     event: EventName
@@ -651,7 +651,7 @@ class OutcomeFacts(Value):
     """The story's outcome events in the production code, and the files the story changed — None where no record
     says."""
 
-    events: typing.Tuple[OutcomeEvent, ...]
+    events: typing.Tuple[OutcomeEventPlaces, ...]
     changed: typing.Optional[typing.FrozenSet[Place]]
 
 

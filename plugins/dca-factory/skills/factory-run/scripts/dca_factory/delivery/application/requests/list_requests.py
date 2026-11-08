@@ -7,7 +7,7 @@ import typing
 
 from ....building_blocks import UseCase
 from ..shared.requests import KINDS, MadeItems, operations_of, place_of, Request, RequestStore, STATES
-from ..status.actions import make_action
+from ..shared.actions import make_action
 
 #: The word on a request's button for each operation.
 OPERATION_LABELS = {"follow": "follow", "retry": "retry", "drop": "take back"}

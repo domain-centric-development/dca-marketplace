@@ -13,7 +13,7 @@ from dca_factory.delivery.adapter.outgoing.process.runner_ports import RunnerReq
 from dca_factory.delivery.application.requests.write_request import WriteRequestCommand
 from dca_factory.delivery.application.shared.request_skill import HandedFileRead
 from dca_factory.delivery.application.shared.requests import RequestRefused
-from dca_factory.delivery.domain.model.handed_file import FileName, HandedFile, HandedFileId, KEEP_DAYS
+from dca_factory.delivery.domain.model.handed_file import FileBytes, FileName, HandedFile, HandedFileId, KEEP_DAYS
 from dca_factory.infrastructure import delivery as wiring
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\0" * 32
@@ -38,7 +38,7 @@ class TheStoreKeepsWhatTheDomainTook(unittest.TestCase):
     def test_kept_found_and_read_by_its_id_alone(self):
         with project() as p, Here(p.root):
             store = HandedFileFolder()
-            ref = store.keep(HandedFile(FileName("../screen shot.png"), PNG))
+            ref = store.keep(HandedFile(FileName("../screen shot.png"), FileBytes(PNG)))
             self.assertEqual("screen-shot.png", ref.name.value)
             self.assertEqual(ref, store.find(ref.id))
             self.assertTrue(store.readable(ref.id).value.startswith(".dca-factory/requests/files/"))
@@ -47,7 +47,8 @@ class TheStoreKeepsWhatTheDomainTook(unittest.TestCase):
     def test_a_file_nothing_names_goes_after_a_while_and_a_named_one_stays(self):
         with project() as p, Here(p.root):
             store = HandedFileFolder()
-            named, loose = store.keep(HandedFile(FileName("a.pdf"), PDF)), store.keep(HandedFile(FileName("b.pdf"), PDF))
+            named = store.keep(HandedFile(FileName("a.pdf"), FileBytes(PDF)))
+            loose = store.keep(HandedFile(FileName("b.pdf"), FileBytes(PDF)))
             old = time.time() - (KEEP_DAYS + 1) * 86400
             for ref in (named, loose):
                 os.utime(os.path.join(files_dir(), ref.id.value), (old, old))
@@ -102,7 +103,7 @@ class TheCliHandsFilesOverToo(unittest.TestCase):
 class TheAgentIsToldWhatWasHandedOver(unittest.TestCase):
     def test_the_prompt_lists_each_file_by_its_path_and_says_it_is_committed_only_as_part_of_the_story(self):
         with project() as p, Here(p.root):
-            ref = HandedFileFolder().keep(HandedFile(FileName("the page today.png"), PNG))
+            ref = HandedFileFolder().keep(HandedFile(FileName("the page today.png"), FileBytes(PNG)))
             run = types.SimpleNamespace(skill_dirs=lambda tool: [], scripts=os.path.join(p.root, "scripts"),
                                         pwd=p.root, home=p.root, where_things_are=lambda *a, **k: "")
             store = HandedFileFolder()

@@ -7,6 +7,7 @@ import dataclasses
 import typing
 
 from ....building_blocks import UseCase
+from ...domain.model.handed_file import FileBytes
 from ...domain.model.project_path import ProjectPath
 from ...domain.model.shown_file import FileNotShown, Refusal, ShownFile, ShownPath, shown_places
 from ..shared.shown_file_source import ShownFileSource
@@ -33,4 +34,4 @@ class ShowProjectFileUseCase:
         data = self._source.read(path)
         if data is None:
             raise FileNotShown(Refusal.NOTHING, "no such file beneath product/ or the factory's folder")
-        return ShownFile.of(path, data)
+        return ShownFile.of(path, FileBytes(data))

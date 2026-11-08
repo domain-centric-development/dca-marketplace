@@ -10,12 +10,12 @@ from ....building_blocks import UseCase
 from ...domain.model.story_state import RUNNABLE
 from ...domain.model.usage import USAGE_FIELDS
 from ..requests.list_requests import ListRequestsQuery, ListRequestsUseCase
-from ..requests.pending import mark_pending
+from ..shared.pending import mark_pending
 from ..shared.requests import PENDING, RequestStore, place_of
 from ..description.parts import parts_as_they_stand
 from ..shared.description_store import DescriptionStore
 from ..shared.status_facts import StatusFacts
-from .actions import Action, entry_actions, make_action, offered, RUNNER
+from ..shared.actions import Action, entry_actions, make_action, offered, RUNNER
 from .now_columns import now_columns, places_of
 from .texts import claim_age, figures, newest_first, parse_time, signal_totals, stamp_text, took_text, worker_text
 from ...domain.model.decision_record import WAITING_WORDS

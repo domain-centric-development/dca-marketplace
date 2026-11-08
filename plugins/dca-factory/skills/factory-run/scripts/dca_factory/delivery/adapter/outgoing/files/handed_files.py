@@ -30,7 +30,7 @@ class HandedFileFolder(HandedFileStore):
         folder = os.path.join(files_dir(), file_id.value)
         os.makedirs(folder, exist_ok=False)
         with open(os.path.join(folder, file.name.value), "xb") as out:
-            out.write(file.data)
+            out.write(file.data.value)
         return HandedFileRef(file_id, file.name, file.kind, file.size)
 
     def find(self, file_id: HandedFileId) -> typing.Optional[HandedFileRef]:

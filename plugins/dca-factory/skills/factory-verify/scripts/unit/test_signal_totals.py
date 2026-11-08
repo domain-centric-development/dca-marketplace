@@ -34,7 +34,7 @@ class CreatingActionTest(unittest.TestCase):
     not."""
 
     def test_an_action_says_whether_an_agent_writes_something_new(self):
-        from dca_factory.delivery.application.status.actions import make_action
+        from dca_factory.delivery.application.shared.actions import make_action
         names = lambda word: word == "s-1"
         self.assertTrue(make_action(names, skill="/factory-backlog stories account", label="suggest stories")["creates"])
         self.assertTrue(make_action(names, skill="/factory-run show the newest first", label="wish")["creates"])
@@ -57,7 +57,7 @@ class ContinueDiscoveryTest(unittest.TestCase):
     """A discovery continued from the page names its topic, so the skill continues that report and no other."""
 
     def test_continue_writes_a_discover_request_that_names_its_topic(self):
-        from dca_factory.delivery.application.status.actions import make_action
+        from dca_factory.delivery.application.shared.actions import make_action
         from dca_factory.delivery.application.shared.requests import KIND, written_keys
         action = make_action(lambda word: False, skill="/factory-discover --topic agent-buyers", label="continue")
         self.assertEqual(("discover", {"topic": "agent-buyers"}, "words"),

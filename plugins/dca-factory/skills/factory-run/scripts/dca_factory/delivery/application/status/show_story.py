@@ -9,12 +9,12 @@ import typing
 
 from ....building_blocks import UseCase, UseCaseException
 from ...domain.model.usage import USAGE_FIELDS
-from ..requests.pending import mark_pending
+from ..shared.pending import mark_pending
 from ..requests.pending_requests import PendingRequestsQuery, PendingRequestsUseCase
 from ..shared.detail_facts import DetailFacts
 from ..shared.front import accepted, created_of, front_text, is_acceptance
 from ..shared.status_facts import StatusFacts
-from .actions import make_action, offered
+from ..shared.actions import make_action, offered
 from .show_status import ShowStatusInputPort, ShowStatusQuery
 from .texts import figures, parse_time, stamp_text, took_text
 from ...domain.model.decision_record import ANSWERED_WORDS

@@ -32,7 +32,7 @@ from ....domain.model.verdict import CheckName
 from ....domain.model.workflow_rule import (
     Outcome, OutcomeState, RuleOrder, RulePart, RuleText, WorkflowRule, Written)
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter
-from ....application.shared.rule_repository import RuleRepository
+from ....application.shared.workflow_rule_repository import WorkflowRuleRepository
 
 #: The rules beside the package: `scripts/workflow/rules` in the plugin, `.agents/factory/workflow/rules` installed.
 FOLDER = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "..", "..",
@@ -74,8 +74,8 @@ def paragraph(body: str, label: str) -> str:
     return ""
 
 
-class RuleFiles(RuleRepository):
-    """The rules' repository (`RuleRepository`) over a folder of Markdown files."""
+class RuleFiles(WorkflowRuleRepository):
+    """The rules' repository (`WorkflowRuleRepository`) over a folder of Markdown files."""
 
     def __init__(self, folder: str = FOLDER) -> None:
         self._folder = folder

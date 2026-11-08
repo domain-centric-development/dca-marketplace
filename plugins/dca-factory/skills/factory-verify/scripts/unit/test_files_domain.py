@@ -4,8 +4,8 @@ file the page may show — pure, no folder touched."""
 import unittest
 
 import support  # noqa: F401 — puts the package on the path
-from dca_factory.delivery.domain.model.handed_file import (ByteSize, FileName, FileRefused, HandedFile, HandedFileId,
-                                                           HandedFiles, MAX_BYTES, kind_of)
+from dca_factory.delivery.domain.model.handed_file import (ByteSize, FileBytes, FileName, FileRefused, HandedFile,
+                                                           HandedFileId, HandedFiles, MAX_BYTES, kind_of)
 from dca_factory.delivery.domain.model.moment import Moment
 from dca_factory.delivery.domain.model.project_path import ProjectPath
 from dca_factory.delivery.domain.model.shot import (REUSED_WITHIN, SHOWN, FoundShot, Instant, RunOrigin, Shot,
@@ -21,18 +21,18 @@ PLACES = (ProjectPath("product"), ProjectPath(".dca-factory"))
 
 class AHandedFile(unittest.TestCase):
     def test_is_known_by_its_content_and_kept_under_a_reduced_name(self):
-        f = HandedFile(FileName("../../Bild vom 3. März.PNG"), PNG)
+        f = HandedFile(FileName("../../Bild vom 3. März.PNG"), FileBytes(PNG))
         self.assertEqual(("image/png", "Bild-vom-3.-M-rz.png", 40), (f.kind.value, f.name.value, f.size.value))
-        self.assertEqual("text/markdown", HandedFile(FileName("notes.md"), "über den Ablauf\n".encode()).kind.value)
+        self.assertEqual("text/markdown", HandedFile(FileName("notes.md"), FileBytes("über den Ablauf\n".encode())).kind.value)
 
     def test_refused_empty_too_big_or_of_no_kind_of_ours(self):
         for name, data in (("a.png", b""), ("a.png", PNG + b"\0" * MAX_BYTES), ("x.svg", b"<svg><script/></svg>"),
                            ("page.txt", b"<html><script>1</script>"), ("tool.exe", b"MZ\x90"), ("t.txt", b"a\x1b[2J")):
             with self.subTest(name=name), self.assertRaises(FileRefused):
-                HandedFile(FileName(name), data)
+                HandedFile(FileName(name), FileBytes(data))
 
     def test_a_request_takes_five_at_most(self):
-        five = tuple(HandedFile(FileName(f"{n}.png"), PNG) for n in range(5))
+        five = tuple(HandedFile(FileName(f"{n}.png"), FileBytes(PNG)) for n in range(5))
         self.assertTrue(HandedFiles(five).any)
         with self.assertRaises(FileRefused):
             HandedFiles(five + five[:1])
@@ -81,7 +81,7 @@ class AStorysPicture(unittest.TestCase):
 
     def test_the_newest_pictures_the_run_took_are_kept_whatever_their_names(self):
         def file(name, at):
-            return TakenFile(ProjectPath(name), FileName(name), PNG if name.endswith(".png") else b"PK", ByteSize(40),
+            return TakenFile(ProjectPath(name), FileName(name), FileBytes(PNG if name.endswith(".png") else b"PK"), ByteSize(40),
                              Instant(at))
         files = [file(f"a-{n:02}.png", 1000.0 - n) for n in range(SHOWN + 5)] + [file("old.png", 10.0),
                                                                                   file("trace.zip", 2000.0)]
@@ -91,7 +91,7 @@ class AStorysPicture(unittest.TestCase):
     def test_newest_first_pictures_only_at_most_shown(self):
         def found(name, at):
             return FoundShot(Shot.of(ProjectPath(f"r/S/shots/{name}"), FileName(name), Moment("2026-11-04T12:00:00Z")),
-                             Instant(at), PNG if name.endswith(".png") else b"text")
+                             Instant(at), FileBytes(PNG if name.endswith(".png") else b"text"))
         listed = [found("e2e-old.png", 1.0), found("e2e-new.png", 2.0), found("notes.txt", 3.0)]
         self.assertEqual(["e2e-new.png", "e2e-old.png"], [s.name.value for s in shown(listed)])
         self.assertEqual("e2e", shown(listed)[0].taker.value)
@@ -109,14 +109,14 @@ class AFileThePageShows(unittest.TestCase):
 
     def test_a_mockup_is_a_page_beside_a_record_or_in_a_mockups_folder(self):
         for given in ("product/epics/e/s/decisions/01/a.html", "product/discovery/t/mockups/a.html"):
-            shown_file = ShownFile.of(ShownPath(ProjectPath(given), PLACES), b"<b>cards</b>")
+            shown_file = ShownFile.of(ShownPath(ProjectPath(given), PLACES), FileBytes(b"<b>cards</b>"))
             self.assertEqual((ShownAs.PAGE, "text/html"), (shown_file.shown_as, shown_file.kind.value))
         with self.assertRaises(FileNotShown) as refused:
-            ShownFile.of(ShownPath(ProjectPath("product/page.html"), PLACES), b"<html><script>1</script>")
+            ShownFile.of(ShownPath(ProjectPath("product/page.html"), PLACES), FileBytes(b"<html><script>1</script>"))
         self.assertEqual(Refusal.KIND, refused.exception.refusal)
 
     def test_anything_else_only_as_a_picture_a_pdf_or_a_text(self):
-        picture = ShownFile.of(ShownPath(ProjectPath("product/a.png"), PLACES), PNG)
+        picture = ShownFile.of(ShownPath(ProjectPath("product/a.png"), PLACES), FileBytes(PNG))
         self.assertEqual((ShownAs.FILE, "image/png"), (picture.shown_as, picture.kind.value))
 
 
