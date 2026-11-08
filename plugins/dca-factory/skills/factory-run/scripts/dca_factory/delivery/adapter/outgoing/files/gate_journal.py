@@ -3,6 +3,9 @@ journaled before its commit, and the backlog's digest on a refused plan gate."""
 
 from __future__ import annotations
 
+from ....domain.model.stage import Role
+from ..pipeline.stage_rows import stage_of
+
 import contextlib
 import os
 import typing
@@ -42,7 +45,7 @@ def journal_gate(result: Verdict, args: typing.Any, story_id: typing.Optional[st
     if not story_id or code == 0 and result.closed:
         return code
     fields = gate_fields(result, args, code)
-    if args.stage == "plan" and code == 1 and story_path:
+    if args.stage == stage_of(Role.PLANS) and code == 1 and story_path:
         fields.append(f"backlog={backlog_digest(story_path)}")
     with contextlib.suppress(OSError):
         journal_append(args.runs, story_id, "gate", args.stage, *fields)

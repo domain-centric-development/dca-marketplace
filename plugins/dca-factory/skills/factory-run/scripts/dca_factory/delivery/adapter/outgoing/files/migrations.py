@@ -5,6 +5,9 @@ stories merged into the living spec, the glossaries out of the code, the method'
 
 from __future__ import annotations
 
+from ....domain.model.stage import Role
+from ..pipeline.stage_rows import stage_of
+
 import contextlib
 import glob
 import os
@@ -93,7 +96,7 @@ def adopted_on(run_folder: str, delivered_file: str) -> str:
     if os.path.isfile(journal):
         for line in reversed(read_text(journal).splitlines()):
             parts = line.split("\t")
-            if len(parts) >= 4 and parts[1] == "gate" and parts[2] == "adopt" and parts[3] == "exit=0":
+            if len(parts) >= 4 and parts[1] == "gate" and parts[2] == stage_of(Role.ADOPTS) and parts[3] == "exit=0":
                 return parts[0]
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(os.path.getmtime(delivered_file)))
 

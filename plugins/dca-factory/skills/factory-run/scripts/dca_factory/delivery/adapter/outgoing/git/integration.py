@@ -3,6 +3,9 @@ changed while the story ran and the lines of them a merge's resolution lost."""
 
 from __future__ import annotations
 
+from ....domain.model.stage import Role
+from ..pipeline.stage_rows import stage_of
+
 import collections
 import difflib
 import os
@@ -112,7 +115,7 @@ def main_tests_waiver(cwd: str, story_id: str, rel: str) -> typing.List[str]:
     except (GateError, OSError):
         return []
     return [str(front.get("id", "")).strip() for _p, front, body, state, _a in records
-            if DecisionState(state).answered and str(front.get("stage", "")).strip() == "integrate"
+            if DecisionState(state).answered and str(front.get("stage", "")).strip() == stage_of(Role.INTEGRATES)
             and (rel in body or re.search(rf"(?<![\w./-]){re.escape(os.path.basename(rel))}(?![\w.-])", body))]
 
 

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from ....domain.model.stage import Role
+from ..pipeline.stage_rows import stage_of
+
 
 import glob
 import os
@@ -64,7 +67,7 @@ def record_story(runs: str, story_id: str) -> typing.Optional[typing.Dict[str, s
         plan = os.path.join(runs, story_id, "plan.md")
         if os.path.isfile(plan):
             journal_signal(runs, story_id, "plan", open=len(plan_left_open(read_text(plan))))
-        elif any(e["kind"] == "gate" and e["name"] == "plan" and e["fields"].get("exit") == "0" for e in events):
+        elif any(e["kind"] == "gate" and e["name"] == stage_of(Role.PLANS) and e["fields"].get("exit") == "0" for e in events):
             unknown.append("plan")
     if latest_signal(events, "rules") is None:
         tsv = os.path.join(folder, INVARIANT_BREAKS)

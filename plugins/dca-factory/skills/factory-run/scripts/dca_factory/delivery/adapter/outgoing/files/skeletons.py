@@ -6,6 +6,9 @@ plan, the files lists of the builder stages, the clauses and invariants tables a
 
 from __future__ import annotations
 
+from ....domain.model.stage import Role
+from ..pipeline.stage_rows import stage_of
+
 import os
 import sys
 import typing
@@ -55,7 +58,7 @@ def contract_body(stage: str, runs: str) -> typing.Optional[str]:
     without this text changing with them."""
     folder = f"{runs}/<story>"
     evidence = f"{evidence_dir(runs)}/<story>".replace(os.sep, "/")
-    if stage == "plan":
+    if stage == stage_of(Role.PLANS):
         return f"""{CONTRACT_HEAD}
 
 plan — {folder}/plan.md (gate before the stage: story, epic, context map, decisions, rounds; the test gate reads the plan)
@@ -80,7 +83,7 @@ plan — {folder}/plan.md (gate before the stage: story, epic, context map, deci
 - A citation is a path from the project root, `src/main/java/…/Thing.java:12`; a bare `Thing.java:12` resolves to nothing.
   A catalog node is cited by its path inside the catalog (`recipe/add-an-aggregate.md`), as the knowledge skill cites it —
   never by a path into a skill folder"""
-    if stage == "test":
+    if stage == stage_of(Role.TESTS):
         return f"""{CONTRACT_HEAD}
 
 test — {folder}/tests.md (gate after the stage: tests-mapped, tests-exist, compiles, tests-red, levels, test-titles, tests-assert-then, invariants, invariant-breaks, files-listed)
@@ -111,7 +114,7 @@ test — {folder}/tests.md (gate after the stage: tests-mapped, tests-exist, com
 - stubs: a type with nothing a criterion observes (a record and its fields, an enum, an interface, an exception type) is
   written whole here; a method whose outcome a criterion asserts throws — whatever a criterion observes, throws"""
     if stage in FILES_SECTIONS and stage_named()[stage].suite:
-        table, name = ("## Changed", "build") if stage == "build" else ("## Moves", "tidy")
+        table, name = ("## Changed", stage_of(Role.BUILDS)) if stage == stage_of(Role.BUILDS) else ("## Moves", stage_of(Role.TIDIES))
         return f"""{CONTRACT_HEAD}
 
 {name} — {folder}/{stage_files()[stage]} (gate after the stage: tests-green, red-proof{', red-reproof' if stage == 'tidy' else ''}, files-listed, existing tests, architecture, format)
@@ -126,7 +129,7 @@ test — {folder}/tests.md (gate after the stage: tests-mapped, tests-exist, com
 - `## needs-human` only to stop, with `decision: <story>-<nn>` and the record beside the story (`stage: {name}`)
 - {'a test that cannot pass for a reason in its own code — a helper, a locator, a fixture — while what it asserts stays as it is: write `back: test` on a line of its own and say what is wrong; the round goes to the test stage, which repairs it and proves it with a break. A change to what a test asserts is still a question (`## needs-human`)' if stage == 'build' else 'the story\'s tests take moves that keep what each asserts — a copy lifted into the shared support, a page object instead of a raw locator, a name after its display name, a dead helper deleted —, each a row under `## Moves`; `red-reproof` runs every moved mapped test on the tree the test stage left and refuses one green there or not compiling. Never an assertion, an expected value, a selector or a scope: a defect in what a test asserts is a finding for the judge'}
 - no criterion key in code, a comment or a test name; no `TODO` for the criterion delivered"""
-    if stage == "judge":
+    if stage == stage_of(Role.JUDGES):
         return f"""{CONTRACT_HEAD}
 
 judge — {folder}/judge.md (the runner reads the verdict; the document gate reads `story-pass`)
@@ -143,7 +146,7 @@ judge — {folder}/judge.md (the runner reads the verdict; the document gate rea
 - `## Previous round` in a repeat round: every defect the previous verdict confirmed — fixed (file:line) | withdrawn (why) | still open
 - a `story-conflict` names a decision record: `## needs-human` with `decision: <story>-<nn>`, the record's `stage:` is the one
   that applies the answer (plan or test)"""
-    if stage == "document":
+    if stage == stage_of(Role.DELIVERS):
         return f"""{CONTRACT_HEAD}
 
 document — {folder}/document.md (gate after the stage: story-pass, outcome, documented, glossary, architecture)
@@ -291,7 +294,7 @@ def files_skeleton(runs: str, story_id: str, stage: str, cwd: str = ".") -> int:
     """The stage's file list (below), and at the test stage the `gate:invariants` table with one row per rule the
     plan names — element, number, the rule's text — so the stage fills in only each row's test."""
     code = _files_skeleton(runs, story_id, stage, cwd)
-    if code == 0 and stage == "test":
+    if code == 0 and stage == stage_of(Role.TESTS):
         invariants_skeleton(runs, story_id)
         clauses_skeleton(runs, story_id, cwd)
     return code

@@ -3,6 +3,9 @@ stage files and refusals of its run folder, its decision records."""
 
 from __future__ import annotations
 
+from ....domain.model.stage import Role
+from ..pipeline.stage_rows import stage_of
+
 import os
 import typing
 
@@ -58,7 +61,7 @@ class StoryFactsFiles(StoryFacts):
         texts = current_stage_files(self.runs, self.story_id, order_for(story.kind.value))
         hand_overs = {StageName(stage): self.hand_over(text) for stage, text in texts.items()}
         marks = self.marks(texts, pass_marks(self.runs, self.story_id))
-        acceptance = self.acceptance() if self.story_path and "document" in texts else None
+        acceptance = self.acceptance() if self.story_path and stage_of(Role.DELIVERS) in texts else None
         return RunFacts(hand_overs, self.unreadable(), frozenset(marks), self.rounds(),
                         tuple(StageName(s) for s in stage_order() if self.present(f".gate-{s}.txt")),
                         frozenset(StageName(s) for s in stage_order() if self.present(stage_files()[s])),
@@ -94,7 +97,7 @@ class StoryFactsFiles(StoryFacts):
         if self.present(".gate-plan.txt"):
             marks.add(Mark.PLAN_REFUSED)
             refused = next((e["fields"].get("backlog") for e in reversed(journal_events(self.runs, self.story_id))
-                            if e["kind"] == "gate" and e["name"] == "plan" and e["fields"].get("exit") != "0"), None)
+                            if e["kind"] == "gate" and e["name"] == stage_of(Role.PLANS) and e["fields"].get("exit") != "0"), None)
             if refused and refused != backlog_digest(self.story_path):
                 marks.add(Mark.REPAIRED)
         if self.present(".gate-integrate.txt") \

@@ -3,6 +3,9 @@ from that run's reports by name — and the red ledger the verdicts are held to.
 
 from __future__ import annotations
 
+from ....domain.model.stage import Role
+from ..pipeline.stage_rows import stage_of
+
 import contextlib
 import os
 import typing
@@ -154,7 +157,7 @@ def red_ledger(cwd: str, runs: typing.Optional[str], story: typing.Optional[str]
         with contextlib.suppress(GateError):
             changed_on += [rid for rid, front, state, answer, body in acceptance_records(cwd, story or "")
                            if record_of(rid, front, body, state, answer).corrects()]
-    built = bool(runs and story) and os.path.isfile(os.path.join(runs or "", story or "", stage_files()["build"]))
+    built = bool(runs and story) and os.path.isfile(os.path.join(runs or "", story or "", stage_files()[stage_of(Role.BUILDS)]))
     moved = frozenset(Selector(selector) for selector, recorded in digests.items()
                       if recorded and located.get(selector) and os.path.isfile(os.path.join(cwd, located[selector]))
                       and file_digest(os.path.join(cwd, located[selector])) != recorded)

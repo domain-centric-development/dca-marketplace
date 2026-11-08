@@ -10,6 +10,9 @@ their own.
 
 from __future__ import annotations
 
+from ....domain.model.stage import Role
+from ..pipeline.stage_rows import stage_of
+
 import argparse
 import contextlib
 import glob
@@ -451,7 +454,7 @@ class Run(ProfileSource):
         self.profile()
         path = os.path.join(place("runs"), story, stage_files()[stage] if stage else "judge.md")
         if stage:
-            return "test" if os.path.isfile(path) and back_in(read_text(path)) == "test" else ""
+            return stage_of(Role.TESTS) if os.path.isfile(path) and back_in(read_text(path)) == stage_of(Role.TESTS) else ""
         return back_in(read_text(path)) if os.path.isfile(path) else "build"
 
     def start_stage(self, story: str) -> str:
@@ -616,11 +619,11 @@ class Run(ProfileSource):
         later = self.later_refusals(story, stage, "this stage")
         if later and stage == self.start_stage(story):
             repeat += later
-        if stage == "test" and self.back_to(story, "build") == "test":
+        if stage == stage_of(Role.TESTS) and self.back_to(story, stage_of(Role.BUILDS)) == stage_of(Role.TESTS):
             repeat += f" The build stage sent the story back: {self.runs}/{story}/build.md."
-        if stage == "test":
+        if stage == stage_of(Role.TESTS):
             repeat += self.red_stale_sentence(story)
-        if stage == "judge" and os.path.isfile(f"{self.runs}/{story}/.judge-previous.md"):
+        if stage == stage_of(Role.JUDGES) and os.path.isfile(f"{self.runs}/{story}/.judge-previous.md"):
             repeat = f" This is a repeat round; the previous verdict: {self.runs}/{story}/.judge-previous.md."
         guard = self.guard_sentence() if stage in stage_named() and stage_named()[stage].guarded else ""
         return (f"{self.opening(stage, story, dry)}{self.worktree_sentence()} "
@@ -727,9 +730,9 @@ class Run(ProfileSource):
                   f"`{self.py} {self.cli_rel()} --files-skeleton {story} <stage>`, "
                   f"`{self.py} {self.cli_rel()} --plan-skeleton {story}`. {self.where_things_are(tool, story)}")
         prompt += self.guard_sentence()
-        if self.back_to(story, "build") == "test":
+        if self.back_to(story, stage_of(Role.BUILDS)) == stage_of(Role.TESTS):
             prompt += f" The build stage sent the story back: {self.runs}/{story}/build.md."
-        if "test" in stages:
+        if stage_of(Role.TESTS) in stages:
             prompt += self.red_stale_sentence(story)
         for earlier in stages:
             if os.path.isfile(f"{self.runs}/{story}/.gate-{earlier}.txt"):
@@ -769,7 +772,7 @@ class Run(ProfileSource):
         folder = f"{self.runs}/{story}/reviews"
         print(f"   reviews: {', '.join(names)} — one process each, at once; the judge converges from "
               "reviews/<perspective>.md")
-        every = self.briefs(story, ["judge"], dry)[0]
+        every = self.briefs(story, [stage_of(Role.JUDGES)], dry)[0]
         prompts = [(f"Review the change of backlog story {story} from the {name} perspective: apply the `{carrier}` "
                     f"skill to the diff {self.evidence(story)}/story.diff, as *A review the runner started* in "
                     f"{every} says. Its input beside the diff: the story and its epic (epic.md "
@@ -823,7 +826,7 @@ class Run(ProfileSource):
         from the builder is the point of the split. The tool's exit, 0 in a dry run."""
         tool = self.tools.tool_for("verifier", tool)
         document = (f" The skeleton: `{self.py} {self.cli_rel()} --document-skeleton {story}`; the document gate: "
-                    f"`{self.py} {self.gate_rel} --story {story} --stage document --brief`.") if "document" in stages else ""
+                    f"`{self.py} {self.gate_rel} --story {story} --stage document --brief`.") if stage_of(Role.DELIVERS) in stages else ""
         prompt = (f"Carry out these stages of the delivery pipeline for backlog story {story}, one after another, in "
                   f"this one session: {', '.join(stages)}. {self.window_briefs(story, stages, dry)}{document} "
                   f"{self.where_things_are(tool, story)}")
@@ -906,7 +909,7 @@ class Run(ProfileSource):
             return 4
         stage_started = utc()
         # The previous verdict is an input to the next one, not something to overwrite.
-        if stage == "judge" and os.path.isfile(f"{self.runs}/{story}/judge.md"):
+        if stage == stage_of(Role.JUDGES) and os.path.isfile(f"{self.runs}/{story}/judge.md"):
             os.replace(f"{self.runs}/{story}/judge.md", f"{self.runs}/{story}/.judge-previous.md")
         self.gates.record("--record-base", story)
         artefact = self.artefact(story, stage)

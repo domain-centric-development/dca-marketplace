@@ -6,6 +6,9 @@ never in the runner, so one reader decides what a worktree is on every platform.
 
 from __future__ import annotations
 
+from ....domain.model.stage import Role
+from ..pipeline.stage_rows import stage_of
+
 import contextlib
 import os
 import re
@@ -152,7 +155,7 @@ def worktree_prepare(cwd: str, runs: str, story_id: str) -> int:
     exclude_worktrees(cwd)
     if not has_worktree(story_id, cwd):
         known = git(cwd, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}")[0] == 0
-        if not known and os.path.isfile(os.path.join(runs, story_id, stage_files()["test"])) and not is_delivered(
+        if not known and os.path.isfile(os.path.join(runs, story_id, stage_files()[stage_of(Role.TESTS)])) and not is_delivered(
                 read_front_matter(find_story(place("epics"), story_id))[0]):
             print(f"none — {story_id} began in the checkout, its tests are there; it finishes there")
             return 0

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from ....domain.model.stage import Role
+from ..pipeline.stage_rows import stage_of
+
 import os
 import typing
 
@@ -66,7 +69,7 @@ class StoryRunFiles(StoryRuns):
             except (GateError, MarkdownError):
                 continue
             story_id = story_id_of(path, front)
-            if story_id == exclude.value or not os.path.isfile(os.path.join(self._runs, story_id, stage_files()["test"])):
+            if story_id == exclude.value or not os.path.isfile(os.path.join(self._runs, story_id, stage_files()[stage_of(Role.TESTS)])):
                 continue
             standing = stand_story(StoryFactsFiles(self._cwd, self._runs, story_id, front, path))
             if standing.state not in ENDED:

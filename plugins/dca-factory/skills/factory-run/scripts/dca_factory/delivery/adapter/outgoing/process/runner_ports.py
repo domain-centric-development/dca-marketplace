@@ -5,6 +5,9 @@ holds."""
 
 from __future__ import annotations
 
+from ....domain.model.stage import Role
+from ..pipeline.stage_rows import stage_of
+
 from ....application.shared.run_outcome import GateOutcome, MergeOutcome, RunOutcome
 from .outcomes import gate_outcome_of, maybe_outcome_of, merge_outcome_of, outcome_of
 
@@ -256,7 +259,7 @@ class RunnerStages(StoryRunJournal, StageSteps):
         return outcome_of(self._run.verifier_window(story, self._tool, stages, dry))
 
     def sent_back(self, story: str) -> bool:
-        return self._run.back_to(story, "build") == "test"
+        return self._run.back_to(story, stage_of(Role.BUILDS)) == stage_of(Role.TESTS)
 
     def repaired(self, story: str) -> bool:
         return newer(f"{self._run.runs}/{story}/tidy.md", f"{self._run.runs}/{story}/build.md")

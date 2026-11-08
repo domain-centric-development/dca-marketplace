@@ -3,6 +3,9 @@ show running — and the main line, asked through git."""
 
 from __future__ import annotations
 
+from ....domain.model.stage import Role
+from ..pipeline.stage_rows import stage_of
+
 import os
 import typing
 
@@ -70,7 +73,7 @@ class BacklogFiles(BacklogFacts):
             found.append(BacklogStory(
                 story_id, path, str(front.get("epic") or epic).strip(), front, body, title, kind,
                 tuple(depends_on(front)), str(front.get("context", "")).strip(),
-                os.path.isfile(os.path.join(self.runs, story_id, stage_files()["test"])),
+                os.path.isfile(os.path.join(self.runs, story_id, stage_files()[stage_of(Role.TESTS)])),
                 has_worktree(story_id, self.home), StoryFactsFiles(self.cwd, self.runs, story_id, front, path, story),
                 story))
         return found

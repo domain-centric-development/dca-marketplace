@@ -3,6 +3,9 @@ story."""
 
 from __future__ import annotations
 
+from ....domain.model.stage import Role
+from ..pipeline.stage_rows import stage_of
+
 import contextlib
 import os
 import re
@@ -578,7 +581,7 @@ class StageEvidenceFiles:
         if not os.path.isfile(ledger):
             return None
         located = {t.selector.value: t.place.value for t in tests if t.place is not None}
-        if stage.value == "tidy" and red_tree(self._runs, story.value) \
+        if stage.value == stage_of(Role.TIDIES) and red_tree(self._runs, story.value) \
                 and tidy_moves(self._cwd, self._runs, story.value, located):
             return RedProof(Count(0), Count(0), (), Presence.PRESENT)
         digests = read_red_digests(self._runs, story.value)
@@ -680,7 +683,7 @@ class StageEvidenceFiles:
         planned = os.path.join(evidence_dir(runs, story_id), STORY_DIGEST)
         digest = PlannedDigest.MISSING if not os.path.isfile(planned) else \
             PlannedDigest.SAME if read_text(planned).strip() == story_digest(self.place_of(story.id).value) else PlannedDigest.CHANGED
-        return StoryPass(gaps, judged_of(verdict_in(texts["judge"]) if "judge" in texts else ""), digest)
+        return StoryPass(gaps, judged_of(verdict_in(texts[stage_of(Role.JUDGES)]) if stage_of(Role.JUDGES) in texts else ""), digest)
 
     def outcome(self, story: Story) -> OutcomeFacts:
         cwd = self._cwd

@@ -3,6 +3,9 @@ existed before the story and how they changed since, the plan's changed tests.""
 
 from __future__ import annotations
 
+from ....domain.model.stage import Role
+from ..pipeline.stage_rows import stage_of
+
 import calendar
 import contextlib
 import os
@@ -426,8 +429,8 @@ def stale_red_proof(cwd: str, runs: str, story: str, start: typing.Optional[str]
     if moved and answered_decisions(cwd, story, "test"):
         excuse = ProofExcuse.DECIDED
     # A tidy that runs again moved the tests itself: its gate re-proves them on the red tree (WP-151 A).
-    elif start == "tidy" and red_tree(runs, story) and last_ended(
-            runs, story, tuple(s.name for s in all_stages() if s.lists and not s.red)) == "tidy":
+    elif start == stage_of(Role.TIDIES) and red_tree(runs, story) and last_ended(
+            runs, story, tuple(s.name for s in all_stages() if s.lists and not s.red)) == stage_of(Role.TIDIES):
         excuse = ProofExcuse.REPROVEN
     else:
         excuse = ProofExcuse.NONE

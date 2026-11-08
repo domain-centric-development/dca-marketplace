@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from ....domain.model.stage import Role
+from ..pipeline.stage_rows import stage_of
+
 
 import contextlib
 import glob
@@ -96,7 +99,7 @@ def mark_stage(cwd: str, runs: str, story_id: str, stage: str, edge: str,
             write_snapshot(cwd, runs, story_id, f"before-{stage}")
             # A repeat judge round reads the verdict before it — the runner moves it aside the same way.
             verdict = os.path.join(runs, story_id, "judge.md")
-            if stage == "judge" and os.path.isfile(verdict):
+            if stage == stage_of(Role.JUDGES) and os.path.isfile(verdict):
                 os.replace(verdict, os.path.join(runs, story_id, ".judge-previous.md"))
                 print(f"judge: the previous verdict is {runs}/{story_id}/.judge-previous.md — account for it")
             print(f"usage: stage {stage} of {story_id} started ({kind})")

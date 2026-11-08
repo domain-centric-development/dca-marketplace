@@ -58,6 +58,7 @@ class DecisionChecks(DomainService):
     def check(story: Story, gating: StageName, evidence: StageEvidence, workflow: Workflow) -> DecisionsChecked:
         order = workflow.order(StoryKind.STORY)
         integrate = workflow.role(Role.INTEGRATES)
+        plans = workflow.role(Role.PLANS)
         facts = evidence.decisions(story)
         records = evidence.decision_records(story)
         if facts.unreadable is not None:
@@ -113,7 +114,7 @@ class DecisionChecks(DomainService):
                 unapplied = text is None or still_asking or rid not in text
                 # Before the plan stage runs, an answer it has to apply is its input — also one a judge's story
                 # conflict routed here, which the plan written before the conflict cannot cite yet.
-                if gating.value == "plan" and named == "plan" and unapplied:
+                if gating == plans and stage == plans and unapplied:
                     items.append(DECISIONS.note(Said(
                         f"{rid} is answered ({record.answer_said().value}) — the plan stage runs next and applies it; the gate "
                         f"after it checks that it did.")))

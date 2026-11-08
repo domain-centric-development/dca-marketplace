@@ -7,8 +7,13 @@ from __future__ import annotations
 import typing
 
 from ....application.delivery.pipeline_workflow import workflow
-from ....domain.model.stage import Stage as PipelineStage, StoryKind, TESTED_KINDS as DOMAIN_TESTED_KINDS, Trait
+from ....domain.model.stage import Role, Stage as PipelineStage, StoryKind, TESTED_KINDS as DOMAIN_TESTED_KINDS, Trait
 from ....domain.model.verdict import FORM_CHECKS as DOMAIN_FORM_CHECKS
+
+
+def stage_of(role: Role) -> str:
+    """The stage that plays <role> in the loaded workflow, by its name — what an adapter keys a stage's file by."""
+    return workflow().role(role).value
 
 
 class Stage(typing.NamedTuple):

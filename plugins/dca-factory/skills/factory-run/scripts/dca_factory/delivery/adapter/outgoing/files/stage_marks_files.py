@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from ....domain.model.stage import Role
+from ..pipeline.stage_rows import stage_of
+
 import os
 
 from ..pipeline.stage_rows import order_for
@@ -21,7 +24,7 @@ class StageMarkFiles(StageMarks):
         self._kind = kind
 
     def judge_passed(self, story: str) -> None:
-        record_judge_signal(self._runs, story, current_stage_files(self._runs, story, order_for(self._kind))["judge"])
+        record_judge_signal(self._runs, story, current_stage_files(self._runs, story, order_for(self._kind))[stage_of(Role.JUDGES)])
 
     def record_suites(self, story: str) -> bool:
         key = os.environ.get("FACTORY_SUITES_KEY", "")
