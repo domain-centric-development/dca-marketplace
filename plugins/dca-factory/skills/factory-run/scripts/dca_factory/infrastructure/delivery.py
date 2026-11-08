@@ -32,6 +32,11 @@ from ..delivery.adapter.outgoing.files.made_items import MadeItemFiles
 from ..delivery.adapter.outgoing.files.request_files import RequestFiles
 from ..delivery.adapter.outgoing.files.status_facts import StatusFactFiles
 from .description import show_part as show_part
+from ..delivery.adapter.outgoing.files.request_files import (
+    default_by as default_by, factory_dir as factory_dir, stamp_utc as stamp_utc)
+from ..delivery.adapter.outgoing.process.factory_process import (
+    cli_path as cli_path, own_file as own_file, read_json as read_json, say as say, SERVE_FILE as SERVE_FILE,
+    write_json as write_json)
 from .profile import ask_profile as ask_profile
 from .schedule import schedule_data as schedule_data, start_of as start_of
 from ..delivery.adapter.outgoing.files.story_files import StoryFiles

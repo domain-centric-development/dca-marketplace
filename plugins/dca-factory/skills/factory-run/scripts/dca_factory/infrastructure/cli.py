@@ -7,6 +7,7 @@ import typing
 
 from ..delivery.adapter.incoming.cli import cli_command
 from ..delivery.adapter.incoming.runner import run_command
+from ..delivery.adapter.incoming.web import service as web_service
 from ..rulebook.adapter.incoming.cli import rules_command
 from ..spec.adapter.incoming.cli import spec_command
 from .workflow import load_workflow
@@ -20,6 +21,7 @@ def wire() -> None:
     run_command.wire(runner)
     rules_command.wire(rulebook)
     spec_command.wire(spec)
+    web_service.wire(delivery)
 
 
 # the stages and the rules, from their repositories, and the command lines wired — once per process

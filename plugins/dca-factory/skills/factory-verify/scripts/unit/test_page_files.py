@@ -10,7 +10,7 @@ import unittest
 
 import support  # noqa: F401 — puts the package on the path
 
-from dca_factory.web import service
+from dca_factory.delivery.adapter.incoming.web import service
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\0" * 32
 

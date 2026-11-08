@@ -1,8 +1,9 @@
 """The factory's own architecture, checked over its package's source — DCA's rules in a third language, over `ast`.
 
 The package is built in DCA layers (WP-152): `building_blocks.py` outside every context, the bounded contexts
-`discovery/`, `delivery/`, `spec/` and `rulebook/` each with `domain/`, `application/` and `adapter/{incoming,outgoing}/`, the
-shared kernel `sharedkernel/`, the web host `web/` and the composition root `infrastructure/`. At the top of the
+`discovery/`, `delivery/`, `spec/` and `rulebook/` each with `domain/`, `application/` and `adapter/{incoming,outgoing}/` —
+the page is delivery's incoming adapter `web/` —, the shared kernel `sharedkernel/` and the composition root
+`infrastructure/`. At the top of the
 package sits the version stamp `contract.py` alone, read by name by every installed release.
 
     place_findings(package)   a module at the top of the package, outside every layer
@@ -13,8 +14,8 @@ package sits the version stamp `contract.py` alone, read by name by every instal
     port_findings(package)    an output port unmarked, in the domain, unimplemented, or implemented inside the core
     cycle_findings(package)   an import cycle between two modules of the package
 
-Each returns its findings as lines `<module>:<line> <what>`; none means the package holds. Exempt: `web/fonts.py`,
-generated data.
+Each returns its findings as lines `<module>:<line> <what>`; none means the package holds. Exempt: the page's
+`fonts.py`, generated data.
 """
 
 import ast
@@ -24,7 +25,7 @@ CONTEXTS = ("discovery", "delivery", "spec", "rulebook")
 #: The one module at the package's top besides the building blocks: the version stamp, which `factory.sh` and an
 #: installed copy of any release read by its name.
 STAMP = "contract"
-EXEMPT = ("web/fonts.py",)
+EXEMPT = ("delivery/adapter/incoming/web/fonts.py",)
 
 #: What a domain module may import from the standard library: types, data classes, enums, patterns — nothing that
 #: reads a file, starts a process, asks the clock or the network (DCA-ONI-002).
@@ -63,7 +64,7 @@ def modules(package):
 
 def place_of(dotted):
     """(owner, layer) of a module: a context's or the shared kernel's `domain`, `application`, `incoming`,
-    `outgoing`; `blocks`, `web`, `root`; `top` for a module at the package's top."""
+    `outgoing`; `blocks`, `root`; `top` for a module at the package's top."""
     parts = dotted.split(".") if dotted else []
     if not parts:
         return ("package", "top")
@@ -75,8 +76,6 @@ def place_of(dotted):
         if len(parts) > 2 and parts[1] == "adapter" and parts[2] in ("incoming", "outgoing"):
             return (parts[0], parts[2])
         return (parts[0], "package")
-    if parts[0] == "web":
-        return ("web", "web")
     if parts[0] == "infrastructure":
         return ("infrastructure", "root")
     return (parts[0], "top")
@@ -118,7 +117,7 @@ def imports_of(tree, dotted, is_package, known):
 def place_findings(package):
     """Every module outside the layers: at the package's top, and neither the building blocks nor the version stamp.
     DCA has no rule id for it — the libraries place every class by its package."""
-    return [f"{rel}:1 outside every layer — a module belongs to a context, the shared kernel, the web host or the root"
+    return [f"{rel}:1 outside every layer — a module belongs to a context, the shared kernel or the root"
             for rel, dotted in sorted(modules(package).items())
             if dotted and place_of(dotted)[1] == "top" and dotted != STAMP]
 
@@ -136,8 +135,8 @@ def layer_findings(package):
     """Every import against the layers. Rules, by DCA's ids:
 
     - DCA-ONI-001  a domain imports no application;
-    - DCA-HEX-001  a domain imports no adapter (nor a module at the top, the web host or the root);
-    - DCA-HEX-002  an application imports no adapter (nor a module at the top, the web host or the root);
+    - DCA-HEX-001  a domain imports no adapter (nor a module at the top or the root);
+    - DCA-HEX-002  an application imports no adapter (nor a module at the top or the root);
     - DCA-HEX-006  an incoming adapter imports no outgoing adapter of its own context;
     - DCA-STR-002  the shared kernel imports no bounded context, nor a module that belongs to one;
     - DCA-STR-003  a context's application imports no other context's application;
@@ -161,7 +160,7 @@ def layer_findings(package):
                     found.append(f"{where} DCA-LAY-003 the application imports {name} — an output port reaches it")
                 continue
             to_owner, to_layer = place_of(target)
-            if owner == "sharedkernel" and (to_owner in CONTEXTS or to_layer in ("top", "web", "root")):
+            if owner == "sharedkernel" and (to_owner in CONTEXTS or to_layer in ("top", "root")):
                 found.append(f"{where} DCA-STR-002 the shared kernel imports {target}")
                 continue
             if to_owner in ("blocks", "package"):

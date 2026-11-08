@@ -16,7 +16,7 @@ import unittest
 import support  # noqa: F401 — puts the package on the path
 
 from dca_factory.delivery.adapter.outgoing.files.story_record import ignore_journals_in, journal_ignore_lines
-from dca_factory.web import fixtures, service
+from dca_factory.delivery.adapter.incoming.web import fixtures, service
 
 
 class PageThemeTest(unittest.TestCase):

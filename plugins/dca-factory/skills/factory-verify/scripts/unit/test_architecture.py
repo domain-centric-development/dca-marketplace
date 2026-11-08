@@ -39,8 +39,8 @@ class LayersTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             plant(root, {"__init__.py": "", "building_blocks.py": "", "contract.py": "", "legacy.py": "",
                          "delivery/__init__.py": "", "delivery/domain/__init__.py": "", "delivery/domain/m.py": ""})
-            self.assertEqual(["legacy.py:1 outside every layer — a module belongs to a context, the shared kernel, "
-                              "the web host or the root"], architecture.place_findings(root))
+            self.assertEqual(["legacy.py:1 outside every layer — a module belongs to a context, the shared kernel or "
+                              "the root"], architecture.place_findings(root))
 
     def test_each_rule_finds_what_it_forbids(self):
         with tempfile.TemporaryDirectory() as root:
@@ -200,25 +200,24 @@ if __name__ == "__main__":
 
 
 class WebHostTest(unittest.TestCase):
-    """The page's server is a host: it translates HTTP into a command or a query and answers with the result — it does
-    not reach past the use cases into an outgoing adapter (WP-184). What it reached before stays named here, as debt
-    to pay down, never as a pattern to follow."""
+    """The page's server is delivery's incoming adapter: it translates HTTP into a command or a query and answers with
+    the result; what it needs of the factory's own process, the composition root hands it (`wire`). It reaches no
+    outgoing adapter but the shared kernel's readers."""
 
-    #: The outgoing adapters `web/` reached before WP-184 — each a helper, none a rule of the factory.
-    KNOWN = {"delivery.adapter.outgoing.files.request_files",       # default_by, factory_dir, stamp_utc
-             "delivery.adapter.outgoing.process.factory_process",   # the factory's process: start, stop, the worker
-             "sharedkernel.adapter.outgoing.markdown.front_matter",  # GateError, caught
+    #: The shared kernel's outgoing adapters the page reads through — every context does.
+    KNOWN = {"sharedkernel.adapter.outgoing.markdown.front_matter",  # GateError, caught
              "sharedkernel.adapter.outgoing.profile.profile_files"}  # the profile's places, set for a write
 
-    def test_the_page_server_reaches_no_outgoing_adapter_beyond_the_known_ones(self):
+    def test_the_page_server_reaches_no_outgoing_adapter_beyond_the_shared_kernels(self):
         import ast
         reached = set()
-        web = os.path.join(PACKAGE, "web")
+        web = os.path.join(PACKAGE, "delivery", "adapter", "incoming", "web")
         for name in sorted(os.listdir(web)):
             if not name.endswith(".py"):
                 continue
             tree = ast.parse(open(os.path.join(web, name), encoding="utf-8").read())
             for node in ast.walk(tree):
-                if isinstance(node, ast.ImportFrom) and node.level == 2 and node.module and ".adapter.outgoing" in f".{node.module}":
-                    reached.add((name, node.module))
+                if isinstance(node, ast.ImportFrom) and node.level and node.module and ".adapter.outgoing" in f".{node.module}":
+                    module = node.module if node.level == 5 else f"delivery.adapter.{node.module}"
+                    reached.add((name, module))
         self.assertEqual([], sorted(f"web/{n} imports {m}" for n, m in reached if m not in self.KNOWN))

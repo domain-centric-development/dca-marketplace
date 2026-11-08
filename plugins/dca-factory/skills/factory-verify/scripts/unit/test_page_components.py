@@ -14,7 +14,7 @@ import unittest
 
 import support  # noqa: F401 — puts the package on the path
 
-from dca_factory.web import page, page_core, page_style, page_tokens, page_ui, page_views
+from dca_factory.delivery.adapter.incoming.web import page, page_core, page_style, page_tokens, page_ui, page_views
 
 LEVELS = ("atoms", "molecules", "organisms", "templates")
 BEM = re.compile(r"^[a-z][a-z0-9]*(-[a-z0-9]+)*(__[a-z0-9]+(-[a-z0-9]+)*)?(--[a-z0-9]+(-[a-z0-9]+)*)?$")
@@ -28,7 +28,7 @@ SVG_TAGS = {"svg", "circle", "path", "rect", "line", "polyline", "polygon", "g",
 #: Where written text is shown as written — rendered Markdown, a document's sections —: its tags carry no classes.
 CONTENT_ZONES = (".prose", ".document")
 COLOUR = re.compile(r"#[0-9a-fA-F]{3,8}\b|\brgba?\(|\bhsla?\(")
-EXAMPLE = os.path.join(os.path.dirname(os.path.abspath(page.__file__)), "..", "..", "..", "templates", "theme",
+EXAMPLE = os.path.join(os.path.dirname(os.path.abspath(page.__file__)), *[".."] * 6, "templates", "theme",
                        "theme.example.css")
 
 

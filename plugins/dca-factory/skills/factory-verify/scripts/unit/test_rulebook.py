@@ -69,7 +69,8 @@ class RegisteredTest(unittest.TestCase):
 
     def test_every_rule_written_in_the_package_is_published(self):
         written = set()
-        for top, _dirs, files in os.walk(os.path.join(PACKAGE, "delivery")):
+        for top, dirs, files in os.walk(os.path.join(PACKAGE, "delivery")):
+            dirs[:] = [d for d in dirs if d != "web"]   # the page shows rule ids as examples; it binds none
             for name in files:
                 if name.endswith(".py"):
                     with open(os.path.join(top, name), encoding="utf-8") as handle:

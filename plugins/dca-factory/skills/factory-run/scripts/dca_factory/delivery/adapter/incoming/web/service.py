@@ -21,25 +21,54 @@ import subprocess
 import sys
 import threading
 import time
+import typing
 import urllib.parse
 import zlib
 
-from ..building_blocks import UseCaseException
-from ..sharedkernel.adapter.outgoing.markdown.front_matter import GateError
-from ..delivery.application.status.show_project_file import ShowProjectFileQuery
-from ..delivery.application.status.follow_factory_log import FollowFactoryLogQuery
-from ..delivery.domain.model.handed_file import MAX_BYTES, MAX_FILES
-from ..delivery.domain.model.shown_file import FileNotShown, Refusal, ShownAs
-from ..delivery.adapter.outgoing.files.request_files import default_by, factory_dir, stamp_utc
-from ..delivery.adapter.outgoing.process.factory_process import (
-    cli_path, own_file, read_json, say, SERVE_FILE, write_json)
-from ..delivery.application.requests.retry_request import RetryRequestCommand
-from ..delivery.application.requests.take_back_request import TakeBackRequestCommand
-from ..delivery.application.requests.write_request import WriteRequestCommand
-from ..delivery.application.shared.requests import DuplicateRequest, ID_WORD, KINDS, RequestRefused
-from ..infrastructure import delivery as wiring
+from .....building_blocks import UseCaseException
+from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
+from ....application.status.show_project_file import ShowProjectFileQuery, ShowProjectFileInputPort
+from ....application.status.follow_factory_log import FollowFactoryLogQuery, FollowFactoryLogInputPort
+from ....domain.model.handed_file import MAX_BYTES, MAX_FILES
+from ....domain.model.shown_file import FileNotShown, Refusal, ShownAs
+from ....application.requests.retry_request import RetryRequestCommand, RetryRequestInputPort
+from ....application.requests.take_back_request import TakeBackRequestCommand, TakeBackRequestInputPort
+from ....application.requests.write_request import WriteRequestCommand, WriteRequestInputPort
+from ....application.shared.requests import DuplicateRequest, ID_WORD, KINDS, RequestRefused
 from . import fixtures
 from .page import FAVICON, PAGE, SCRIPT_HASH
+
+
+class WebRoot(typing.Protocol):
+    """What the page's server takes from the composition root: its use cases — given at start (`wire`), never
+    imported."""
+
+    def show_project_file(self, cwd: str) -> ShowProjectFileInputPort: ...
+    def write_request(self, cwd: str) -> WriteRequestInputPort: ...
+    def take_back_request(self, cwd: str) -> TakeBackRequestInputPort: ...
+    def retry_request(self, cwd: str) -> RetryRequestInputPort: ...
+    def follow_factory_log(self, cwd: str) -> FollowFactoryLogInputPort: ...
+
+    # the page's process, as the factory keeps its own: its file under the factory's folder, the time, who asks
+    SERVE_FILE: str
+    def default_by(self, cwd: str) -> str: ...
+    def factory_dir(self) -> str: ...
+    def stamp_utc(self, moment: typing.Optional[float] = None) -> str: ...
+    def cli_path(self) -> str: ...
+    def own_file(self, name: str) -> str: ...
+    def read_json(self, path: str) -> typing.Any: ...
+    def say(self, text: str) -> None: ...
+    def write_json(self, path: str, data: typing.Any, private: bool = False) -> None: ...
+
+
+#: the composition root, given by `wire` before the server starts
+wiring: WebRoot
+
+
+def wire(root: WebRoot) -> None:
+    """The composition root the page's server builds its use cases from."""
+    global wiring
+    wiring = root
 
 PORT_BASE, PORT_SPAN = 8700, 200    # where a project's page looks for its port, a stable one per project first
 
@@ -92,7 +121,7 @@ def serve_here(cwd, port=None, open_browser=False, by_up=False, fixture=None):
         return serve_fixture(cwd, fixture, port, open_browser)
     chosen = free_port(cwd, port)
     if not chosen:
-        say(f"port {port} is taken — name another with --port" if port else
+        wiring.say(f"port {port} is taken — name another with --port" if port else
             f"no free port between {PORT_BASE} and {PORT_BASE + PORT_SPAN - 1} — name one with --port")
         return 2
     token = secrets.token_hex(20)        # letters and digits only: a link pasted into markdown stays whole
@@ -100,10 +129,10 @@ def serve_here(cwd, port=None, open_browser=False, by_up=False, fixture=None):
     server.project, server.token, server.port = os.path.realpath(cwd), token, chosen
     server.theme, server.fixture = theme_dir(), None
     url = f"http://127.0.0.1:{chosen}/?t={token}"
-    write_json(own_file(SERVE_FILE), dict(pid=os.getpid(), port=chosen, url=url, started=stamp_utc(), by_up=by_up),
+    wiring.write_json(wiring.own_file(wiring.SERVE_FILE), dict(pid=os.getpid(), port=chosen, url=url, started=wiring.stamp_utc(), by_up=by_up),
                private=True)
-    say(f"the page for {os.path.basename(server.project)}: {url}")
-    say("bound to 127.0.0.1 alone; the token is this start's — Ctrl-C ends the page and the working of a person's "
+    wiring.say(f"the page for {os.path.basename(server.project)}: {url}")
+    wiring.say("bound to 127.0.0.1 alone; the token is this start's — Ctrl-C ends the page and the working of a person's "
         "requests; the backlog runs on where `up` has it on")
     requests_worker(server.project)
     if open_browser:
@@ -122,35 +151,35 @@ def serve_here(cwd, port=None, open_browser=False, by_up=False, fixture=None):
     finally:
         server.server_close()
         server.end_followers()
-        if (read_json(own_file(SERVE_FILE)) or {}).get("pid") == os.getpid():
+        if (wiring.read_json(wiring.own_file(wiring.SERVE_FILE)) or {}).get("pid") == os.getpid():
             with contextlib.suppress(OSError):
-                os.remove(own_file(SERVE_FILE))
+                os.remove(wiring.own_file(wiring.SERVE_FILE))
     return 0
 
 
 def theme_dir():
     """The project's theme: `.dca-factory/theme/` beside the factory's other own files, resolved at the start."""
-    return os.path.abspath(os.path.join(factory_dir(), "theme"))
+    return os.path.abspath(os.path.join(wiring.factory_dir(), "theme"))
 
 
 def serve_fixture(cwd, fixture, port=None, open_browser=False):
     """The real page against canned views (WP-180): every state on screen without a running factory. Nothing is
     written — no serve file, no worker —, so it stands beside the project's own page; every press is refused."""
     if fixture not in fixtures.FIXTURES:
-        say(f"no fixture {fixture!r} — one of {', '.join(sorted(fixtures.FIXTURES))}")
+        wiring.say(f"no fixture {fixture!r} — one of {', '.join(sorted(fixtures.FIXTURES))}")
         return 2
     chosen = free_port(cwd, port) if port else free_port(os.path.join(cwd, ".fixture"))
     if not chosen:
-        say("no free port — name one with --port")
+        wiring.say("no free port — name one with --port")
         return 2
     token = secrets.token_hex(20)
     server = Server(("127.0.0.1", chosen), Handler)
     server.project, server.token, server.port = os.path.realpath(cwd), token, chosen
     server.theme, server.fixture = theme_dir(), fixture
     url = f"http://127.0.0.1:{chosen}/?t={token}"
-    say(f"the fixture {fixture!r}: {url}")
-    say(f"its components, in this project's theme: {url}#components")
-    say("canned views, every press refused — Ctrl-C ends it")
+    wiring.say(f"the fixture {fixture!r}: {url}")
+    wiring.say(f"its components, in this project's theme: {url}#components")
+    wiring.say("canned views, every press refused — Ctrl-C ends it")
     if open_browser:
         import webbrowser
         with contextlib.suppress(Exception):
@@ -229,7 +258,7 @@ def cli_env():
 
 def run_cli(project, argv, timeout=60):
     try:
-        done = subprocess.run([sys.executable, cli_path(), *argv], cwd=project, capture_output=True, text=True,
+        done = subprocess.run([sys.executable, wiring.cli_path(), *argv], cwd=project, capture_output=True, text=True,
                               encoding="utf-8", errors="replace", timeout=timeout, env=cli_env())
     except subprocess.TimeoutExpired:
         return 124, "", f"factory-cli.py {' '.join(argv)} took longer than {timeout}s"
@@ -322,7 +351,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.answer(200, PAGE, "text/html; charset=utf-8")
         if url.path == "/api/meta":
             return self.json(200, dict(project=os.path.basename(self.server.project), port=self.server.port,
-                                       by=default_by(self.server.project), fixture=self.server.fixture,
+                                       by=wiring.default_by(self.server.project), fixture=self.server.fixture,
                                        kinds=[dict(kind=k.name, keys=list(k.keys), words=k.words, option=k.option,
                                                    about=k.about) for k in KINDS]))
         if url.path.startswith("/api/view/"):
@@ -444,7 +473,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return None
         if values.get("log") == "factory":
             return self.follow_log()
-        argv = [sys.executable, cli_path(), "--follow"] + (["--story", values["story"]] if values.get("story") else []) \
+        argv = [sys.executable, wiring.cli_path(), "--follow"] + (["--story", values["story"]] if values.get("story") else []) \
             + (["--process", values["process"]] if values.get("process") else []) \
             + (["--request", values["request"]] if values.get("request") else [])
         self.send_response(200)
@@ -552,7 +581,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         except ValueError as error:
             return self.refuse(400, f"no JSON object — {error}")
         project = self.server.project
-        by = " ".join(str(body.get("by") or "").split())[:80] or default_by(project)
+        by = " ".join(str(body.get("by") or "").split())[:80] or wiring.default_by(project)
         if url.path == "/api/request":
             fields = {k: str(body[k]) for k in REQUEST_FIELDS if body.get(k)}
             try:
@@ -599,7 +628,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 @contextlib.contextmanager
 def in_project(project):
     """The places read from the project's profile, for a call that writes there from the server's thread."""
-    from ..sharedkernel.adapter.outgoing.profile.profile_files import read_profile, resolve_profile, set_places
+    from .....sharedkernel.adapter.outgoing.profile.profile_files import read_profile, resolve_profile, set_places
     lock = SERVER_LOCK
     with lock:
         here = os.getcwd()

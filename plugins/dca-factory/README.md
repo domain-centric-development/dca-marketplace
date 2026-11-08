@@ -276,7 +276,7 @@ into git beside the story journals — and survives `factory.sh update`.
 `factory.sh serve --fixture all-states` serves the real page against canned views that hold every state — draft,
 running, waiting, stopped, delivered, superseded, a wish in each of its states — and writes nothing; `#components`
 on any page is its pattern library: every component in its variants, by level, in your theme. The page is built from
-those components alone (`web/page_ui.py`, one BEM block each, a factory state as `data-state`), and
+those components alone (`delivery/adapter/incoming/web/page_ui.py`, one BEM block each, a factory state as `data-state`), and
 `unit/test_page_components.py` holds it so.
 
 ## One entry point

@@ -1,7 +1,8 @@
 # Context map — the factory
 
 The factory's package (`skills/factory-run/scripts/dca_factory/`) is built the way it teaches: four bounded contexts,
-each in DCA layers, a shared kernel, the building blocks outside them, a web host across them and a composition root.
+each in DCA layers, a shared kernel, the building blocks outside them and a composition root; the page that shows every
+context is delivery's incoming adapter (`delivery/adapter/incoming/web/`), given its use cases by the root.
 
 ```mermaid
 flowchart LR
@@ -52,7 +53,6 @@ new discovery: a future crossing, shown so it is not forgotten.
 |---|---|
 | `building_blocks.py` | the markers of `dca-building-blocks`, in Python — a dependency of every context, depending on none |
 | `sharedkernel/` | what several contexts read alike: a project's markdown (front matter, sections, the text) |
-| `web/` | the host that shows every context at once — the page and its server; it calls read models and use cases only |
 | `infrastructure/` | the composition root: wires each port to its adapter |
 
 `contract.py` at the package's top is the version stamp alone — `CONTRACT` and `VERSION`, read by
