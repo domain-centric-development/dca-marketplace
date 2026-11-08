@@ -134,6 +134,5 @@ def render(view: Model, fmt: str = "md") -> str:
     if fmt == "json":
         for kind, flow in view["flow"].items():
             flow["svg"] = svg(flow["graph"], kind, titles(view))
-            flow["svg_one_at_a_time"] = svg(flow["graph"], kind, titles(view), one_at_a_time=True)
         return json.dumps(view, indent=2) + "\n"
     return markdown(view)

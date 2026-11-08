@@ -6,6 +6,7 @@ from __future__ import annotations
 import typing
 
 from ....building_blocks import Store
+from ...domain.model.jump import Jumped, Restarted
 from ...domain.model.stage import StageName, StoryKind
 from ...domain.model.story_state import GateReport, Judged, Rounds
 
@@ -82,4 +83,12 @@ class StoryRunJournal(Store, typing.Protocol):
 
     def in_worktree(self) -> bool:
         """The story runs in its worktree, integrated once delivered."""
+        ...
+
+    def jumped(self, story: str, jump: Jumped) -> None:
+        """The run sends the story back: kept in its journal as the runner decided it."""
+        ...
+
+    def restarted(self, story: str, restart: Restarted) -> None:
+        """The run starts the story anew at a stage: kept in its journal as the runner decided it."""
         ...

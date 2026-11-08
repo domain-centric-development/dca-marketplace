@@ -250,6 +250,13 @@ class Stages:
         self.verdicts = list(verdicts)
         self._kind = kind
         self.ran, self.rounds = [], 0
+        self.lines = []                         # the jumps and restarts the run kept in the journal
+
+    def jumped(self, story, jump):
+        self.lines.append(f"jump {jump.source.value}>{jump.target.value} {jump.rule.value}")
+
+    def restarted(self, story, restart):
+        self.lines.append(f"restart {restart.stage.value} {restart.rule.value} {restart.reason.value}")
 
     def open_decisions(self, story):
         return []
@@ -348,6 +355,7 @@ class Run(unittest.TestCase):
         self.assertEqual(stages.ran[:3], ["gate plan", "plan", "gate plan"])
         self.assertNotIn("build", stages.ran)
         self.assertTrue(any("goes on as an adoption" in line for line in said))
+        self.assertEqual(["restart plan RUN-ROUTE-7 adopted"], stages.lines)
 
     def test_a_story_runs_through_with_a_gate_after_each_gated_stage(self):
         stages = Stages()
@@ -398,6 +406,8 @@ class Run(unittest.TestCase):
         self.assertEqual(stages.ran[:3], ["judge", "build", "gate build"])
         self.assertIn("factory: judge verdict 'changes-requested' (RUN-VERDICT-1) — round 1 goes back to the build "
                       "stage.", said)
+        # the way back is kept in the journal as the runner took it — a reader never guesses it (WP-194)
+        self.assertEqual(["jump judge>build RUN-VERDICT-1"], stages.lines)
 
     def test_a_story_conflict_stops_for_a_person(self):
         code, said = run(Stages(verdicts=("story-conflict",)), "judge")

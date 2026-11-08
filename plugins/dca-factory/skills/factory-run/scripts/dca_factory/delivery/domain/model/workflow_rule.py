@@ -72,6 +72,14 @@ class Outcome(Value):
     goes: typing.Tuple[Target, ...] = ()
 
 
+class Restart(Value):
+    """Where a rule starts a story's run again — a re-entry, not a jump back: no round is spent and no stage sends it
+    there; the run begins anew at <stage>, `when` says on what."""
+
+    stage: StageName
+    when: RuleText
+
+
 class WorkflowRule(AggregateRoot[RuleId]):
     # A root without a transition, like the workflow: a rule file is changed by a person, the factory reads it whole
     # and holds its outcomes to the workflow's targets — one rule, one unit, through its repository.
@@ -85,7 +93,7 @@ class WorkflowRule(AggregateRoot[RuleId]):
                  retired: typing.Optional[RuleText] = None, written: typing.Optional[Written] = None,
                  told: typing.Optional[RuleText] = None, section: typing.Optional[RuleText] = None,
                  see: typing.Optional[Written] = None, order: typing.Optional[RuleOrder] = None,
-                 title: typing.Optional[RuleText] = None) -> None:
+                 title: typing.Optional[RuleText] = None, restart: typing.Optional[Restart] = None) -> None:
         super().__init__()
         states = [o.state for o in outcomes]
         if part is RulePart.TOLD:
@@ -112,6 +120,7 @@ class WorkflowRule(AggregateRoot[RuleId]):
         self._see = see
         self._order = order
         self._title = title
+        self._restart = restart
 
     @classmethod
     def restore(cls, rule_id: RuleId, part: RulePart, when: RuleText, why: RuleText,
@@ -120,9 +129,10 @@ class WorkflowRule(AggregateRoot[RuleId]):
                 retired: typing.Optional[RuleText] = None, written: typing.Optional[Written] = None,
                 told: typing.Optional[RuleText] = None, section: typing.Optional[RuleText] = None,
                 see: typing.Optional[Written] = None, order: typing.Optional[RuleOrder] = None,
-                title: typing.Optional[RuleText] = None) -> WorkflowRule:
+                title: typing.Optional[RuleText] = None, restart: typing.Optional[Restart] = None) -> WorkflowRule:
         """The workflow rule as it was kept — the one way a repository builds it."""
-        return cls(rule_id, part, when, why, outcomes, reports, stages, kinds, retired, written, told, section, see, order, title)
+        return cls(rule_id, part, when, why, outcomes, reports, stages, kinds, retired, written, told, section, see, order, title,
+                   restart)
 
     @property
     def id(self) -> RuleId:
@@ -144,6 +154,11 @@ class WorkflowRule(AggregateRoot[RuleId]):
     def title(self) -> typing.Optional[RuleText]:
         """The rule's name for a person, a short statement of what holds — none where the file names none."""
         return self._title
+
+    @property
+    def restart(self) -> typing.Optional[Restart]:
+        """Where the rule starts the run again, and on what — none for a rule that starts nothing anew."""
+        return self._restart
 
     @property
     def outcomes(self) -> typing.Tuple[Outcome, ...]:
@@ -194,7 +209,8 @@ class WorkflowRule(AggregateRoot[RuleId]):
 
     def unknown_targets(self, targets: typing.FrozenSet[Target]) -> typing.Tuple[Target, ...]:
         """The targets its outcomes send a story to that are none of <targets> — a workflow's stages, again, stop."""
-        return tuple(sorted({t for o in self._outcomes for t in o.goes} - targets, key=lambda t: t.value))
+        named = {t for o in self._outcomes for t in o.goes} | ({Target(self._restart.stage.value)} if self._restart else set())
+        return tuple(sorted(named - targets, key=lambda t: t.value))
 
     def jump(self, state: OutcomeState) -> Jump:
         """Where the rule sends the story on <state>: its targets — none where it says nothing about where."""

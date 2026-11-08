@@ -26,7 +26,10 @@ from dca_factory.delivery.domain.model.workflow_rule import Outcome, OutcomeStat
 from dca_factory.infrastructure.rulebook import show_rulebook
 from dca_factory.rulebook.adapter.outgoing.skills.skill_files import SkillFiles
 from dca_factory.rulebook.application.show_rulebook import ShowRulebookQuery, ShowRulebookUseCase
-from dca_factory.rulebook.adapter.outgoing.delivery.delivery_rules import DeliveryFindings, DeliveryRules
+from dca_factory.rulebook.adapter.outgoing.delivery.delivery_rules import (
+    DeliveryFindings, DeliveryJournals, DeliveryRules)
+from dca_factory.rulebook.domain.model.rule import Count, KindName
+from dca_factory.rulebook.domain.model.runs import RouteReading, StoryJournal, story_run
 from dca_factory.rulebook.adapter.incoming.cli.flow_svg import svg
 from dca_factory.rulebook.application.show_rulebook import graph_model
 from dca_factory.rulebook.domain.model import rule as book_rule
@@ -206,7 +209,8 @@ class StageFilesTest(unittest.TestCase):
 class SkillsTest(unittest.TestCase):
 
     def book(self, root):
-        return ShowRulebookUseCase(DeliveryRules(), SkillFiles(root), DeliveryFindings(".")).execute(ShowRulebookQuery())
+        return ShowRulebookUseCase(DeliveryRules(), SkillFiles(root), DeliveryFindings("."),
+                                   DeliveryJournals(root)).execute(ShowRulebookQuery())
 
     def test_what_a_stage_is_told_comes_from_its_file_and_holds_at_its_stage(self):
         view = show_rulebook(tempfile.gettempdir()).execute(ShowRulebookQuery())
@@ -266,8 +270,8 @@ class FlowTest(unittest.TestCase):
                                          "gate:fail story s-1 stage build\n",
                 "journal.tsv": "2026-10-30T10:15:00Z\tgate\tbuild\texit=1\tfail=suite,tests-kept\tseq=1\n"
                                "2026-10-30T10:16:00Z\tgate\tbuild\texit=1\tfail=suite\tseq=2\n"})
-            story = ShowRulebookUseCase(DeliveryRules(), SkillFiles(None), DeliveryFindings(root)).execute(
-                ShowRulebookQuery(story="s-1"))["story"]
+            story = ShowRulebookUseCase(DeliveryRules(), SkillFiles(None), DeliveryFindings(root),
+                                        DeliveryJournals(root)).execute(ShowRulebookQuery(story="s-1"))["story"]
             self.assertEqual([{"stage": "build", "state": "fail"}], story["fired"]["GATE-SUITE"])
             self.assertEqual([{"stage": "build", "state": "pass"}], story["fired"]["GATE-TESTS-KEPT"])
             self.assertNotIn("GATE-PLAN-FILES", story["fired"])
@@ -363,9 +367,8 @@ class CliTest(unittest.TestCase):
                          [s["stage"] for s in view["flow"]["task"]["steps"]])
         self.assertTrue(all(not r["kinds"] or "task" in r["kinds"] for r in view["rules"]))
         self.assertTrue(view["flow"]["task"]["svg"].startswith("<svg"))
-        # a page shows one way back at a time: every way back on the first lane, the drawing no taller than all nested
-        height = lambda drawing: float(re.search(r'viewBox="0 0 \S+ (\S+)"', drawing).group(1))
-        self.assertLessEqual(height(view["flow"]["task"]["svg_one_at_a_time"]), height(view["flow"]["task"]["svg"]))
+        self.assertEqual(["plan", "build", "tidy", "judge", "document", "integrate"],
+                         [t["stage"] for t in view["flow"]["task"]["track"]["tiles"]])
         drawn = self.cli("--format", "svg", "--kind", "journey").stdout
         self.assertTrue(drawn.startswith("<svg"), drawn[:200])
         self.assertIn('data-stage="judge"', drawn)
@@ -374,3 +377,84 @@ class CliTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TrackTest(unittest.TestCase):
+    """The rules page's track (WP-194): one line per pair of stages, read off the rules' `goes` — never a list in the
+    page —; a repeat of a stage is its tile's round, a restart its tile's note; the journal's route read as the runner
+    wrote it, an older journal from the order of its gates."""
+
+    def setUp(self):
+        rules = DeliveryRules()
+        self.book = Rulebook(rules.rules(), rules.rows(), rules.orders())
+
+    def ways(self, kind):
+        return {(w.source.value, w.target.value): (w.cost.value, [r.value for r in w.rules], w.reason.value)
+                for w in self.book.track(KindName(kind), Count(3)).ways}
+
+    def test_the_story_kind_has_six_ways_back_one_per_pair(self):
+        # a red proof refused after build or tidy is the stage's own change — a round, not a restart (RUN-ROUTE-5 is)
+        # the runner's decision first — its reason labels the line
+        self.assertEqual({("build", "test"): ("round", ["RUN-BACK-1", "GATE-RED-PROOF"],
+                                              "a test cannot pass · a test changed since its red proof"),
+                          ("tidy", "test"): ("round", ["GATE-RED-PROOF"], "a test changed since its red proof"),
+                          ("judge", "build"): ("round", ["RUN-VERDICT-1"], "changes requested"),
+                          ("judge", "test"): ("round", ["RUN-VERDICT-1"], "changes requested"),
+                          ("integrate", "build"): ("round", ["RUN-INTEGRATE-1"], "the main line refuses"),
+                          ("delivered", "plan"): ("free", ["GATE-ACCEPTANCE"], "a correction at acceptance")},
+                         self.ways("story"))
+
+    def test_a_task_has_no_test_tile_and_no_acceptance(self):
+        track = self.book.track(KindName("task"), Count(3))
+        self.assertNotIn("test", [t.stage.value for t in track.tiles])
+        self.assertFalse(track.accepted())
+        self.assertEqual({("judge", "build"), ("integrate", "build")}, set(self.ways("task")))
+
+    def test_a_restart_is_a_note_on_its_tile_and_a_repeat_its_round(self):
+        tiles = {t.stage.value: t for t in self.book.track(KindName("story"), Count(3)).tiles}
+        self.assertEqual({"RUN-STANDING-2", "RUN-ROUTE-7"}, {r.value for r in tiles["plan"].restarts})
+        self.assertEqual({"RUN-ROUTE-5"}, {r.value for r in tiles["test"].restarts})
+        self.assertEqual(("rounds", "once", "decides"),
+                         (tiles["build"].turn.value, tiles["plan"].turn.value, tiles["judge"].turn.value))
+
+    def journal(self, root, lines):
+        plant(os.path.join(root, ".dca-factory", "evidence", "s-1"), {"journal.tsv": "".join(
+            f"2026-11-0{1 + n // 50}T10:{n % 50:02d}:00Z\t{line}\tseq={n + 1}\n" for n, line in enumerate(lines))})
+        [found] = DeliveryJournals(root).journals()
+        return story_run(found, self.book.track(KindName("story"), Count(3)))
+
+    def test_the_runner_s_own_lines_say_where_the_story_went(self):
+        with tempfile.TemporaryDirectory() as root:
+            run = self.journal(root, ["gate\tplan\texit=0\tby=runner", "stage-start\tbuilder\tstages=plan,test,build,tidy",
+                                      "gate\ttest\texit=1\tfail=spec-delta\tby=builder", "gate\tbuild\texit=0\tby=runner",
+                                      "stage-start\tverifier", "jump\ttest\tfrom=judge\trule=RUN-VERDICT-1",
+                                      "gate\tbuild\texit=1\tfail=suite\tby=runner",
+                                      "restart\ttest\trule=RUN-ROUTE-5\treason=test-changed", "gate\tbuild\texit=0\tby=runner"])
+            self.assertEqual(RouteReading.JOURNAL, run.reading)
+            self.assertEqual([("judge", "test", 1)], [(w.source.value, w.target.value, w.times.value) for w in run.ways])
+            self.assertEqual({"test": 1}, {r.stage.value: r.times.value for r in run.restarts})
+            stages = {s.stage.value: s for s in run.stages}
+            self.assertEqual((1, 0), (stages["test"].tries.value, stages["test"].refused.value))   # inside, not between
+            self.assertEqual(1, stages["build"].refused.value)
+            self.assertEqual("build", run.last.value)
+
+    def test_an_older_journal_is_read_from_the_order_of_the_runner_s_gates(self):
+        with tempfile.TemporaryDirectory() as root:
+            run = self.journal(root, ["gate\tplan\texit=0", "gate\tbuild\texit=0\tby=runner", "stage-start\tverifier",
+                                      "gate\tbuild\texit=0\tby=runner", "stage-start\tverifier",
+                                      "gate\tplan\texit=0\tby=runner"])
+            self.assertEqual(RouteReading.GATE_ORDER, run.reading)
+            self.assertEqual([("judge", "build", 1)], [(w.source.value, w.target.value, w.times.value) for w in run.ways])
+            self.assertEqual({"plan": 1}, {r.stage.value: r.times.value for r in run.restarts})   # no way back to plan
+
+    def test_the_project_s_refusals_are_counted_per_rule(self):
+        with tempfile.TemporaryDirectory() as root:
+            plant(os.path.join(root, ".dca-factory", "evidence"), {
+                "a/journal.tsv": "2026-11-01T10:00:00Z\tgate\tbuild\texit=1\tfail=suite\tby=runner\tseq=1\n",
+                "b/journal.tsv": "2026-11-02T10:00:00Z\tgate\tbuild\texit=1\tfail=suite\tby=builder\tseq=1\n"
+                                 "2026-11-03T10:00:00Z\tgate\ttidy\texit=1\tby=runner\tseq=2\n"})
+            view = show_rulebook(root).execute(ShowRulebookQuery())["refusals"]
+            self.assertEqual(2, view["rules"]["GATE-SUITE"]["times"])
+            self.assertEqual({"a": 1, "b": 1}, view["rules"]["GATE-SUITE"]["stories"])
+            self.assertEqual("2026-11-02T10:00:00Z", view["rules"]["GATE-SUITE"]["last"])
+            self.assertEqual(1, view["unnamed"])

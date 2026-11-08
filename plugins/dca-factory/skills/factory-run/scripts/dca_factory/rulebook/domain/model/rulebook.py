@@ -8,6 +8,7 @@ import enum
 import typing
 
 from ....building_blocks import Value
+from .track import TileTurn, Track, TrackTile, TrackWay, WayCost, reason_of, restarting
 from .rule import (
     AGAIN, Citation, Count, Enforcement, Fired, KindName, OutcomeState, Part, Refused, Rule, RuleId, RuleState, Source,
     StageName,
@@ -244,6 +245,47 @@ class Rulebook(Value):
 
         return FlowGraph(kind, steps, built(found), built(shared), built(anywhere))
 
+    def track(self, kind: KindName, limit: Count) -> Track:
+        """The kind's track (`track.py`): its stages, and one way back per pair of stages its rules send a story along —
+        the rules that only restart the run there left to the tile; a pass action's way starts at the delivered end."""
+        graph = self.graph(kind)
+        known = {r.id: r for r in self.active()}
+        names = [step.stage for step in graph.steps]
+        found: typing.Dict[typing.Tuple[str, str], typing.List[typing.Tuple[Rule, OutcomeState]]] = {}
+        for edge in graph.edges:
+            if edge.way is not Way.BACK:
+                continue
+            for ruled in edge.rules:
+                rule = known.get(ruled.rule)
+                if rule is None or restarting(rule, edge.target):
+                    continue
+                start = StageName(DELIVERED) if rule.part is Part.PASS_ACTION else edge.source
+                found.setdefault((start.value, edge.target.value), []).append((rule, ruled.state))
+        ways = []
+        for (source, target), found_by in found.items():
+            # the runner's own decision first: its reason labels the line, a check's refusal joins it in the tooltip
+            ruled_by = sorted(found_by, key=lambda ruled: ruled[0].part is not Part.DECISION)
+            reasons: typing.List[str] = []
+            for rule, state in ruled_by:
+                for outcome in rule.outcomes:
+                    said = reason_of(outcome.said).value
+                    if outcome.state is state and said not in reasons:
+                        reasons.append(said)
+            ways.append(TrackWay(StageName(source), StageName(target),
+                                 WayCost.FREE if source == DELIVERED else WayCost.ROUND,
+                                 tuple(dict.fromkeys(rule.id for rule, _state in ruled_by)), Words(" · ".join(reasons))))
+        tiles = []
+        for step in graph.steps:
+            rounds = step.gate is GateTime.AFTER and any(
+                e.source == step.stage and e.way is Way.AGAIN and any(r.state is OutcomeState.FAIL for r in e.rules)
+                for e in graph.edges)
+            restarts = [r for r in self.chosen(None, kind) if restarting(r, step.stage)
+                        and (not r.stages or any(stage in names for stage in r.stages))]
+            whens = tuple(dict.fromkeys(r.restart.when for r in restarts if r.restart is not None))
+            turn = (TileTurn.DECIDES if step.gate is GateTime.NONE else TileTurn.ROUNDS if rounds else TileTurn.ONCE)
+            tiles.append(TrackTile(step.stage, turn, tuple(r.id for r in restarts), whens))
+        return Track(kind, tuple(tiles), tuple(ways), limit)
+
     def unrounded(self) -> typing.Iterator[Problem]:
         """A stage whose gate runs after it, at which no rule sends a refusal back into it: the drawn flow would have
         no round there, and a refused gate no way on."""
@@ -317,6 +359,8 @@ class Rulebook(Value):
                 found.append(Problem(Words(f"{rule.id.value} is written but no code binds it — it decides nothing; "
                                            f"bind it or retire it — {rule.source.value}")))
             nowhere = [t.value for o in rule.outcomes for t in o.goes if t not in places and t.value not in (AGAIN, STOP)]
+            if rule.restart is not None and rule.restart.stage not in places:
+                nowhere.append(rule.restart.stage.value)
             if nowhere:
                 found.append(Problem(Words(f"{rule.id.value} goes to no stage {', '.join(nowhere)} — "
                                            f"{rule.source.value}")))

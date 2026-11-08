@@ -2,10 +2,13 @@
 id: GATE-ACCEPTANCE
 title: A story waits for a person's acceptance before it counts as delivered
 part: pass
+kinds:
+- story
+- journey
 reports:
 - acceptance
 pass: the acceptance record says accepted — the delivery goes on
-fail: the acceptance asks for a correction — written into the story, which runs again from plan
+fail: a correction at acceptance — written into the story, which runs again from plan as a new pass, no round spent
 goes.fail: plan
 wait: no acceptance exists yet — a record `accept-<n>.md` is written beside the story and the story waits (exit 3)
 goes.wait: stop

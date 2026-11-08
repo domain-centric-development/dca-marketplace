@@ -529,160 +529,244 @@ function delivered(st) {
   return ui.split({main: byDay, side: sums + qualityCard(st.signals), sideFirst: true});
 }
 
-// --- 6 the rules: the factory's rulebook, drawn as it says it ------------------------------------------------------------
+// --- 6 the rules: the factory's rulebook — a stage read, the checks against the stages, a story's run ----------------
+// Three renderings of one read model (`factory.sh rules --format json`): the track of the picked kind with its ways back
+// (derived by the factory from the rules), the stage's rules, and what the project's journals say. Where the page
+// stands — the view, the kind, the stage, the story — is in its address: `#rules/<view>/<kind>/<stage|all>[/<story>]`.
 async function loadRules() {
   const want = S.ruleStory || "";
   if (S.rules && S.rulesFor === want) return;
   S.rulesFor = want;
   if (await load("rules", "/api/view/rules" + (want ? `?id=${encodeURIComponent(want)}` : ""))) render();
 }
+const RULE_VIEWS = [["stage", "stage"], ["matrix", "checks × stages"], ["run", "run"]];
 // a rule read as sentences: its title, why, when, and each outcome after its keyword, where it sends the story
 const SAYS = {pass: "Passes when", fail: "Fails when", skip: "Skips when", note: "Notes when", wait: "Waits when", ask: "Asks when"};
 const sentence = t => { const s = String(t || "").trim(); return s ? s[0].toUpperCase() + s.slice(1) + (/[.!?)]$/.test(s) ? "" : ".") : ""; };
 const clause = t => { const s = String(t || "").trim(); return s + (/[.!?)]$/.test(s) ? "" : "."); };
 const going = goes => (goes || []).length ? `→ ${goes.map(g => g === "stop" ? "stop" : g === "again" ? "once more" : "back to " + g).join(" or ")}` : "";
+const PARTS = {check: "check — a question the gate asks of a stage's work; it passes or refuses",
+  decision: "decision — where the runner sends the story next", pass: "pass — what a passing gate does",
+  instruction: "told — what a stage reads before it works; no gate asks it directly"};
+const times = n => `${n}×`;
+// a told rule's name: its first sentence
+const firstSentence = text => { const plainText = String(text || "").replace(/^\s*\d+[A-Za-z]?\.\s*/, "").replace(/\*\*/g, "").replace(/\s*\n\s*/g, " ");
+  const m = plainText.match(/^(.{20,170}?[.:;])(\s|$)/); return m ? m[1] : plainText.slice(0, 140) + (plainText.length > 140 ? "…" : ""); };
+const ruleTitle = r => r.title ? sentence(r.title).replace(/\.$/, "") : r.text ? firstSentence(r.text) : sentence(r.why || r.when || r.id);
 
-// a rule's row is keyed by where it stands — the same rule in two groups opens on its own —; a link to a rule
-// (`#rules:<story>:<rule>`) opens it wherever it stands
-function ruleRow(id, rules, story, stage, scope) {
-  const r = rules[id] || {id, enforcement: "", outcomes: []}, key = `rule:${scope || "rules"}:${id}`;
-  const fired = story && story.fired[id] ? story.fired[id].filter(f => !stage || f.stage === stage) : [];
-  const state = fired.some(f => f.state === "fail") ? "fail" : fired.length ? fired[fired.length - 1].state : "";
-  const refused = story && story.refused[id];
-  const head = r.title ? sentence(r.title).replace(/\.$/, "") : r.text ? r.text.replace(/\s+/g, " ").slice(0, 140) + (r.text.length > 140 ? "…" : "") : sentence(r.why || r.when);
-  return ui.accordion({key, variant: "row", open: opened(key, opened(`rule:${id}`)), head: inline(head), meta: ui.ruleId(id, r.enforcement, state, refused),
-    body: () => (r.text ? ui.said("Where", inline(clause(r.when))) + ui.prose(r.text)
-      : (r.why ? ui.intro(inline(sentence(r.why)), {html: true}) : "") + ui.said("When", inline(clause(r.when)))
-        + (r.outcomes || []).map(o => ui.said(SAYS[o.state] || o.state, inline(clause(o.said)), {icon: o.state, state: o.state, goes: going(o.goes)})).join(""))
-      + (fired.length ? ui.note(`this story: ${fired.map(f => `${f.stage}: ${f.state}`).join(" · ")}${refused ? ` · refused ${refused}×` : ""}`, {state: "wait"}) : "")
-      + ui.accordion({key: `src:${id}`, variant: "quiet", open: opened(`src:${id}`), head: "source",
-          body: () => ui.hint(`${r.source || ""}${r.bound ? (r.part === "instruction" ? " · placed in " : " · bound in ") + r.bound : ""}`, {block: true})})});
+// what the view reads: the kind's flow and track, the stage picked, the story's run where one is picked
+function rulesContext(st) {
+  const v = S.rules, rules = Object.fromEntries((v.rules || []).map(r => [r.id, r])), kinds = Object.keys(v.flow || {});
+  const story = v.story && v.story.id === S.ruleStory ? v.story : null, run = story ? story.run : null;
+  if (run && S.kindFor !== story.id) { S.kindFor = story.id; if (kinds.includes(run.kind)) S.ruleKind = run.kind; }
+  const kind = kinds.includes(S.ruleKind) ? S.ruleKind : kinds[0];
+  const flow = (v.flow || {})[kind] || {steps: [], every_gate: [], graph: {anywhere: []}, track: {tiles: [], ways: []}};
+  const track = flow.track || {tiles: [], ways: []}, route = track.tiles.map(t => t.stage);
+  const stage = S.ruleStage === null ? (route.includes("build") ? "build" : route[0] || "") : route.includes(S.ruleStage) ? S.ruleStage : "";
+  const stepOf = name => flow.steps.find(s => s.stage === name) || {gate: "none", gate_before: [], told: [], gate_after: [], passed: [], decided: []};
+  const refusals = (v.refusals || {}).rules || {};
+  return {v, st, rules, kinds, kind, flow, track, route, stage, stepOf, story, run, refusals};
 }
-const ruleGroup = (label, ids, rules, story, stage, o = {}) => ui.ruleGroup(label,
-  (ids || []).map(id => ruleRow(id, rules, story, stage, o.scope || `${stage || "flow"}:${label || "rules"}`)), o);
-const waysLine = (edges, title, rules, o) => {
-  const named = id => (rules && rules[id] && rules[id].title) || id;
-  return ui.ways(title, edges.map(e => ({source: e.source, target: e.target, key: `${e.source}>${e.target}>${e.way}`,
-    rules: [...new Set(e.rules.map(r => named(r.rule)))].join(" · ")})), o);
-};
-function foldGroup(key, label, ids, rules, story, stage) {
-  if (!ids || !ids.length) return "";
-  return ui.accordion({key, variant: "quiet", open: opened(key), head: `${esc(label)} (${ids.length})`, body: () => ruleGroup("", ids, rules, story, stage, {scope: key})});
+const checksOf = step => [...(step.gate_before || []), ...(step.gate_after || [])];
+const nextOf = (c, stage) => { const i = c.route.indexOf(stage); return i >= 0 && i < c.route.length - 1 ? c.route[i + 1] : "delivered"; };
+// how often a rule refused: at one stage of this project, or — a story picked — that story between the stages
+function refusedAt(c, id, stage) {
+  if (c.run) {
+    const at = c.run.stages[stage], r = c.rules[id] || {};
+    return at ? (r.reports || []).reduce((n, name) => n + (at.checks[name] || 0), 0) : 0;
+  }
+  return ((c.refusals[id] || {}).stages || {})[stage] || 0;
 }
-function folded(key, title, sub, ids, rules, story) {
-  if (!ids || !ids.length) return "";
-  return ui.accordion({key, variant: "card", level: 2, open: opened(key), head: `${esc(title)} ${ui.hint(`${ids.length} rules — ${sub}`)}`,
-    body: () => ruleGroup("", ids, rules, story, "", {scope: key})});
+// `bare`: in a narrow column the id stands in the row's title, not beside it
+function ruleRow(c, id, stage, bare = false) {
+  const r = c.rules[id] || {id}, n = stage ? refusedAt(c, id, stage) : 0;
+  const aside = n ? ui.flag(`✗ ${n}`, "fail", {title: c.run ? `refused ${c.story.id} ${times(n)} here, between the stages` : `refused ${times(n)} here in this project`}) : "";
+  return {id, title: ruleTitle(r), aside: aside || (bare ? "" : undefined), state: c.run && n ? "fail" : ""};
 }
-
-function picked(flow, rules, story) {
-  const graph = flow.graph || {edges: [], every_gate: [], anywhere: []}, p = S.flowPick;
-  const ids = es => [...new Set(es.flatMap(e => e.rules.map(r => r.rule)))];
-  if (!p) {
-    return ui.card("", "", ui.empty("Pick a step, a gate or a way in the drawing — its rules show here.")
-      + ui.hint(`${ui.em("Four kinds of rule.")} A ${ui.em("check")} (GATE-…) is a question a gate asks after a stage — it passes or refuses. A ${ui.em("decision")} (RUN-…) says where the story goes then: on, once more, back, or stop. A ${ui.em("pass")} rule says what a passing gate does. What a stage is ${ui.em("told")} (STAGE-…) is its instruction; no gate asks it directly.`, {block: true, html: true})
-      + ui.hint("A teal dot is a gate: the checks between two steps. A dashed arc above is a round — a refused gate sends the story back into its step, three times at most. A way back appears below while the pointer is on its step. A red mark stops the run; a grey one waits for a person.", {block: true}));
-  }
-  if (p.type === "stage") {
-    // a stage told as it runs: what it is told, the gate that asks, what a pass does, where a refusal sends it
-    const step = flow.steps.find(s => s.stage === p.stage) || {gate_before: [], told: [], gate_after: [], passed: [], decided: []};
-    const at = flow.steps.findIndex(s => s.stage === p.stage), next = (flow.steps[at + 1] || {}).stage || "delivered";
-    const own = e => e.source === p.stage;
-    const round = graph.edges.find(e => own(e) && e.way === "again"), on = graph.edges.find(e => own(e) && e.way === "on" && e.rules.length);
-    const out = graph.edges.filter(e => own(e) && e.way === "back"), into = graph.edges.filter(e => e.target === p.stage && e.way === "back");
-    const stops = graph.edges.filter(e => own(e) && (e.way === "stop" || e.way === "waits"));
-    const named = new Set([round, on, ...out, ...stops].filter(Boolean).flatMap(e => e.rules.map(r => r.rule)));
-    const rest = (step.decided || []).filter(id => !named.has(id));
-    // a stage told as it runs: checked before it starts, what it is told while it works, checked afterwards — and how
-    // that ends: all pass and the story goes on, or one fails and it tries once more, goes back or stops —, then the rest
-    const verdict = step.gate === "none", checks = (step.gate_after || []).length, plain = {plain: true};
-    const passes = ui.outcome("pass", `${verdict ? "It says yes" : checks ? "All pass" : "It passes"} → on to ${ui.em(next)}`,
-      ruleGroup("then also", [...(step.passed || []), ...(on ? on.rules.map(r => r.rule) : [])], rules, story, p.stage, plain));
-    const fails = ui.outcome("fail", `${verdict ? "It asks for changes" : "One fails"} → what happens next`,
-      (round ? ruleGroup("it tries once more", ids([round]), rules, story, p.stage, plain) : "")
-      + waysLine(out, "it goes back to an earlier stage", rules, plain)
-      + (stops.length ? ruleGroup("it stops and waits for a person", ids(stops), rules, story, p.stage, plain) : ""));
-    return ui.card(esc(p.stage), esc((step.window || "") + (verdict ? " · decides with its verdict, no gate" : "")),
-      ui.part(`Checked before it starts ${ui.hint("— a failing check keeps it from starting", {prose: true})}`, ruleGroup("", step.gate_before, rules, story, p.stage, {scope: `${p.stage}:before`}))
-      + ui.part(`While it works ${ui.hint(`— it is told ${(step.told || []).length} instructions`, {prose: true})}`, foldGroup(`told:${p.stage}`, "show what it is told", step.told, rules, story, p.stage))
-      + ui.part(`Checked afterwards ${ui.hint(verdict ? "— its verdict decides, no gate" : checks ? `— ${checks} checks the work must pass` : "— nothing is checked", {prose: true})}`,
-          foldGroup(`checks:${p.stage}`, "show the checks", step.gate_after, rules, story, p.stage) + passes + fails)
-      + ui.part("The runner also decides here", ruleGroup("", rest, rules, story, p.stage, {scope: `${p.stage}:runner`}), {aside: true})
-      + (into.length ? ui.part("Ways back to this stage", waysLine(into, "", rules), {aside: true}) : ""));
-  }
-  if (p.type === "gate") {
-    const [where, stage] = p.gate.split(":"), step = flow.steps.find(s => s.stage === stage) || {};
-    const round = graph.edges.find(e => e.source === stage && e.target === stage && e.way === "again");
-    return ui.card(`gate ${esc(where === "gate-before" ? "before" : "after")} ${esc(stage)}`,
-      where === "gate-before" ? "a refused check keeps the stage from starting" : "a refused check sends the story once more into its step",
-      ruleGroup("its checks — each can refuse", (where === "gate-before" ? step.gate_before : step.gate_after) || [], rules, story, stage)
-      + (where === "gate-after" && round ? ruleGroup("when one refuses — what decides where the story goes", ids([round]), rules, story, stage) : "")
-      + ruleGroup("also at every gate", flow.every_gate, rules, story, stage));
-  }
-  const edge = graph.edges.concat(graph.every_gate || [], graph.anywhere || []).find(e => `${e.source}>${e.target}>${e.way}` === p.key);
-  if (p.way === "again") {
-    const step = flow.steps.find(s => s.stage === p.source) || {};
-    return ui.card(`${esc(p.source)} once more`, step.gate === "after" ? "a refused check of its gate sends the story back into it" : "the stage runs again",
-      ruleGroup("what sends it once more", edge ? ids([edge]) : [], rules, story, p.source)
-      + (step.gate === "after" ? ruleGroup(`the checks of the gate after ${p.source} — each can refuse`, step.gate_after, rules, story, p.source) : ""));
-  }
-  return ui.card(`${esc(p.source)} → ${esc(p.target)}`, esc(p.way), ruleGroup("the rules that take it", edge ? ids([edge]) : [], rules, story, p.source));
+// a list of rules, the first few shown and the rest behind a fold
+function ruleList(c, key, ids, stage, first = 99, bare = false) {
+  const rows = (ids || []).map(id => ruleRow(c, id, stage, bare));
+  if (rows.length <= first + 1) return ui.ruleRows(rows);
+  return ui.ruleRows(rows.slice(0, first)) + ui.accordion({key: `rules:${key}`, variant: "quiet", open: opened(`rules:${key}`),
+    head: `${rows.length - first} more`, body: () => ui.ruleRows(rows.slice(first))});
 }
 
-// a story laid over the drawing: the steps its gates ran at, where it stands, which gate refused it and how often
-function storyMarks(flow, story) {
-  if (!story) return null;
-  // the steps run in order: every step before the last one the story's gates ran at was reached too (a judge has none)
-  const ran = new Set(Object.values(story.fired).flat().map(f => f.stage));
-  const last = Math.max(-1, ...flow.steps.map((s, i) => ran.has(s.stage) ? i : -1));
-  const reached = new Set([...ran, ...flow.steps.slice(0, last + 1).map(s => s.stage)]);
-  const at = story.refused_at || {};
-  const gates = flow.steps.filter(s => s.gate === "after").map(s => {
-    const refused = Object.values(at[s.stage] || {}).reduce((n, k) => n + k, 0);
-    const failed = (s.gate_after || []).some(id => (story.fired[id] || []).some(f => f.stage === s.stage && f.state === "fail"));
-    return {stage: s.stage, refused, failed};
+// the track: a tile per stage of the kind, the delivered end, the ways back — the picked stage's solid, or the ways the
+// picked story took; a repeat of a stage is its tile's ↺, a restart its tile's grey note, never a line
+function ruleTrack(c) {
+  const t = c.track, limit = t.round_limit || 3, ways = [];
+  const free = w => w.source === "delivered" ? `${w.reason} · a new pass` : w.reason;
+  // on the line only the first reason — the line stays short; every reason stays in its tooltip
+  const first = w => { const r = w.reason.split(" · ")[0]; return w.source === "delivered" ? `${r} · a new pass` : r; };
+  if (c.run) {
+    for (const took of c.run.ways) {
+      const w = t.ways.find(x => x.source === took.source && x.target === took.target);
+      if (w) ways.push({source: w.source, target: w.target, round: w.cost === "round", solid: true, label: `${first(w)} · ${times(took.times)}`,
+        title: `${w.source} → ${w.target} · ${free(w)} (${w.rules.join(", ")}) — ${c.story.id} took it ${times(took.times)}`});
+    }
+  } else {
+    for (const w of t.ways) ways.push({source: w.source, target: w.target, round: w.cost === "round", solid: !!c.stage && w.source === c.stage,
+      label: first(w), title: `${w.source} → ${w.target} · ${free(w)} (${w.rules.join(", ")}) — ${w.cost === "round" ? "costs a round" : "costs no round"}`});
+  }
+  const tiles = t.tiles.map(tile => {
+    const step = c.stepOf(tile.stage), told = (step.told || []).length, checks = checksOf(step).length;
+    const meta = tile.decides ? `decides · told ${told}` : `${checks} checks · told ${told}`;
+    let state = null, notes = [];
+    if (c.run) {
+      const x = c.run.stages[tile.stage] || {};
+      state = !x.reached ? {text: "not reached"} : x.refused ? {text: `✗ refused ${times(x.refused)}`, tone: "fail"}
+        : {text: `✓ passed${x.tries ? ` · ${x.tries} ${x.tries === 1 ? "try" : "tries"} inside` : ""}`, tone: "pass"};
+      const again = c.run.restarts[tile.stage];
+      if (again) notes = [{text: `↩ started again here · ${times(again.times)}`, title: `restarted here — no round${again.reasons.length ? `: ${again.reasons.join(", ")}` : ""}`}];
+    } else {
+      state = tile.rounds ? {text: `↺ up to ${limit} rounds`, tone: "wait"} : tile.decides ? {text: "↺ sends back · a round", tone: "wait"} : null;
+      if (tile.restarts.length) notes = [{text: `↩ again from here when ${tile.restart_when.join(" or ")}`, title: `${tile.restarts.join(" · ")} — no round`}];
+    }
+    return {stage: tile.stage, picked: tile.stage === c.stage, here: !!c.run && c.run.last === tile.stage, meta, state, notes};
   });
-  return {reached, gates};
+  tiles.push({end: true, stage: "delivered", name: "delivered", note: t.accepted ? "after a person's acceptance" : ""});
+  const legend = [["wait", "━ costs a round, as ↺ on a tile"], ["", "━ costs no round"], ["", "↩ started again at that stage — a note, no line"],
+    ["", c.run ? `solid: a way back ${c.story.id} took, with how often` : "solid: where the picked stage sends a story back · dashed: the others"]];
+  return ui.ruleTrack({tiles, ways, legend});
 }
-function storyLine(st, flow, story) {
-  if (!story) return "";
-  const row = (st.rows || []).find(r => r.story === story.id) || {};
-  const marks = storyMarks(flow, story), refused = marks.gates.filter(g => g.refused);
-  const other = [...marks.reached].filter(name => !flow.steps.some(s => s.stage === name));
-  return ui.intro(`${ui.em(story.id)} — ${esc(row.state || "")}${row.stage && row.stage !== "—" ? `, now at ${ui.em(row.stage)}` : ""}.
-    ${refused.length ? "Refused: " + refused.map(g => `${esc(g.stage)} ×${g.refused}`).join(", ") + "." : "No gate refused it."}
-    ${other.length ? ui.hint(`It also ran ${other.join(", ")} — another kind's steps; pick that kind to see them.`) : ""}`, {html: true});
+// the ways drawn once the tiles stand; a newly picked tile scrolled into its track's sight where the track scrolls
+let trackPicked = "";
+function paintTracks() {
+  document.querySelectorAll(".rule-track").forEach(drawWays);
+  const picked = document.querySelector('.rule-track__tile[aria-pressed="true"]'), key = picked ? `${S.ruleKind}/${picked.dataset.trackStage}` : "";
+  if (picked && key !== trackPicked) picked.scrollIntoView({block: "nearest", inline: "nearest"});
+  trackPicked = key;
+}
+
+// the three groups beneath: at every gate, anywhere in a run, what every stage is told
+function ruleGroups(c) {
+  const anywhere = [...new Set([...(((c.flow.graph || {}).anywhere) || []).flatMap(e => e.rules.map(r => r.rule)),
+    ...(c.v.outside || []).filter(id => (c.rules[id] || {}).part !== "instruction")])];
+  const told = (c.v.rules || []).filter(r => r.part === "instruction" && !(r.stages || []).length).map(r => r.id);
+  const group = (key, title, sub, ids) => ids.length ? ui.accordion({key: `group:${key}`, variant: "card", level: 2, open: opened(`group:${key}`),
+    head: `${esc(title)} ${ui.hint(`${ids.length} rules — ${sub}`)}`, body: () => ruleList(c, `group:${key}`, ids, "")}) : "";
+  return ui.ruleFolds([group("every", "At every gate", "what each gate of this kind asks as well", c.flow.every_gate || []),
+    group("anywhere", "Anywhere in a run", "what stops a run or waits for a person at any stage", anywhere),
+    group("told", "Every stage is told", "what each stage reads whatever it is", told)]);
+}
+
+// --- the stage view: the picked stage in three columns — what it is told, what is checked, what comes next
+function stageView(c) {
+  if (!c.stage) return ruleTrack(c) + ui.hint("Pick a stage to read what it is told, what its gate checks and where it sends a story back — a second click on the picked stage shows every way at once.", {block: true}) + ruleGroups(c);
+  const s = c.stage, step = c.stepOf(s), tile = c.track.tiles.find(t => t.stage === s) || {};
+  const before = step.gate === "before", checks = checksOf(step);
+  const told = ui.card("While it works", `told · ${(step.told || []).length}`, ui.hint(`What the ${s} stage reads before it starts.`, {block: true})
+    + ((step.told || []).length ? ruleList(c, `told:${s}`, step.told, "", 8) : ui.empty("Nothing of its own — what every stage is told, below.")));
+  const checked = ui.card(before ? "Checked before it starts" : "Checked afterwards", tile.decides ? "decides" : `${checks.length} checks`,
+    tile.decides ? ui.hint("No gate: reviewers read the change, and the judge's verdict decides — it passes, sends the story back, or asks a person.", {block: true}) + ruleList(c, `decided:${s}`, step.decided || [], s)
+      : ui.hint(`${before ? "Before the stage" : "After the stage"}, a script — not a model — asks each of these; one refusal and the stage is not done.${c.run ? ` The counts are ${c.story.id}'s refusals between the stages.` : " The counts are this project's refusals."}`, {block: true})
+        + ruleList(c, `checks:${s}`, checks, s));
+  const out = c.track.ways.filter(w => w.source === s);
+  const sent = new Set(out.flatMap(w => w.rules));
+  const rest = (step.decided || []).filter(id => !sent.has(id));
+  const wayRows = out.flatMap(w => w.rules.map(id => ({id, title: `back to ${w.target} — ${w.reason}`, aside: ui.id(id)})));
+  const next = ui.card("", "", ui.outcome("pass", `${tile.decides ? "it says yes" : "all pass"} → ${ui.em(nextOf(c, s))}`, ruleList(c, `passed:${s}`, step.passed || [], s)))
+    + ui.card("", "", ui.outcome("fail", "one fails → what happens next",
+        ui.ruleRows(wayRows) + (rest.length ? ruleList(c, `next:${s}`, rest, s) : !wayRows.length ? ui.hint("the stage tries once more", {block: true}) : "")));
+  return ruleTrack(c) + ui.stageRead({told, checked, next}) + ruleGroups(c);
+}
+
+// --- checks × stages: a row per check — those at (almost) every gate first, then the others in stage order
+function matrixView(c) {
+  const gated = c.route.filter(s => c.stepOf(s).gate !== "none"), at = new Map();
+  const add = (id, s) => { if (!at.has(id)) at.set(id, new Set()); at.get(id).add(s); };
+  c.route.forEach(s => checksOf(c.stepOf(s)).forEach(id => add(id, s)));
+  (c.flow.every_gate || []).forEach(id => gated.filter(s => !((c.rules[id] || {}).stages || []).length || c.rules[id].stages.includes(s)).forEach(s => add(id, s)));
+  const all = [...at.entries()].map(([id, stages]) => ({id, stages}));
+  const many = Math.max(2, gated.length - 1);
+  const every = all.filter(x => x.stages.size >= many).sort((a, b) => b.stages.size - a.stages.size);
+  const first = x => Math.min(...[...x.stages].map(s => c.route.indexOf(s)));
+  const some = all.filter(x => !every.includes(x)).sort((a, b) => first(a) - first(b));
+  const row = x => ({id: x.id, title: ruleTitle(c.rules[x.id] || {id: x.id}), name: ((c.rules[x.id] || {}).reports || []).join(" · "),
+    cells: Object.fromEntries([...x.stages].map(s => { const n = refusedAt(c, x.id, s);
+      return [s, {n, title: n ? `refused ${times(n)} at ${s}${c.run ? ` — ${c.story.id}, between the stages` : " in this project"}` : `the ${s} gate asks it`}]; }))});
+  const told = {title: "told before the stage", cells: Object.fromEntries(c.route.map(s => [s, {text: `${(c.stepOf(s).told || []).length}`}]))};
+  const matrix = ui.ruleMatrix({stages: c.route.map(s => ({stage: s, picked: s === c.stage})),
+    bands: [{label: `at (almost) every gate · ${every.length}`, rows: every.map(row)}, {label: `at some gates · ${some.length}`, rows: some.map(row)},
+            {label: "per stage", rows: [told]}]});
+  const step = c.stage ? c.stepOf(c.stage) : null, tile = c.track.tiles.find(t => t.stage === c.stage) || {};
+  const side = !step ? ui.card("", "", ui.hint("A column's head picks a stage.", {block: true}))
+    : ui.card(esc(c.stage), `${tile.decides ? "decides, no gate" : `${checksOf(step).length} checks`} · told ${(step.told || []).length} · ✓ → ${esc(nextOf(c, c.stage))}`,
+        ui.part("if refused", ruleList(c, `side:${c.stage}`, step.decided || [], c.stage) || ui.hint("it tries once more", {block: true}))
+        + ui.actions(ui.btn(`open ${c.stage} in the stage view`, {attrs: {"data-rule-view": "stage"}})));
+  const legend = ui.card("", "", ui.hint(c.run ? `A dot: that gate asks it. A count: it refused ${c.story.id} there, between the stages.`
+    : "A dot: that gate asks it. A count: it refused there, over every story of this project — a stage's own tries inside it among them.", {block: true}));
+  return ui.split({main: ui.card("Checks × stages", `${all.length} checks of the ${esc(c.kind)} kind`, matrix), side: side + legend});
+}
+
+// --- the run: every stage as a column — the rulebook, or with a story picked what that story met at each
+function runView(c) {
+  const cols = c.route.map(s => {
+    const step = c.stepOf(s), tile = c.track.tiles.find(t => t.stage === s) || {}, checks = checksOf(step);
+    const parts = [];
+    let verdict = null, flag = "";
+    if (c.run) {
+      const x = c.run.stages[s] || {}, named = Object.keys(x.checks || {});
+      verdict = !x.reached ? {state: "minor", text: "not reached"}
+        : x.refused ? {state: "fail", text: `✗ refused ${times(x.refused)}`, small: `${named.length ? named.join(", ") : "the checks are not in the journal (an older run)"}${x.ended === "pass" ? " · then passed" : " · not passed yet"}`}
+        : x.ended === "fail" ? {state: "fail", text: "✗ refused inside the stage", small: `${x.tries} ${x.tries === 1 ? "try" : "tries"}`}
+        : {state: "pass", text: "✓ passed", small: x.tries ? `${x.tries} ${x.tries === 1 ? "try" : "tries"} inside the stage` : ""};
+    } else {
+      const total = checks.reduce((n, id) => n + refusedAt(c, id, s), 0);
+      flag = total ? ui.flag(`✗ ${total}`, "fail", {title: `refusals at ${s} in this project`}) : "";
+      parts.push({label: `told · ${(step.told || []).length}`, html: ruleList(c, `board-told:${s}`, step.told || [], "", 3, true)});
+    }
+    parts.push(tile.decides ? {label: "decides", html: ui.hint("no gate — reviewers read the change, the judge decides", {block: true})}
+      : {label: `checked · ${checks.length}`, html: ruleList(c, `board-checks:${s}`, checks, s, c.run ? 4 : 6, true)});
+    if ((step.decided || []).length) parts.push({label: "if refused", html: ruleList(c, `board-decided:${s}`, step.decided, s, 2, true)});
+    return {stage: s, picked: s === c.stage, here: !!c.run && c.run.last === s, flag, verdict, parts};
+  });
+  const line = c.run
+    ? ui.hint(`${c.story.id} · ${c.run.kind} · ${Object.values(c.run.stages).reduce((n, x) => n + x.refused, 0)} refusals between the stages · last at ${c.run.last}${c.run.reading === "gate-order" ? " · its ways back read from the order of its gates — its journal is older than the runner's own lines" : ""}`, {block: true})
+    : ui.hint("Pick a story above to see where it passed, where it was refused and where it went back.", {block: true});
+  return ruleTrack(c) + line + ui.ruleBoard(cols) + (c.run ? "" : ruleGroups(c));
 }
 
 function rulesTab(st) {
   if (!S.rules) { loadRules(); return ui.card("", "", ui.empty("Reading the rules…")); }
-  const v = S.rules, rules = Object.fromEntries((v.rules || []).map(r => [r.id, r]));
-  const story = v.story || null;
-  const kinds = Object.keys(v.flow || {});
-  if (story && S.kindFor !== story.id) {
-    S.kindFor = story.id;
-    const ran = new Set(Object.values(story.fired).flat().map(f => f.stage));
-    const fits = kinds.filter(k => [...ran].every(x => v.flow[k].steps.some(s => s.stage === x)))
-      .sort((a, b) => v.flow[a].steps.length - v.flow[b].steps.length);
-    if (fits.length) S.ruleKind = fits[0];
+  if (S.rulesFor !== (S.ruleStory || "")) loadRules();
+  const c = rulesContext(st);
+  const titles = Object.fromEntries((st.rows || []).map(r => [r.story, r.title]));
+  const stories = ((c.v.refusals || {}).stories || []);
+  const head = ui.toolbar(ui.switch(RULE_VIEWS.map(([id, label]) => ({label, pressed: id === S.ruleView, attrs: {"data-rule-view": id}})), {label: "the view"})
+    + ui.labelled("kind", ui.switch(c.kinds.map(k => ({label: k, pressed: k === c.kind, attrs: {"data-rule-kind": k}})), {label: "which kind of story"}))
+    + ui.formRow({id: "rule-story", label: "a story", quiet: true, inline: true, attrs: {"data-rule-pick": ""},
+        options: [{value: "", label: "no story"}, ...stories.map(id => ({value: id, label: titles[id] ? `${id} — ${titles[id]}` : id, selected: id === S.ruleStory}))]}));
+  const view = {stage: stageView, matrix: matrixView, run: runView}[S.ruleView] || stageView;
+  return head + view(c)
+    + ((c.v.problems || []).length ? ui.card("Problems", "the rulebook itself", `<ul>${c.v.problems.map(p => `<li>${esc(p)}</li>`).join("")}</ul>`) : "");
+}
+
+// --- the drawer: one rule in full — what it is, where it holds, how it comes out, why or its whole instruction, and
+// what the project's journals say of it
+function ruleSheet(id) {
+  if (!S.rules) return "";
+  const c = rulesContext(S.status || {}), r = c.rules[id] || ((S.rules.retired || []).find(x => x.id === id)) || {id, outcomes: []};
+  const facts = [["kind of rule", esc(PARTS[r.part] || r.part || "")], ["stages", esc((r.stages || []).join(", ") || "outside the stages")],
+    ["kinds", esc((r.kinds || []).join(", ") || "every kind")], (r.reports || []).length ? ["in the gate report", esc(r.reports.join(", "))] : null,
+    r.restart ? ["starts anew", esc(`at ${r.restart.stage} when ${r.restart.when} — no round`)] : null];
+  const outcomes = (r.outcomes || []).map(o => ui.said(SAYS[o.state] || o.state, inline(clause(o.said)), {icon: o.state, state: o.state, goes: going(o.goes)})).join("");
+  const body = r.text ? ui.said("Where", inline(clause(r.when))) + ui.part("the instruction", ui.prose(r.text))
+    : (r.why ? ui.intro(inline(sentence(r.why)), {html: true}) : "") + (r.when ? ui.said("When", inline(clause(r.when))) : "");
+  const parts = [], found = c.refusals[id], unnamed = (c.v.refusals || {}).unnamed || 0;
+  if (found) {
+    const list = Object.entries(found.stories).map(([story, n]) => ({press: {label: story, attrs: {"data-rule-story": story}}, aside: times(n)}));
+    parts.push({label: "in this project", html: ui.hint(`Refused ${times(found.times)}, last ${found.last.replace("T", " ").slice(0, 16)}, in ${list.length} ${list.length === 1 ? "story" : "stories"} — counting a stage's own tries inside it as well as the refusals between the stages.`, {block: true})
+      + ui.list(list.slice(0, 12)) + (list.length > 12 ? ui.hint(`and ${list.length - 12} more`, {block: true}) : "")});
+  } else if ((r.reports || []).length) {
+    parts.push({label: "in this project", html: ui.hint(`Never refused in the journals.${unnamed ? ` ${unnamed} older refusals name no check — their lines are from before 2026-10-10.` : ""}`, {block: true})});
   }
-  const kind = kinds.includes(S.ruleKind) ? S.ruleKind : kinds[0];
-  const flow = (v.flow || {})[kind] || {steps: [], edges: [], every_gate: []};
-  const stories = (st.rows || []).map(r => r.story);
-  const picks = ui.toolbar(ui.switch(kinds.map(k => ({label: k, pressed: k === kind, attrs: {"data-flow": k}})), {label: "which kind of story"})
-    + ui.formRow({id: "overlay", label: "a story's gate runs", quiet: true, inline: true, attrs: {"data-overlay": ""},
-        options: [{value: "", label: "no story"}, ...stories.map(id => ({value: id, selected: id === S.ruleStory}))]}));
-  // the drawing — which flow and which story's runs at its head, so they stand above it at every width — and what is
-  // picked in it on the content's width; beside them the rules across the stages (WP-183)
-  return ui.split({
-    main: ui.card(esc(kind), `${(v.rules || []).length} rules — pick a step, a gate or a way`, picks + storyLine(st, flow, story)
-        + (flow.svg_one_at_a_time ? ui.flow(flow.svg_one_at_a_time) : ""))
-      + picked(flow, rules, story),
-    side: folded("every-gate", "At every gate", "the checks each gate of this flow runs as well", flow.every_gate, rules, story)
-      + folded("anywhere", "Anywhere in a run", "what stops a run or waits for a person at any step",
-               [...new Set(((flow.graph || {}).anywhere || []).flatMap(e => e.rules.map(r => r.rule)))], rules, story)
-      + folded("outside", "Outside the stages", "the whole run, the commit hook, every stage alike", v.outside || [], rules, story)
-      + ((v.problems || []).length ? ui.card("Problems", "the rulebook itself", `<ul>${v.problems.map(p => `<li>${esc(p)}</li>`).join("")}</ul>`) : "")});
+  if (c.run && (r.reports || []).length) {
+    const n = c.run.refused[id] || 0;
+    parts.push({label: `in ${c.story.id}`, html: ui.hint(n ? `Refused it ${times(n)} between the stages — each a round.` : "Did not refuse it between the stages (or the journal does not name the checks).", {block: true})});
+  }
+  return ui.ruleSheet({id, title: inline(ruleTitle(r)), facts, outcomes, body, parts,
+    source: `${r.source || ""}${r.bound ? (r.part === "instruction" ? " · placed in " : " · bound in ") + r.bound : ""}`});
 }
 
 // --- one story -----------------------------------------------------------------------------------------------------
@@ -921,9 +1005,33 @@ function components() {
       ["days", ui.days([{day: "2026-10-15", rows: [{at: "10:12", story: sample.story, title: sample.title, epic: sample.epic, event: "BookLent", seconds: "14 min", cost: "$3.10"}]}])],
       ["domain · kernel", ui.domain(ui.domainNode("Domain model", "") + ui.facts([{kind: "aggregate", terms: [{name: "Loan"}]}])) + ui.kernel([{kind: "values", terms: [{name: "Money", shared: true}]}])],
       ["proposals", ui.proposals([{goal: "one goal", id: "p-1", epic: "lending"}, {goal: "another goal", id: "p-2", actions: ui.btn("make it an epic")}])],
-      ["rule-group · ways · part · outcome", ui.part("Checked afterwards", ui.outcome("pass", "All pass → on to " + ui.em("test"), "") + ui.outcome("fail", "One fails → what happens next", ui.ruleGroup("its checks", [ui.accordion({key: "gallery:rule", variant: "row", open: false, head: "The tests are red", meta: ui.ruleId("GATE-TESTS", "gate", "fail")})])
-        + ui.ways("back to an earlier stage", [{source: "build", target: "plan", key: "build>plan>back", rules: "a plan gap"}], {plain: true})))],
-      ["flow", ui.flow(`<svg viewBox="0 0 880 60" role="img" aria-label="a drawing the factory gives"><text x="10" y="36">the factory draws the flow</text></svg>`)],
+      ["rule-group · part · outcome", ui.part("Checked afterwards", ui.outcome("pass", "All pass → on to " + ui.em("test"), "") + ui.outcome("fail", "One fails → what happens next", ui.ruleGroup("its checks", [ui.accordion({key: "gallery:rule", variant: "row", open: false, head: "The tests are red", meta: ui.ruleId("GATE-TESTS", "gate", "fail")})])))],
+      ["rule-track", ui.ruleTrack({tiles: [{stage: "plan", meta: "4 checks · told 9", notes: [{text: "↩ again from here when the story changed", title: "a restart — no round"}]},
+          {stage: "test", meta: "6 checks · told 12", state: {text: "↺ up to 3 rounds", tone: "wait"}},
+          {stage: "build", picked: true, meta: "5 checks · told 8", state: {text: "↺ up to 3 rounds", tone: "wait"}},
+          {stage: "judge", meta: "decides · told 4", state: {text: "↺ sends back · a round", tone: "wait"}}, {end: true, stage: "delivered", name: "delivered", note: "after a person's acceptance"}],
+        ways: [{source: "build", target: "test", round: true, solid: true, label: "a test cannot pass", title: "build → test"},
+               {source: "judge", target: "build", round: true, label: "changes requested", title: "judge → build"},
+               {source: "delivered", target: "plan", round: false, label: "a correction at acceptance", title: "delivered → plan"}],
+        legend: [["wait", "━ costs a round"], ["", "━ costs no round"], ["", "solid: where the picked stage sends a story back"]]})],
+      ["rule-row · rule-rows", ui.ruleRows([{id: "GATE-SUITE", title: "The whole suite is green", aside: ui.flag("✗ 8", "fail")}, {id: "STAGE-BUILD-1", title: "Build the smallest change that turns the tests green"},
+        {id: "GATE-TESTS-KEPT", title: "A test the stage kept is unchanged", state: "fail", aside: ui.flag("✗ 2", "fail")}])],
+      ["labelled", ui.labelled("kind", ui.switch([{label: "story", pressed: true}, {label: "task"}], {label: "which kind"}))],
+      ["stage-read", ui.stageRead({told: ui.card("While it works", "told · 2", ui.ruleRows([{id: "STAGE-BUILD-1", title: "Build the smallest change"}])),
+        checked: ui.card("Checked afterwards", "1 check", ui.ruleRows([{id: "GATE-SUITE", title: "The whole suite is green"}])),
+        next: ui.card("", "", ui.outcome("pass", "all pass → " + ui.em("tidy"), "")) + ui.card("", "", ui.outcome("fail", "one fails → what happens next", ""))})],
+      ["rule-matrix", ui.ruleMatrix({stages: [{stage: "test"}, {stage: "build", picked: true}, {stage: "tidy"}],
+        bands: [{label: "at (almost) every gate · 1", rows: [{id: "GATE-OWNED", title: "What a person owns stays unchanged", name: "owned", cells: {test: {}, build: {n: 2}, tidy: {}}}]},
+                {label: "per stage", rows: [{title: "told before the stage", cells: {test: {text: "12"}, build: {text: "8"}, tidy: {text: "5"}}}]}]})],
+      ["rule-board", ui.ruleBoard([{stage: "test", verdict: {state: "pass", text: "✓ passed", small: "2 tries inside the stage"}, parts: [{label: "checked · 1", html: ui.ruleRows([{id: "GATE-RED", title: "The new tests are red"}])}]},
+        {stage: "build", here: true, picked: true, verdict: {state: "fail", text: "✗ refused 2×", small: "suite · not passed yet"}, parts: [{label: "checked · 1", html: ui.ruleRows([{id: "GATE-SUITE", title: "The whole suite is green", state: "fail", aside: ui.flag("✗ 2", "fail")}])}]},
+        {stage: "tidy", verdict: {state: "minor", text: "not reached"}, flag: ui.flag("✗ 3", "fail"), parts: []}])],
+      ["rule-sheet", ui.ruleSheet({id: "GATE-SUITE", title: "The whole suite is green", facts: [["kind of rule", "check"], ["stages", "build, tidy"], ["in the gate report", "suite"]],
+        outcomes: ui.said("Passes when", "every test is green.", {icon: "pass", state: "pass"}) + ui.said("Fails when", "a test is red.", {icon: "fail", state: "fail", goes: "→ once more"}),
+        body: ui.intro("A story is done only on a green suite."), parts: [{label: "in this project", html: ui.hint("Refused 26× in 20 stories.", {block: true})
+          + ui.list([{press: {label: sample.story}, aside: "3×"}])}], source: "workflow/rules/gate/GATE-SUITE.md"})],
+      ["rule-folds", ui.ruleFolds([ui.accordion({key: "gallery:fold-a", variant: "card", level: 3, open: opened("gallery:fold-a"), head: "At every gate", body: () => ui.intro("What it folds.")}),
+        ui.accordion({key: "gallery:fold-b", variant: "card", level: 3, open: opened("gallery:fold-b"), head: "Anywhere in a run", body: () => ui.intro("What it folds.")})])],
       ["table", ui.table([{label: "story"}, {label: "state"}, {label: "tokens", num: true}, {act: true}], [[ui.story(sample.story, sample.title), "ready", "1.2 M", ui.btn("run it", {size: "s"})]])],
       ["terminal", ui.terminal()],
       ["curve", ui.curve(curve)],

@@ -6,6 +6,7 @@ in delivery's published terms, plain data a reader translates into its own model
     stage  {name, kinds: [...], window, gate: before | after | none, in_order, pass_action}
     order  {kind: [stage, ...]}
     story  {stages: {stage: [{state, check}]}, refused: {check: n}} — what the gate found over one story
+    run    {story, kind, events: [{at, kind, name, fields}]} — a story's journal, the lines a reading of its route needs
 """
 
 from __future__ import annotations
@@ -16,6 +17,11 @@ import typing
 # The modules that register rules where they decide — imported for that, as the gate's composition root does.
 from ..adapter.incoming.gate import gate_command  # noqa: F401
 from ..adapter.outgoing.files.gate_reports import story_findings
+from ..adapter.outgoing.files.journal_files import journal_events
+from ..adapter.outgoing.files.run_marks import run_stories
+from ..adapter.outgoing.files.story_layout import find_story, story_kind
+from ..domain.model.story_state import MAX_ROUNDS
+from ...sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError, read_front_matter
 from ..adapter.outgoing.process import runner_process  # noqa: F401
 from ..adapter.outgoing.tools import tool_choice  # noqa: F401
 from ..application.backlog import run_backlog  # noqa: F401
@@ -53,7 +59,8 @@ def published(bound: typing.Optional[Bound], found: WorkflowRule) -> Published:
                 source=found.written.value if found.written else "", bound=bound.place if bound else "",
                 retired=found.retired.value if found.retired else "",
                 told=found.told.value if found.told else "", section=found.section.value if found.section else "",
-                placed=placed(found) if found.part is RulePart.TOLD else "")
+                placed=placed(found) if found.part is RulePart.TOLD else "",
+                restart=dict(stage=found.restart.stage.value, when=found.restart.when.value) if found.restart else None)
 
 
 def placed(found: WorkflowRule) -> str:
@@ -116,3 +123,34 @@ def story_gate_findings(cwd: str, story_id: str) -> Published:
     set_places(read_profile(resolve_profile(None, cwd)))
     runs = place("runs")
     return story_findings(runs if os.path.isabs(runs) else os.path.join(cwd, runs), story_id)
+
+
+def round_limit() -> int:
+    """How many rounds a story runs before it stops for a person."""
+    return MAX_ROUNDS
+
+
+#: The journal lines a reading of a story's route needs: the gates, the jumps and restarts the runner writes, the
+#: processes' starts, a person's `--from` and the domain's events (a story taken back at its acceptance).
+ROUTE_KINDS = ("gate", "jump", "restart", "stage-start", "rounds-reset", "event")
+
+
+def project_runs(cwd: str) -> typing.List[Published]:
+    """Every story of the project <cwd> that left a journal: its kind, and the lines of it a reading of its route
+    needs, in the journal's order."""
+    set_places(read_profile(resolve_profile(None, cwd)))
+    runs, epics = place("runs"), place("epics")
+    runs = runs if os.path.isabs(runs) else os.path.join(cwd, runs)
+    epics = epics if os.path.isabs(epics) else os.path.join(cwd, epics)
+    found = []
+    for story in run_stories(runs):
+        events = [dict(at=e["at"], kind=e["kind"], name=e["name"], fields=e["fields"])
+                  for e in journal_events(runs, story) if e["kind"] in ROUTE_KINDS]
+        if not events:
+            continue
+        try:
+            kind = story_kind(read_front_matter(find_story(epics, story))[0])
+        except (MarkdownError, OSError):
+            kind = ""
+        found.append(dict(story=story, kind=kind, events=events))
+    return found

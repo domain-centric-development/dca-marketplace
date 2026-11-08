@@ -105,6 +105,13 @@ class Outcome(Value):
     goes: typing.Tuple[StageName, ...] = ()
 
 
+class Restart(Value):
+    """Where a rule starts a story's run anew — a re-entry, never a jump back: no round is spent — and on what."""
+
+    stage: StageName
+    when: Words
+
+
 class Rule(Value):
     """One rule. A gate's or the runner's says its outcomes; an instructed one says what the stage is told (`text`).
     No stages — it is placed in no stage of the flow; no kinds — it holds for every kind."""
@@ -124,6 +131,8 @@ class Rule(Value):
     bound: Source = Source("")
     #: its name for a person, a short statement of what holds; empty where the file names none
     title: Words = Words("")
+    #: where it starts the run anew, and on what; none for a rule that restarts nothing
+    restart: typing.Optional[Restart] = None
 
     @property
     def enforcement(self) -> Enforcement:
@@ -145,6 +154,12 @@ class Citation(Value):
 
 class Count(Value):
     value: int
+
+
+class Moment(Value):
+    """When a journal line was written, as the journal writes it (ISO 8601, UTC)."""
+
+    value: str
 
 
 class Fired(Value):

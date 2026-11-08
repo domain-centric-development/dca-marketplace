@@ -1890,6 +1890,8 @@ def verify_runner(runner, verbose=False):
                   'else if [ "$FACTORY_STAGE" = test ]; then printf "%s\\n" "$FACTORY_PROMPT" >> prompts.txt; fi; '
                   'sh -c "$FIXTURE_STAND_IN"; fi')
     for _ in one_shard():
+        jumps = []                              # the runner's own `jump` lines of the last run (WP-194)
+
         def back_run(verifier=False):
             with tmpdir() as root:
                 build_project(root)
@@ -1909,12 +1911,16 @@ def verify_runner(runner, verbose=False):
                           if "\tstage-start\t" in l and "\tstage-start\treview:" not in l] if os.path.isfile(journal) else []
                 prompts_file = os.path.join(root, "prompts.txt")
                 prompts = open(prompts_file, encoding="utf-8").read() if os.path.isfile(prompts_file) else ""
+                jumps[:] = ["\t".join(l.split("\t")[1:5]) for l in open(journal, encoding="utf-8").read().splitlines()
+                            if "\tjump\t" in l or "\trestart\t" in l] if os.path.isfile(journal) else []
                 return code, output, starts, story_delivered(root), prompts
         code, output, starts, delivered, prompts = back_run()
         check("judge sent back: `back: test` runs the test stage again, then build, tidy and the judge — the story is delivered",
               code == 0 and delivered and starts == ["plan", "test", "build", "tidy", "judge", "test", "build", "tidy", "judge", "document"]
               and "goes back to the test stage" in output,
               f"exit {code}; starts {starts}; {output.strip().splitlines()[-3:]}")
+        check("judge sent back: the runner keeps the way back in the journal — `jump test from=judge rule=RUN-VERDICT-1`",
+              jumps == ["jump\ttest\tfrom=judge\trule=RUN-VERDICT-1"], jumps)
         second = prompts.strip().splitlines()[-1] if prompts.strip() else ""
         test_skill = told_text(runner, "test")
         check("judge sent back: the test stage runs again on its brief, which says to fix the judge's confirmed defects",
@@ -2116,6 +2122,8 @@ def verify_runner(runner, verbose=False):
                      'else if [ "$FACTORY_STAGE" = test ]; then printf "%s\\n" "$FACTORY_PROMPT" >> test-prompts.txt; fi; '
                      'sh -c "$FIXTURE_STAND_IN"; fi')
     for _ in one_shard():
+        back_lines = []                         # the runner's own `jump` lines of the last run (WP-194)
+
         def buildback_run(shared=False, cmd=None):
             with tmpdir() as root:
                 build_project(root)
@@ -2135,6 +2143,8 @@ def verify_runner(runner, verbose=False):
                           if "\tstage-start\t" in l and "\tstage-start\treview:" not in l] if os.path.isfile(journal) else []
                 prompts_file = os.path.join(root, "test-prompts.txt")
                 prompts = open(prompts_file, encoding="utf-8").read().strip().splitlines() if os.path.isfile(prompts_file) else []
+                back_lines[:] = ["\t".join(l.split("\t")[1:5]) for l in open(journal, encoding="utf-8").read().splitlines()
+                                 if "\tjump\t" in l] if os.path.isfile(journal) else []
                 asked = os.path.isdir(os.path.join(root, "product", "epics", "sample", "STORY-1", "decisions"))
                 return code, output, starts, story_delivered(root), prompts, asked
         code, output, starts, delivered, prompts, asked = buildback_run()
@@ -2144,6 +2154,8 @@ def verify_runner(runner, verbose=False):
               and starts == ["plan", "test", "build", "test", "build", "tidy", "judge", "document"]
               and "goes back to the test stage" in output,
               f"exit {code}; starts {starts}; asked {asked}; {output.strip().splitlines()[-3:]}")
+        check("build sent back: the runner keeps the way back in the journal — `jump test from=build rule=RUN-BACK-1`",
+              back_lines == ["jump\ttest\tfrom=build\trule=RUN-BACK-1"], back_lines)
         common = told_text(runner)
         check("build sent back: the second test prompt names build.md, and what every stage is told says not to change "
               "what the test asserts",

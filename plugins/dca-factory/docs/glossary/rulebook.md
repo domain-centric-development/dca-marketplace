@@ -69,13 +69,48 @@ holds — the run as a whole, the commit hook, every stage alike — stands outs
 
 **Type:** Concept
 
-**Operations:** show (`show_rulebook`) — the rules, at a stage or for a kind, each kind's flow and the problems
+**Operations:** show (`show_rulebook`) — the rules, at a stage or for a kind, each kind's flow and track, the
+project's refusals per rule, a story's run, and the problems
 
 ### Edge (edge)
 
 **Definition:** Where an outcome sends a story, from the stage its rule sits at: an earlier stage (back), a later one,
 the same one `again`, or `stop` — the run ends and a person looks. Written beside the rule as `goes=`. Delivery's run jumps by it
 (see *Jump* in delivery's glossary) — an edge is what the factory does, not a description beside it.
+
+**Type:** Value
+
+### Restart (restart)
+
+**Definition:** Where a rule starts a story's run anew — a re-entry, never a jump back: no round is spent and no stage
+sends it there (`restarts: <stage>` with `restarts.when: <on what>` in the rule's file). The track shows it as a note on
+its stage's tile, never as a line.
+
+**Type:** Value
+
+### Track (track)
+
+**Definition:** A kind's stages in order and its delivered end, with the ways back read off its rules: one *way* per
+pair of stages, whatever the number of rules behind it; a way a stage sends a story back costs a round, a person's
+correction at acceptance starts at the delivered end and costs none. A repeat of a stage is its tile's rounds, a restart
+its tile's note. Code: `Rulebook.track`, `domain/model/track.py`.
+
+**Type:** Value
+
+### Story run (story run)
+
+**Definition:** One story along its kind's track, read from its journal: per stage reached, refused between the stages
+(the runner's gate) and by which checks, tried again inside the stage (a stage's own gate calls), the ways back it took
+and its restarts — from the runner's own `jump` and `restart` lines, or for an older journal from the order of the
+runner's gates. Code: `domain/model/runs.py`; the journals through `ProjectJournals`.
+
+**Type:** Value
+
+### Rule refusals (rule refusals)
+
+**Definition:** How often a rule refused in the project — every refused gate line whose checks it reports under, a
+stage's own tries inside it among them —, when last, in which stories and at which stages. A refused line without
+`fail=` (before 2026-10-10) names no check and is counted apart.
 
 **Type:** Value
 

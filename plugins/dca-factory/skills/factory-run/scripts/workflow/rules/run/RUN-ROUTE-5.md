@@ -7,6 +7,8 @@ stages:
 - tidy
 fail: the test changed since its red proof — the run starts at the test stage instead, no round is spent
 goes.fail: test
+restarts: test
+restarts.when: a merge changed a test
 ---
 
 # RUN-ROUTE-5

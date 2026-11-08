@@ -2,8 +2,7 @@
 
 Every class is a BEM block of a component in `page_ui.py` (or of the page's frame, `FRAME_BLOCKS`), an element of one
 (`block__element`) or a variant (`block--variant`); a state the factory names is selected as `[data-state="…"]`, never
-as a class. Colours come from the tokens alone (`page_tokens.py`) — no colour is written here as a value. The rules
-under `.flow` select the drawing the factory makes of a flow: its classes are that drawing's, not the page's.
+as a class. Colours come from the tokens alone (`page_tokens.py`) — no colour is written here as a value.
 """
 
 #: The one width at which the page narrows — the frame for the window, a component for its container (WP-181).
@@ -216,6 +215,8 @@ code { font-family: var(--mono); font-size: .78em; background: var(--code); padd
 .form-row .hint, .form-row .error { display: block; margin-top: var(--space-1); }
 .form-row--inline { display: inline-flex; align-items: baseline; gap: var(--space-2); margin-top: 0; }
 .form-row--inline .label { margin: 0; }
+.form-row--inline { max-width: 100%; min-width: 0; }
+.form-row--inline .select { min-width: 0; max-width: 26em; }
 .label--bar { color: var(--bar-text); }
 .ask { margin-top: var(--space-3); }
 /* the files beside the words (WP-184): a chip each, a picture as a small preview */
@@ -579,10 +580,6 @@ code { font-family: var(--mono); font-size: .78em; background: var(--code); padd
 .part--aside > .part__head { font-size: var(--text-md); color: var(--muted); }
 .part__head { font: 600 var(--text-base) var(--display); display: flex; gap: var(--space-2); align-items: baseline; flex-wrap: wrap; margin: 0; }
 .part .rule-group:first-of-type { margin-top: var(--space-2); }
-/* a rule's caret under its group's label, its title a step in — as a scenario under its rule */
-.ways { list-style: none; }
-.ways__row { display: flex; gap: var(--space-3); align-items: baseline; flex-wrap: wrap; padding: var(--space-1) 0; }
-.ways__rules { font: 400 var(--text-base) var(--body); color: var(--muted); }
 /* how a check ends: the pass and the fail, each its mark and where the story goes, what happens then beneath */
 .outcome { margin-top: var(--space-4); }
 .outcome__head { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; margin: 0; font: 600 var(--text-base) var(--display); }
@@ -618,36 +615,91 @@ code { font-family: var(--mono); font-size: .78em; background: var(--code); padd
 .curve-tip__title { display: block; font: 600 var(--text-md) var(--display); margin-bottom: var(--space-1); }
 .curve-tip__row { display: flex; justify-content: space-between; gap: var(--space-4); color: var(--muted); }
 .curve-tip__value { color: var(--ink); }
-/* the flow, drawn by the factory: a way back shown on a hover, a step, a gate or an edge picked by a click — the
-   classes below `.flow` are the drawing's own */
-.flow { overflow-x: auto; margin-top: var(--space-3); }
-/* the drawing keeps the size it is read at: a wide window widens the card, not the drawing (WP-183) */
-/* the drawing fills its place up to the measure and shrinks with it — to the least width it states, where its small
-   text still reads at 12 px; narrower, the place scrolls */
-.flow svg { display: block; width: 100%; max-width: var(--flow-measure); height: auto; margin-inline: auto; }
-.flow .f text { fill: var(--ink); } .flow .f text.small { fill: var(--muted); stroke: var(--panel); }
-.flow .f .on-line, .flow .f .tip-on { stroke: color-mix(in srgb, var(--muted) 70%, var(--panel)); }
-.flow .f .gate circle { fill: var(--pass); } .flow .f .tip-again, .flow .f .way-again path.vis { stroke: var(--pass); }
-.flow .f .way-again text.small { fill: var(--pass); } .flow .f .way-back path.vis, .flow .f .tip-back { stroke: var(--ink); }
-.flow .f .gate path, .flow .f .mark path { stroke: var(--brand-ink); }
-.flow .f .mark-stop circle { fill: var(--fail); } .flow .f .mark-waits circle { fill: var(--muted); } .flow .f .done { stroke: var(--ink); }
-.flow .way, .flow .gate, .flow [data-stage] { cursor: pointer; }
-.flow .way-back { opacity: 0; pointer-events: none; transition: opacity .15s; }
-.flow .way-back[data-shown], .flow .way-back[data-picked] { opacity: 1; pointer-events: auto; }
-/* what is picked stands out, the rest steps back: a band behind the picked way, a ring round the picked gate */
-.flow[data-has-pick] .way:not([data-picked]):not(.way-back), .flow[data-has-pick] .gate:not([data-picked]), .flow[data-has-pick] [data-stage]:not([data-picked]) { opacity: .35; }
-.flow .way[data-picked] path.vis { stroke-dasharray: none; stroke-width: 2.4; }
-.flow .way-again[data-picked] path.hit { stroke: color-mix(in srgb, var(--pass) 22%, transparent); }
-.flow .way-back[data-picked] path.hit { stroke: color-mix(in srgb, var(--ink) 14%, transparent); }
-.flow .way[data-picked] text.small { font-weight: 700; }
-.flow .gate[data-picked] circle { stroke: color-mix(in srgb, var(--pass) 30%, transparent); stroke-width: 10px; }
-.flow .mark[data-picked] circle { stroke: color-mix(in srgb, var(--fail) 30%, transparent); stroke-width: 8px; }
-.flow [data-stage][data-picked] { fill: var(--brand); paint-order: stroke; stroke: color-mix(in srgb, var(--brand) 22%, transparent); stroke-width: 10px; stroke-linejoin: round; }
-.flow [data-stage][data-has-back]:hover { fill: var(--brand); }
-.flow[data-has-story] [data-stage]:not([data-reached]) { opacity: .35; }
-.flow [data-stage][data-now] { fill: var(--brand); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px; }
-.flow .gate[data-failed] circle { stroke: var(--fail); stroke-width: 4px; }
-.flow [data-badge] { font: 700 11px var(--mono); fill: var(--fail); }
+/* the rules (WP-194): a rule a press in a list, a kind's track with its ways back, a stage in three columns, the checks
+   against the stages, the board of a run, a rule in the drawer, the groups that unfold */
+.rule-rows { list-style: none; margin-top: var(--space-2); }
+.rule-row { border-top: 1px solid var(--line); }
+.rule-row:first-child { border-top: 0; }
+.rule-row__open { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); align-items: baseline; width: 100%;
+  text-align: left; background: none; border: 0; padding: var(--space-2) 0; font: 400 var(--text-md)/1.35 var(--body); color: var(--ink); cursor: pointer; }
+.rule-row__open:hover .rule-row__title { color: var(--brand-text); }
+.rule-row[data-state="fail"] .rule-row__title { color: var(--tone); font-weight: 600; }
+.rule-row__aside { white-space: nowrap; }
+.labelled { display: inline-flex; align-items: center; gap: var(--space-2); white-space: nowrap; max-width: 100%; min-width: 0; }
+.labelled__text { font: 400 var(--text-sm) var(--mono); color: var(--muted); }
+/* the track: tiles that are presses, their words from the top; the ways back beneath in a low band of levels — one
+   meaning per colour (a round in the waiting tone, none in the muted one), the emphasis the stroke */
+.rule-track { margin-top: var(--space-4); background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-card);
+  padding: var(--space-4) var(--space-4) var(--space-2); }
+.rule-track__scroll { overflow-x: auto; overflow-y: hidden; }
+.rule-track__wrap { position: relative; min-width: calc(var(--tiles) * 8.5rem); padding-bottom: var(--band, var(--space-2)); }
+.rule-track__tiles { display: grid; gap: var(--space-3); position: relative; z-index: 1; }
+.rule-track__tile { display: flex; flex-direction: column; justify-content: flex-start; align-items: stretch; text-align: left; min-height: 6rem;
+  padding: var(--space-3); background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: var(--radius-control);
+  cursor: pointer; font: inherit; }
+.rule-track__tile:hover { border-color: color-mix(in srgb, var(--brand) 50%, var(--line)); }
+.rule-track__tile[aria-pressed="true"] { border-color: var(--brand); background: color-mix(in srgb, var(--brand) 8%, var(--panel)); }
+.rule-track__tile[data-here] { box-shadow: 0 0 0 3px color-mix(in srgb, var(--run) 35%, transparent); }
+.rule-track__end { display: flex; flex-direction: column; justify-content: flex-start; align-items: center; text-align: center;
+  padding: var(--space-3); border: 1px dashed var(--line); border-radius: var(--radius-control); color: var(--muted); }
+.rule-track__name { display: block; font: 700 var(--text-lg)/1.15 var(--display); }
+.rule-track__end > .rule-track__name { font: 400 var(--text-sm) var(--mono); }
+.rule-track__meta, .rule-track__note { display: block; font: 400 var(--text-xs)/1.6 var(--mono); color: var(--muted); }
+.rule-track__state { display: block; font: 600 var(--text-xs)/1.6 var(--mono); color: var(--tone, var(--muted)); }
+.rule-track__ways { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.rule-track__way { fill: none; stroke-width: 1.6; }
+.rule-track__way--round { stroke: var(--wait); } .rule-track__way--free { stroke: var(--muted); }
+.rule-track__way--quiet { stroke-width: 1.1; opacity: .55; stroke-dasharray: 5 4; }
+.rule-track__way--solid { stroke-width: 2.2; }
+.rule-track__head--round { fill: var(--wait); } .rule-track__head--free { fill: var(--muted); }
+.rule-track__hit { fill: none; stroke: transparent; stroke-width: 12; pointer-events: stroke; cursor: help; }
+.rule-track__label { font: 600 var(--text-xs) var(--mono); paint-order: stroke; stroke: var(--panel); stroke-width: 4px; }
+.rule-track__label--round { fill: var(--wait); } .rule-track__label--free { fill: var(--muted); }
+.rule-track__legend { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); font: 400 var(--text-xs) var(--mono); color: var(--muted); padding-top: var(--space-1); }
+.rule-track__key[data-state] { color: var(--tone); }
+.stage-read { display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 5fr) minmax(0, 3fr); gap: var(--space-4); align-items: start; margin-top: var(--space-4); }
+.stage-read__told, .stage-read__checked, .stage-read__next { min-width: 0; }
+.stage-read__told > .card, .stage-read__checked > .card, .stage-read__next > .card:first-child { margin-top: 0; }
+.stage-read__next > .card + .card { margin-top: var(--space-3); }
+/* the checks against the stages: wider than its place, it scrolls in its own box, never the page */
+.rule-matrix { overflow-x: auto; margin-top: var(--space-3); }
+.rule-matrix__table { width: 100%; min-width: 36rem; border-collapse: collapse; }
+.rule-matrix__corner, .rule-matrix__stage { padding: var(--space-2); border-bottom: 1px solid var(--line); text-align: center; }
+.rule-matrix__corner { text-align: left; }
+.rule-matrix__pick { font: 700 var(--text-md) var(--display); color: var(--ink); background: none; border: 0; cursor: pointer;
+  padding: var(--space-1) var(--space-2); border-radius: var(--radius-label); }
+.rule-matrix__pick:hover, .rule-matrix__stage[aria-current="true"] .rule-matrix__pick { color: var(--brand-text); }
+.rule-matrix__stage[aria-current="true"], .rule-matrix__cell[data-picked] { background: color-mix(in srgb, var(--brand) 7%, var(--panel)); }
+.rule-matrix__label { padding: var(--space-2); border-top: 1px solid var(--line); background: color-mix(in srgb, var(--ink) 4%, var(--panel)); }
+.rule-matrix__check { padding: var(--space-2); border-top: 1px solid var(--line); text-align: left; font: 400 var(--text-md)/1.35 var(--body); }
+.rule-matrix__rule { font: inherit; color: var(--ink); background: none; border: 0; padding: 0; text-align: left; cursor: pointer; }
+.rule-matrix__rule:hover { color: var(--brand-text); }
+.rule-matrix__name, .rule-matrix__text, .rule-matrix__plain { font: 400 var(--text-xs) var(--mono); color: var(--muted); white-space: nowrap; }
+.rule-matrix__cell { padding: var(--space-2); border-top: 1px solid var(--line); text-align: center; width: 8%; }
+.rule-matrix__dot { display: inline-block; width: 11px; height: 11px; border-radius: var(--radius-round); background: var(--tone); vertical-align: middle; }
+.rule-matrix__count { display: inline-block; font: 700 var(--text-xs)/1 var(--mono); color: var(--paper); background: var(--tone);
+  border-radius: var(--radius-round); padding: var(--space-1) var(--space-2); }
+/* the board of a run: a column per stage, side by side; narrower than its columns, it scrolls in its own box */
+.rule-board { overflow-x: auto; margin-top: var(--space-4); }
+.rule-board__track { display: grid; grid-template-columns: repeat(var(--cols), minmax(11rem, 1fr)); gap: var(--space-3); align-items: start; }
+.rule-board__col { min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-card); padding: var(--space-3) var(--space-4); }
+.rule-board__col[data-picked] { border-color: var(--brand); }
+.rule-board__col[data-here] { box-shadow: 0 0 0 3px color-mix(in srgb, var(--run) 35%, transparent); }
+.rule-board__head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-2); margin: 0 0 var(--space-2);
+  padding-bottom: var(--space-2); border-bottom: 2px solid var(--ink); }
+.rule-board__pick { font: 700 var(--text-xl)/1.1 var(--display); color: var(--ink); background: none; border: 0; padding: 0; cursor: pointer; }
+.rule-board__pick:hover { color: var(--brand-text); }
+.rule-board__verdict { margin: 0 0 var(--space-2); border-radius: var(--radius-control); padding: var(--space-2) var(--space-3);
+  font: 600 var(--text-sm)/1.35 var(--mono); color: var(--tone, var(--muted)); background: color-mix(in srgb, var(--tone, var(--ink)) 10%, var(--panel)); }
+.rule-board__why { display: block; font-weight: 500; }
+.rule-board__part { margin-top: var(--space-3); }
+.rule-sheet__head { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); }
+.rule-sheet__title { font: 700 var(--text-2xl)/1.2 var(--display); margin: var(--space-2) 0; text-wrap: balance; }
+.rule-sheet__outcomes { margin-top: var(--space-4); }
+.rule-sheet__part { margin-top: var(--space-5); }
+.rule-folds { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr)); gap: 0 var(--space-4); }
+.rule-folds__item { min-width: 0; }
+.rule-folds__item:has(> [data-open]) { grid-column: 1 / -1; }
 
 /* === templates ================================================================================================ */
 /* a place beneath a view (a part of the description): its way back stands above the head, apart from it */
@@ -711,7 +763,7 @@ code { font-family: var(--mono); font-size: .78em; background: var(--code); padd
 .gallery__show > .accordion--card:first-child, .gallery__show > .notice:first-child { margin-top: 0; }
 
 /* === the narrow screen ======================================================================================== */
-@media (prefers-reduced-motion: reduce) { .caret { transition: none; } .spinner, .stepper__step[data-state="now"] .stepper__bar { animation: none; } .flow .way-back { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .caret { transition: none; } .spinner, .stepper__step[data-state="now"] .stepper__bar { animation: none; } }
 /* the frame answers the window; a component answers the place it stands in — the main region, the drawer, a column
    of the pattern library — so one placed in the drawer takes the narrow layout on a wide screen too (WP-181) */
 @media (max-width: 760px) {
@@ -728,6 +780,7 @@ code { font-family: var(--mono); font-size: .78em; background: var(--code); padd
   .delivery { grid-template-columns: 44px minmax(0, 1fr) auto; } .delivery__epic { display: none; } .delivery--head { display: none; }
   .delivery__event { grid-column: 2 / -1; grid-row: 2; } .delivery__fig + .delivery__fig { grid-column: 3; grid-row: 2; }
   .gallery__item { grid-template-columns: 1fr; gap: var(--space-2); }
+  .stage-read { grid-template-columns: minmax(0, 1fr); }
   /* a row with buttons: its cells side by side, the buttons on a line of their own beneath */
   .table--acts .table__row { display: grid; grid-template-columns: auto 1fr fit-content(40%); border-bottom: 1px solid var(--line); }
   .table--acts .table__cell { border-bottom: 0; }

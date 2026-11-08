@@ -4,7 +4,7 @@ title: A test that cannot pass goes back to the test stage
 part: decision
 stages:
 - build
-fail: the build stage asks to go back — a round is spent and the run goes back to the test stage
+fail: a test cannot pass — the build stage asks to go back (`back: test`), a round is spent and the run goes back to the test stage
 goes.fail: test
 ---
 

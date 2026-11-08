@@ -8,7 +8,7 @@ import dataclasses
 import typing
 
 from ....building_blocks import UseCase
-from ...domain.model.jump import Next, RuleId, Target
+from ...domain.model.jump import Jumped, Next, RestartReason, Restarted, RuleId, Target
 from ...domain.model.stage import Role, StageName, StoryKind, Trait, Window
 from ...domain.model.route import Around, Move
 from ...domain.model.story_state import Judged, Rounds
@@ -97,6 +97,7 @@ class RunStoryUseCase(RunStoryInputPort):
         stale = workflow().red_check(kind, start, jump("RUN-ROUTE-5"))
         if not dry and stale is not None and stale.stage is not None and self._journal.red_stale(story, start):
             start = stale.stage
+            self._journal.restarted(story, Restarted(start, stale.rule, RestartReason.TEST_CHANGED))
         ran: typing.List[str] = []
         for step in workflow().steps(kind, start, command.shared):
             stage = step.stage.value
@@ -193,6 +194,8 @@ class RunStoryUseCase(RunStoryInputPort):
             return None
         self._lines.out(f"factory: the plan found every scenario of {command.story} holding today — it goes on as an "
                         f"adoption.")
+        self._journal.restarted(command.story, Restarted(role_of(Role.PLANS), RuleId("RUN-ROUTE-7"),
+                                                         RestartReason.ADOPTED))
         return self._route(command, role_of(Role.PLANS), resume)
 
     @decides("RUN-BACK-1")
@@ -270,7 +273,7 @@ class RunStoryUseCase(RunStoryInputPort):
         if rounds is None:
             return RunOutcome.FAILED
         went = workflow().jump(kind, role_of(Role.BUILDS), jump("RUN-BACK-1"))
-        return self._went(went, f"factory: the build stage found a defect in a test's own code ({went.rule.value}) — "
+        return self._went(story, role_of(Role.BUILDS), went, f"factory: the build stage found a defect in a test's own code ({went.rule.value}) — "
                                 f"round {rounds.value} goes back to the {{stage}} stage.")
 
     @decides("RUN-WINDOW-2")
@@ -321,7 +324,7 @@ class RunStoryUseCase(RunStoryInputPort):
                 return RunOutcome.FAILED
             named = Target((self._journal.back(story) or role_of(Role.BUILDS)).value)
             back = workflow().chosen(kind, role_of(Role.JUDGES), jump("RUN-VERDICT-1"), named)
-            return self._went(back, f"factory: judge verdict 'changes-requested' ({back.rule.value}) — round "
+            return self._went(story, role_of(Role.JUDGES), back, f"factory: judge verdict 'changes-requested' ({back.rule.value}) — round "
                                     f"{rounds.value} goes back to the {{stage}} stage.")
         if judged is Judged.CONFLICT:
             self._lines.err("factory: judge verdict 'story-conflict' — the story or the plan is wrong. This never goes "
@@ -352,7 +355,7 @@ class RunStoryUseCase(RunStoryInputPort):
         if rounds is None:
             return RunOutcome.FAILED
         went = workflow().jump(self._journal.kind(story), role_of(Role.ADOPTS), jump("RUN-ADOPT-1"))
-        return self._went(went, f"factory: gate 'adopt' refused ({went.rule.value}) — round {rounds.value} runs the "
+        return self._went(story, role_of(Role.ADOPTS), went, f"factory: gate 'adopt' refused ({went.rule.value}) — round {rounds.value} runs the "
                                 f"{{stage}} stage again with the gate's report.")
 
     def _integrate(self, command: RunStoryCommand) -> Ended:
@@ -363,7 +366,7 @@ class RunStoryUseCase(RunStoryInputPort):
         # a refusal on the main line, not a merge that moved: the way of RUN-INTEGRATE-1 that builds again
         went = workflow().chosen(self._journal.kind(command.story), role_of(Role.INTEGRATES), jump("RUN-INTEGRATE-1"),
                                  Target(role_of(Role.BUILDS).value))
-        return self._went(went, "")
+        return self._went(command.story, role_of(Role.INTEGRATES), went, "")
 
     @decides(
         "RUN-ROUNDS-1",
@@ -384,7 +387,7 @@ class RunStoryUseCase(RunStoryInputPort):
         rounds = self._round(story, what)
         if rounds is None:
             return RunOutcome.FAILED
-        return self._went(went, f"factory: {what} ({went.rule.value}) — round {rounds.value} runs stage '{{stage}}' "
+        return self._went(story, stage, went, f"factory: {what} ({went.rule.value}) — round {rounds.value} runs stage '{{stage}}' "
                                 "again with the gate's report.")
 
     def _round(self, story: str, what: str) -> typing.Optional[Rounds]:
@@ -396,11 +399,13 @@ class RunStoryUseCase(RunStoryInputPort):
             return None
         return rounds
 
-    def _went(self, went: Next, said: str) -> Ended:
-        """The stage a rule sent the story to, <said> with it; a rule that sends it nowhere stops the run."""
+    def _went(self, story: str, here: StageName, went: Next, said: str) -> Ended:
+        """The stage a rule sent the story to from <here>, <said> with it and kept in the journal; a rule that sends it
+        nowhere stops the run."""
         if went.stage is None:
             self._lines.err(f"factory: {went.rule.value} sends the story nowhere from here — the run stops. needs-human.")
             return RunOutcome.FAILED
+        self._journal.jumped(story, Jumped(here, went.stage, went.rule))
         if said:
             self._lines.err(said.format(stage=went.stage.value))
         return went.stage

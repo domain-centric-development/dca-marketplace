@@ -109,10 +109,9 @@ def mark(x: float, y: float, way: str, edge: Model, source: str) -> str:
             f'{sign(x, y, way)}</g>')
 
 
-def svg(graph: Model, kind: str, titles: typing.Optional[typing.Mapping[str, str]] = None, one_at_a_time: bool = False) -> str:
+def svg(graph: Model, kind: str, titles: typing.Optional[typing.Mapping[str, str]] = None) -> str:
     """The kind's flow; `graph` as the rulebook's json view gives it (`flow.<kind>.graph`); `titles` names a rule
-    by its title where a way back is labelled — its id where it has none. `one_at_a_time`: a page shows only the ways
-    back of one step at a time, so they nest per step that takes them, and the drawing is only as tall as one step's."""
+    by its title where a way back is labelled — its id where it has none."""
     titles = titles or {}
     steps = graph["steps"]
     at, line, width = placed(steps)
@@ -124,7 +123,7 @@ def svg(graph: Model, kind: str, titles: typing.Optional[typing.Mapping[str, str
     depths: typing.List[float] = []          # each lane below the label of the one above it
     below: typing.Dict[str, float] = {}
     for edge, names in zip(backs, named):
-        nest = edge["source"] if one_at_a_time else ""
+        nest = ""
         depths.append(below.get(nest, 26.0))
         below[nest] = depths[-1] + 22 + 15 * (len(names) + 1)
     depth = max(below.values(), default=26.0)

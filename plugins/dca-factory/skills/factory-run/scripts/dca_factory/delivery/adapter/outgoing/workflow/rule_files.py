@@ -30,7 +30,7 @@ from ....domain.model.jump import RuleId, Target
 from ....domain.model.stage import StageName, StoryKind
 from ....domain.model.verdict import CheckName
 from ....domain.model.workflow_rule import (
-    Outcome, OutcomeState, RuleOrder, RulePart, RuleText, WorkflowRule, Written)
+    Outcome, OutcomeState, Restart, RuleOrder, RulePart, RuleText, WorkflowRule, Written)
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter
 from ....application.shared.workflow_rule_repository import WorkflowRuleRepository
 
@@ -137,7 +137,7 @@ class RuleFiles(WorkflowRuleRepository):
             RuleText(paragraph(body, WHY)), outcomes, [CheckName(n) for n in listed(front.get("reports"))],
             [StageName(s) for s in listed(front.get("stages"))], [StoryKind(k) for k in listed(front.get("kinds"))],
             RuleText(str(retired)) if retired else None, self._written(path),
-            title=RuleText(str(front["title"])) if front.get("title") else None)
+            title=RuleText(str(front["title"])) if front.get("title") else None, restart=restart_of(path, front))
 
     def _written(self, path: str) -> Written:
         return Written(os.path.relpath(path, os.path.dirname(os.path.dirname(self._folder))).replace(os.sep, "/"))
@@ -161,10 +161,22 @@ class RuleFiles(WorkflowRuleRepository):
                 lines.append(f"goes.{outcome.state.value}: {goes[0]}")
             elif goes:
                 lines += [f"goes.{outcome.state.value}:"] + [f"- {t}" for t in goes]
+        if rule.restart is not None:
+            lines += [f"restarts: {rule.restart.stage.value}", f"restarts.when: {written_value(rule.restart.when.value)}"]
         if rule.retired is not None:
             lines.append(f"retired: {written_value(rule.retired.value)}")
         lines += ["---", "", f"# {rule.id.value}", "", f"{WHEN}{rule.when.value}", "", f"{WHY}{rule.why.value}", ""]
         return "\n".join(lines)
+
+
+def restart_of(path: str, front: typing.Mapping[str, typing.Any]) -> typing.Optional[Restart]:
+    """`restarts: <stage>` with `restarts.when: <on what>` — where the rule starts the run anew; both or neither."""
+    stage, when = front.get("restarts"), front.get("restarts.when")
+    if not stage and not when:
+        return None
+    if not stage or not when:
+        raise ValueError(f"{path}: `restarts:` names the stage and `restarts.when:` on what — one without the other")
+    return Restart(StageName(str(stage)), RuleText(str(when)))
 
 
 def told_text(rule: WorkflowRule) -> str:

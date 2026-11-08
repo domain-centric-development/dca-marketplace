@@ -3,6 +3,7 @@ was at once more, or the end of the run — the run jumps where the rules say, n
 
 from __future__ import annotations
 
+import enum
 import re
 import typing
 
@@ -47,3 +48,29 @@ class Next(Value):
 
     stage: typing.Optional[StageName]
     rule: RuleId
+
+
+class Jumped(Value):
+    """A way back the run took: from the stage that sent the story to the stage it runs again from, by the rule that
+    said so — what the journal keeps, so a reader never guesses it from the order of the gates."""
+
+    source: StageName
+    target: StageName
+    rule: RuleId
+
+
+class RestartReason(enum.Enum):
+    """Why a run started anew at a stage instead of going on: the story changed under its plan, a test changed after
+    it was seen red, the plan found the whole story holding already."""
+
+    STORY_CHANGED = "story-changed"
+    TEST_CHANGED = "test-changed"
+    ADOPTED = "adopted"
+
+
+class Restarted(Value):
+    """A run started anew at a stage — a re-entry, no round spent —, by the rule that said so, and why."""
+
+    stage: StageName
+    rule: RuleId
+    reason: RestartReason

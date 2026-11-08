@@ -5,6 +5,8 @@ part: decision
 stages:
 - plan
 pass: the run starts a new pass from plan, as an adoption
+restarts: plan
+restarts.when: it already holds
 ---
 
 # RUN-ROUTE-7

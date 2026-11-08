@@ -17,7 +17,7 @@ const TABS = [
   ["run", "The factory at work", "Your requests at once, while this page is open; the backlog's stories while it is started — one stage after the other, a gate between them."],
   ["decide", "Waiting for you", "A question a stage may not decide alone, or a result to look at."],
   ["delivered", "Delivered", "What the factory delivered, the newest first."],
-  ["rules", "The rules", "What the gate checks, what the runner decides and what each stage is told — per stage of a story, the gates between them. Pick a rule to read it; pick a story to see which fired."]];
+  ["rules", "The rules", "What each stage is told, what its gate checks and where a refusal sends the story — per stage, as checks against the stages, or as one story ran. Pick a rule to read it in full."]];
 const NOW = ["now", "Where it stands", "The cycle a story turns through — how many stand where, and the one that matters most in each."];
 const GALLERY = ["components", "The page's components", "Every component of this page in its variants and states, by level — atoms, molecules, organisms, templates. It shows the theme this project gives the page."];
 const MARKS = {look: "!", question: "?", stopped: "✗", running: "▶", done: "✓", none: "", next: "→"};             // no state is no mark
@@ -27,7 +27,8 @@ const ICONS = {
   wait: '<path d="M8 6.5v7M12 6.5v7"/>', ask: '<path d="M7.6 7.6a2.5 2.5 0 1 1 3.4 2.3c-.7.3-1 .8-1 1.5v.6M10 14.4v.1"/>'};
 const S = {tab: "now", menu: null, help: null, status: null, decisions: null, discover: null, requests: null, follow: null, followOn: "", autoFollow: "", factoryLogOff: false, followSource: null,
            followLines: [], drawer: null, opener: null, drafts: {}, handed: {}, fold: new Map(),
-           rules: null, rulesFor: null, ruleKind: "story", ruleStory: "", flowPick: null, partText: {}, meta: {},
+           rules: null, rulesFor: null, ruleView: "stage", ruleKind: "story", ruleStage: null, ruleStory: "", ruleOpen: "", kindFor: "",
+           partText: {}, meta: {},
            part: "", detail: "", storyFrom: "", record: "", topicPick: "", storyView: {}, changing: ""};
 const stored = key => { try { return localStorage.getItem(key) || ""; } catch (e) { return ""; } };
 const store = (key, value) => { try { localStorage.setItem(key, value); } catch (e) {} };
@@ -35,9 +36,18 @@ const store = (key, value) => { try { localStorage.setItem(key, value); } catch 
 const known = id => id === "now" || id === "components" || TABS.some(([t]) => t === id);
 // a view, and where it holds one: `#describe/<part>` reads a part, `#backlog/<story>` opens a story (WP-183)
 function readHash() {
-  const [tab, sub] = location.hash.slice(1).split("/");
+  const [tab, sub, ...more] = location.hash.slice(1).split("/");
   if (!known(tab)) return false;
   S.tab = tab;
+  // the rules: `#rules/<view>/<kind>/<stage|all>[/<story>]` — the view, the kind, the stage picked (or none), the story
+  if (tab === "rules" && sub) {
+    const [kind, stage, story] = more.map(decodeURIComponent);
+    S.ruleView = ["stage", "matrix", "run"].includes(sub) ? sub : "stage";
+    if (kind) S.ruleKind = kind;
+    S.ruleStage = stage === undefined || stage === "-" ? null : stage === "all" ? "" : stage;
+    S.ruleStory = story || "";
+    S.kindFor = S.ruleStory;
+  }
   S.part = tab === "describe" && sub ? decodeURIComponent(sub) : "";
   S.detail = ["backlog", "run"].includes(tab) && sub ? decodeURIComponent(sub) : "";
   S.topicPick = tab === "discover" && sub ? decodeURIComponent(sub) : "";
@@ -48,8 +58,8 @@ if (location.hash === "#spec" || S.tab === "spec") S.tab = "describe";          
 // `#rules:<story>[:<rule>]` opens the rules with that story's gate runs marked, and the rule read
 if (location.hash.startsWith("#rules:")) {
   const [story, rule] = decodeURIComponent(location.hash.slice(7)).split(":");
-  [S.tab, S.ruleStory] = ["rules", story || ""];
-  if (rule) S.fold.set("rule:" + rule, true);
+  [S.tab, S.ruleStory, S.ruleView] = ["rules", story || "", story ? "run" : "stage"];
+  if (rule) S.ruleOpen = rule;
 }
 
 // --- helpers -------------------------------------------------------------------------------------------------------
@@ -265,9 +275,9 @@ document.addEventListener("input", event => {
   if (event.target.dataset && event.target.dataset.draft !== undefined) S.drafts[event.target.dataset.draft] = event.target.value;
 });
 document.addEventListener("change", event => {
-  if (!event.target.dataset || event.target.dataset.overlay === undefined) return;
-  S.ruleStory = event.target.value;
+  if (!event.target.dataset || event.target.dataset.rulePick === undefined) return;
   event.target.blur();                                   // a focused select holds the redraw back
+  rulesGo({ruleStory: event.target.value, ruleView: event.target.value ? "run" : S.ruleView});
   loadRules();
 });
 
@@ -294,11 +304,23 @@ const CALLS = {
     place(); render();
   },
   async close() { S.drawer = null; $("drawer").hidden = true; forget("d"); if (S.opener && document.contains(S.opener)) S.opener.focus(); S.opener = null; },
+  // the rule's drawer: closed by its ✕, Escape or a click beside it — the focus goes back to the row that opened it
+  async closeRule() {
+    S.ruleOpen = ""; const drawer = $("drawer"); drawer.hidden = true; drawer.removeAttribute("role"); drawer.setAttribute("aria-label", "story");
+    if (S.opener && document.contains(S.opener)) S.opener.focus(); S.opener = null;
+  },
 };
 
 document.addEventListener("click", async event => {
-  const target = event.target.closest("[data-press],[data-call],[data-story],[data-tab],[data-pick],[data-flow],[data-filter],[data-part],[data-goto],[data-change],[data-record],[data-pick-topic]");
+  const target = event.target.closest("[data-press],[data-call],[data-story],[data-tab],[data-pick],[data-filter],[data-part],[data-goto],[data-change],[data-record],[data-pick-topic],"
+    + "[data-rule-open],[data-rule-story],[data-rule-view],[data-rule-kind],[data-rule-stage]");
   if (!target) return;
+  if (target.dataset.ruleOpen) return openRule(target.dataset.ruleOpen, target);
+  if (target.dataset.ruleStory) { CALLS.closeRule(); rulesGo({ruleStory: target.dataset.ruleStory, ruleView: "run"}); return loadRules(); }
+  if (target.dataset.ruleView) return rulesGo({ruleView: target.dataset.ruleView});
+  if (target.dataset.ruleKind) return rulesGo({ruleKind: target.dataset.ruleKind});
+  // a second press on the picked tile picks nothing: every way quiet, the groups beneath
+  if (target.dataset.ruleStage) return rulesGo({ruleStage: target.dataset.trackStage && target.getAttribute("aria-pressed") === "true" ? "" : target.dataset.ruleStage});
   if (target.dataset.record) { S.record = target.dataset.record; return render(); }
   // a discovery opens on a place of its own beneath discover, as a story beneath the backlog (WP-183)
   if (target.dataset.pickTopic !== undefined) {
@@ -313,7 +335,6 @@ document.addEventListener("click", async event => {
     if (field) field.focus();
     return;
   }
-  if (target.dataset.flow) { S.ruleKind = target.dataset.flow; return render(); }
   if (target.dataset.filter) { S.backlogFilter = target.dataset.filter; forgetFolds("epic:"); return render(); }
   if (target.dataset.pick) return scheme(target.dataset.pick);
   if (target.dataset.tab) return show(target.dataset.tab);
@@ -465,9 +486,37 @@ document.addEventListener("keydown", event => {
 }, true);
 // where the page stands, in its address — a reload opens the same
 function place() {
+  if (S.tab === "rules") return history.replaceState(null, "", rulesHash());
   const sub = S.tab === "describe" ? S.part : S.tab === "discover" ? S.topicPick : STORY_TABS.includes(S.tab) ? S.detail : "";
   history.replaceState(null, "", "#" + S.tab + (sub ? "/" + encodeURIComponent(sub) : ""));
 }
+// the rules' place: the view, the kind, the stage picked (`all`: none) and the story — each pick a step back and forth
+const rulesHash = () => `#rules/${S.ruleView}/${encodeURIComponent(S.ruleKind)}/${S.ruleStage === null ? "-" : encodeURIComponent(S.ruleStage || "all")}`
+  + (S.ruleStory ? `/${encodeURIComponent(S.ruleStory)}` : "");
+function rulesGo(change) {
+  Object.assign(S, change);
+  history.pushState(null, "", rulesHash());
+  render();
+}
+// the rule in the drawer: opened from its row, read again with each redraw, the focus on its ✕
+function openRule(id, from) {
+  S.ruleOpen = id; S.opener = from || null;
+  paintRule();
+  const close = $("rule-sheet-close");
+  if (close) close.focus();
+}
+function paintRule() {
+  const drawer = $("drawer");
+  if (!S.ruleOpen || S.tab !== "rules" || !S.rules) { if (S.ruleOpen && S.tab !== "rules") CALLS.closeRule(); return; }
+  morph(drawer, ruleSheet(S.ruleOpen));
+  drawer.setAttribute("role", "dialog"); drawer.setAttribute("aria-label", "rule " + S.ruleOpen);
+  drawer.hidden = false;
+}
+document.addEventListener("click", event => {
+  if (!S.ruleOpen) return;
+  const inside = event.target.closest && (event.target.closest("#drawer") || event.target.closest("[data-rule-open]"));
+  if (!inside && document.contains(event.target)) CALLS.closeRule();
+}, true);
 // the wide width of the stylesheet (page_style.WIDE): the main region's content from which a view takes two columns
 const WIDE_PX = 1500;
 // a story has its place under the backlog or under run, whichever it was opened from (WP-183)
@@ -481,6 +530,7 @@ let wasWide = null;
 const sized = new ResizeObserver(() => {
   document.documentElement.style.setProperty("--bar-height", $("topbar").getBoundingClientRect().height + "px");
   fitCurve();
+  paintTracks();
   const now = wide();
   if (now === wasWide) return;
   const first = wasWide === null;
@@ -548,7 +598,8 @@ function render() {
                         : ui.pageHead(eyebrow, title, lede))
     + (S.status || S.tab === "components" ? endedLine(S.status || {}) + view(S.status || {}) : ui.card("", "", ui.empty("Reading the factory…"))));
   if (S.tab === "run" || S.tab === "discover" || onStoryPlace()) paintFollow();
-  if (S.tab === "rules") paintFlow();
+  paintTracks();
+  paintRule();
   fitCurve();
 }
 // the curve takes the width it is given: drawn anew at that width once it is known or has changed
@@ -560,72 +611,6 @@ function fitCurve() {
   S.curveW = w;
   svg.outerHTML = curveSvg(S.curve, w);
 }
-
-// --- the drawing of the rules: a way back shows while its step is hovered; what is picked stays marked --------------
-function showBacks(test) {
-  document.querySelectorAll(".flow .way-back").forEach(g => g.toggleAttribute("data-shown", test(g)));
-}
-// a gate after a step and its round are one thing: the gate, and where a refusal of it sends the story
-const gated = stage => { const f = S.rules && S.rules.flow && S.rules.flow[S.ruleKind]; const s = f && f.steps.find(x => x.stage === stage); return !!s && s.gate === "after"; };
-const flowKey = g => g.dataset.gate ? "gate:" + g.dataset.gate : g.dataset.stage && !g.dataset.way ? "stage:" + g.dataset.stage
-  : g.dataset.way === "again" && gated(g.dataset.source) ? "gate:gate-after:" + g.dataset.source
-  : `${g.dataset.source}>${g.dataset.target}>${g.dataset.way}`;
-function paintFlow() {
-  const backs = new Set([...document.querySelectorAll(".flow .way-back")].map(g => g.dataset.source));
-  document.querySelectorAll(".flow [data-stage]").forEach(t => t.toggleAttribute("data-has-back", backs.has(t.dataset.stage)));
-  const key = S.flowPick ? S.flowPick.key : "";
-  document.querySelectorAll(".flow").forEach(f => f.toggleAttribute("data-has-pick", !!key));
-  document.querySelectorAll(".flow .way, .flow .gate, .flow [data-stage]").forEach(g => g.toggleAttribute("data-picked", !!key && flowKey(g) === key));
-  const v = S.rules, flow = v && v.flow && v.flow[S.ruleKind], marks = flow ? storyMarks(flow, v.story) : null;
-  const row = marks && S.status ? (S.status.rows || []).find(r => r.story === v.story.id) : null;
-  document.querySelectorAll(".flow").forEach(f => f.toggleAttribute("data-has-story", !!marks));
-  document.querySelectorAll(".flow [data-badge]").forEach(t => t.remove());
-  document.querySelectorAll(".flow [data-stage]").forEach(t => {
-    t.toggleAttribute("data-reached", !!marks && marks.reached.has(t.dataset.stage));
-    t.toggleAttribute("data-now", !!row && row.stage === t.dataset.stage);
-  });
-  document.querySelectorAll(".flow .gate").forEach(g => {
-    const [, stage] = (g.dataset.gate || "").split(":"), at = marks ? marks.gates.find(x => x.stage === stage) : null;
-    g.toggleAttribute("data-failed", !!at && at.failed);
-    if (at && at.refused) {
-      const c = g.querySelector("circle"), t = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      t.setAttribute("x", +c.getAttribute("cx") + 14); t.setAttribute("y", +c.getAttribute("cy") - 12);
-      t.setAttribute("data-badge", ""); t.textContent = `×${at.refused}`; g.appendChild(t);
-    }
-  });
-  if (S.flowPick && S.flowPick.type === "stage") showBacks(g => g.dataset.source === S.flowPick.stage);
-  else if (S.flowPick && S.flowPick.way === "back") showBacks(g => flowKey(g) === S.flowPick.key);
-}
-document.addEventListener("mouseover", event => {
-  const at = event.target.closest && event.target.closest(".flow [data-stage]");
-  if (at) showBacks(g => g.dataset.source === at.dataset.stage);
-});
-document.addEventListener("mouseout", event => {
-  const at = event.target.closest && event.target.closest(".flow [data-stage]");
-  if (at) { showBacks(() => false); paintFlow(); }
-});
-function pickInFlow(at) {
-  const key = flowKey(at);
-  if (S.flowPick && S.flowPick.key === key) S.flowPick = null;
-  else if (at.dataset.gate) S.flowPick = {key, type: "gate", gate: at.dataset.gate};
-  else if (key.startsWith("gate:")) S.flowPick = {key, type: "gate", gate: key.slice(5)};
-  else if (at.dataset.stage && !at.dataset.way) S.flowPick = {key, type: "stage", stage: at.dataset.stage};
-  else S.flowPick = {key, type: "edge", source: at.dataset.source, target: at.dataset.target, way: at.dataset.way};
-  render();
-}
-document.addEventListener("click", event => {
-  const edge = event.target.closest && event.target.closest("[data-edge]");
-  if (edge) {
-    event.stopPropagation();
-    const [source, target, way] = edge.dataset.edge.split(">");
-    S.flowPick = {key: edge.dataset.edge, type: "edge", source, target, way};
-    return render();
-  }
-  const at = event.target.closest && event.target.closest(".flow [data-rules], .flow [data-stage]");
-  if (!at) return;
-  event.stopPropagation();
-  pickInFlow(at);
-}, true);
 
 // the delivered curve: a hair across both panels and a tip with the delivery under the pointer
 document.addEventListener("mousemove", event => {
@@ -653,6 +638,7 @@ document.addEventListener("mousemove", event => {
 document.addEventListener("keydown", event => {
   if (event.target.closest("textarea, input, select")) return;
   if (event.key === "Escape") {
+    if (S.ruleOpen) return CALLS.closeRule();
     if (S.drawer) return CALLS.close();
     if (S.changing) { S.changing = ""; return render(); }
     if (S.detail) return CALLS.closeDetail();
@@ -672,6 +658,7 @@ document.addEventListener("keydown", event => {
   $("tab-" + to).focus();
 });
 window.addEventListener("hashchange", () => { if (readHash()) render(); });
+window.addEventListener("popstate", () => { if (readHash()) render(); });
 """
 
 SCRIPT_START = r"""

@@ -27,6 +27,7 @@ from .factory_process import running_page
 from ..files.decision_record_files import project_record_path
 from ....application.shared.request_skill import HandedFileRead, SkillRun
 from ....application.shared.backlog_schedule import ScheduleRead
+from ....domain.model.jump import Jumped, Restarted
 from ....domain.model.stage import StageName, StoryKind
 from ....domain.model.story_state import GateReport, Judged, Rounds
 from ..files.run_marks import judged_of
@@ -290,6 +291,14 @@ class RunnerStages(StoryRunJournal, StageSteps):
 
     def integrate(self, story: str, dry: bool) -> typing.Optional[RunOutcome]:
         return maybe_outcome_of(self._run.cases.integrate(self._run, self._tool, story, dry))
+
+    def jumped(self, story: str, jump: Jumped) -> None:
+        self._run.journal_line(story, f"{utc()}\tjump\t{jump.target.value}\tfrom={jump.source.value}\t"
+                                      f"rule={jump.rule.value}")
+
+    def restarted(self, story: str, restart: Restarted) -> None:
+        self._run.journal_line(story, f"{utc()}\trestart\t{restart.stage.value}\trule={restart.rule.value}\t"
+                                      f"reason={restart.reason.value}")
 
 
 class RunnerIntegration(StoryIntegration):

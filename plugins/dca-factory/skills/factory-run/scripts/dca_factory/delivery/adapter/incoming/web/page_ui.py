@@ -55,6 +55,52 @@ function curveSvg(curve, width = CURVE.w) {
   return out;
 }
 
+// the ways back under a rule track, drawn once its tiles stand: straight lines with corners — down from the stage that
+// sends, across on a level, up into the stage it goes to. One meaning per colour (the variant): `round` costs a round,
+// as the tile's ↺ does; `free` costs none. Emphasis is the stroke: `solid` where the picked stage sends a story (or
+// the ways a story took), a thin dashed line for every other. The levels are packed — the shortest jump first, each on
+// the highest level where its span overlaps no other line's; two lines that only meet at one tile share one. A line
+// meets its tile in the middle when it is that tile's only one; several spread round the middle, the tile's outgoing
+// lines left (the deeper further right), its incoming ones right (the deeper further left), so none crosses another.
+const TRACK = {level: 16, first: 6, spread: 14, rise: 4, label: 11};
+function drawWays(track) {
+  const wrap = track.querySelector(".rule-track__wrap"), svg = track.querySelector(".rule-track__ways");
+  if (!wrap || !svg) return;
+  let ways = [];
+  try { ways = JSON.parse(track.dataset.ways || "[]"); } catch (e) { ways = []; }
+  const box = wrap.getBoundingClientRect(), order = [...wrap.querySelectorAll("[data-track-stage]")].map(t => t.dataset.trackStage);
+  const at = stage => { const t = wrap.querySelector(`[data-track-stage="${CSS.escape(stage)}"]`); if (!t) return null;
+    const b = t.getBoundingClientRect(); return {x: b.left - box.left + b.width / 2, bottom: b.bottom - box.top}; };
+  ways = ways.filter(w => order.includes(w.source) && order.includes(w.target))
+    .map(w => Object.assign({}, w, {lo: order.indexOf(w.target), hi: order.indexOf(w.source)}))
+    .sort((a, b) => (a.hi - a.lo) - (b.hi - b.lo));
+  const levels = [];
+  ways.forEach(w => {
+    let k = 0;
+    while ((levels[k] || []).some(([a, b]) => Math.max(a, w.lo) < Math.min(b, w.hi))) k++;
+    (levels[k] = levels[k] || []).push([w.lo, w.hi]);
+    w.depth = TRACK.first + (k + 1) * TRACK.level;
+  });
+  const ends = {};
+  ways.forEach(w => { (ends[w.source] = ends[w.source] || []).push({w, out: true}); (ends[w.target] = ends[w.target] || []).push({w, out: false}); });
+  Object.entries(ends).forEach(([stage, list]) => {
+    const t = at(stage); if (!t) return;
+    list.sort((p, q) => p.out !== q.out ? (p.out ? -1 : 1) : p.out ? p.w.depth - q.w.depth : q.w.depth - p.w.depth);
+    list.forEach((e, k) => { const x = t.x + (k - (list.length - 1) / 2) * TRACK.spread; if (e.out) e.w.x1 = x; else e.w.x2 = x; });
+  });
+  let out = `<defs>${["round", "free"].map(c => `<marker id="rule-track-head-${c}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">`
+    + `<path class="${mods("rule-track__head", [c])}" d="M0 0L10 5L0 10z"/></marker>`).join("")}</defs>`;
+  ways.forEach(w => {
+    const a = at(w.source); if (!a || w.x1 == null || w.x2 == null) return;
+    const y = a.bottom + 2, d = `M${w.x1} ${y} V ${y + w.depth} H ${w.x2} V ${y + TRACK.rise}`, cost = w.round ? "round" : "free";
+    out += `<path class="${mods("rule-track__way", [cost, w.solid ? "solid" : "quiet"])}" d="${d}" marker-end="url(#rule-track-head-${cost})"/>`
+      + `<path class="rule-track__hit" d="${d}"><title>${esc(w.title || "")}</title></path>`;
+    if (w.solid && w.label) out += `<text class="${mods("rule-track__label", [cost])}" x="${w.x2 + TRACK.label}" y="${y + w.depth - 5}">${esc(w.label)}</text>`;
+  });
+  svg.innerHTML = out;
+  wrap.style.setProperty("--band", `${ways.length ? 14 + levels.length * TRACK.level : 8}px`);
+}
+
 // --- atoms
 // a control is pressed — a raised rectangle in the display face; a display is read — flat, in the mono face
 // a press: `size` s, m (the default) or l — its height a token, the same whatever it carries; `icon` a mark before the words: play or stop
@@ -109,6 +155,12 @@ ui.shot = o => `<figure class="shot"><a class="shot__open" href="${esc(o.href)}"
   + `<figcaption class="shot__said">${o.stage ? `<b>${esc(o.stage)}</b> · ` : ""}${esc(o.name)}${o.at ? ` · ${esc(o.at)}` : ""}</figcaption></figure>`;
 // --- molecules
 ui.story = (id, title, o = {}) => ui.link(title || id, {title: true, compact: o.compact, ink: o.ink, attrs: {"data-story": id}});
+// a rule in a list: its title, and beside it its id or what it did — a press that opens the rule in the drawer
+ui.ruleRow = o => `<li class="rule-row"${o.state ? ` data-state="${esc(o.state)}"` : ""}><button type="button" class="rule-row__open" data-rule-open="${esc(o.id)}" aria-haspopup="dialog" title="${esc(o.id)}">`
+  + `<span class="rule-row__title">${o.html ? o.title : esc(o.title)}</span><span class="rule-row__aside">${o.aside != null ? o.aside : ui.id(o.id)}</span></button></li>`;
+ui.ruleRows = rows => rows.length ? `<ul class="rule-rows">${rows.map(ui.ruleRow).join("")}</ul>` : "";
+// a word that names a group of controls beside it, wrapping with it as one — "kind" and its switch
+ui.labelled = (text, html) => `<span class="labelled"><span class="labelled__text">${esc(text)}</span>${html}</span>`;
 // the only way a field is set: its label, the field, what it takes and what was wrong — tied by for, id and describedby
 ui.formRow = o => {
   const hintId = o.hint ? `${o.id}-hint` : "", errorId = o.error ? `${o.id}-error` : "";
@@ -254,12 +306,51 @@ ui.ruleGroup = (label, rows, o = {}) => rows.length ? `<div class="rule-group">$
 // a rule with the scenarios it holds: the rule a heading, its scenarios a list beneath it, one block per rule
 ui.ruleBlock = (rule, rows) => `<section class="rule-block">${rule ? `<h4 class="rule-block__rule">${ui.caption("Rule", {brand: true})} ${rule}</h4>` : ""}`
   + `<ul class="rule-block__rows">${rows.map(r => `<li>${r}</li>`).join("")}</ul></section>`;
-ui.ways = (title, ways, o = {}) => ways.length ? `<div class="rule-group">${title ? `<div class="rule-group__label">${o.plain ? ui.hint(title, {prose: true}) : ui.caption(title)}</div>` : ""}<ul class="ways">${ways.map(w =>
-  `<li class="ways__row">${ui.link(`${w.source} → ${w.target}`, {way: true, attrs: {"data-edge": w.key}})}<span class="ways__rules">${esc(w.rules)}</span></li>`).join("")}</ul></div>` : "";
 ui.part = (title, body, o = {}) => body ? `<section class="${mods("part", [o.aside && "aside"])}"><h${o.level || 3} class="part__head">${title}</h${o.level || 3}>${body}</section>` : "";
 // how a check ends: a mark in the state's colour, where the story goes in plain words, what happens then beneath
 ui.outcome = (state, head, body) => `<section class="outcome" data-state="${esc(state)}"><h4 class="outcome__head">${ui.icon(state, {large: true})}<span>${head}</span></h4>${body ? `<div class="outcome__body">${body}</div>` : ""}</section>`;
-ui.flow = svg => `<div class="flow">${svg}</div>`;
+// a kind's stages as a track of tiles, the delivered end after them, the ways back drawn beneath (`drawWays`); a tile
+// is a press that picks its stage — its words start at its top, never centred —, a state the factory names its own
+ui.ruleTrack = o => `<div class="rule-track" data-ways="${esc(JSON.stringify(o.ways || []))}"><div class="rule-track__scroll">`
+  + `<div class="rule-track__wrap" style="--tiles: ${(o.tiles || []).length}"><div class="rule-track__tiles" style="grid-template-columns: repeat(${Math.max(1, (o.tiles || []).length - 1)}, minmax(0, 1fr)) minmax(0, .7fr)">`
+  + (o.tiles || []).map(t => t.end
+    ? `<div class="rule-track__end" data-track-stage="${esc(t.stage)}"><span class="rule-track__name">○ ${esc(t.name || t.stage)}</span>${t.note ? `<span class="rule-track__note">${esc(t.note)}</span>` : ""}</div>`
+    : `<button type="button" class="rule-track__tile" data-track-stage="${esc(t.stage)}" data-rule-stage="${esc(t.stage)}" aria-pressed="${!!t.picked}"${t.here ? " data-here" : ""}>`
+      + `<b class="rule-track__name">${esc(t.stage)}</b>${t.meta ? `<span class="rule-track__meta">${esc(t.meta)}</span>` : ""}`
+      + (t.state ? `<span class="rule-track__state"${t.state.tone ? ` data-state="${esc(t.state.tone)}"` : ""}>${esc(t.state.text)}</span>` : "")
+      + (t.notes || []).map(n => `<span class="rule-track__note"${n.title ? ` title="${esc(n.title)}"` : ""}>${esc(n.text)}</span>`).join("") + `</button>`).join("")
+  + `</div><svg class="rule-track__ways" aria-hidden="true" data-own></svg></div></div>`
+  + ((o.legend || []).length ? `<p class="rule-track__legend">${o.legend.map(([tone, text]) => `<span class="rule-track__key"${tone ? ` data-state="${esc(tone)}"` : ""}>${esc(text)}</span>`).join("")}</p>` : "")
+  + `</div>`;
+// a stage read in three columns: what it is told, what is checked, what comes next
+ui.stageRead = o => `<div class="stage-read"><div class="stage-read__told">${o.told}</div><div class="stage-read__checked">${o.checked}</div><div class="stage-read__next">${o.next}</div></div>`;
+// the checks against the stages: a row per check, a column per stage — a dot where that gate asks it, a count where it
+// refused; a column's head picks its stage. Wider than its place, it scrolls in its own box
+ui.ruleMatrix = o => `<div class="rule-matrix"><table class="rule-matrix__table"><thead><tr><th class="rule-matrix__corner" scope="col">${ui.caption(o.corner || "check")}</th>`
+  + o.stages.map(s => `<th class="rule-matrix__stage" scope="col"${s.picked ? ' aria-current="true"' : ""}><button type="button" class="rule-matrix__pick" data-rule-stage="${esc(s.stage)}">${esc(s.stage)}</button></th>`).join("")
+  + `</tr></thead><tbody>` + o.bands.map(b => `<tr class="rule-matrix__band"><td class="rule-matrix__label" colspan="${o.stages.length + 1}">${ui.caption(b.label)}</td></tr>`
+    + b.rows.map(row => `<tr class="rule-matrix__row"><th class="rule-matrix__check" scope="row">`
+      + (row.id ? `<button type="button" class="rule-matrix__rule" data-rule-open="${esc(row.id)}" aria-haspopup="dialog">${esc(row.title)}</button>` : `<span class="rule-matrix__plain">${esc(row.title)}</span>`)
+      + (row.name ? ` <span class="rule-matrix__name">${esc(row.name)}</span>` : "") + `</th>`
+      + o.stages.map(s => { const c = (row.cells || {})[s.stage];
+          return `<td class="rule-matrix__cell"${s.picked ? " data-picked" : ""}${c && c.title ? ` title="${esc(c.title)}"` : ""}>`
+            + (!c ? "" : c.text != null ? `<span class="rule-matrix__text">${esc(c.text)}</span>` : c.n ? `<span class="rule-matrix__count" data-state="fail">${esc(c.n)}</span>` : `<span class="rule-matrix__dot" data-state="pass"></span>`) + `</td>`; }).join("")
+      + `</tr>`).join("")).join("") + `</tbody></table></div>`;
+// every stage of a kind as a column: its head picks it, what the story did there, what it is told and checked
+ui.ruleBoard = cols => `<div class="rule-board"><div class="rule-board__track" style="--cols: ${cols.length}">` + cols.map(c =>
+  `<section class="rule-board__col"${c.picked ? " data-picked" : ""}${c.here ? " data-here" : ""}><h3 class="rule-board__head"><button type="button" class="rule-board__pick" data-rule-stage="${esc(c.stage)}">${esc(c.stage)}</button>${c.flag || ""}</h3>`
+  + (c.verdict ? `<p class="rule-board__verdict" data-state="${esc(c.verdict.state)}">${esc(c.verdict.text)}${c.verdict.small ? `<small class="rule-board__why">${esc(c.verdict.small)}</small>` : ""}</p>` : "")
+  + (c.parts || []).map(p => `<div class="rule-board__part">${ui.caption(p.label)}${p.html}</div>`).join("") + `</section>`).join("") + `</div></div>`;
+// one rule in full, as the drawer shows it: its id and a way to close, its name, where it holds, how it comes out, why —
+// and what the project's journals say of it
+ui.ruleSheet = o => `<article class="rule-sheet" aria-labelledby="rule-sheet-title"><div class="rule-sheet__head">${ui.id(o.id)}`
+  + ui.btn("✕", {size: "s", title: "close (Esc)", attrs: {"data-call": "closeRule", "aria-label": "close the rule", id: "rule-sheet-close"}}) + `</div>`
+  + `<h2 class="rule-sheet__title" id="rule-sheet-title">${o.title}</h2>${ui.kv(o.facts || [])}`
+  + (o.outcomes ? `<div class="rule-sheet__outcomes">${o.outcomes}</div>` : "") + (o.body || "")
+  + (o.parts || []).map(p => `<section class="rule-sheet__part">${ui.caption(p.label, {brand: true})}${p.html}</section>`).join("")
+  + (o.source ? ui.hint(o.source, {block: true}) : "") + `</article>`;
+// cards that unfold side by side; one opened takes the whole width
+ui.ruleFolds = items => `<div class="rule-folds">${items.filter(Boolean).map(i => `<div class="rule-folds__item">${i}</div>`).join("")}</div>`;
 ui.table = (cols, rows, o = {}) => {
   const cls = c => [c.num && "table__num", c.act && "table__act", c.hide && "hide-narrow", c.mark && "table__mark"].filter(Boolean).join(" ");
   const cell = (c, v) => `<td class="table__cell ${cls(c)}">${c.act ? ui.actions(v, {end: true}) : v}</td>`;

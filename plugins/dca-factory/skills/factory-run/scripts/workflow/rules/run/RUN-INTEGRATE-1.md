@@ -5,7 +5,7 @@ part: decision
 stages:
 - integrate
 pass: the target is merged into the story's branch and the integrate gate runs
-fail: there is a conflict, which the integrate stage resolves, or the main line refuses, which costs a round
+fail: the main line refuses — a round is spent and the build stage runs again with the gate's report; a conflict goes to the integrate stage first, which resolves it
 goes.fail:
 - integrate
 - build

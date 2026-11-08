@@ -5,7 +5,7 @@ from __future__ import annotations
 import typing
 
 from ....building_blocks import OutputPort
-from ...domain.model.rule import Rule
+from ...domain.model.rule import Count, Rule
 from ...domain.model.rulebook import KindOrder, StageRow
 
 
@@ -22,4 +22,8 @@ class DecidedRules(OutputPort, typing.Protocol):
 
     def orders(self) -> typing.Tuple[KindOrder, ...]:
         """Each kind's run order."""
+        ...
+
+    def round_limit(self) -> Count:
+        """How many rounds a story runs before it stops for a person."""
         ...
