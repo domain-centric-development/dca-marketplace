@@ -4,10 +4,12 @@ project's own into the factory's — and the boundary a use case writes inside."
 from __future__ import annotations
 
 import dataclasses
+import enum
 import os
 import typing
 
 from .....building_blocks import DomainEvent, DomainEventPublisher, TransactionBoundary
+from ....domain.model.delivery_event import DeliveryEvent
 from .journal_files import append_event, journal_append, journal_lock
 from .request_files import factory_dir
 
@@ -15,6 +17,18 @@ T = typing.TypeVar("T")
 
 #: The kind of a journal line that records a domain event, named by its type.
 EVENT_KIND = "event"
+
+
+def shown(value: typing.Any) -> str:
+    """A field of an event as the journal writes it: an enum by its word, a value by its own, a claim by its line, a
+    tuple of them joined."""
+    if isinstance(value, enum.Enum):
+        return str(value.value)
+    if isinstance(value, tuple):
+        return ",".join(shown(item) for item in value)
+    if hasattr(value, "line"):
+        return shown(value.line())
+    return str(getattr(value, "value", value))
 
 
 def cells(event: DomainEvent) -> typing.List[str]:
@@ -25,7 +39,7 @@ def cells(event: DomainEvent) -> typing.List[str]:
             continue
         value = getattr(event, field.name)
         if value is not None:
-            out.append(f"{field.name}={getattr(value, 'value', value)}")
+            out.append(f"{field.name}={shown(value)}")
     return out
 
 
@@ -37,9 +51,9 @@ class JournalEventPublisher(DomainEventPublisher):
         self._runs = runs
 
     def publish(self, event: DomainEvent) -> None:
-        story = getattr(event, "story", None)
-        moment = getattr(event, "at", None)
-        at = moment.value if moment is not None else None
+        if not isinstance(event, DeliveryEvent):
+            raise TypeError(f"{type(event).__name__} is no delivery event: it carries no moment `at` and no `story`")
+        story, at = event.story, event.at.value
         name = type(event).__name__
         if story is not None:
             journal_append(self._runs, story.value, EVENT_KIND, name, *cells(event), at=at)

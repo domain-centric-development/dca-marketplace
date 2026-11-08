@@ -211,6 +211,7 @@ class StoryReleased(DomainEvent):
     """A person released the draft: it is approved and may be built."""
 
     story: StoryId
+    by: Person
     at: Moment
 
 
@@ -233,6 +234,8 @@ class StoryAdoptedForProof(DomainEvent):
     """A claimed delivery was handed to the adopt path, to be proven by the existing tests."""
 
     story: StoryId
+    #: the claim the story was delivered under, replaced by the proof
+    claimed_by: DeliveredBy
     at: Moment
 
 
@@ -378,14 +381,16 @@ class Story(AggregateRoot[StoryId]):
         """What the story says — its criteria, context, dependencies; never changed by the aggregate."""
         return self._content
 
-    def release(self, answered: Assumption, at: Moment) -> None:
-        """A person's go: the draft becomes approved, the release kept as the answered assumption."""
+    def release(self, by: Person, request: Detail, at: Moment) -> None:
+        """A person's go, through the request they made: the draft becomes approved, the release kept as an answered
+        assumption naming who, when and the request."""
         if self._status is not StoryStatus.DRAFT:
             raise NotADraft(self._id, self._status)
         self._status = StoryStatus.APPROVED
         self._marked = True
-        self._assumptions.append(answered)
-        self.register_event(StoryReleased(self._id, at))
+        self._assumptions.append(Assumption(f"- answered: the story is released for building (request "
+                                            f"{request.value}, {by.value}, {at.value})."))
+        self.register_event(StoryReleased(self._id, by, at))
 
     def reopen(self, correction: CitedCorrection, at: Moment) -> None:
         """Taken back for the correction it cites: approved again, it runs from plan, and no longer says delivered."""
@@ -407,7 +412,7 @@ class Story(AggregateRoot[StoryId]):
         self._status = StoryStatus.ADOPTED
         self._marked = True
         self._delivery = None
-        self.register_event(StoryAdoptedForProof(self._id, at))
+        self.register_event(StoryAdoptedForProof(self._id, claim.by, at))
         return claim
 
     def take_answer(self, sentence: Detail, cites: Detail, at: Moment) -> bool:

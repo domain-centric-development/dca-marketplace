@@ -9,7 +9,9 @@ from ....building_blocks import DomainEventPublisher, TransactionBoundary, UseCa
 from ...domain.model.epic import EpicId
 from ...domain.model.moment import Moment
 from ...domain.model.person import Person
-from ...domain.model.story import Assumption, Story, StoryId, StoryStatus
+from ...domain.model.story_words import Detail
+from ...domain.service.release_policy import QuestionPass, ReleasePolicy
+from ...domain.model.story import Story, StoryId, StoryStatus
 from ..shared.decision_record_repository import DecisionRecordRepository
 from ..shared.outcomes import NeedsSkill
 from ..shared.story_journal import StoryJournal
@@ -60,12 +62,10 @@ class ReleaseStoriesUseCase(ReleaseStoriesInputPort):
             drafts = [self._stories.get(story_id) for story_id in command.stories]
         if not drafts or not all(self._releasable(story) for story in drafts):
             return NeedsSkill("a draft whose question pass did not run on it as it stands, or a record holds it")
-        answered = Assumption(f"- answered: the story is released for building (request {command.request}, "
-                              f"{command.by.value}, {command.at.value}).")
-
+        # all drafts of a release, or none: an epic is released whole where every draft may be — one unit
         def release() -> Released:
             for story in drafts:
-                story.release(answered, command.at)
+                story.release(command.by, Detail(str(command.request)), command.at)
                 self._stories.save(story)
                 self._events.publish_and_clear_events(story)
             return Released(tuple(story.id for story in drafts))
@@ -73,5 +73,5 @@ class ReleaseStoriesUseCase(ReleaseStoriesInputPort):
         return self._transactions.in_transaction(release)
 
     def _releasable(self, story: Story) -> bool:
-        return story.status is StoryStatus.DRAFT and self._journal.question_pass_ran(story.id) \
-            and not self._records.open_records_of(story.id)
+        ran = QuestionPass.RAN_ON_IT if self._journal.question_pass_ran(story.id) else QuestionPass.NOT_RAN
+        return ReleasePolicy.releasable(story, ran, self._records.open_records_of(story.id))

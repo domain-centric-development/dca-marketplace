@@ -138,6 +138,8 @@ class QuestionAnswered(DomainEvent):
 
     record: RecordId
     story: typing.Optional[StoryId]
+    by: Person
+    given: Given
     at: Moment
 
 
@@ -146,6 +148,8 @@ class DeliveryAccepted(DomainEvent):
 
     record: RecordId
     story: typing.Optional[StoryId]
+    by: Person
+    given: Given
     at: Moment
 
 
@@ -154,6 +158,8 @@ class CorrectionAsked(DomainEvent):
 
     record: RecordId
     story: typing.Optional[StoryId]
+    by: Person
+    given: Given
     at: Moment
 
 
@@ -373,11 +379,11 @@ class DecisionRecord(AggregateRoot[RecordId]):
         self._answer = answer
         self._state = DecisionState.ANSWERED
         if self._kind is RecordKind.QUESTION:
-            self.register_event(QuestionAnswered(self._id, self._story, answer.at))
+            self.register_event(QuestionAnswered(self._id, self._story, answer.by, answer.given, answer.at))
         elif answer.given.accepts():
-            self.register_event(DeliveryAccepted(self._id, self._story, answer.at))
+            self.register_event(DeliveryAccepted(self._id, self._story, answer.by, answer.given, answer.at))
         else:
-            self.register_event(CorrectionAsked(self._id, self._story, answer.at))
+            self.register_event(CorrectionAsked(self._id, self._story, answer.by, answer.given, answer.at))
 
     def apply(self, stage: StageName, at: Moment) -> None:
         """A stage applied the person's answer: the record is applied, by that stage."""

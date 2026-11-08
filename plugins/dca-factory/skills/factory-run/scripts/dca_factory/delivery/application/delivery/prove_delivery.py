@@ -54,12 +54,10 @@ class ProveDeliveryUseCase(ProveDeliveryInputPort):
         holders = tuple(self._runs.holding_checkout(story.id))
         if holders:
             return CheckoutHeld(holders)
-        claim_kept = self._runs.keep_claim(story.id, claim, command.at)
-        kept = self._runs.keep_pass(story.id)
-
-        def save() -> None:
+        def save() -> typing.Tuple[str, str]:
             self._stories.save(story)
             self._events.publish_and_clear_events(story)
+            return self._runs.keep_claim(story.id, claim, command.at), self._runs.keep_pass(story.id)
 
-        self._transactions.in_transaction(save)
+        claim_kept, kept = self._transactions.in_transaction(save)
         return AdoptedForProof(claim, claim_kept, kept)

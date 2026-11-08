@@ -265,7 +265,8 @@ T = typing.TypeVar("T")
 
 class TransactionBoundary(OutputPort, typing.Protocol):
     """Marker for the port that runs a use case's writes as one unit: the aggregate saved and its events published
-    together, or neither."""
+    together, or neither. Where the storage cannot roll back — files written in order — an implementation says so and
+    holds at least one writer at a time; the use case then writes after every refusal it can give, never before."""
 
     def in_transaction(self, work: typing.Callable[[], T]) -> T:
         """Run <work> inside the boundary and return what it returned."""

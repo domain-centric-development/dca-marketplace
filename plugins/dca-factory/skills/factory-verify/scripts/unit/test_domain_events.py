@@ -7,7 +7,9 @@ import unittest
 
 import support
 from support import gate_story
-from dca_factory.delivery.adapter.outgoing.files.journal_events import JournalEventPublisher
+from dca_factory.delivery.adapter.outgoing.files.journal_events import JournalEventPublisher, cells
+from dca_factory.delivery.domain.model.delivery_event import DeliveryEvent
+from dca_factory.delivery.domain.model.story_words import ScenarioKey
 from dca_factory.delivery.adapter.outgoing.files.journal_files import journal_events
 from dca_factory.delivery.domain.model.decision_record import (
     Answer, AnswerApplied, Asker, CorrectionAsked, DecisionRecord, DecisionState, DeliveryAccepted, Given, NotAnswered,
@@ -16,7 +18,7 @@ from dca_factory.delivery.domain.model.moment import Moment
 from dca_factory.delivery.domain.model.person import Person
 from dca_factory.delivery.domain.model.stage import StageName
 from dca_factory.delivery.domain.model.story import (
-    PLAN_ADOPT, AlreadyDelivered, Assumption, CitedCorrection, NothingToDeliver, NotReleased, PublicationTakenBack,
+    PLAN_ADOPT, AlreadyDelivered, DeliveredBy, GatePass, StoryAdoptedForProof, Assumption, CitedCorrection, NothingToDeliver, NotReleased, PublicationTakenBack,
     StoryAdoptedOnPlan, StoryDeliveredByGate, StoryId, StoryReleased, StoryReopened, StoryStatus)
 from dca_factory.delivery.domain.model.story_words import Detail
 
@@ -27,8 +29,8 @@ class Events(unittest.TestCase):
 
     def test_a_released_story_registers_its_release_and_the_journal_records_it_once(self):
         story = gate_story("S-1", front={"status": "draft"})
-        story.release(Assumption("- answered: released"), AT)
-        self.assertEqual(story.domain_events(), (StoryReleased(StoryId("S-1"), AT),))
+        story.release(Person("jane"), Detail("R1"), AT)
+        self.assertEqual(story.domain_events(), (StoryReleased(StoryId("S-1"), Person("jane"), AT),))
         with tempfile.TemporaryDirectory() as root:
             runs = os.path.join(root, "runs")      # the evidence, the journal among it, lies beside the run folder
             JournalEventPublisher(runs).publish_and_clear_events(story)
@@ -41,7 +43,7 @@ class Events(unittest.TestCase):
                                         story=StoryId("S-1"),
                                         content=RecordContent(Detail("q"), None, Detail(""), Detail(""), ()))
         record.answer(Answer(Given("a"), Person("jane"), AT))
-        self.assertEqual(record.domain_events(), (QuestionAnswered(RecordId("S-1-01"), StoryId("S-1"), AT),))
+        self.assertEqual(record.domain_events(), (QuestionAnswered(RecordId("S-1-01"), StoryId("S-1"), Person("jane"), Given("a"), AT),))
 
 
 def record(kind=RecordKind.QUESTION, state=DecisionState.OPEN, options=(), written=""):
@@ -104,6 +106,21 @@ class Transitions(unittest.TestCase):
             record(options=("a",)).choose(OptionKey("c"), Person("jane"), AT)
         with self.assertRaises(NotOpen):
             record(state=DecisionState.ANSWERED, options=("a",), written="a").choose(OptionKey("a"), Person("jane"), AT)
+
+    def test_a_claimed_delivery_handed_to_the_adopt_path_keeps_the_claim_in_its_event(self):
+        story = gate_story("S-1", front={"status": "delivered", "delivered": AT.value, "delivered_by": "hand:jane"})
+        story.adopt_for_proof(GatePass.MISSING, AT)
+        self.assertEqual(story.domain_events(),
+                         (StoryAdoptedForProof(StoryId("S-1"), DeliveredBy.hand(Person("jane")), AT),))
+
+    def test_every_event_keeps_the_delivery_contract_and_the_journal_writes_its_fields_by_their_words(self):
+        story = gate_story("S-1", front={"status": "approved"})
+        story.split_off((ScenarioKey("a"), ScenarioKey("b")), Detail("a (T#a), b (T#b)"), AT)
+        event = story.domain_events()[0]
+        self.assertIsInstance(event, DeliveryEvent)
+        self.assertEqual(cells(event), ["into=S-1-holds", "scenarios=a,b"])
+        self.assertEqual(cells(StoryAdoptedForProof(StoryId("S-1"), DeliveredBy.hand(Person("jane")), AT)),
+                         ["claimed_by=hand:jane"])
 
     def test_an_answered_record_is_applied_once(self):
         applied = record(state=DecisionState.ANSWERED, written="a")

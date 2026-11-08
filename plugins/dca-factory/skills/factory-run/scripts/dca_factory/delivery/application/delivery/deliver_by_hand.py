@@ -73,17 +73,18 @@ class DeliverByHandUseCase(DeliverByHandInputPort):
         story = self._stories.get(command.story)
         delivery = story.deliver_by_hand(command.by, command.at)
         held = self._claims.held_elsewhere(story.id)
-        if held is not None:
-            if not command.force:
-                return ClaimedElsewhere(held)
-            self._journal.delivered_over_claim(story.id, held.who)
+        if held is not None and not command.force:
+            return ClaimedElsewhere(held)
         changing = self._spec.changing(story.id)
         if changing.keys:
             return ChangesWhatHolds(changing)
 
-        def save() -> None:
+        def save() -> SpecChange:
             self._stories.save(story)
             self._events.publish_and_clear_events(story)
+            if held is not None:
+                self._journal.delivered_over_claim(story.id, held.who)
+            return self._spec.take_unproven(story.id)
 
-        self._transactions.in_transaction(save)
-        return DeliveredByHand(delivery, self._spec.take_unproven(story.id), self._stories.path_of(story.id))
+        unproven = self._transactions.in_transaction(save)
+        return DeliveredByHand(delivery, unproven, self._stories.path_of(story.id))
