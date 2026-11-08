@@ -3,6 +3,8 @@ checkout it stands in, the places its profile sets, the worker whose claim it ru
 
 from __future__ import annotations
 
+from ..delivery.adapter.outgoing.process.outcomes import exit_of, maybe_exit_of
+
 import argparse
 import os
 import typing
@@ -48,15 +50,15 @@ class RunnerCases:
 
     def run_story(self, run: Run, tool: str, story: str, start: typing.Optional[str], dry: bool, gate_first: bool,
                   shared: typing.FrozenSet[Window]) -> int:
-        return RunStoryUseCase(RunnerStages(run, tool), ConsoleLines()).execute(
-            RunStoryCommand(story, start, dry, gate_first, shared))
+        return exit_of(RunStoryUseCase(RunnerStages(run, tool), ConsoleLines()).execute(
+            RunStoryCommand(story, start, dry, gate_first, shared)))
 
     def integrate(self, run: Run, tool: str, story: str, dry: bool) -> typing.Optional[int]:
-        return self._integration(run, tool).execute(IntegrateStoryCommand(story, dry))
+        return maybe_exit_of(self._integration(run, tool).execute(IntegrateStoryCommand(story, dry)))
 
     def resolve(self, run: Run, tool: str, story: str, out: str) -> typing.Optional[int]:
-        return ResolveConflictsUseCase(RunnerIntegration(run, tool), ConsoleLines()).execute(
-            ResolveConflictsCommand(story, out))
+        return maybe_exit_of(ResolveConflictsUseCase(RunnerIntegration(run, tool), ConsoleLines()).execute(
+            ResolveConflictsCommand(story, out)))
 
     def run_backlog(self, run: Run, tool: str, slots: int, watch: bool, interval: int, dry: bool) -> int:
         backlog = RunnerBacklog(run, tool)

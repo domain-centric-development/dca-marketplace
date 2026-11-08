@@ -13,6 +13,9 @@ from dca_factory.delivery.domain.model.workflow_rule import Outcome, OutcomeStat
 from dca_factory.delivery.domain.model.stage import StageName, StoryKind, Window
 from dca_factory.delivery.domain.model.story_state import GateReport, HandOverText, Rounds
 from dca_factory.delivery.adapter.outgoing.files.run_marks import judged_of
+from dca_factory.delivery.application.shared.run_outcome import GateOutcome, MergeOutcome, RunOutcome
+from dca_factory.delivery.adapter.outgoing.process.outcomes import (
+    exit_of, gate_outcome_of, maybe_exit_of, maybe_outcome_of, merge_outcome_of, outcome_of)
 from dca_factory.delivery.application.delivery.integrate_story import IntegrateStoryCommand, IntegrateStoryUseCase
 from dca_factory.delivery.domain.model.route import Around, Move
 from dca_factory.delivery.domain.model.story_state import Judged, Refusal
@@ -24,9 +27,44 @@ def names(*words):
 
 
 
+class Translated:
+    """A fake that answers in exit codes, read through the runner's own translation (`outcomes.py`) — as the runner's
+    adapters read the processes they start."""
+
+    GATES = ("gate", "quiet_gate")
+    RUNS = ("stopped_for_human", "stage", "builder", "reviews", "verifier")
+
+    def __init__(self, fake):
+        self._fake = fake
+
+    def __getattr__(self, name):
+        found = getattr(self._fake, name)
+        if name in self.GATES:
+            return lambda *a: gate_outcome_of(found(*a))
+        if name in self.RUNS:
+            return lambda *a: outcome_of(found(*a))
+        if name in ("integrate", "session"):
+            return lambda *a: maybe_outcome_of(found(*a))
+        if name == "prepare":
+            def prepared(*a):
+                code, said = found(*a)
+                return merge_outcome_of(code), said
+            return prepared
+        return found
+
+
+class Integrated:
+    """The integration use case as the composition root builds it, its outcome given back as the runner's exit."""
+
+    def __init__(self, integration, lines):
+        self._case = IntegrateStoryUseCase(Translated(integration), lines)
+
+    def execute(self, command):
+        return maybe_exit_of(self._case.execute(command))
+
+
 def integrated(integration, lines):
-    """The integration use case as the composition root builds it."""
-    return IntegrateStoryUseCase(integration, lines)
+    return Integrated(integration, lines)
 
 class Held:
     """A rules' repository that holds what it is given."""
@@ -287,7 +325,7 @@ class Stages:
 
 def run(stages, start=None):
     lines = Lines()
-    code = RunStoryUseCase(stages, lines).execute(RunStoryCommand("S-1", start))
+    code = exit_of(RunStoryUseCase(Translated(stages), lines).execute(RunStoryCommand("S-1", start)))
     return code, lines.said
 
 
@@ -430,6 +468,21 @@ class Integration:
     def bump(self, story):
         self.rounds += 1
         return Rounds(self.rounds)
+
+
+class Outcomes(unittest.TestCase):
+
+    def test_every_outcome_has_its_exit_and_reads_back_as_itself_and_an_exit_the_table_does_not_name_fails(self):
+        for outcome in RunOutcome:
+            self.assertIs(outcome_of(exit_of(outcome)), outcome)
+        self.assertEqual(sorted(exit_of(o) for o in RunOutcome), [0, 1, 2, 3, 4, 5, 7])
+        self.assertIs(outcome_of(124), RunOutcome.FAILED)
+
+    def test_a_gate_passes_waits_or_refuses_and_a_merge_merges_stops_or_fails(self):
+        self.assertEqual([gate_outcome_of(c) for c in (0, 3, 1, 2)],
+                         [GateOutcome.PASSED, GateOutcome.WAITS_FOR_PERSON, GateOutcome.REFUSED, GateOutcome.REFUSED])
+        self.assertEqual([merge_outcome_of(c) for c in (0, 3, 1)],
+                         [MergeOutcome.MERGED, MergeOutcome.CONFLICTS, MergeOutcome.FAILED])
 
 
 class Integrate(unittest.TestCase):

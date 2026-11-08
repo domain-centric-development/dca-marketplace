@@ -5,6 +5,9 @@ holds."""
 
 from __future__ import annotations
 
+from ....application.shared.run_outcome import GateOutcome, MergeOutcome, RunOutcome
+from .outcomes import gate_outcome_of, maybe_outcome_of, merge_outcome_of, outcome_of
+
 import os
 import time
 import typing
@@ -200,11 +203,11 @@ class RunnerStages(StoryStages):
     def pause(self, story: str) -> None:
         self._run.between_stages(story, self._tool)
 
-    def gate(self, stage: str, story: str) -> int:
-        return self._run.gate(stage, story)
+    def gate(self, stage: str, story: str) -> GateOutcome:
+        return gate_outcome_of(self._run.gate(stage, story))
 
-    def quiet_gate(self, stage: str, story: str) -> int:
-        return self._run.quiet_gate(stage, story)
+    def quiet_gate(self, stage: str, story: str) -> GateOutcome:
+        return gate_outcome_of(self._run.quiet_gate(stage, story))
 
     def report(self, story: str, stage: str) -> GateReport:
         path = f"{self._run.runs}/{story}/.gate-{stage}.txt"
@@ -225,12 +228,12 @@ class RunnerStages(StoryStages):
     def asks_human(self, story: str, stage: str) -> bool:
         return self._run.asks_human(self._run.artefact(story, stage))
 
-    def stopped_for_human(self, story: str, stage: str) -> int:
-        return self._run.stopped_for_human(self._run.artefact(story, stage), stage, story)
+    def stopped_for_human(self, story: str, stage: str) -> RunOutcome:
+        return outcome_of(self._run.stopped_for_human(self._run.artefact(story, stage), stage, story))
 
-    def stage(self, story: str, stage: str) -> int:
+    def stage(self, story: str, stage: str) -> RunOutcome:
         self._announce(stage)
-        return self._run.run_one(story, self._tool, stage)
+        return outcome_of(self._run.run_one(story, self._tool, stage))
 
     def dry(self, story: str, stage: str) -> None:
         tool = self._announce(stage)
@@ -242,14 +245,14 @@ class RunnerStages(StoryStages):
         self._run.tool_in_flight = tool
         return tool
 
-    def builder(self, story: str, stages: typing.Sequence[str], start: str, dry: bool) -> int:
-        return self._run.builder_window(story, self._tool, stages, start, dry)
+    def builder(self, story: str, stages: typing.Sequence[str], start: str, dry: bool) -> RunOutcome:
+        return outcome_of(self._run.builder_window(story, self._tool, stages, start, dry))
 
-    def reviews(self, story: str, dry: bool) -> int:
-        return self._run.run_reviews(story, self._tool, dry)
+    def reviews(self, story: str, dry: bool) -> RunOutcome:
+        return outcome_of(self._run.run_reviews(story, self._tool, dry))
 
-    def verifier(self, story: str, stages: typing.Sequence[str], dry: bool) -> int:
-        return self._run.verifier_window(story, self._tool, stages, dry)
+    def verifier(self, story: str, stages: typing.Sequence[str], dry: bool) -> RunOutcome:
+        return outcome_of(self._run.verifier_window(story, self._tool, stages, dry))
 
     def sent_back(self, story: str) -> bool:
         return self._run.back_to(story, "build") == "test"
@@ -281,8 +284,8 @@ class RunnerStages(StoryStages):
     def in_worktree(self) -> bool:
         return bool(os.environ.get("FACTORY_HOME"))
 
-    def integrate(self, story: str, dry: bool) -> typing.Optional[int]:
-        return self._run.cases.integrate(self._run, self._tool, story, dry)
+    def integrate(self, story: str, dry: bool) -> typing.Optional[RunOutcome]:
+        return maybe_outcome_of(self._run.cases.integrate(self._run, self._tool, story, dry))
 
 
 class RunnerIntegration(StoryIntegration):
@@ -299,16 +302,17 @@ class RunnerIntegration(StoryIntegration):
     def unlock(self) -> None:
         self._run.drop_lock()
 
-    def step(self, story: str, work: typing.Callable[[], typing.Optional[int]]) -> typing.Optional[int]:
+    def step(self, story: str, work: typing.Callable[[], typing.Optional[RunOutcome]]) -> typing.Optional[RunOutcome]:
         with self._run.step(story, "integrate"):
             return work()
 
-    def prepare(self, story: str) -> typing.Tuple[int, str]:
-        return self._run.as_home(
+    def prepare(self, story: str) -> typing.Tuple[MergeOutcome, str]:
+        code, said = self._run.as_home(
             lambda home, story: integrate_prepare(home, place("runs"), place("epics"), story), story)
+        return merge_outcome_of(code), said
 
-    def session(self, story: str, conflicts: str, lost: Lost) -> typing.Optional[int]:
-        return self._run.integrate_stage(story, self._tool, conflicts, list(lost) or None)
+    def session(self, story: str, conflicts: str, lost: Lost) -> typing.Optional[RunOutcome]:
+        return maybe_outcome_of(self._run.integrate_stage(story, self._tool, conflicts, list(lost) or None))
 
     def lost(self, story: str) -> Lost:
         return main_tests_lost(self._run.pwd, self._run.runs, story)
@@ -316,9 +320,9 @@ class RunnerIntegration(StoryIntegration):
     def lost_text(self, lost: Lost) -> str:
         return lost_text(lost)
 
-    def gate(self, story: str) -> int:
+    def gate(self, story: str) -> GateOutcome:
         home = os.environ.get("FACTORY_HOME") or self._run.home
-        return self._run.gate("integrate", story, gate_path=f"{home}/{self._run.gate_rel}")
+        return gate_outcome_of(self._run.gate("integrate", story, gate_path=f"{home}/{self._run.gate_rel}"))
 
     def report(self, story: str) -> GateReport:
         path = self.report_place(story)

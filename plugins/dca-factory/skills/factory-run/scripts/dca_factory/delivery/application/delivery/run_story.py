@@ -13,6 +13,7 @@ from ...domain.model.stage import Role, StageName, StoryKind, Trait, Window
 from ...domain.model.route import Around, Move
 from ...domain.model.story_state import Judged
 from ..shared.run_lines import RunLines
+from ..shared.run_outcome import GateOutcome, RunOutcome
 from ..shared.story_stages import StoryStages
 from .check_stage import refusing
 from .pipeline_rules import decides, jump
@@ -20,7 +21,7 @@ from .pipeline_workflow import role_of, workflow
 
 
 #: What one pass of the route ends with: the run's exit, or the stage a round runs the story again from.
-Ended = typing.Union[int, StageName]
+Ended = typing.Union[RunOutcome, StageName]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -32,21 +33,22 @@ class RunStoryCommand:
     shared: typing.FrozenSet[Window] = frozenset()      #: the windows that carry their stages in one process
 
 
-class RunStoryInputPort(UseCase[RunStoryCommand, int], typing.Protocol):
-    """Run a story: its exit."""
+class RunStoryInputPort(UseCase[RunStoryCommand, RunOutcome], typing.Protocol):
+    """Run a story: how it ends."""
 
 
 class RunStoryUseCase(RunStoryInputPort):
-    """The story's stages, round after round: 0 when it ran through, 3 when it waits for a person, 1 when it failed
-    or the rounds did not converge, 4 at a limit, 5 when the checkout was taken over, 7 when a person's file changed
-    under a stage."""
+    """The story's stages, round after round — the executive of the story's process: it decides each next step with
+    the workflow, takes it through the port, and reads where the story stands from the journal the port keeps. It
+    ends when the story ran through, waits for a person, failed or did not converge, reached a limit, lost the
+    checkout, or a person's file changed under a stage."""
 
     def __init__(self, stages: StoryStages, lines: RunLines) -> None:
         self._stages = stages
         self._lines = lines
         self._gate_first = False
 
-    def execute(self, command: RunStoryCommand) -> int:
+    def execute(self, command: RunStoryCommand) -> RunOutcome:
         self._gate_first = command.gate_first
         start = StageName(command.start or role_of(Role.PLANS).value)
         while True:
@@ -75,7 +77,7 @@ class RunStoryUseCase(RunStoryInputPort):
                 self._lines.err(f"factory:   {record}")
             self._lines.err("factory:   answer under '## Answer' with answer:, by: and at:, then run the stage that "
                             "asked (--from <stage>).")
-            return 3
+            return RunOutcome.WAITS_FOR_PERSON
         kind = self._stages.kind(story)
         # Every gate passed in the story's worktree: only the integration is left, and it delivers the story; an
         # adopted story whose judge passed: only the adopt gate.
@@ -96,9 +98,9 @@ class RunStoryUseCase(RunStoryInputPort):
                 continue
             if Around.GATE_BEFORE in step.around:
                 self._lines.out(f"── gate {stage}")
-                if self._stages.gate(stage, story) != 0:
+                if self._stages.gate(stage, story) is not GateOutcome.PASSED:
                     self._lines.err(f"factory: gate '{stage}' refused the story. Fix it before the stage runs.")
-                    return 1
+                    return RunOutcome.FAILED
             if step.move is Move.BUILDER:
                 built = self._builder(command, kind, step.stage)
                 if built is not None:
@@ -110,13 +112,13 @@ class RunStoryUseCase(RunStoryInputPort):
                 continue
             # The reviews come before the judge: one process per perspective, at once.
             if Around.REVIEWS in step.around:
-                code = self._stages.reviews(story, dry)
-                if code != 0:
-                    return code
+                reviewed = self._stages.reviews(story, dry)
+                if reviewed is not RunOutcome.RAN_THROUGH:
+                    return reviewed
             # The verifier runs where the judge would; resumed at the document stage alone it runs in its own context.
             if step.move is Move.VERIFIER:
                 verified = self._verifier(command, kind)
-                if verified != 0:
+                if verified is not RunOutcome.RAN_THROUGH:
                     return verified
                 ran += [name.value for name in workflow().window(kind, Window.VERIFIER)]
                 break
@@ -126,36 +128,36 @@ class RunStoryUseCase(RunStoryInputPort):
                     and Around.GATE_AFTER in step.around and holds:
                 self._gate_first = False
                 self._lines.out(f"── gate {stage}  (the file exists — checked before the stage is invoked)")
-                if self._stages.quiet_gate(stage, story) == 0:
+                if self._stages.quiet_gate(stage, story) is GateOutcome.PASSED:
                     self._lines.out(f"factory: {artefact} already holds — stage '{stage}' is not invoked again.")
                     ran.append(stage)
                     continue
                 if self._environment(story, stage):
-                    return 1
+                    return RunOutcome.FAILED
             self._gate_first = False
             # A resumed story whose document file exists and was never refused: its gate decides first.
             if step.stage == role_of(Role.DELIVERS) and not dry and holds and not self._stages.refused_before(story, stage) \
                     and not self._stages.delivered(story):
                 self._lines.out("── gate document  (the file exists — checked before the stage is invoked)")
-                if self._stages.quiet_gate(stage, story) == 0:
+                if self._stages.quiet_gate(stage, story) is GateOutcome.PASSED:
                     self._lines.out(f"factory: {artefact} already holds — the document stage is not invoked again.")
                     ran.append(stage)
                     break
             if dry:
                 self._stages.dry(story, stage)
             else:
-                code = self._stages.stage(story, stage)
-                if code != 0:
-                    return code
+                ran_stage = self._stages.stage(story, stage)
+                if ran_stage is not RunOutcome.RAN_THROUGH:
+                    return ran_stage
                 after = self._after_stage(story, kind, step.stage)
                 if after is not None:
                     return after
             if Around.GATE_AFTER in step.around:
                 self._lines.out(f"── gate {stage}")
-                gate = 0 if dry else self._stages.gate(stage, story)
-                if gate == 3:
+                gate = GateOutcome.PASSED if dry else self._stages.gate(stage, story)
+                if gate is GateOutcome.WAITS_FOR_PERSON:
                     return self._accepting(story)
-                if gate != 0:
+                if gate is not GateOutcome.PASSED:
                     return self._refused(story, kind, step.stage, f"gate '{stage}' refused")
             ran.append(stage)
             if step.stage == role_of(Role.PLANS) and not dry:
@@ -172,7 +174,7 @@ class RunStoryUseCase(RunStoryInputPort):
         self._lines.out(f"factory: story {story} ran through {','.join(ran) or 'nothing'}.")
         if self._stages.in_worktree() and not dry and self._stages.resumes(story) == role_of(Role.INTEGRATES):
             return self._integrate(command)
-        return 0
+        return RunOutcome.RAN_THROUGH
 
     def _adopted(self, command: RunStoryCommand, kind: StoryKind) -> typing.Optional[Ended]:
         """The plan gate adopted the whole story (WP-165): its kind is read once per pass, so the pass ends here and
@@ -203,9 +205,9 @@ class RunStoryUseCase(RunStoryInputPort):
         stages = [name.value for name in workflow().window(kind, Window.BUILDER, start)]
         if not stages:
             return None
-        code = self._stages.builder(story, stages, start.value, command.dry)
-        if code != 0:
-            return code
+        built = self._stages.builder(story, stages, start.value, command.dry)
+        if built is not RunOutcome.RAN_THROUGH:
+            return built
         if command.dry:
             return None
         if role_of(Role.PLANS).value in stages:
@@ -225,7 +227,7 @@ class RunStoryUseCase(RunStoryInputPort):
             if not self._stages.holds(story, stage):
                 self._lines.err(f"factory: the shared stages produced no {self._stages.artefact(story, stage)} — "
                                 f"stage '{stage}' is not finished.")
-                return 1
+                return RunOutcome.FAILED
             if self._stages.asks_human(story, stage):
                 return self._stages.stopped_for_human(story, stage)
         # Checked, not believed: a story's tests were seen red; a journey's and an adoption's are green at their
@@ -236,19 +238,19 @@ class RunStoryUseCase(RunStoryInputPort):
                 continue
             if kind is not StoryKind.STORY:
                 self._lines.out(f"── gate {stage}  (re-checked by the runner)")
-                if self._stages.gate(stage, story) != 0:
+                if self._stages.gate(stage, story) is not GateOutcome.PASSED:
                     self._lines.err(f"factory: the runner's re-check of gate '{stage}' refused the shared stages' work.")
-                    return 1
+                    return RunOutcome.FAILED
             elif not self._stages.red_proof(story):
                 self._lines.err(f"factory: the shared stages left no red proof ({self._stages.red_ledger(story)}) — "
                                 f"the {stage} gate never saw the tests fail.")
-                return 1
+                return RunOutcome.FAILED
         for stage in stages:
             traits = self._traits(stage)
             if Trait.POST_GATED not in traits or (Trait.TESTED in traits and Trait.SUITE not in traits):
                 continue
             self._lines.out(f"── gate {stage}  (re-checked by the runner)")
-            if self._stages.gate(stage, story) != 0:
+            if self._stages.gate(stage, story) is not GateOutcome.PASSED:
                 return self._refused(story, kind, StageName(stage), f"the runner's re-check of gate '{stage}' refused")
         return None
 
@@ -258,7 +260,7 @@ class RunStoryUseCase(RunStoryInputPort):
         if rounds.converged():
             self._lines.err(f"factory: the build stage sent the story back in round {rounds.value} — three rounds "
                             "did not converge. needs-human.")
-            return 1
+            return RunOutcome.FAILED
         went = workflow().jump(kind, role_of(Role.BUILDS), jump("RUN-BACK-1"))
         return self._went(went, f"factory: the build stage found a defect in a test's own code ({went.rule.value}) — "
                                 f"round {rounds.value} goes back to the {{stage}} stage.")
@@ -269,13 +271,13 @@ class RunStoryUseCase(RunStoryInputPort):
         builder is the point of the split."""
         story = command.story
         stages = [name.value for name in workflow().window(kind, Window.VERIFIER)]
-        code = self._stages.verifier(story, stages, command.dry)
-        if code != 0 or command.dry:
-            return code
+        verified = self._stages.verifier(story, stages, command.dry)
+        if verified is not RunOutcome.RAN_THROUGH or command.dry:
+            return verified
         if not self._stages.holds(story, role_of(Role.JUDGES).value):
             self._lines.err(f"factory: the shared stages produced no {self._stages.artefact(story, role_of(Role.JUDGES).value)} — "
                             "stage 'judge' is not finished.")
-            return 1
+            return RunOutcome.FAILED
         if self._stages.asks_human(story, role_of(Role.JUDGES).value):
             return self._stages.stopped_for_human(story, role_of(Role.JUDGES).value)
         judged = self._judged(story, kind)
@@ -286,16 +288,16 @@ class RunStoryUseCase(RunStoryInputPort):
         if not self._stages.holds(story, role_of(Role.DELIVERS).value):
             self._lines.err(f"factory: the shared stages produced no {self._stages.artefact(story, role_of(Role.DELIVERS).value)} — "
                             "stage 'document' is not finished.")
-            return 1
+            return RunOutcome.FAILED
         if self._stages.asks_human(story, role_of(Role.DELIVERS).value):
             return self._stages.stopped_for_human(story, role_of(Role.DELIVERS).value)
         self._lines.out("── gate document  (re-checked by the runner)")
         gate = self._stages.gate(role_of(Role.DELIVERS).value, story)
-        if gate == 3:
+        if gate is GateOutcome.WAITS_FOR_PERSON:
             return self._accepting(story)
-        if gate != 0:
+        if gate is not GateOutcome.PASSED:
             return self._refused(story, kind, role_of(Role.DELIVERS), "gate 'document' refused")
-        return 0
+        return RunOutcome.RAN_THROUGH
 
     @decides("RUN-VERDICT-1")
     def _judged(self, story: str, kind: StoryKind) -> typing.Optional[Ended]:
@@ -310,7 +312,7 @@ class RunStoryUseCase(RunStoryInputPort):
             if rounds.converged():
                 self._lines.err(f"factory: judge verdict 'changes-requested' in round {rounds.value} — three rounds "
                                 "did not converge. needs-human.")
-                return 1
+                return RunOutcome.FAILED
             named = Target((self._stages.back(story) or role_of(Role.BUILDS)).value)
             back = workflow().chosen(kind, role_of(Role.JUDGES), jump("RUN-VERDICT-1"), named)
             return self._went(back, f"factory: judge verdict 'changes-requested' ({back.rule.value}) — round "
@@ -318,12 +320,12 @@ class RunStoryUseCase(RunStoryInputPort):
         if judged is Judged.CONFLICT:
             self._lines.err("factory: judge verdict 'story-conflict' — the story or the plan is wrong. This never goes "
                             f"back to the build stage. needs-human: read {judge}.")
-            return 1
+            return RunOutcome.FAILED
         if judged is Judged.MISSING:
             self._lines.err(f"factory: {judge} carries no 'verdict:' line — the judge stage is not finished.")
-            return 1
+            return RunOutcome.FAILED
         self._lines.err(f"factory: {judge} carries a verdict that is not one of pass|changes-requested|story-conflict.")
-        return 1
+        return RunOutcome.FAILED
 
     @decides("RUN-ADOPT-1")
     def _adopt(self, command: RunStoryCommand) -> Ended:
@@ -332,19 +334,19 @@ class RunStoryUseCase(RunStoryInputPort):
         story = command.story
         self._lines.out("── gate adopt")
         if command.dry:
-            return 0
-        if self._stages.gate(role_of(Role.ADOPTS).value, story) == 0:
+            return RunOutcome.RAN_THROUGH
+        if self._stages.gate(role_of(Role.ADOPTS).value, story) is GateOutcome.PASSED:
             if self._stages.in_worktree():
                 return self._integrate(command)
             self._lines.out(f"factory: story {story} is delivered (adopted: checked, nothing built).")
-            return 0
+            return RunOutcome.RAN_THROUGH
         if self._environment(story, role_of(Role.ADOPTS).value):
-            return 1
+            return RunOutcome.FAILED
         rounds = self._stages.bump(story)
         if rounds.converged():
             self._lines.err(f"factory: gate 'adopt' refused in round {rounds.value} — three rounds did not converge. "
                             "needs-human.")
-            return 1
+            return RunOutcome.FAILED
         went = workflow().jump(self._stages.kind(story), role_of(Role.ADOPTS), jump("RUN-ADOPT-1"))
         return self._went(went, f"factory: gate 'adopt' refused ({went.rule.value}) — round {rounds.value} runs the "
                                 f"{{stage}} stage again with the gate's report.")
@@ -368,17 +370,17 @@ class RunStoryUseCase(RunStoryInputPort):
         goes (`workflow().after_refusal`) — a rule that stops ends the run, else a round from the stage they name, the
         refused one or the earlier one the story's state resumes at, while the rounds converge."""
         if self._environment(story, stage.value):
-            return 1
+            return RunOutcome.FAILED
         failed = self._stages.report(story, stage.value).refused_checks()
         went = workflow().after_refusal(kind, stage, self._stages.resumes(story),
                                         refusing(stage.value, [name.value for name in failed]), RuleId("RUN-ROUNDS-1"))
         if went.stage is None:
             self._lines.err(f"factory: {what} ({went.rule.value}) — the rule stops the run. needs-human.")
-            return 1
+            return RunOutcome.FAILED
         rounds = self._stages.bump(story)
         if rounds.converged():
             self._lines.err(f"factory: {what} in round {rounds.value} — three rounds did not converge. needs-human.")
-            return 1
+            return RunOutcome.FAILED
         return self._went(went, f"factory: {what} ({went.rule.value}) — round {rounds.value} runs stage '{{stage}}' "
                                 "again with the gate's report.")
 
@@ -386,7 +388,7 @@ class RunStoryUseCase(RunStoryInputPort):
         """The stage a rule sent the story to, <said> with it; a rule that sends it nowhere stops the run."""
         if went.stage is None:
             self._lines.err(f"factory: {went.rule.value} sends the story nowhere from here — the run stops. needs-human.")
-            return 1
+            return RunOutcome.FAILED
         if said:
             self._lines.err(said.format(stage=went.stage.value))
         return went.stage
@@ -401,10 +403,10 @@ class RunStoryUseCase(RunStoryInputPort):
         return True
 
     @decides("RUN-ACCEPT-1")
-    def _accepting(self, story: str) -> int:
+    def _accepting(self, story: str) -> RunOutcome:
         self._lines.err(f"factory: story {story} waits for a human's acceptance — answer it with /factory-decisions;")
         self._lines.err("factory:   the story holds the checkout until then.")
-        return 3
+        return RunOutcome.WAITS_FOR_PERSON
 
     @staticmethod
     def _runs(kind: StoryKind, stage: StageName) -> bool:

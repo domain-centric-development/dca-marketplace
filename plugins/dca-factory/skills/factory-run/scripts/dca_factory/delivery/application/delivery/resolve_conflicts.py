@@ -8,6 +8,7 @@ import typing
 
 from ....building_blocks import UseCase
 from ..shared.run_lines import RunLines
+from ..shared.run_outcome import RunOutcome
 from ..shared.story_integration import Lost, StoryIntegration
 
 
@@ -21,8 +22,8 @@ class ResolveConflictsCommand:
     lost: Lost = ()
 
 
-class ResolveConflictsInputPort(UseCase[ResolveConflictsCommand, typing.Optional[int]], typing.Protocol):
-    """Resolve a merge's conflicts: None when the resolution holds, else the run's exit."""
+class ResolveConflictsInputPort(UseCase[ResolveConflictsCommand, typing.Optional[RunOutcome]], typing.Protocol):
+    """Resolve a merge's conflicts: None when the resolution holds, else how the run ends."""
 
 
 class ConflictResolution:
@@ -30,13 +31,13 @@ class ConflictResolution:
         the integrate stage resolves them, then the merge is committed and squashed. A resolution that dropped what
         the main line added to a test goes back to the same stage, naming the lines, at most twice — never to a person,
         and never to the story's own stages, whose gates would call it the story's change. `lost` starts with such a
-        repair. None when it holds, else the run's exit."""
+        repair. None when it holds, else how the run ends."""
 
     def __init__(self, integration: StoryIntegration, lines: RunLines) -> None:
         self._integration = integration
         self._lines = lines
 
-    def resolve(self, story: str, said: str, lost: Lost = ()) -> typing.Optional[int]:
+    def resolve(self, story: str, said: str, lost: Lost = ()) -> typing.Optional[RunOutcome]:
         conflicts = "".join(line[len("conflict: "):] + " " for line in said.split("\n") if line.startswith("conflict: "))
         for attempt in (1, 2, 3):
             stopped = self._integration.session(story, conflicts, lost)
@@ -52,7 +53,7 @@ class ConflictResolution:
         self._lines.err(f"factory: three resolutions of {story} kept dropping the main line's side of a test — "
                         f"{self._integration.lost_text(lost)}. needs-human: the worktree "
                         f"{self._integration.worktree()} holds the merge.")
-        return 1
+        return RunOutcome.FAILED
 
 
 class ResolveConflictsUseCase(ResolveConflictsInputPort):
@@ -61,5 +62,5 @@ class ResolveConflictsUseCase(ResolveConflictsInputPort):
     def __init__(self, integration: StoryIntegration, lines: RunLines) -> None:
         self._resolution = ConflictResolution(integration, lines)
 
-    def execute(self, command: ResolveConflictsCommand) -> typing.Optional[int]:
+    def execute(self, command: ResolveConflictsCommand) -> typing.Optional[RunOutcome]:
         return self._resolution.resolve(command.story, command.said, command.lost)

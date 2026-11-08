@@ -6,6 +6,7 @@ import typing
 
 from ....building_blocks import OutputPort
 from ...domain.model.story_state import GateReport, Rounds
+from .run_outcome import GateOutcome, MergeOutcome, RunOutcome
 
 #: What a resolution lost of the main line's tests: (test file, [line, …]).
 Lost = typing.Sequence[typing.Tuple[str, typing.Sequence[str]]]
@@ -21,18 +22,18 @@ class StoryIntegration(OutputPort, typing.Protocol):
     def unlock(self) -> None:
         ...
 
-    def step(self, story: str, work: typing.Callable[[], typing.Optional[int]]) -> typing.Optional[int]:
+    def step(self, story: str, work: typing.Callable[[], typing.Optional[RunOutcome]]) -> typing.Optional[RunOutcome]:
         """<work> journaled as the runner's own integrate step."""
         ...
 
-    def prepare(self, story: str) -> typing.Tuple[int, str]:
-        """The main line merged into the story's branch: 0, 3 stopped on conflicts (`conflict: <path>` lines), else
-        it could not be merged — with the lines it said."""
+    def prepare(self, story: str) -> typing.Tuple[MergeOutcome, str]:
+        """The main line merged into the story's branch — merged, stopped on conflicts (`conflict: <path>` lines), or
+        failed —, with the lines it said."""
         ...
 
-    def session(self, story: str, conflicts: str, lost: Lost) -> typing.Optional[int]:
+    def session(self, story: str, conflicts: str, lost: Lost) -> typing.Optional[RunOutcome]:
         """One integrate stage session over the conflicts, or the repair of what a resolution lost, then the merge
-        committed and squashed: None when it is, else the run's exit."""
+        committed and squashed: None when it is, else how the run ends."""
         ...
 
     def lost(self, story: str) -> Lost:
@@ -42,7 +43,7 @@ class StoryIntegration(OutputPort, typing.Protocol):
     def lost_text(self, lost: Lost) -> str:
         ...
 
-    def gate(self, story: str) -> int:
+    def gate(self, story: str) -> GateOutcome:
         """The integrate gate on the merged tree."""
         ...
 
