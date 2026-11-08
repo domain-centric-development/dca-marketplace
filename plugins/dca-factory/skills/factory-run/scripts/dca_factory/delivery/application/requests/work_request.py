@@ -2,7 +2,6 @@
 itself, and what it wrote committed as the backlog's."""
 
 from __future__ import annotations
-from ...domain.model.decision_record import StateWord
 
 import dataclasses
 import typing
@@ -24,6 +23,7 @@ from ..delivery.pipeline_rules import decides
 from .request_writes import RequestWrites
 from .request_worked import RequestWorked as RequestWorked, Said as Said
 from .settle_request import RequestSettling
+from ...domain.model.decision_record import DecisionState
 
 
 
@@ -142,7 +142,7 @@ class WorkRequestUseCase(WorkRequestInputPort):
             self._store.journal("request-end", kind.name, request["id"], f"exit={ran.code}", "state=failed")
             return RequestWorked(1, [("err", f"factory: request {request['id']} — the tool {why}; it stays as failed "
                                              f"(`factory.sh requests`).")])
-        asked = [(where, rid) for where, rid, state in self._records.asked(request["id"]) if StateWord(state).waits()]
+        asked = [(where, rid) for where, rid, state in self._records.asked(request["id"]) if DecisionState(state).waits]
         if asked:
             commit, refusal = self._writes.commit(request, before, said)
             self._store.update(request, state="waiting", worker=None, record_file=asked[0][0],

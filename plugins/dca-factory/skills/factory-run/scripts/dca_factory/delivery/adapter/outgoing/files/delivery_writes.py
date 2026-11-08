@@ -104,39 +104,6 @@ def acceptance_applies(cwd: str, runs: str, story_id: str, profile: Front) -> bo
                                 Presence.PRESENT if end_user else Presence.ABSENT) is Presence.PRESENT
 
 
-def ask_acceptance(cwd: str, runs: str, story_id: str, story_path: str, profile: Front,
-                   criteria: typing.List[typing.Tuple[str, str]]) -> str:
-    """Write the next acceptance record beside the story and return its id. The criteria it lists are the
-    ones accepted: a reopen after an acceptance compares the story against them."""
-    records = acceptance_records(cwd, story_id, story_path)
-    number = len(records) + 1
-    rid = f"{story_id}-accept-{number}"
-    try:
-        _path, mapping = read_mapping(runs, story_id)
-    except GateError:
-        mapping = {}
-    run = str(profile.get("run", "")).strip()
-    lines = [f"- {key}: {text}" + (f" — `{', '.join(mapping[key])}`" if mapping.get(key) else "")
-             for key, text in criteria]
-    store = decisions_store(story_path)
-    os.makedirs(store, exist_ok=True)
-    stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    with open(os.path.join(store, f"accept-{number}.md"), "w", encoding="utf-8") as handle:
-        handle.write(
-            f"---\nid: {rid}\nstory: {story_id}\nstage: document\nkind: {ACCEPTANCE_KIND}\n"
-            f"asked: {stamp}\ndigest: {story_digest(story_path)}\n---\n\n"
-            f"# Accept {story_id}?\n\n## Question\n"
-            f"Every gate passed. Look at what the story delivers before it counts as delivered:\n\n"
-            + "\n".join(lines) + "\n\n"
-            + (f"Start the application with `{run}`.\n\n" if run else
-               "Start the application the way the project runs it (the profile names no `run:`).\n\n")
-            + "## Options\n"
-              "- accepted: the story is delivered.\n"
-              "- a correction: what should be different, written into the story (criteria and an "
-              "`answered:` line naming this record); the story runs again from plan.\n")
-    return rid
-
-
 def record_flaky_findings(result: typing.Any, story_path: str, story_id: str, front: Front, runs: str) -> None:
     """WP-113: a test noted flaky in this story and in another one is a finding — a row of the project's own findings
     (`<product>/findings/flaky.md`, WP-146: the flake belongs to no one story), open, for a task (`kind: task`,

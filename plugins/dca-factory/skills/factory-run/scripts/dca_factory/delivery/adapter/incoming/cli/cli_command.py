@@ -51,7 +51,7 @@ import sys
 import textwrap
 import time
 import typing
-from ....domain.model.decision_record import StateWord
+from ....application.decisions.list_decisions import UNREADABLE, record_waits
 from .....contract import CONTRACT, VERSION
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from .....sharedkernel.adapter.outgoing.profile.profile_files import (
@@ -163,9 +163,9 @@ def list_decisions(cwd: str, story_id: typing.Optional[str] = None, fmt: str = "
     from the files alone; the same view as the status, in text, Markdown or JSON."""
     model = root.wiring.list_decisions(cwd).execute(ListDecisionsQuery(story_id))
     records = model["records"]
-    waiting = [r for r in records if (StateWord(r["state"]).waits() or r["state"] == "unreadable")]
-    mark = lambda r: "look" if r["kind"] == "acceptance" and StateWord(r["state"]).waits() else \
-        "stopped" if r["state"] == "unreadable" else decision_mark(r)
+    waiting = [r for r in records if (record_waits(r["state"]) or r["state"] == UNREADABLE)]
+    mark = lambda r: "look" if r["kind"] == "acceptance" and record_waits(r["state"]) else \
+        "stopped" if r["state"] == UNREADABLE else decision_mark(r)
     headers = ["record", "state", "story / stage", "asked (UTC)", "question → answer"]
     cells = lambda marks: [[f"{marks[mark(r)]} {r['id']}", r["state"], f"{r['story']} / {r['stage']}",
                             stamp_text(r["asked"]), r["text"]] for r in records]

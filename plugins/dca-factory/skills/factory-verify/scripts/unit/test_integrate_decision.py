@@ -8,6 +8,7 @@ from support import evidence, gate_story, project, verdict, write
 from dca_factory.delivery.adapter.outgoing.files.decision_record_files import DecisionRecordFiles
 from dca_factory.delivery.adapter.outgoing.files.journal_events import JournalEventPublisher
 from dca_factory.delivery.adapter.outgoing.files.stage_evidence_files import DecisionStampFiles
+from dca_factory.delivery.adapter.outgoing.files.story_files import StoryFiles
 from dca_factory.delivery.application.delivery.apply_answer import ApplyAnswerCommand, ApplyAnswerUseCase
 from dca_factory.delivery.domain.model.moment import Moment
 from dca_factory.delivery.application.delivery.pipeline_workflow import workflow
@@ -50,12 +51,13 @@ class IntegrateDecision(unittest.TestCase):
         front, body = read_front_matter(story)
         checked = gate_story("S-1", story, front, body)
         result = verdict()
-        answers = ApplyAnswerUseCase(DecisionRecordFiles(p.root, p.epics), DecisionStampFiles(p.runs, p.epics),
+        answers = ApplyAnswerUseCase(DecisionRecordFiles(p.root, p.epics), StoryFiles(p.root, p.epics),
+                                     DecisionStampFiles(p.runs, p.epics),
                                      JournalEventPublisher(p.runs), Directly())
         for item in DecisionChecks.check(checked, StageName(gating), evidence(p.root, p.runs),
                                          workflow().order(StoryKind.STORY)).items:
             if isinstance(item, Applying):
-                applied = answers.execute(ApplyAnswerCommand(checked, item.record, item.stage,
+                applied = answers.execute(ApplyAnswerCommand(checked.id, item.record, item.stage,
                                                              Moment("2026-11-08T10:00:00Z")))
                 result.take((item.finding(applied.written),))
             else:

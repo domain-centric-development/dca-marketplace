@@ -2,7 +2,6 @@
 changed while the story ran and the lines of them a merge's resolution lost."""
 
 from __future__ import annotations
-from ....domain.model.decision_record import StateWord
 
 import collections
 import difflib
@@ -20,6 +19,7 @@ from ..files.run_marks import write_mark
 from ..files.design_files import ASSERTION_STATEMENT
 from ..files.kept_files import assertions_kept, meaningful_lines, TESTS_BASELINE
 from ..files.delivery_files import SKIP_DIRS, TEST_FILE
+from ....domain.model.decision_record import DecisionState
 
 
 def tree_tests(cwd: str, tree: typing.Optional[str]) -> typing.Optional[typing.Dict[str, str]]:
@@ -112,7 +112,7 @@ def main_tests_waiver(cwd: str, story_id: str, rel: str) -> typing.List[str]:
     except (GateError, OSError):
         return []
     return [str(front.get("id", "")).strip() for _p, front, body, state, _a in records
-            if StateWord(state).answered() and str(front.get("stage", "")).strip() == "integrate"
+            if DecisionState(state).answered and str(front.get("stage", "")).strip() == "integrate"
             and (rel in body or re.search(rf"(?<![\w./-]){re.escape(os.path.basename(rel))}(?![\w.-])", body))]
 
 

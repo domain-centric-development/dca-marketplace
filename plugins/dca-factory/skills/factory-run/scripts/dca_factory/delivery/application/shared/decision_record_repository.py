@@ -27,3 +27,7 @@ class DecisionRecordRepository(Repository[DecisionRecord, RecordId], typing.Prot
     def open_records_of(self, story: StoryId) -> typing.Sequence[DecisionRecord]:
         """Every record of the story that is open or a draft."""
         ...
+
+    def next_acceptance_id(self, story: StoryId) -> RecordId:
+        """The id the story's next acceptance takes; RecordNotFound where its records cannot be read."""
+        ...

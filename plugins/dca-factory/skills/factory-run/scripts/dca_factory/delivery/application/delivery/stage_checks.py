@@ -233,7 +233,7 @@ def _decisions(run: Run) -> None:
     for item in checked.items:
         if isinstance(item, Applying):
             try:
-                applied = run.answers.execute(ApplyAnswerCommand(run.story, item.record, item.stage, run.now()))
+                applied = run.answers.execute(ApplyAnswerCommand(run.story.id, item.record, item.stage, run.now()))
             except DomainException as refused:
                 run.result.fail("decisions", str(refused))
                 continue

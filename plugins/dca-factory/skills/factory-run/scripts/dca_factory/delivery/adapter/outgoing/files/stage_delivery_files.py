@@ -16,7 +16,7 @@ from ....domain.model.story_state import Acceptance, AcceptanceVerdict
 from ..claims.remote_claims import claim_config_here
 from .decision_record_files import acceptance_state, record_path
 from .delivery_writes import (
-    acceptance_applies, ask_acceptance, checkout_story, commit_delivery, keep_beside_delivery, keep_published_status,
+    acceptance_applies, checkout_story, commit_delivery, keep_beside_delivery, keep_published_status,
     prepare_delivery, publish_story, record_red_tree, record_tests_baseline, take_into_home)
 from .run_marks import STORY_DIGEST, write_mark
 from .owned_files import regard_gate_line
@@ -64,13 +64,8 @@ class StageDeliveryFiles(StageDelivery):
             return AcceptanceFacts(False, None, str(error))
         return AcceptanceFacts(True, Acceptance(AcceptanceVerdict(verdict), RecordId(rid) if rid else None), None)
 
-    def ask(self, story: str, story_path: str, criteria: typing.Sequence[typing.Tuple[str, str]]
-            ) -> typing.Tuple[str, str, typing.Optional[str]]:
-        try:
-            asked = ask_acceptance(self._cwd, self._runs, story, story_path, self._profile, list(criteria))
-        except GateError as error:
-            return "", "", str(error)
-        return asked, shown(record_path(story, asked, story_path)), None
+    def record_place(self, story: str, story_path: str, record: str) -> str:
+        return str(shown(record_path(story, record, story_path)))
 
     def in_worktree(self) -> bool:
         return bool(in_worktree())

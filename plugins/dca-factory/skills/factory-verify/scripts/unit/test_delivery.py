@@ -144,13 +144,18 @@ stage: plan
 """
 
 
+def sentence(body, given):
+    """The sentence the record answered <given> leaves in its story — the record decides it."""
+    answer = {"answer": given, "by": "jane", "at": "2026-11-08T10:00:00Z"}
+    return records.record_of("S-1-01", {"id": "S-1-01", "story": "S-1"}, body, "answered", answer).answer_sentence().value
+
+
 class Answered(unittest.TestCase):
 
     def test_an_option_label_reads_as_the_options_text_and_a_free_answer_as_itself(self):
-        self.assertEqual(records.answer_sentence(RECORD, {"answer": "a"}), "The first way, with its cost.")
-        self.assertEqual(records.answer_sentence(RECORD, {"answer": "Option B"}), "The second way.")
-        self.assertEqual(records.answer_sentence(RECORD, {"answer": "Neither:\n  keep it  as is"}),
-                         "Neither: keep it as is")
+        self.assertEqual(sentence(RECORD, "a"), "The first way, with its cost.")
+        self.assertEqual(sentence(RECORD, "Option B"), "The second way.")
+        self.assertEqual(sentence(RECORD, "Neither:\n  keep it  as is"), "Neither: keep it as is")
 
     def test_every_option_form_a_stage_writes_reads_as_its_label_and_text(self):
         record = ("# Q\n\n## Options\n"
@@ -166,7 +171,7 @@ class Answered(unittest.TestCase):
         self.assertEqual(options[7]["text"], "eighth - a correction: not an option")
         self.assertEqual(records.recommended_option(record), "b")
         self.assertEqual(records.recommended_option("## Options\n- a: x\n\n## Recommendation\nnone of them\n"), None)
-        self.assertEqual(records.answer_sentence(record, {"answer": "b"}), "this story writes its scenarios. Nothing else.")
+        self.assertEqual(sentence(record, "b"), "this story writes its scenarios. Nothing else.")
 
     def test_the_line_goes_under_the_assumptions_once_and_the_planned_digest_follows(self):
         with project() as p:

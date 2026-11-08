@@ -230,6 +230,14 @@ class PublicationTakenBack(DomainEvent):
     at: Moment
 
 
+class AnswerTaken(DomainEvent):
+    """An answer a stage applied became an answered line of the story: the story carries it from now on."""
+
+    story: StoryId
+    cites: Detail
+    at: Moment
+
+
 class StoryDeliveredByHand(DomainEvent):
     """A person built the story and delivered it — claimed, not proven."""
 
@@ -349,6 +357,15 @@ class Story(AggregateRoot[StoryId]):
         self._delivery = None
         self.register_event(StoryAdoptedForProof(self._id, at))
         return claim
+
+    def take_answer(self, sentence: Detail, cites: Detail, at: Moment) -> bool:
+        """An answer a stage applied, an answered line of the story — once per record it cites: False where the story
+        carries it already."""
+        if any(f"({cites.value})" in assumption.value for assumption in self._assumptions):
+            return False
+        self._assumptions.append(Assumption.answered(sentence, cites))
+        self.register_event(AnswerTaken(self._id, cites, at))
+        return True
 
     def adopt_on_plan(self, answered: Assumption, at: Moment) -> None:
         """The plan found every scenario holding: the released story is adopted, the plan's finding kept as its

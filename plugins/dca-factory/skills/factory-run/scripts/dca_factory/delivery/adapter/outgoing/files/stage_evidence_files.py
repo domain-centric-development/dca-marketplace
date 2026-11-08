@@ -2,7 +2,6 @@
 story."""
 
 from __future__ import annotations
-from ....domain.model.decision_record import StateWord
 
 import contextlib
 import os
@@ -39,10 +38,10 @@ from .brief_files import given_digest, named_digest
 from ....domain.model.decision_record import DecisionRecord
 from .decision_record_files import (
     record_of,
-    answer_sentence, decisions_store, needs_human_ids, read_decisions, record_path)
+    decisions_store, needs_human_ids, read_decisions, record_path)
 from .epic_files import epic_dependency_problem
 from .findings_files import confirmed_defects, findings_path, findings_rows, project_findings_path
-from .owned_files import owned_changes, write_answered
+from .owned_files import owned_changes, regard_gate_line
 import glob
 from .delivery_files import (
     glossary_files, IMPORT_LINE, PATHLIKE, PIPELINE_DIR, plan_proposals, production_files,
@@ -74,6 +73,7 @@ from .design_files import (
 from .run_marks import OWNED_CHANGED
 from .story_layout import EPIC_FILE, epic_folder, find_story
 from ....application.shared.decision_stamps import DecisionStamps
+from ....domain.model.decision_record import DecisionState
 
 Front = typing.Mapping[str, typing.Any]
 
@@ -568,7 +568,7 @@ class StageEvidenceFiles:
     def answered_records(self, story: StoryId) -> typing.FrozenSet[RecordId]:
         try:
             return frozenset(RecordId(str(front["id"]).strip()) for _p, front, _b, state, _a in records_of(story.value)
-                             if StateWord(state).answered())
+                             if DecisionState(state).answered)
         except GateError:
             return frozenset()
 
@@ -861,17 +861,10 @@ class DecisionStampFiles(DecisionStamps):
         self._runs = runs
         self._epics = epics
 
-    def answered_line(self, story: Story, record: RecordId) -> typing.Optional[Place]:
-        rid = record.value
-        where = find_story(self._epics, story.id.value)
-        found = next(((body, answer) for _path, front, body, _state, answer
-                      in read_decisions(decisions_store(where), story.id.value)
-                      if str(front["id"]).strip() == rid), None)
-        if found is None:
-            return None
-        body, answer = found
-        written = write_answered(where, self._runs, rid, answer_sentence(body, answer))
-        return Place(shown(where)) if written else None
+    def regard(self, story: StoryId) -> Place:
+        where = find_story(self._epics, story.value)
+        regard_gate_line(where, self._runs)
+        return Place(shown(where))
 
 
 class MainLineEvidence(StageEvidenceFiles):

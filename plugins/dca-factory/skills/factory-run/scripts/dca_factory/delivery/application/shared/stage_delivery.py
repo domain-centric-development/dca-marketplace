@@ -55,10 +55,8 @@ class StageDelivery(OutputPort, typing.Protocol):
     def acceptance(self, story: str, story_path: str) -> AcceptanceFacts:
         ...
 
-    def ask(self, story: str, story_path: str, criteria: typing.Sequence[typing.Tuple[str, str]]
-            ) -> typing.Tuple[str, str, typing.Optional[str]]:
-        """The next acceptance record written beside the story: (its id, where it is, why it could not be
-        written)."""
+    def record_place(self, story: str, story_path: str, record: str) -> str:
+        """Where a record of the story is, as a person finds it."""
         ...
 
     def in_worktree(self) -> bool:

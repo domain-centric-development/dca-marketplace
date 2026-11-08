@@ -34,6 +34,17 @@ class OptionKey(Value):
             raise ValueError(f"{self.value!r} is no option key")
 
 
+class OptionLine(Value):
+    """An option as the record offers it: its key and its first line."""
+
+    key: OptionKey
+    line: Detail
+
+
+#: An answer that names an option by its label: `a`, `B`, `option b`, `(c)`.
+LABEL = re.compile(r"^(?:option\s+)?\(?([A-Za-z0-9]{1,3})[.):*\s]*$", re.I)
+
+
 class DecisionState(enum.Enum):
     """Where a record stands: no answer, an answer section not yet complete, answered, applied by a stage."""
 
@@ -61,27 +72,6 @@ class DecisionState(enum.Enum):
     def answered(self) -> bool:
         """It carries the person's answer: answered, or applied by a stage since."""
         return self in ANSWERED_STATES
-
-
-class StateWord(Value):
-    """A record's state as its file is read — `open`, `draft`, `answered`, `applied`, or a word that names none (a
-    record that cannot be read)."""
-
-    value: str
-
-    def state(self) -> typing.Optional[DecisionState]:
-        """The state the word names — None for one that names none."""
-        return next((state for state in DecisionState if state.value == self.value), None)
-
-    def waits(self) -> bool:
-        """A record that waits for a person; one that cannot be read waits for none."""
-        named = self.state()
-        return named is not None and named.waits
-
-    def answered(self) -> bool:
-        """A record that carries the person's answer."""
-        named = self.state()
-        return named is not None and named.answered
 
 
 class Section(enum.Enum):
@@ -167,6 +157,18 @@ class CorrectionAsked(DomainEvent):
     at: Moment
 
 
+class AcceptanceAsked(DomainEvent):
+    """Every gate passed and the story waits for a person's look before it counts as delivered."""
+
+    record: RecordId
+    story: StoryId
+    at: Moment
+
+
+#: The stage an acceptance is asked at: the one that delivers.
+ACCEPTANCE_STAGE = StageName("document")
+
+
 class AnswerApplied(DomainEvent):
     """A stage applied the person's answer: the record says by which, and when."""
 
@@ -233,6 +235,8 @@ class RecordContent(Value):
     written_answer: Detail
     written_by: Detail
     missing: typing.Tuple[AnswerField, ...]
+    #: the options with their first lines, as the record's `## Options` offers them
+    option_lines: typing.Tuple[OptionLine, ...] = ()
 
 
 class DecisionRecord(AggregateRoot[RecordId]):
@@ -252,6 +256,7 @@ class DecisionRecord(AggregateRoot[RecordId]):
         self._story = story
         self._answer = answer
         self._applied: typing.Optional[Applied] = None
+        self._asked: typing.Optional[Moment] = None
 
     @classmethod
     def restore(cls, record_id: RecordId, kind: RecordKind, asker: Asker, state: DecisionState,
@@ -288,6 +293,21 @@ class DecisionRecord(AggregateRoot[RecordId]):
     def answer_given(self) -> typing.Optional[Answer]:
         return self._answer
 
+    @classmethod
+    def ask_acceptance(cls, record_id: RecordId, story: StoryId, at: Moment) -> DecisionRecord:
+        """A new acceptance: open, asked at the delivering stage, for a person's look at the story."""
+        record = cls(record_id, RecordKind.ACCEPTANCE, Asker.STAGE, DecisionState.OPEN, (), story,
+                     content=RecordContent(Detail(f"Accept {story.value}?"), ACCEPTANCE_STAGE, Detail(""), Detail(""),
+                                           ANSWER_FIELDS))
+        record._asked = at
+        record.register_event(AcceptanceAsked(record_id, story, at))
+        return record
+
+    @property
+    def asked(self) -> typing.Optional[Moment]:
+        """When a new record was asked in this life of it — None for one read as it was kept."""
+        return self._asked
+
     @property
     def applied(self) -> typing.Optional[Applied]:
         """The stage that applied the answer in this life of the record, and when — None where none did."""
@@ -313,6 +333,22 @@ class DecisionRecord(AggregateRoot[RecordId]):
         if self._answer is not None:
             return self._answer.given
         return Given(self._content.written_answer.value) if self._state.answered else None
+
+    def answer_sentence(self) -> typing.Optional[Detail]:
+        """The sentence the answer leaves in its story — deterministic: where the answer names an option by its label,
+        that option's first line; else the answer itself. One line, emphasis and runs of white space taken out. None
+        while the record waits."""
+        given = self.given()
+        if given is None:
+            return None
+        said = " ".join(given.value.replace("**", "").split())
+        label = LABEL.match(said)
+        if label:
+            named = next((o.line for o in self._content.option_lines
+                          if o.key.value.lower() == label.group(1).lower()), None)
+            if named is not None:
+                return named
+        return Detail(said)
 
     def accepts(self) -> bool:
         """An acceptance the person answered with `accept…`: the delivery is what they wanted."""

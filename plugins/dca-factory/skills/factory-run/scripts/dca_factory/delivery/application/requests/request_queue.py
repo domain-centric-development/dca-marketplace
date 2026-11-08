@@ -2,7 +2,6 @@
 one whose process ended without saying how."""
 
 from __future__ import annotations
-from ...domain.model.decision_record import StateWord
 
 import dataclasses
 import typing
@@ -12,6 +11,7 @@ from ..shared.requests import KIND, Request, RequestRefused, RequestStore, stori
 from ..shared.run_lines import RunLines
 from ..shared.story_starts import StoryStarts
 from ..delivery.pipeline_rules import decides
+from ...domain.model.decision_record import DecisionState
 
 #: The exits of a request's process that end it with no word of its own: a hang-up, an interrupt, a TERM.
 STOPPED_EXITS = (129, 130, 143)
@@ -58,7 +58,7 @@ class RequestQueue:
                 self._store.update(request, state="queued", record_file=None)
                 self._lines.out(f"factory: request {request['id']} waited on a record that is gone — it runs again")
                 continue
-            if all(StateWord(state).answered() for _p, _id, state in records):
+            if all(DecisionState(state).answered for _p, _id, state in records):
                 self._store.update(request, state="queued", record_file=None,
                                    answered=" ".join(rid for _p, rid, _s in records))
                 self._lines.out(f"factory: request {request['id']} — its question is answered; it runs again")

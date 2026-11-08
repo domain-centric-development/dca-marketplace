@@ -3,7 +3,7 @@ integration — through the output port StageDelivery."""
 
 from __future__ import annotations
 
-from ....building_blocks import DomainException
+from ....building_blocks import DomainException, UseCaseException
 from ...domain.model.stage_story import Presence
 from ...domain.model.verdict import Said
 from ...domain.model.acceptance import ACCEPTANCE, AcceptanceStep
@@ -11,6 +11,7 @@ from ...domain.service.adopt_checks import AdoptChecks, Adoption
 from ..shared.stage_delivery import Landing
 from .check_stage import on_pass, Run
 from .adopt_on_plan import AdoptOnPlanCommand
+from .ask_acceptance import AskAcceptanceCommand
 from .deliver_story import DeliverStoryCommand
 
 DELIVERED_LEFT = "a delivered story is checked and its marks are left as they are"
@@ -97,12 +98,14 @@ def _document_passed(run: Run) -> None:
             step = AcceptanceStep.at_delivery(facts.acceptance)
             result.take(step.findings)
             if step.ask is Presence.PRESENT:
-                asked, where, refused = run.delivery.ask(story_id, story_path, run.criteria)
-                if refused is not None:
-                    result.fail("acceptance", refused)
+                try:
+                    asked = run.acceptances.execute(AskAcceptanceCommand(run.story.id, run.now())).record
+                except UseCaseException as refused:
+                    result.fail("acceptance", str(refused))
                     return
-                result.take((ACCEPTANCE.wait(Said(f"{asked} asks a human to accept the story before it is delivered — "
-                                                   f"{where}, answered through /factory-decisions")),))
+                where = run.delivery.record_place(story_id, story_path, asked.value)
+                result.take((ACCEPTANCE.wait(Said(f"{asked.value} asks a human to accept the story before it is "
+                                                   f"delivered — {where}, answered through /factory-decisions")),))
             if step.goes_on is Presence.ABSENT:
                 return
     if result.failed:

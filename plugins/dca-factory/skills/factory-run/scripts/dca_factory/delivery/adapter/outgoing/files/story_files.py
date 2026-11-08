@@ -33,7 +33,12 @@ def status_of(value: typing.Any) -> StoryStatus:
 
 def add_assumption(path: str, line: str) -> None:
     """One line at the end of the story's `## Assumptions` — the section added where the story has none."""
-    lines = read_text(path).splitlines()
+    with open(path, encoding="utf-8", newline="") as handle:
+        text = handle.read()
+    newline = "\r\n" if "\r\n" in text else "\n"
+    lines = text.split(newline)
+    while lines and not lines[-1]:
+        lines.pop()
     head = next((i for i, l in enumerate(lines) if l.strip().lower().startswith("## assumptions")), None)
     if head is None:
         lines += ["", "## Assumptions", "", line]
@@ -42,7 +47,7 @@ def add_assumption(path: str, line: str) -> None:
         while end > head + 1 and not lines[end - 1].strip():
             end -= 1
         lines.insert(end, line)
-    write_atomic(path, "\n".join(lines) + "\n")
+    write_atomic(path, newline.join(lines) + newline)
 
 
 def names_story(word: str) -> bool:

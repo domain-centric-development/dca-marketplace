@@ -10,14 +10,16 @@ from ...domain.model.decision_record import RecordId
 from ...domain.model.moment import Moment
 from ...domain.model.stage import StageName
 from ...domain.model.stage_story import Place
-from ...domain.model.story import Story
+from ...domain.model.story import StoryId
+from ...domain.model.story_words import Detail
 from ..shared.decision_record_repository import DecisionRecordRepository
 from ..shared.decision_stamps import DecisionStamps
+from ..shared.story_repository import StoryRepository
 
 
 @dataclasses.dataclass(frozen=True)
 class ApplyAnswerCommand:
-    story: Story
+    story: StoryId
     record: RecordId
     stage: StageName
     at: Moment
@@ -35,12 +37,14 @@ class ApplyAnswerInputPort(UseCase[ApplyAnswerCommand, AnswerApplied], typing.Pr
 
 
 class ApplyAnswerUseCase(ApplyAnswerInputPort):
-    """The record is applied by its aggregate — answered ones only —, saved with its event in one transaction; the
-    answer then becomes an `answered:` line of the story."""
+    """The record is applied by its aggregate — answered ones only —, and the story takes the answer as an answered
+    line, once; both saved with their events in one transaction — the answer and the line it leaves are one
+    decision."""
 
-    def __init__(self, records: DecisionRecordRepository, stamps: DecisionStamps, events: DomainEventPublisher,
-                 transactions: TransactionBoundary) -> None:
+    def __init__(self, records: DecisionRecordRepository, stories: StoryRepository, stamps: DecisionStamps,
+                 events: DomainEventPublisher, transactions: TransactionBoundary) -> None:
         self._records = records
+        self._stories = stories
         self._stamps = stamps
         self._events = events
         self._transactions = transactions
@@ -48,10 +52,16 @@ class ApplyAnswerUseCase(ApplyAnswerInputPort):
     def execute(self, command: ApplyAnswerCommand) -> AnswerApplied:
         record = self._records.get(command.record)
         record.apply(command.stage, command.at)
+        sentence = record.answer_sentence() or Detail("")
+        story = self._stories.get(command.story)
+        taken = story.take_answer(sentence, Detail(command.record.value), command.at)
 
         def save() -> None:
             self._records.save(record)
             self._events.publish_and_clear_events(record)
+            if taken:
+                self._stories.save(story)
+                self._events.publish_and_clear_events(story)
 
         self._transactions.in_transaction(save)
-        return AnswerApplied(self._stamps.answered_line(command.story, command.record))
+        return AnswerApplied(self._stamps.regard(command.story) if taken else None)

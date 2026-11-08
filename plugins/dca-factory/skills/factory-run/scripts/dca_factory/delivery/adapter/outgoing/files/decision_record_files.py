@@ -2,7 +2,6 @@
 the project's own."""
 
 from __future__ import annotations
-from ....domain.model.decision_record import StateWord
 
 import os
 import re
@@ -19,7 +18,7 @@ from ....application.shared.front import is_acceptance
 from ....application.shared.story_repository import StoryNotFound
 from ....domain.model.decision_record import (
     ANSWER_FIELDS as DOMAIN_ANSWER_FIELDS, AnswerField, Asker, DecisionRecord, DecisionState, OptionKey,
-    Given, RecordContent, RecordId, RecordKind, Section)
+    Given, OptionLine, RecordContent, RecordId, RecordKind, Section)
 from ....domain.model.stage import StageName
 from ....domain.model.story_words import Detail
 from ....domain.model.story_state import AcceptanceVerdict
@@ -30,6 +29,7 @@ from ....application.delivery.pipeline_workflow import workflow
 from ....application.shared.decision_inbox import DecisionInbox
 from ....application.shared.decision_record_repository import DecisionRecordRepository
 from ....application.shared.request_records import RequestRecords
+from ....domain.model.decision_record import DecisionState
 
 GateError = MarkdownError
 
@@ -113,13 +113,20 @@ class DecisionRecordFiles(DecisionRecordRepository):
         except GateError as error:
             raise StoryNotFound(f"no story {story.value} under {place('epics')}/ — {error}") from None
         found = [rid for rid, _front, state, _a, _b in acceptance_records(self._cwd, story.value, path)
-                 if StateWord(state).waits()]
+                 if DecisionState(state).waits]
         return self.get(RecordId(found[-1])) if found else None
 
     def open_records_of(self, story: StoryId) -> typing.Sequence[DecisionRecord]:
         return [self.record(name, front, body, state) for name, front, body, state, error, _path
                 in decision_files(self._cwd)
-                if not error and str(front.get("story", "")).strip() == story.value and StateWord(state).waits()]
+                if not error and str(front.get("story", "")).strip() == story.value and DecisionState(state).waits]
+
+    def next_acceptance_id(self, story: StoryId) -> RecordId:
+        try:
+            path = find_story(self._epics, story.value)
+            return RecordId(f"{story.value}-accept-{len(acceptance_records(self._cwd, story.value, path)) + 1}")
+        except GateError as error:
+            raise RecordNotFound(str(error)) from None
 
     @staticmethod
     def record(name: str, front: Front, body: str, state: str) -> DecisionRecord:
@@ -274,7 +281,7 @@ def answered_decisions(cwd: str, story_id: str, stage: str) -> typing.List[str]:
     except GateError:
         return []
     return [str(front["id"]).strip() for _p, front, _b, state, answer in records
-            if StateWord(state).answered() and applying_stage(front, answer) == stage]
+            if DecisionState(state).answered and applying_stage(front, answer) == stage]
 
 
 def nothing_line(line: str) -> bool:
@@ -363,17 +370,6 @@ def answer_section(text: str) -> typing.Optional[str]:
         if inside:
             lines.append(line)
     return "\n".join(lines).rstrip() if lines else None      # a section appended after it leaves it as it was
-
-
-def answer_sentence(body: str, answer: typing.Mapping[str, typing.Any]) -> str:
-    """The sentence an answered record leaves in its story — deterministic: where the answer names an option of the
-    record's `## Options` by its label (`a`, `B`, `option b`), that option's first line; else the answer itself.
-    One line, markup and runs of white space taken out."""
-    given = " ".join(str(answer.get("answer", "")).split())
-    label = re.sub(r"^(?:option\s+)", "", given, flags=re.I).strip(" .):*")
-    if re.fullmatch(r"[A-Za-z0-9]{1,3}", label or ""):
-        given = next((o["line"] for o in decision_options(body) if o["key"].lower() == label.lower()), given)
-    return plain(given)
 
 
 #: A story delivered only once a human looked at it: the record kind, the modes of `acceptance:`.
@@ -476,7 +472,7 @@ class RequestRecordFiles(RequestRecords):
 def record_of(name: str, front: Front, body: str, state: str, answer: typing.Mapping[str, typing.Any]) -> DecisionRecord:
     """The record in a file named <name>, read off its front matter, its body, its state and its `## Answer`."""
     story = str(front.get("story", "")).strip()
-    stage = str(front.get("stage", "")).strip() if StateWord(state).waits() else resume_stage(front, answer)
+    stage = str(front.get("stage", "")).strip() if DecisionState(state).waits else resume_stage(front, answer)
     return DecisionRecord.restore(
         RecordId(str(front.get("id", name)).strip()),
         RecordKind.ACCEPTANCE if is_acceptance(front) else RecordKind.QUESTION,
@@ -488,4 +484,5 @@ def record_of(name: str, front: Front, body: str, state: str, answer: typing.Map
             Detail((body.strip().splitlines() or ["(no title)"])[0].lstrip("# ").strip()),
             StageName(stage) if stage else None,
             Detail(str(answer.get("answer"))), Detail(str(answer.get("by"))),
-            tuple(AnswerField(f) for f in ANSWER_FIELDS if not answer.get(f))))
+            tuple(AnswerField(f) for f in ANSWER_FIELDS if not answer.get(f)),
+            tuple(OptionLine(OptionKey(option["key"]), Detail(option["line"])) for option in decision_options(body))))
