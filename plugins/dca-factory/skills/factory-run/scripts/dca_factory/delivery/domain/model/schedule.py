@@ -37,13 +37,9 @@ class Holding(enum.Enum):
 
 
 class Entry(Value):
-    """One story as the schedule reads it."""
+    """What the schedule reads of one story's run beside the story: where it stands, what it holds, its open stage."""
 
-    story: StoryId
     standing: Standing
-    depends_on: typing.Tuple[StoryId, ...]
-    epic: EpicId
-    context: ContextName
     holds: typing.FrozenSet[Holding]
     running: typing.Optional[Running]
 

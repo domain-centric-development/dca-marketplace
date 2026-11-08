@@ -7,9 +7,10 @@ import typing
 from ....building_blocks import DomainService
 from ..model.decision_record import ANSWERED_STATES, DecisionState, RecordId, RecordKind, WAITING
 from ..model.stage import HandOver, StageName, StoryKind
+from ..model.story import Story, StoryStatus
 from ..model.workflow import Workflow
 from ..model.story_state import (
-    AcceptanceVerdict, Detail, Mark, MAX_ROUNDS, RunFacts, StateName, Standing, StoryFront, VerdictWord)
+    AcceptanceVerdict, Detail, Mark, MAX_ROUNDS, RunFacts, StateName, Standing, StoryMarks, VerdictWord)
 
 PLAN, BUILD, TEST, JUDGE, DOCUMENT = (StageName(n) for n in ("plan", "build", "test", "judge", "document"))
 ADOPT, INTEGRATE = StageName("adopt"), StageName("integrate")
@@ -24,35 +25,35 @@ class StoryStanding(DomainService):
         self._workflow = workflow
 
     @staticmethod
-    def before_run(front: StoryFront) -> typing.Optional[Standing]:
+    def before_run(story: Story, marks: StoryMarks) -> typing.Optional[Standing]:
         """Where a story stands that does not run — None for one released to run."""
-        story, status = front.story.value, front.status.value
+        name, status = story.id.value, story.content.written_status.value
         # Before anything the story says about itself: a stage may have written it (WP-94).
-        if Mark.OWNED_CHANGED in front.marks:
+        if Mark.OWNED_CHANGED in marks.marks:
             return Standing(StateName.STOPPED, None, Detail(
                 f"the story or an answer changed under a stage — a person looks at "
-                f"it, then `factory-cli.py --owned-confirm {story}`"))
+                f"it, then `factory-cli.py --owned-confirm {name}`"))
         if status == "superseded":
             return Standing(StateName.SUPERSEDED, None, Detail("replaced by another story"))
         # Delivered is delivered: the gate wrote it into the story, and nothing under the run folder — a refusal
         # left from an earlier round, a deleted folder — changes that.
-        if front.delivered_by is not None:
-            by = front.delivered_by.value
+        if story.status is StoryStatus.DELIVERED:
+            by = story.delivery.by.value if story.delivery else ""
             return Standing(StateName.DELIVERED, None, Detail(f"claimed by {by}" if by.startswith("hand") else ""))
         # Several factories (WP-93): a story this factory published waits for its merge; one another factory
         # claimed is theirs — read off the last fetch, written only where the profile opts in.
-        if Mark.PUBLISHED in front.marks:
+        if Mark.PUBLISHED in marks.marks:
             return Standing(StateName.PUBLISHED, None, Detail(
                 "published as its branch — waits for its merge on the remote main "
-                "line; `factory.sh integrate " + story + "` publishes it again "
+                "line; `factory.sh integrate " + name + "` publishes it again "
                 "after another landed"))
-        if front.claimant:
-            return Standing(StateName.CLAIMED, None, Detail(f"claimed by {front.claimant.value}"))
+        if marks.claimant:
+            return Standing(StateName.CLAIMED, None, Detail(f"claimed by {marks.claimant.value}"))
         if status and status not in ("approved", "adopted"):
             return Standing(StateName.UNRELEASED, None, Detail(f"status {status} — a human releases it first"))
         return None
 
-    def in_run(self, front: StoryFront, run: RunFacts) -> Standing:
+    def in_run(self, story: Story, run: RunFacts) -> Standing:
         """Where a released story stands in its run."""
         texts = run.hand_overs
         order = self._workflow.order(StoryKind.STORY)
@@ -117,7 +118,7 @@ class StoryStanding(DomainService):
                 return Standing(StateName.STOPPED, None, Detail(
                     "the main checkout could not take the story's commit — see "
                     ".gate-integrate.txt; then `factory.sh run --story "
-                    + front.story.value + " --from integrate`"))
+                    + story.id.value + " --from integrate`"))
             if "gate:fail moved" in report:
                 return Standing(StateName.IN_PROGRESS, INTEGRATE, Detail(
                     "the main line moved on — the story is merged with "
@@ -143,7 +144,7 @@ class StoryStanding(DomainService):
                     "the build adds it"))
             return Standing(StateName.IN_PROGRESS, first, Detail(
                 f"the {first.value} gate refused — the stage runs again"))
-        adopt, integrating = front.kind == StoryKind.ADOPT, Mark.WORKTREE in run.marks
+        adopt, integrating = story.kind == StoryKind.ADOPT, Mark.WORKTREE in run.marks
         if adopt and verdict.value == "pass":
             if integrating and Mark.ADOPT_PASSED in run.marks:
                 return Standing(StateName.IN_PROGRESS, INTEGRATE, Detail(
@@ -164,9 +165,9 @@ class StoryStanding(DomainService):
         if not texts:
             return Standing(StateName.READY, PLAN, Detail(""))
         if verdict.value == "changes-requested":
-            return Standing(StateName.IN_PROGRESS, self._workflow.judged_back(front.kind, texts[JUDGE].text),
+            return Standing(StateName.IN_PROGRESS, self._workflow.judged_back(story.kind, texts[JUDGE].text),
                             Detail("the judge requested changes"))
-        missing = next(stage for stage in self._workflow.order(front.kind) if stage not in texts)
+        missing = next(stage for stage in self._workflow.order(story.kind) if stage not in texts)
         return Standing(StateName.IN_PROGRESS, missing, Detail(f"{self._file_of(missing).value} not written yet"))
 
     def _file_of(self, stage: StageName) -> HandOver:

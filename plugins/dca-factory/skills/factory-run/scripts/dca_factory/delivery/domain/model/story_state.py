@@ -8,7 +8,7 @@ import typing
 from ....building_blocks import Value
 from .story_words import Detail as Detail, StatusWord as StatusWord
 from .decision_record import DecisionState, RecordId, RecordKind
-from .stage import StageName, StoryKind
+from .stage import StageName
 from .story import StoryId
 from .verdict import CheckName, Finding, Said
 
@@ -69,6 +69,14 @@ class Standing(Value):
     start: typing.Optional[StageName]
     detail: Detail
 
+    @classmethod
+    def twin(cls, story: StoryId, others: typing.Sequence[Detail]) -> typing.Optional[Standing]:
+        """Two stories under one id would share a run folder and a row: each stops, naming where the others are."""
+        if not others:
+            return None
+        return cls(StateName.STOPPED, None, Detail(
+            f"id {story.value!r} is not unique — also {', '.join(o.value for o in others)}; give one of them another"))
+
 
 class Claimant(Value):
     """Who claimed a story in another factory and since when, as the claim names it: `<who> (<host>) since <at>`."""
@@ -100,15 +108,10 @@ class Mark(enum.Enum):
     DOCUMENT_PASSED = "document-passed"
 
 
-class StoryFront(Value):
-    """What a story says about itself, and the marks read before its run: enough for every story not running."""
+class StoryMarks(Value):
+    """The marks read before a story's run: in its evidence folder (a stage changed it, it is published), and the
+    claim another factory holds on it."""
 
-    story: StoryId
-    status: StatusWord
-    kind: StoryKind
-    #: who claims the delivery where the story is delivered — "" for the gate, `hand:<who>` for a person; None where
-    #: it is not delivered
-    delivered_by: typing.Optional[Detail]
     marks: typing.FrozenSet[Mark]
     claimant: typing.Optional[Claimant]
 

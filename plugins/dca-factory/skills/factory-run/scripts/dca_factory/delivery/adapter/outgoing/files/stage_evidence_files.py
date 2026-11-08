@@ -51,7 +51,7 @@ from .decision_record_files import NOTHING
 from .kept_files import bare_path, row_cells
 from .run_marks import current_stage_files, STORY_DIGEST, verdict_in
 from .snapshots import NOT_OBSERVED
-from .story_layout import journeys_hold, story_digest
+from .story_layout import depends_on, journeys_hold, story_digest
 from ..claims.remote_claims import claim_config_here
 from ..git.integration import (
     CONFLICT_MARKER, integration_target, lost_text, MAIN_TESTS, main_tests_adapted, main_tests_lost, main_tests_waiver,
@@ -182,14 +182,6 @@ def publishes_of(front: Front) -> typing.List[str]:
     return [str(item).strip().strip("`") for item in items if str(item).strip().strip("`")]
 
 
-def depends_on_of(front: Front) -> typing.List[str]:
-    """The stories a journey walks, under `depends_on:` — a list, or one line of comma-separated ids."""
-    needs = front.get("depends_on")
-    if isinstance(needs, str):
-        return [n.strip() for n in needs.strip("[] ").split(",") if n.strip()]
-    return [str(n) for n in needs] if isinstance(needs, list) else []
-
-
 def contract_of(profile: typing.Mapping[str, typing.Any]) -> int:
     """The contract the profile declares, else the gate's own."""
     declared = str(profile.get("contract", "")).strip()
@@ -201,7 +193,7 @@ def story_content(front: Front, body: str, criteria: typing.Sequence[typing.Tupl
     return StoryContent(
         ContextName(str(front.get("context", "")).strip()), StatusWord(str(front.get("status", "")).strip().lower()),
         tuple(ScenarioKey(key) for key, _text in criteria), tuple(ScenarioKey(k) for k in happy_paths(body)),
-        tuple(StoryId(s) for s in depends_on_of(front)), tuple(RowId(r) for r in closes_of(front)),
+        tuple(StoryId(s) for s in depends_on(front)), tuple(RowId(r) for r in closes_of(front)),
         tuple(EventName(e) for e in publishes_of(front)),
         tuple(ScenarioClauses(ScenarioKey(key), tuple(Clause(Count(n), Detail(text)) for n, text in clauses),
                               tuple(Detail(a) for a in scenario_actions(body).get(key, [])))

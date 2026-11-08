@@ -9,12 +9,22 @@ from ....building_blocks import DomainService
 from ..gateway.main_line import MainLine
 from ..model.epic import EpicId
 from ..model.schedule import Entry, EpicGraph, Holding, Liveness, Schedule, Slots, Wait
-from ..model.story import StoryId
+from ..model.story import Story, StoryId
+from ..model.story_words import ContextName
 from ..model.story_state import Detail, RUNNABLE, StateName, Standing
 
 DONE = (StateName.DELIVERED, StateName.SUPERSEDED)
 WAITING = (StateName.WAITING, StateName.RUNNING)
 Standings = typing.Dict[StoryId, Standing]
+
+
+class _Row(typing.NamedTuple):
+    """What the order and the slots read of one story: its epic, what it depends on, its context, what it holds."""
+
+    epic: EpicId
+    depends_on: typing.Tuple[StoryId, ...]
+    context: ContextName
+    holds: typing.FrozenSet[Holding]
 
 
 def runnable(standing: Standing) -> typing.Optional[Standing]:
@@ -47,31 +57,25 @@ class Scheduling(DomainService):
     so what depends on them is blocked."""
 
     @staticmethod
-    def twin(story: StoryId, others: typing.Sequence[Detail]) -> typing.Optional[Standing]:
-        """Two stories under one id would share a run folder and a row: each stops, naming where the others are."""
-        if not others:
-            return None
-        return Standing(StateName.STOPPED, None, Detail(
-            f"id {story.value!r} is not unique — also {', '.join(o.value for o in others)}; give one of them another"))
-
-    @staticmethod
-    def schedule(entries: typing.Sequence[Entry], graph: EpicGraph, main_line: MainLine,
-                 slots: typing.Optional[Slots] = None, busy: typing.Tuple[StoryId, ...] = (),
+    def schedule(stories_read: typing.Sequence[Story], entries: typing.Mapping[StoryId, Entry], graph: EpicGraph,
+                 main_line: MainLine, slots: typing.Optional[Slots] = None, busy: typing.Tuple[StoryId, ...] = (),
                  skip: typing.Tuple[StoryId, ...] = ()) -> Schedule:
-        stories = {entry.story: entry for entry in entries}
-        standings: Standings = {entry.story: entry.standing for entry in entries}
+        """Every story's place in the order, and the ones that start now — over the stories and what their runs
+        left (<entries>, by story)."""
+        stories = {s.id: _Row(s.epic, s.content.depends_on, s.content.context, entries[s.id].holds)
+                   for s in stories_read}
+        standings: Standings = {s.id: entries[s.id].standing for s in stories_read}
         for story in skip:
             if story in standings and standings[story].state not in DONE:
                 standings[story] = Standing(StateName.STOPPED, None,
                                             Detail("stopped in this run — skipped (--keep-going)"))
-        order, cycle = Scheduling.order(stories, graph)
-        Scheduling.block(order, cycle, stories, standings, graph)
+        order, cycle = Scheduling._order(stories, graph)
+        Scheduling._block(order, cycle, stories, standings, graph)
         # A story the runner would give a worktree is taken from the main line's commit: one the checkout holds
         # uncommitted would be missing from — or older in — the tree the integrate step tests (#162). The runner
         # leaves it; a session working in this checkout may take it as it is.
         for story in order:
-            entry = stories[story]
-            if not runnable(standings[story]) or entry.holds:
+            if not runnable(standings[story]) or stories[story].holds:
                 continue
             why = main_line.uncommitted(story)
             if why and slots:
@@ -82,22 +86,22 @@ class Scheduling(DomainService):
                                                                   f"committed"))
         # A stage that started and has not ended is running — unless it has shown no sign of life for longer
         # than a stage may take, then it was interrupted and the story may be picked up again.
-        for entry in entries:
-            if entry.running is None or standings[entry.story].state in DONE:
+        for name, entry in entries.items():
+            if entry.running is None or standings[name].state in DONE:
                 continue                              # done is done: a killed runner's open stage changes nothing
             stage, since = entry.running.stage.value, entry.running.since.value
             if entry.running.liveness == Liveness.ALIVE:
-                standings[entry.story] = Standing(StateName.RUNNING, None, Detail(f"stage {stage} since {since}"))
+                standings[name] = Standing(StateName.RUNNING, None, Detail(f"stage {stage} since {since}"))
             else:
-                standings[entry.story] = noted(standings[entry.story], Detail(
+                standings[name] = noted(standings[name], Detail(
                     f"stage {stage} started {since} and never ended — possibly interrupted"))
         holders = [s for s in order if Holding.CHECKOUT in stories[s].holds]
         if slots:
-            return Scheduling.slotted(order, stories, standings, holders, slots, busy)
-        return Scheduling.alone(order, stories, standings, holders, main_line)
+            return Scheduling._slotted(order, stories, standings, holders, slots, busy)
+        return Scheduling._alone(order, stories, standings, holders, main_line)
 
     @staticmethod
-    def order(stories: typing.Mapping[StoryId, Entry],
+    def _order(stories: typing.Mapping[StoryId, _Row],
               graph: EpicGraph) -> typing.Tuple[typing.Tuple[StoryId, ...], typing.Tuple[StoryId, ...]]:
         """Dependency order, ties by the epic's place (an epic's `depends_on:` first, then its id) and then the
         story's id; whatever is left after that sits on a cycle, which is returned beside the order."""
@@ -115,8 +119,8 @@ class Scheduling(DomainService):
         return tuple(order + remaining), tuple(remaining)
 
     @staticmethod
-    def block(order: typing.Sequence[StoryId], cycle: typing.Sequence[StoryId],
-              stories: typing.Mapping[StoryId, Entry], standings: Standings, graph: EpicGraph) -> None:
+    def _block(order: typing.Sequence[StoryId], cycle: typing.Sequence[StoryId],
+              stories: typing.Mapping[StoryId, _Row], standings: Standings, graph: EpicGraph) -> None:
         """Block every story that could run but waits for a story or an epic, in the order — a dependency blocked
         before it reads as blocked."""
         for story in order:
@@ -135,12 +139,12 @@ class Scheduling(DomainService):
                     standings[story] = blocked(Detail("depends on " + ", ".join(
                         f"{d.value} ({standings[d].state.value})" for d in pending)))
                 else:
-                    waits = Scheduling.epic_waits(stories[story].epic, graph, stories, standings)
+                    waits = Scheduling._epic_waits(stories[story].epic, graph, stories, standings)
                     if waits:
                         standings[story] = blocked(waits)
 
     @staticmethod
-    def epic_waits(epic: EpicId, graph: EpicGraph, stories: typing.Mapping[StoryId, Entry],
+    def _epic_waits(epic: EpicId, graph: EpicGraph, stories: typing.Mapping[StoryId, _Row],
                    standings: Standings) -> typing.Optional[Detail]:
         """Why a story of this epic may not start yet because of its epic's `depends_on:`, or None. An epic it
         depends on is done when it has stories and every one of them is delivered or superseded — an epic without a
@@ -151,7 +155,7 @@ class Scheduling(DomainService):
         for needed in graph.needs.get(epic, ()):
             if needed not in graph.needs:
                 return Detail(f"its epic {epic.value} depends on unknown epic {needed.value}")
-            own = [s for s, entry in stories.items() if entry.epic == needed
+            own = [s for s, row in stories.items() if row.epic == needed
                    and standings[s].state != StateName.SUPERSEDED]
             done = sum(1 for s in own if standings[s].state == StateName.DELIVERED)
             if not own or done < len(own):
@@ -161,7 +165,7 @@ class Scheduling(DomainService):
         return None
 
     @staticmethod
-    def alone(order: typing.Tuple[StoryId, ...], stories: typing.Mapping[StoryId, Entry], standings: Standings,
+    def _alone(order: typing.Tuple[StoryId, ...], stories: typing.Mapping[StoryId, _Row], standings: Standings,
               holders: typing.Sequence[StoryId], main_line: MainLine) -> Schedule:
         """The schedule for a session in the checkout: one story at a time."""
         nxt: typing.Optional[StoryId] = None
@@ -199,7 +203,7 @@ class Scheduling(DomainService):
         return Schedule(order, standings, (nxt,) if nxt else (), Detail(reason), Wait.YES if wait else Wait.NO)
 
     @staticmethod
-    def slotted(order: typing.Tuple[StoryId, ...], stories: typing.Mapping[StoryId, Entry], standings: Standings,
+    def _slotted(order: typing.Tuple[StoryId, ...], stories: typing.Mapping[StoryId, _Row], standings: Standings,
                 holders: typing.Sequence[StoryId], slots: Slots, busy: typing.Tuple[StoryId, ...]) -> Schedule:
         """The schedule for a runner with slots (WP-92): every story in its worktree, up to that many at once."""
         for story in busy:

@@ -6,6 +6,7 @@ import dataclasses
 import typing
 
 from ....building_blocks import OutputPort
+from ...domain.model.story import Story
 from ...domain.gateway.main_line import MainLine
 from ...domain.model.schedule import EpicGraph
 from ...domain.model.story_state import Standing
@@ -32,6 +33,8 @@ class BacklogStory:
     tests_written: bool
     worktree: bool
     facts: typing.Optional[StoryFacts]
+    #: the story as the schedule orders it — under `key`, an id given twice under its key with its path
+    story: Story
     standing: typing.Optional[Standing] = None
 
 

@@ -17,7 +17,7 @@ from ....application.status.texts import parse_time
 from ....domain.model.schedule import EpicGraph
 from ....domain.model.story import StoryId
 from ....domain.model.story_state import Detail, Standing, StateName
-from ....domain.service.scheduling import Scheduling
+from .story_files import story_of
 from ..git.repository import git
 from ..git.worktrees import has_worktree, uncommitted_story
 from .epic_files import epic_graph, graph_of
@@ -54,22 +54,25 @@ class BacklogFiles(BacklogFacts):
                 front, body = read_front_matter(path)
             except GateError as error:
                 found.append(BacklogStory(name, path, epic, {}, "", "", None, (), "", False, False, None,
-                                          stopped(str(error))))
+                                          story_of(path, {"id": name}, "", ()), stopped(str(error))))
                 continue
             story_id = str(front.get("id") or name).strip()
             title, kind = story_title(front, body), story_kind(front)
             others = [Detail(shown(p)) for p in twice.get(story_id.lower(), [])
                       if os.path.normpath(p) != os.path.normpath(path)]
-            twin = Scheduling.twin(StoryId(story_id), others)
+            twin = Standing.twin(StoryId(story_id), others)
             if twin is not None:
-                found.append(BacklogStory(
-                    f"{story_id} ({shown(path)})", path, epic, front, body, title, kind, (), "", False, False, None, twin))
+                key = f"{story_id} ({shown(path)})"
+                found.append(BacklogStory(key, path, epic, front, body, title, kind, (), "", False, False, None,
+                                          story_of(path, dict(front, id=key), body), twin))
                 continue
+            story = story_of(path, front, body)
             found.append(BacklogStory(
                 story_id, path, str(front.get("epic") or epic).strip(), front, body, title, kind,
                 tuple(depends_on(front)), str(front.get("context", "")).strip(),
                 os.path.isfile(os.path.join(self.runs, story_id, stage_files()["test"])),
-                has_worktree(story_id, self.home), StoryFactsFiles(self.cwd, self.runs, story_id, front, path)))
+                has_worktree(story_id, self.home), StoryFactsFiles(self.cwd, self.runs, story_id, front, path, story),
+                story))
         return found
 
     def epics(self) -> EpicGraph:

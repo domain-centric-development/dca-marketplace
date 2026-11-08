@@ -14,6 +14,6 @@ from ..delivery.pipeline_workflow import workflow
     "RUN-STANDING-2",
 )
 def stand_story(facts: StoryFacts) -> Standing:
-    """The story's standing: from its front alone where it does not run, else from its run as well."""
-    front = facts.front()
-    return StoryStanding.before_run(front) or StoryStanding(workflow()).in_run(front, facts.run(front))
+    """The story's standing: from the story and its marks where it does not run, else from its run as well."""
+    story = facts.story()
+    return StoryStanding.before_run(story, facts.story_marks()) or StoryStanding(workflow()).in_run(story, facts.run(story))

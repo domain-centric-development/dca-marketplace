@@ -6,8 +6,7 @@ from __future__ import annotations
 import datetime
 import typing
 
-from ...domain.model.epic import EpicId
-from ...domain.model.schedule import ContextName, Entry, Holding, Liveness, Running, Slots
+from ...domain.model.schedule import Entry, Holding, Liveness, Running, Slots
 from ...domain.model.stage import StageName
 from ...domain.model.story import StoryId
 from ...domain.model.story_state import Detail
@@ -38,7 +37,7 @@ def schedule_backlog(backlog: BacklogFacts, now: datetime.datetime, slots: typin
     rows = list(backlog.stories())
     running = {stage.story: stage for stage in backlog.open_stages()}
     stale_after = backlog.stale_after()
-    entries = []
+    entries: typing.Dict[StoryId, Entry] = {}
     for row in rows:
         standing = row.standing or stand_story(row.facts) if row.facts else row.standing
         assert standing is not None, row.key
@@ -49,18 +48,17 @@ def schedule_backlog(backlog: BacklogFacts, now: datetime.datetime, slots: typin
             holds.add(Holding.CHECKOUT)
         open_stage = running.get(row.key)
         since = parse_time(open_stage.since) if open_stage else None
-        entries.append(Entry(
-            StoryId(row.key), standing, tuple(StoryId(d) for d in row.depends_on), EpicId(row.epic),
-            ContextName(row.context), frozenset(holds),
+        entries[row.story.id] = Entry(
+            standing, frozenset(holds),
             Running(StageName(open_stage.stage), Detail(open_stage.since),
                     Liveness.ALIVE if since and (now - since).total_seconds() <= stale_after else Liveness.SILENT)
-            if open_stage else None))
-    schedule = Scheduling.schedule(entries, backlog.epics(), backlog.main_line(rows),
+            if open_stage else None)
+    schedule = Scheduling.schedule([row.story for row in rows], entries, backlog.epics(), backlog.main_line(rows),
                                    Slots(slots) if slots else None, tuple(StoryId(s) for s in busy),
                                    tuple(StoryId(s) for s in skip))
     stories: Model = {}
-    for row, entry in zip(rows, entries):
-        standing = schedule.standings[entry.story]
+    for row in rows:
+        standing, entry = schedule.standings[row.story.id], entries[row.story.id]
         story: Model = dict(state=standing.state.value, start=standing.start.value if standing.start else None,
                             detail=standing.detail.value, deps=list(row.depends_on), path=row.path, epic=row.epic,
                             front=row.front, body=row.body, title=row.title, worktree=row.worktree)

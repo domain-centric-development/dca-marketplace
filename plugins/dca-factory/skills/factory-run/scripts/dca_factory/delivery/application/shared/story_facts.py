@@ -5,16 +5,21 @@ from __future__ import annotations
 import typing
 
 from ....building_blocks import OutputPort
-from ...domain.model.story_state import RunFacts, StoryFront
+from ...domain.model.story import Story
+from ...domain.model.story_state import RunFacts, StoryMarks
 
 
 class StoryFacts(OutputPort, typing.Protocol):
     """One story's facts, read where they are kept — its run's only when asked, for a story released to run."""
 
-    def front(self) -> StoryFront:
-        """What the story says about itself, and the marks read before its run."""
+    def story(self) -> Story:
+        """The story, as its file says it."""
         ...
 
-    def run(self, front: StoryFront) -> RunFacts:
+    def story_marks(self) -> StoryMarks:
+        """The marks read before its run: a stage changed it, it is published, another factory claims it."""
+        ...
+
+    def run(self, story: Story) -> RunFacts:
         """What the story's run left."""
         ...

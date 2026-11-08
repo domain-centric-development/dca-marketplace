@@ -8,22 +8,23 @@ import typing
 
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from ..pipeline.stage_rows import order_for, stage_files, stage_order
-from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_text
+from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir, factory_home
 from ....application.shared.front import is_acceptance
 from ....domain.model.decision_record import DecisionState, RecordId, RecordKind
-from ....domain.model.stage import StageName, StoryKind
-from ....domain.model.story import StoryId
+from ....domain.model.stage import StageName
 from ....domain.model.story_state import (
     Acceptance, AcceptanceVerdict, Claimant, Detail, GateReport, HandOverFacts, HandOverText, Mark, RecordFacts,
-    Rounds, RunFacts, StatusWord, StoryFront, VerdictWord)
+    Rounds, RunFacts, StoryMarks, VerdictWord)
 from ..claims.remote_claims import cached_claims, PUBLISHED
+from ....domain.model.story import Story
+from .story_files import story_of
 from ..git.worktrees import has_worktree
 from .decision_record_files import acceptance_state, needs_human_ids, records_of, resume_stage
 from .journal_files import journal_events
 from .run_marks import (
     backlog_digest, current_stage_files, gate_passed_since, OWNED_CHANGED, pass_marks, STORY_DIGEST, verdict_in)
-from .story_layout import delivered_by, is_delivered, story_digest, story_kind
+from .story_layout import story_digest
 from ....application.shared.story_facts import StoryFacts
 
 Front = typing.Mapping[str, typing.Any]
@@ -33,23 +34,29 @@ class StoryFactsFiles(StoryFacts):
     """The facts of the story <story_id> with the front matter <front>, under the checkout <cwd> and the run folder
     <runs>."""
 
-    def __init__(self, cwd: str, runs: str, story_id: str, front: Front, story_path: typing.Optional[str]) -> None:
+    def __init__(self, cwd: str, runs: str, story_id: str, front: Front, story_path: typing.Optional[str],
+                 story: typing.Optional[Story] = None) -> None:
         self.cwd, self.runs, self.story_id, self.matter, self.story_path = cwd, runs, story_id, front, story_path
+        self._story = story
         self.evidence, self.folder = evidence_dir(runs, story_id), os.path.join(runs, story_id)
 
-    def front(self) -> StoryFront:
+    def story(self) -> Story:
+        if self._story is not None:
+            return self._story
+        if self.story_path:
+            return story_of(self.story_path, self.matter, read_front_matter(self.story_path)[1])
+        return story_of(os.path.join(self.story_id, "story.md"), dict(self.matter, id=self.story_id), "", ())
+
+    def story_marks(self) -> StoryMarks:
         marks = {mark for mark, name in ((Mark.OWNED_CHANGED, OWNED_CHANGED), (Mark.PUBLISHED, PUBLISHED))
                  if os.path.isfile(os.path.join(self.evidence, name))}
         foreign = cached_claims(self.runs).get(self.story_id)
         claimant = Claimant(f"{foreign['who']} ({foreign['host']}) since {foreign['since']}") \
             if foreign and not foreign["own"] else None
-        return StoryFront(StoryId(self.story_id), StatusWord(str(self.matter.get("status", "")).strip().lower()),
-                          StoryKind(story_kind(self.matter)),
-                          Detail(delivered_by(self.matter)) if is_delivered(self.matter) else None,
-                          frozenset(marks), claimant)
+        return StoryMarks(frozenset(marks), claimant)
 
-    def run(self, front: StoryFront) -> RunFacts:
-        texts = current_stage_files(self.runs, self.story_id, order_for(front.kind.value))
+    def run(self, story: Story) -> RunFacts:
+        texts = current_stage_files(self.runs, self.story_id, order_for(story.kind.value))
         hand_overs = {StageName(stage): self.hand_over(text) for stage, text in texts.items()}
         records, unreadable = self.records()
         marks = self.marks(texts, pass_marks(self.runs, self.story_id))
