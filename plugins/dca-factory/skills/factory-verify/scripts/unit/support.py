@@ -19,7 +19,9 @@ from dca_factory.infrastructure import schedule  # noqa: E402,F401
 from dca_factory.infrastructure.workflow import load_workflow  # noqa: E402
 
 load_workflow()                                   # the stages and the rules, as every composition root loads them
-from dca_factory.infrastructure import cli as _cli  # noqa: E402,F401 — wires the command lines, as the cli does
+from dca_factory.infrastructure import cli as _cli  # noqa: E402
+
+_cli.wire()                                         # every command line, as a cli call wires the one it needs
 from dca_factory.delivery.adapter.outgoing.pipeline.stage_rows import stage_files  # noqa: E402
 from dca_factory.delivery.adapter.outgoing.files import journal_files as journal
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles

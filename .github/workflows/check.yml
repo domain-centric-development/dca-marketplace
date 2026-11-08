@@ -20,6 +20,12 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      defender:
+        description: "Windows: scan the checkout and the temp folder with Defender (on) or exclude them (off)"
+        type: choice
+        options: ["on", "off"]
+        default: "on"
 
 jobs:
   factory:
@@ -36,6 +42,14 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
+      # The suite starts thousands of processes, each reading its package's files; Defender scans every file opened.
+      # A measurement run turns it off for the checkout and the temp folder, to see what it costs.
+      - name: Windows — Defender off for the checkout and the temp folder
+        if: runner.os == 'Windows' && github.event_name == 'workflow_dispatch' && inputs.defender == 'off'
+        shell: pwsh
+        run: |
+          Add-MpPreference -ExclusionPath "$env:GITHUB_WORKSPACE", "$env:RUNNER_TEMP", "$env:TEMP", "$env:USERPROFILE\.cache"
+          Add-MpPreference -ExclusionProcess "python.exe", "bash.exe", "git.exe"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.x"
