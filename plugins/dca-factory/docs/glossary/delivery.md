@@ -79,10 +79,25 @@ checks it.
 - `Assumption` (Value Object, a line under `## Assumptions`)
 - `Delivery` (Value Object, its delivered lines)
 
-**Operations:** release (`release`) — a draft becomes approved, its release an answered assumption; deliver
-(`deliver`); reopen (`reopen`) — a delivered story taken back for a correction; adopt for proof
-(`adopt_for_proof`) — a claimed delivery handed to the adopt path, the claim returned to be kept; deliver by hand
-(`deliver_by_hand`) — a story a person built, delivered and claimed by them
+**Operations:** every change of its state is one of these, each guarded and raising its event; no adapter writes
+a status past them.
+- release (`release`) — a draft becomes approved, its release an answered assumption naming who and the request
+  (`StoryReleased`);
+- deliver by the gate (`deliver_by_gate`) — a released, adopted or unmarked story, built or adopted, delivered by
+  the gate; a draft or an unknown status is refused (`NotReleased`), a superseded one too (`NothingToDeliver`)
+  (`StoryDeliveredByGate`);
+- deliver by hand (`deliver_by_hand`) — a story a person built, delivered and claimed by them
+  (`StoryDeliveredByHand`);
+- adopt on plan (`adopt_on_plan`) — the plan found every scenario holding: adopted, the plan's finding its answered
+  line (`StoryAdoptedOnPlan`);
+- split off (`split_off`) — the plan found some scenarios holding: they move into an adopted story `<id>-holds`,
+  which it returns (`ScenariosSplitOff`, and `StoryAdoptedOnPlan` for the new one);
+- take an answer (`take_answer`) — an answer a stage applied becomes an answered line, once per record (`AnswerTaken`);
+- reopen (`reopen`) — a delivered story taken back for the correction it cites (`CitedCorrection`) (`StoryReopened`);
+- take back a publication (`take_back_publication`) — a delivery published on its branch, taken back: what it was
+  published over again (`PublicationTakenBack`);
+- adopt for proof (`adopt_for_proof`) — a claimed delivery handed to the adopt path, the claim returned to be kept
+  and carried by its event (`StoryAdoptedForProof`).
 
 ### Decision record (DecisionRecord)
 
@@ -99,8 +114,19 @@ answered, a stage applies it. An answer is never overwritten — a change of min
 - `Answer` (Value Object — the answer, by whom, when)
 - `Acceptance` (a decision record that asks for a look at a delivered story)
 
-**Operations:** answer (`answer`); accept (`accept`) — an acceptance answered `accepted`; correct (`correct`) — an
-acceptance answered with a reason code; apply (`apply`) — the stage that applied the answer stamps it
+**Operations:** every change of its state is one of these, each guarded and raising its event.
+- ask for an acceptance (`ask_acceptance`) — a new record, open, asked at the stage that delivers
+  (`AcceptanceAsked`);
+- answer (`answer`) — once; the events carry who answered and what (`QuestionAnswered`; for an acceptance
+  `DeliveryAccepted` where the answer begins with `accept`, else `CorrectionAsked`);
+- choose (`choose`) — an option of an open record that offers it (`NotOpen`, `OptionNotOffered`);
+- accept (`accept`) — an acceptance answered `accepted`;
+- apply (`apply`) — the stage that applied an answered record (`NotAnswered` otherwise) (`AnswerApplied`).
+
+**Queries — the record decides, never a copy of it:** whether it waits (`waits`), what was given (`given`),
+whether an acceptance accepts (`accepts`) or asks for a correction (`corrects`), whether its answer backs a change
+of what holds (`backs_change`), and the sentence it leaves in its story (`answer_sentence`, over its
+`OptionLine`s). A correction's code is one of `ReasonCode`.
 
 ### Epic (Epic)
 
@@ -170,10 +196,11 @@ request is one.
 
 ### Delivery (Delivery) · Delivered on (DeliveredOn) · Delivered by (DeliveredBy)
 
-**Definition:** A story's delivered lines: when (`delivered:`, as written) and who claims it — `gate`, `hand:<who>`,
-or nothing for a story delivered before the line existed.
+**Definition:** A story's delivered lines: when (`delivered:`, as written) and who claims it — the `Deliverer`
+(`gate`, `hand` with the `Person`, or `unknown` for a story delivered before the line existed or under a word the
+factory does not know, which a save leaves as written).
 
-**Type:** Value Object
+**Type:** Value Object (`Deliverer`: Enum)
 
 ### Gate pass (GatePass)
 
@@ -250,8 +277,9 @@ a stage that ran again makes every later file history. The rules: the workflow's
 
 **Definition:** What a story did to a test that existed before it: `kept` (lines added only), `arranged` (rewritten,
 every assertion kept), `switched off`, or `changed` what it expects — in that order of weight, switched off first.
+What a diff of the test showed (`TestDiff`) decides it (`TestDiff.edit`).
 
-**Type:** Value Object
+**Type:** Enum, decided by a Value Object (`TestDiff`)
 
 ### Claim · Worker (Worker) · Meeting (Meeting) · Fate (Fate)
 
@@ -260,18 +288,20 @@ factory that claims — a person on a host. Where a claim exists already, the me
 `collision` (the same id claimed for another epic or title — a person gives one another id) or `others` (another
 factory runs it). After a fetch a claim's fate is to hold, to be `released` (its story is delivered on the remote main
 line) or to be an `orphan` (the main line has no such story, and no published mark or story branch says it is on its
-way). Only a worker's own claim is released without force; a delivered story's id never comes free again — the next
-id follows the highest in use, as wide as it (`IdPrefix`). The rules: the domain service `ClaimRules`.
+way) — what a fetch traced of the claim decides it (`ClaimTrace.fate`). Only a worker's own claim is released
+without force; a delivered story's id never comes free again — the next id follows the highest in use, as wide as it
+(`IdPrefix`). The rules are the values' own (`Claim.meets`, `Claim.released_by`, `ClaimTrace.fate`).
 
 **Type:** Value Object
 
-### Kind word (KindWord)
+### Named kind (NamedKind)
 
-**Definition:** A story's `kind:` as written, and what the story is by it: `journey` — a guard over an epic's
-delivered stories —, `task` — a change no actor sees —, an adoption where the story's status is `adopted` —
-behaviour the project already has —, else a story. The kind decides the stages it runs.
+**Definition:** A story's `kind:` as its front matter names it — `journey`, `task`, or none (any other word names
+none) —, and what the story is by it: `journey` — a guard over an epic's delivered stories —, `task` — a change no
+actor sees —, an adoption where the story's status is `adopted` — behaviour the project already has —, else a story.
+The kind decides the stages it runs.
 
-**Type:** Value Object
+**Type:** Enum
 
 **Operations:** kind (`kind`)
 
@@ -376,6 +406,20 @@ the rounds did not converge — is the workflow's
 (`Workflow.steps`, `jump`, `after_refusal`, `judged_back`; the readers of a gate's report and a verdict are those values'); the use case `run_story` — the executive of the story's process — walks it, reading where the story stands from its journal (the store `StoryRunJournal`) and taking each step through the port `StageSteps`, a round one more pass of its loop,
 and `integrate_story` brings the delivered story onto the main line through `StoryIntegration`.
 
+The run is a **process manager** in the shape the guide names (no marker): `run_story` is its executive — it decides
+each next step with the workflow and holds no state of its own —, the journal is its tracker (a store), every step a
+command through a port; where a step is another use case (the integration), the composition root wires that use
+case behind the port. A round is counted in one place; `Rounds` decides whether they converged. The run, a gate and a
+merge of the main line end in outcomes, never in exit codes: `RunOutcome` (ran through, failed, not set up, waits for
+a person, at a limit, checkout taken, changed under it), `GateOutcome` (passed, refused, waits for a person) and
+`MergeOutcome` (merged, conflicts, failed) — the runner's adapter translates them to and from its exit codes.
+
+The factory's own steps ask for a stage by its **role** (`Role`: plans, tests, builds, tidies, judges, delivers,
+adopts, integrates — the stage file's `role:`), never by its name: `Workflow.role`, and `stage_of` for an adapter.
+
+How the project's policy ranks a check is a `Requirement` — undeclared (every check decides), required, or optional
+(red is reported and does not decide).
+
 **Type:** Concept
 
 ### Jump (Jump) · Target (Target) · Next (Next)
@@ -408,8 +452,11 @@ the stages and kinds it holds for; a frame places it, and one no frame places sa
 
 **Definition:** The stages a story runs through, in their order, each with what it writes, the shared window that may
 carry it, the kinds that run it, its traits (gated, gated after its file, tested, red, listing its files, guarded,
-running the suite, in the run order), the profile commands its gate runs and the hand-overs it weighs — validated as a
-whole: each stage named once, each hand-over written by one stage, each file a gate weighs written by a stage of it.
+running the suite, in the run order), its role, the profile commands its gate runs and the hand-overs it weighs —
+validated as a whole: each stage named once, each hand-over written by one stage, each file a gate weighs written by
+a stage of it, each role played by one stage (`InconsistentWorkflow`; a role nobody plays is `MissingRole`). An
+aggregate root without a transition: a person changes the stage files, the factory reads them as one unit — the
+consistency boundary of those invariants.
 An aggregate named `delivery`, kept by the `WorkflowRepository`: one Markdown file per stage under `workflow/stages/`
 today, another store later. Every question about a stage — a kind's run order, a stage's file, a window's stages — is
 the workflow's; its methods answer it (the route, the current pass), the domain services take it (`KeptChecks`, `StoryStanding`),
@@ -452,6 +499,16 @@ over every story not yet done (`BacklogEntries`), `check_change` over a commit o
 noted, or waiting for a person — and what it says, for a refusal the stage's next instruction. What a check alone
 needs and only reads — the profile, the run folder, the epic, the context map — it asks the domain gateway
 `StageEvidence`; a story naming no epic there is gets a fact, so the `epic` check refuses it and the others run.
+
+**Type:** Concept
+
+### Domain event · Delivery event (DeliveryEvent)
+
+**Definition:** Something that happened to a story or a decision record, named in the past tense and raised by the
+aggregate in the operation that made it happen — every event of the context carries its moment and the story it
+concerns (`DeliveryEvent`), or none for a record of the project's own. A use case saves the aggregate and publishes
+its events in one transaction; the journal records each as a line of kind `event` — the story's journal, or the
+factory's own. The journal is what reads them today: a person, and the views over it.
 
 **Type:** Concept
 

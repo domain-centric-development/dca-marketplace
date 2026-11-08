@@ -19,7 +19,7 @@ Code: `dca_factory/rulebook/` — `domain/model/` flat, `application/show_rulebo
 
 **Type:** Value
 
-**Related terms:** `Rule id`, `Enforcement`, `Outcome`, `Part`
+**Related terms:** `Rule id`, `Enforcement`, `Outcome`, `Part`, `Kind name` (the story kinds a rule holds for — `KindName`, an Enum: story, journey, adopt, task)
 
 ### Rule id (rule id)
 

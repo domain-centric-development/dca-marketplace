@@ -15,6 +15,14 @@ the product does, written by the gate that delivers and by nothing else.
 
 **Type:** Concept
 
+### Context spec (ContextSpec) · Subdomain (Subdomain)
+
+**Definition:** A bounded context as the spec holds it: what it is for, its subdomain, its domain model and its
+features. Its subdomain is how the designed domain classifies it — `Core`, `Supporting`, `Generic`, or unstated —,
+read from the description's table: any word naming `core` or `generic` is that, another word supporting.
+
+**Type:** Aggregate Root (`Subdomain`: Enum)
+
 ### Feature (feature)
 
 **Definition:** A lasting term of a context's language, a folder of the spec and a glossary entry `Type: Feature`;
