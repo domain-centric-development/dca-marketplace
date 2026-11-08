@@ -217,7 +217,8 @@ def show_spec_delta(runs: str, epics: str) -> ShowSpecDeltaUseCase:
 
 
 def take_back_delivery(cwd: str, runs: str, epics: str) -> TakeBackDeliveryUseCase:
-    return TakeBackDeliveryUseCase(PublishedBranchFiles(cwd, runs, epics))
+    return TakeBackDeliveryUseCase(PublishedBranchFiles(cwd, runs, epics), JournalEventPublisher(runs),
+                                   FileTransactions())
 
 
 def resolve_run_argument(cwd: str) -> ResolveRunArgumentUseCase:

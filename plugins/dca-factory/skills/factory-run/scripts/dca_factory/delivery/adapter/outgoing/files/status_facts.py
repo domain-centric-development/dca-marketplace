@@ -3,6 +3,7 @@ its records, the running stages and the activity inside them, the epics, the wor
 raw, as they are written. What they mean for a person is the status read model's."""
 
 from __future__ import annotations
+from ....domain.model.decision_record import StateWord
 
 import datetime
 import glob
@@ -35,7 +36,6 @@ from .....sharedkernel.adapter.outgoing.markdown.sections import section_of
 from .signals import latest_signal
 from .journal_files import journal_events
 from ....application.shared.front import is_acceptance
-from ....domain.model.decision_record import ANSWERED_WORDS
 from ....application.shared.status_facts import StatusFacts
 
 GateError = MarkdownError
@@ -451,12 +451,12 @@ def story_signals(runs: str, story_id: str, records: typing.Sequence[typing.Any]
             domain[fields["code"]] = domain.get(fields["code"], 0) + 1
     corrections: typing.Dict[str, int] = {}
     for _p, front, _b, state, answer in records:
-        code = correction_code(answer.get("answer")) if is_acceptance(front) and state in ANSWERED_WORDS else None
+        code = correction_code(answer.get("answer")) if is_acceptance(front) and StateWord(state).answered() else None
         if code:
             corrections[code] = corrections.get(code, 0) + 1
     red = {s.name for s in all_stages() if s.red}
     tested = any(e["kind"] == "gate" and e["name"] in red for e in events)
-    return dict(tested=tested, asked=len(questions), answered=sum(1 for _f, st in questions if st in ANSWERED_WORDS),
+    return dict(tested=tested, asked=len(questions), answered=sum(1 for _f, st in questions if StateWord(st).answered()),
                 assumptions_open=sum(1 for l in lines if l.startswith("open:")),
                 assumptions_answered=sum(1 for l in lines if l.startswith("answered:")),
                 plan_open=int(plan[0].get("open", 0)) if plan else None,

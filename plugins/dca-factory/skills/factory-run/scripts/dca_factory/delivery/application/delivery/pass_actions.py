@@ -10,6 +10,7 @@ from ...domain.model.acceptance import ACCEPTANCE, AcceptanceStep
 from ...domain.service.adopt_checks import AdoptChecks, Adoption
 from ..shared.stage_delivery import Landing
 from .check_stage import on_pass, Run
+from .adopt_on_plan import AdoptOnPlanCommand
 from .deliver_story import DeliverStoryCommand
 
 DELIVERED_LEFT = "a delivered story is checked and its marks are left as they are"
@@ -58,9 +59,16 @@ def _plan_passed(run: Run) -> None:
         run.delivery.plan_marks(run.story_id, run.story_path)
         adoption = run.evidence.plan_adoption(run.story.id)
         outcome = AdoptChecks.outcome(run.story, adoption)
-        if adoption is not None and outcome is not Adoption.NONE:
-            run.delivery.adopt(run.result, run.story_id, run.story_path,
-                               [(row.key.value, row.test.value) for row in adoption.rows], outcome is Adoption.WHOLE)
+        if adoption is not None and outcome is Adoption.WHOLE:
+            try:
+                run.adoptions.execute(AdoptOnPlanCommand(run.story.id, adoption, run.now()))
+            except DomainException as refused:
+                run.result.fail("plan-adopts", str(refused))
+                return
+            run.delivery.adopted(run.result, run.story_id, run.story_path)
+        elif adoption is not None and outcome is not Adoption.NONE:
+            run.delivery.split_off(run.result, run.story_id, run.story_path,
+                                   [(row.key.value, row.test.value) for row in adoption.rows])
 
 
 @on_pass("test", rule="GATE-PASS-RED-TREE")

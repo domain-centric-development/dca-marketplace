@@ -1,6 +1,7 @@
 """Show where the factory stands: what waits for a person, what runs, the backlog by epic, what comes next."""
 
 from __future__ import annotations
+from ...domain.model.decision_record import StateWord
 
 import dataclasses
 import re
@@ -18,7 +19,6 @@ from ..shared.status_facts import StatusFacts
 from ..shared.actions import Action, entry_actions, make_action, offered, RUNNER
 from .now_columns import now_columns, places_of
 from .texts import claim_age, figures, newest_first, parse_time, signal_totals, stamp_text, took_text, worker_text
-from ...domain.model.decision_record import WAITING_WORDS
 from ...domain.model.story_state import ENDED_WORDS
 
 Model = typing.Dict[str, typing.Any]
@@ -92,7 +92,7 @@ class ShowStatusUseCase(ShowStatusInputPort):
             story_id = str(front.get("story", "")).strip() if not error else ""
             if story_id in stories:
                 continue                                  # its story's row already says so
-            if error or state in WAITING_WORDS:
+            if error or StateWord(state).waits():
                 waiting.append(dict(mark="question", story=story_id or name, what="an open question",
                                     record=facts.shown(path), draft=False,
                                     place=place_of(str(front.get("request", "")).strip()) if not error else "decide",
@@ -285,7 +285,7 @@ class ShowStatusUseCase(ShowStatusInputPort):
         """(mark, state words, action) for one story — the words a person uses."""
         state, detail = story["state"], story.get("detail", "")
         records = self._facts.story_records(story_id, story.get("path"))
-        open_records = [(path, front) for path, front, _body, st, _a in records if st in WAITING_WORDS]
+        open_records = [(path, front) for path, front, _body, st, _a in records if StateWord(st).waits()]
         shown = self._facts.shown
         record = shown(open_records[0][0]) if open_records else ""
         by_hand = f"write the answer into {record} under `## Answer`" if record else ""
@@ -332,7 +332,7 @@ class ShowStatusUseCase(ShowStatusInputPort):
     def _open_record(self, story_id: str, story: Model) -> str:
         """The open record a waiting story waits on, as a path a person reads — '' where none is open."""
         records = self._facts.story_records(story_id, story.get("path"))
-        opened = [(path, front) for path, front, _b, st, _a in records if st in WAITING_WORDS]
+        opened = [(path, front) for path, front, _b, st, _a in records if StateWord(st).waits()]
         chosen = next((p for p, f in opened if is_acceptance(f)), opened[0][0] if opened else "")
         return self._facts.shown(chosen) if chosen else ""
 

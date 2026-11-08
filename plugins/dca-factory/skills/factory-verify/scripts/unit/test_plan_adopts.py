@@ -6,7 +6,12 @@ import unittest
 
 from support import evidence, gate_story, project, verdict, write
 from dca_factory.delivery.adapter.outgoing.files.plan_adoption_files import split_off
+from dca_factory.delivery.adapter.outgoing.files.journal_events import JournalEventPublisher
 from dca_factory.delivery.adapter.outgoing.files.stage_delivery_files import StageDeliveryFiles
+from dca_factory.delivery.adapter.outgoing.files.story_files import StoryFiles
+from dca_factory.delivery.application.delivery.adopt_on_plan import AdoptOnPlanCommand, AdoptOnPlanUseCase
+from dca_factory.delivery.domain.model.moment import Moment
+from dca_factory.delivery.domain.model.story import StoryAdoptedOnPlan
 from dca_factory.delivery.domain.service.adopt_checks import AdoptChecks, Adoption
 from dca_factory.sharedkernel.adapter.outgoing.markdown import front_matter as markdown
 
@@ -52,6 +57,24 @@ def adopt(*rows):
         f"| {key} | {test} |\n" for key, test in rows)
 
 
+class Recorded(JournalEventPublisher):
+    """The events a use case published, in order."""
+
+    def __init__(self):
+        super().__init__("")
+        self.published = []
+
+    def publish(self, event):
+        self.published.append(event)
+
+
+class Directly:
+    """A transaction that runs its work as it is."""
+
+    def in_transaction(self, work):
+        return work()
+
+
 class PlanAdopts(unittest.TestCase):
 
     def setUp(self):
@@ -82,7 +105,7 @@ class PlanAdopts(unittest.TestCase):
         self.assertFalse(self.found().failed)
         held = [("shows-the-price", "WidgetPageTest#showsThePrice"),
                 ("says-the-shelf-is-empty", "WidgetPageTest#saysTheShelfIsEmpty")]
-        StageDeliveryFiles(self.p.root, self.p.runs, {}).adopt(verdict(), "S-1", self.path, held, False)
+        StageDeliveryFiles(self.p.root, self.p.runs, {}).split_off(verdict(), "S-1", self.path, held)
         rest = markdown.read_text(self.path)
         self.assertIn("#### shows-the-name (happy path)", rest)
         self.assertNotIn("shows-the-price", rest.split("## Assumptions")[0])
@@ -102,11 +125,14 @@ class PlanAdopts(unittest.TestCase):
         self.assertFalse(self.found().failed)
         adoption = evidence(self.p.root, self.p.runs).plan_adoption(self.story().id)
         self.assertIs(AdoptChecks.outcome(self.story(), adoption), Adoption.WHOLE)
-        StageDeliveryFiles(self.p.root, self.p.runs, {}).adopt(
-            verdict(), "S-1", self.path, [(r.key.value, r.test.value) for r in adoption.rows], True)
+        events = Recorded()
+        AdoptOnPlanUseCase(StoryFiles(self.p.root), events, Directly()).execute(
+            AdoptOnPlanCommand(self.story().id, adoption, Moment("2026-11-08T10:00:00Z")))
+        StageDeliveryFiles(self.p.root, self.p.runs, {}).adopted(verdict(), "S-1", self.path)
         front, body = markdown.read_front_matter(self.path)
         self.assertEqual(front["status"], "adopted")
-        self.assertIn("the plan adopted the story", body)
+        self.assertIn("the plan adopted the story: shows-the-name (WidgetPageTest#showsTheName)", body)
+        self.assertEqual([type(e) for e in events.published], [StoryAdoptedOnPlan])
         self.assertIs(AdoptChecks.outcome(self.story(), adoption), Adoption.NONE)
 
     def test_a_split_that_takes_the_only_happy_path_is_refused(self):

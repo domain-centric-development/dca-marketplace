@@ -10,21 +10,16 @@ import time
 import typing
 
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter
-from .owned_files import write_answered, write_story_fields
+from ....domain.model.story import PLAN_ADOPT as PLAN_ADOPT_LINE
+from .owned_files import write_answered
 from .story_layout import STORY_FILE
 
 #: The record id the gate's `answered:` line cites: no decision record, the plan's own `## Adopt`.
-PLAN_ADOPT = "plan-adopt"
+PLAN_ADOPT = PLAN_ADOPT_LINE.value
 
 CRITERIA = re.compile(r"^##\s+acceptance criteria\s*$", re.I)
 RULE = re.compile(r"^###\s")
 SCENARIO = re.compile(r"^####\s+([a-z0-9][a-z0-9-]*)")
-
-
-def adopt_whole(runs: str, story_path: str, held: typing.Sequence[typing.Tuple[str, str]]) -> None:
-    write_story_fields(story_path, status="adopted")
-    write_answered(story_path, runs, PLAN_ADOPT, "every scenario holds on today's code, and no delivered story "
-                   "carries it — the plan adopted the story: " + ", ".join(f"{k} ({t})" for k, t in held))
 
 
 def split_off(lines: typing.List[str], keys: typing.Collection[str]

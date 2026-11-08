@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import typing
 
+from ....building_blocks import DomainException
 from ...domain.model.stage import Stage, StageName, StoryKind, TESTED_KINDS, Trait
 from ...domain.model.stage_story import ContractNumber, Count, HandOverName, MappedTest, Place, ScenarioKey, Selector, TestTable
 from ...domain.model.story import StoryId
@@ -23,6 +24,7 @@ from ...domain.service.spec_checks import SpecChecks
 from ...domain.service.story_checks import StoryChecks
 from ...domain.service.test_checks import TestChecks
 from ...domain.service.then_checks import ThenChecks
+from .apply_answer import ApplyAnswerCommand
 from .check_stage import check, Run
 from .pipeline_workflow import workflow
 
@@ -230,7 +232,12 @@ def _decisions(run: Run) -> None:
                                    workflow().order(StoryKind.STORY))
     for item in checked.items:
         if isinstance(item, Applying):
-            run.result.take((item.finding(run.stamps.apply(run.story, item)),))
+            try:
+                applied = run.answers.execute(ApplyAnswerCommand(run.story, item.record, item.stage, run.now()))
+            except DomainException as refused:
+                run.result.fail("decisions", str(refused))
+                continue
+            run.result.take((item.finding(applied.written),))
         else:
             run.result.take((item,))
 

@@ -10,10 +10,14 @@ from support import gate_story
 from dca_factory.delivery.adapter.outgoing.files.journal_events import JournalEventPublisher
 from dca_factory.delivery.adapter.outgoing.files.journal_files import journal_events
 from dca_factory.delivery.domain.model.decision_record import (
-    Answer, Asker, DecisionRecord, DecisionState, Given, QuestionAnswered, RecordContent, RecordId, RecordKind)
+    Answer, AnswerApplied, Asker, CorrectionAsked, DecisionRecord, DecisionState, DeliveryAccepted, Given, NotAnswered,
+    NotOpen, OptionKey, OptionNotOffered, QuestionAnswered, RecordContent, RecordId, RecordKind)
 from dca_factory.delivery.domain.model.moment import Moment
 from dca_factory.delivery.domain.model.person import Person
-from dca_factory.delivery.domain.model.story import Assumption, StoryId, StoryReleased
+from dca_factory.delivery.domain.model.stage import StageName
+from dca_factory.delivery.domain.model.story import (
+    PLAN_ADOPT, AlreadyDelivered, Assumption, CitedCorrection, NothingToDeliver, NotReleased, PublicationTakenBack,
+    StoryAdoptedOnPlan, StoryDeliveredByGate, StoryId, StoryReleased, StoryReopened, StoryStatus)
 from dca_factory.delivery.domain.model.story_words import Detail
 
 AT = Moment("2026-11-08T10:00:00Z")
@@ -38,6 +42,79 @@ class Events(unittest.TestCase):
                                         content=RecordContent(Detail("q"), None, Detail(""), Detail(""), ()))
         record.answer(Answer(Given("a"), Person("jane"), AT))
         self.assertEqual(record.domain_events(), (QuestionAnswered(RecordId("S-1-01"), StoryId("S-1"), AT),))
+
+
+def record(kind=RecordKind.QUESTION, state=DecisionState.OPEN, options=(), written=""):
+    return DecisionRecord.restore(RecordId("S-1-01"), kind, Asker.REQUEST, state, [OptionKey(o) for o in options],
+                                  story=StoryId("S-1"),
+                                  content=RecordContent(Detail("q"), None, Detail(written), Detail("jane"), ()))
+
+
+class Transitions(unittest.TestCase):
+
+    def test_the_gate_delivers_a_released_or_unmarked_story_and_registers_it(self):
+        for front in ({"status": "approved"}, {"status": "adopted"}, {}):
+            story = gate_story("S-1", front=front)
+            story.deliver_by_gate(AT)
+            self.assertEqual(story.domain_events(), (StoryDeliveredByGate(StoryId("S-1"), AT),), front)
+
+    def test_the_gate_refuses_a_draft_a_superseded_and_a_delivered_story(self):
+        with self.assertRaises(NotReleased):
+            gate_story("S-1", front={"status": "draft"}).deliver_by_gate(AT)
+        with self.assertRaises(NothingToDeliver):
+            gate_story("S-1", front={"status": "superseded"}).deliver_by_gate(AT)
+        with self.assertRaises(AlreadyDelivered):
+            gate_story("S-1", front={"status": "delivered", "delivered": AT.value}).deliver_by_gate(AT)
+
+    def test_a_released_story_the_plan_found_holding_is_adopted_with_the_plans_line(self):
+        story = gate_story("S-1", front={"status": "approved"})
+        line = Assumption.answered(Detail("every scenario holds"), PLAN_ADOPT)
+        story.adopt_on_plan(line, AT)
+        self.assertIs(story.status, StoryStatus.ADOPTED)
+        self.assertIn(line, story.assumptions)
+        self.assertEqual(story.domain_events(), (StoryAdoptedOnPlan(StoryId("S-1"), AT),))
+        with self.assertRaises(NotReleased):
+            gate_story("S-1", front={"status": "draft"}).adopt_on_plan(line, AT)
+
+    def test_a_published_delivery_taken_back_is_what_it_was_published_over(self):
+        story = gate_story("S-1", front={"status": "delivered", "delivered": AT.value, "delivered_by": "gate"})
+        story.take_back_publication(StoryStatus.ADOPTED, AT)
+        self.assertIs(story.status, StoryStatus.ADOPTED)
+        self.assertIsNone(story.delivery)
+        self.assertEqual(story.domain_events(), (PublicationTakenBack(StoryId("S-1"), AT),))
+
+    def test_a_reopened_story_names_the_correction_it_cites(self):
+        story = gate_story("S-1", front={"status": "delivered", "delivered": AT.value, "delivered_by": "gate"})
+        story.reopen(CitedCorrection(Detail("S-1-02")), AT)
+        self.assertEqual(story.domain_events(), (StoryReopened(StoryId("S-1"), Detail("S-1-02"), AT),))
+
+    def test_an_acceptance_answered_accept_in_any_form_is_accepted_and_anything_else_a_correction(self):
+        for given, event in (("accepted", DeliveryAccepted), ("Accepted.", DeliveryAccepted),
+                             ("the label is wrong", CorrectionAsked)):
+            answered = record(RecordKind.ACCEPTANCE)
+            answered.answer(Answer(Given(given), Person("jane"), AT))
+            self.assertEqual([type(e) for e in answered.domain_events()], [event], given)
+            self.assertEqual(answered.accepts(), event is DeliveryAccepted)
+
+    def test_an_option_is_chosen_on_an_open_record_that_offers_it(self):
+        chosen = record(options=("a", "b"))
+        chosen.choose(OptionKey("b"), Person("jane"), AT)
+        self.assertIs(chosen.state, DecisionState.ANSWERED)
+        with self.assertRaises(OptionNotOffered):
+            record(options=("a",)).choose(OptionKey("c"), Person("jane"), AT)
+        with self.assertRaises(NotOpen):
+            record(state=DecisionState.ANSWERED, options=("a",), written="a").choose(OptionKey("a"), Person("jane"), AT)
+
+    def test_an_answered_record_is_applied_once(self):
+        applied = record(state=DecisionState.ANSWERED, written="a")
+        applied.apply(StageName("build"), AT)
+        self.assertIs(applied.state, DecisionState.APPLIED)
+        self.assertEqual(applied.domain_events(),
+                         (AnswerApplied(RecordId("S-1-01"), StoryId("S-1"), StageName("build"), AT),))
+        with self.assertRaises(NotAnswered):
+            applied.apply(StageName("build"), AT)
+        with self.assertRaises(NotAnswered):
+            record().apply(StageName("build"), AT)
 
 
 if __name__ == "__main__":

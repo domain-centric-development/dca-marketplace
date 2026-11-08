@@ -52,6 +52,37 @@ class DecisionState(enum.Enum):
             return cls.OPEN
         return cls.ANSWERED if all(field in given for field in ANSWER_FIELDS) else cls.DRAFT
 
+    @property
+    def waits(self) -> bool:
+        """It waits for a person: no answer, or an incomplete one."""
+        return self in WAITING
+
+    @property
+    def answered(self) -> bool:
+        """It carries the person's answer: answered, or applied by a stage since."""
+        return self in ANSWERED_STATES
+
+
+class StateWord(Value):
+    """A record's state as its file is read — `open`, `draft`, `answered`, `applied`, or a word that names none (a
+    record that cannot be read)."""
+
+    value: str
+
+    def state(self) -> typing.Optional[DecisionState]:
+        """The state the word names — None for one that names none."""
+        return next((state for state in DecisionState if state.value == self.value), None)
+
+    def waits(self) -> bool:
+        """A record that waits for a person; one that cannot be read waits for none."""
+        named = self.state()
+        return named is not None and named.waits
+
+    def answered(self) -> bool:
+        """A record that carries the person's answer."""
+        named = self.state()
+        return named is not None and named.answered
+
 
 class Section(enum.Enum):
     """The sections of a record its state follows from."""
@@ -74,9 +105,6 @@ ANSWER_FIELDS = (AnswerField("answer"), AnswerField("by"), AnswerField("at"))
 WAITING = frozenset((DecisionState.OPEN, DecisionState.DRAFT))
 #: A record carries the person's answer once answered, and still after a stage applied it.
 ANSWERED_STATES = frozenset((DecisionState.ANSWERED, DecisionState.APPLIED))
-#: The same as the words a record's state is read and shown with.
-WAITING_WORDS = frozenset(state.value for state in WAITING)
-ANSWERED_WORDS = frozenset(state.value for state in ANSWERED_STATES)
 
 
 class Asker(enum.Enum):
@@ -97,6 +125,10 @@ class Given(Value):
     """What a person answered: an option's key or their words, as written."""
 
     value: str
+
+    def accepts(self) -> bool:
+        """An answer that accepts a delivery: it begins with `accept` — `accepted`, `Accepted.`, `accept, thanks`."""
+        return self.value.strip().lower().startswith("accept")
 
 
 #: The answer an acceptance takes where the person accepts the delivery.
@@ -135,12 +167,54 @@ class CorrectionAsked(DomainEvent):
     at: Moment
 
 
+class AnswerApplied(DomainEvent):
+    """A stage applied the person's answer: the record says by which, and when."""
+
+    record: RecordId
+    story: typing.Optional[StoryId]
+    stage: StageName
+    at: Moment
+
+
+class Applied(Value):
+    """Which stage applied the answer, and when."""
+
+    stage: StageName
+    at: Moment
+
+
+class NotAnswered(DomainException):
+    """Only an answered record is applied: one that waits has nothing to apply, one applied is applied once."""
+
+    def __init__(self, record: RecordId, state: DecisionState) -> None:
+        super().__init__(f"{record.value} is {state.value} — only an answered record is applied")
+        self.record = record
+
+
 class AlreadyAnswered(DomainException):
     """An answer is never overwritten — a change of mind is a new question."""
 
     def __init__(self, record: RecordId, state: DecisionState) -> None:
         super().__init__(f"{record.value} is {state.value} already — an answer is never overwritten; a change of "
                          "mind is a new question")
+
+
+class NotOpen(DomainException):
+    """An option is chosen on an open record only: one with an answer, complete or not, is not chosen on again."""
+
+    def __init__(self, record: RecordId, state: DecisionState) -> None:
+        super().__init__(f"{record.value} is {state.value} — an option is chosen on an open record")
+        self.record = record
+
+
+class OptionNotOffered(DomainException):
+    """An option is one the record offers."""
+
+    def __init__(self, record: RecordId, option: OptionKey, offered: typing.Sequence[OptionKey]) -> None:
+        super().__init__(f"{record.value} offers {', '.join(o.value for o in offered) or 'no option'}, "
+                         f"not {option.value}")
+        self.record = record
+        self.option = option
 
 
 class NoAcceptance(DomainException):
@@ -177,6 +251,7 @@ class DecisionRecord(AggregateRoot[RecordId]):
         self._options = tuple(options)
         self._story = story
         self._answer = answer
+        self._applied: typing.Optional[Applied] = None
 
     @classmethod
     def restore(cls, record_id: RecordId, kind: RecordKind, asker: Asker, state: DecisionState,
@@ -214,6 +289,11 @@ class DecisionRecord(AggregateRoot[RecordId]):
         return self._answer
 
     @property
+    def applied(self) -> typing.Optional[Applied]:
+        """The stage that applied the answer in this life of the record, and when — None where none did."""
+        return self._applied
+
+    @property
     def content(self) -> RecordContent:
         """What the record says — its question, the stage, the answer as written."""
         return self._content
@@ -223,8 +303,32 @@ class DecisionRecord(AggregateRoot[RecordId]):
         return self._state in WAITING
 
     def answer_said(self) -> Detail:
-        """The answer and who gave it, as a finding quotes them."""
+        """The answer and who gave it, as a finding quotes them — the one it took, else the one written."""
+        if self._answer is not None:
+            return Detail(f"{self._answer.given.value!r} by {self._answer.by.value}")
         return Detail(f"{self._content.written_answer.value!r} by {self._content.written_by.value}")
+
+    def given(self) -> typing.Optional[Given]:
+        """What the person answered — None while it waits for one."""
+        if self._answer is not None:
+            return self._answer.given
+        return Given(self._content.written_answer.value) if self._state.answered else None
+
+    def accepts(self) -> bool:
+        """An acceptance the person answered with `accept…`: the delivery is what they wanted."""
+        given = self.given()
+        return self._kind is RecordKind.ACCEPTANCE and given is not None and given.accepts()
+
+    def corrects(self) -> bool:
+        """An acceptance answered with anything but `accept…`: the person asks for a correction."""
+        return self._kind is RecordKind.ACCEPTANCE and self._state.answered and not self.accepts()
+
+    def backs_change(self) -> bool:
+        """An answer that backs a change of what holds: a question answered, or an acceptance's correction — never
+        an acceptance that accepted."""
+        if self._kind is RecordKind.ACCEPTANCE:
+            return self.corrects()
+        return self._state.answered
 
     def answer(self, answer: Answer) -> None:
         """The person's answer, once: a record answered or applied takes no second one."""
@@ -234,10 +338,26 @@ class DecisionRecord(AggregateRoot[RecordId]):
         self._state = DecisionState.ANSWERED
         if self._kind is RecordKind.QUESTION:
             self.register_event(QuestionAnswered(self._id, self._story, answer.at))
-        elif answer.given == ACCEPTED:
+        elif answer.given.accepts():
             self.register_event(DeliveryAccepted(self._id, self._story, answer.at))
         else:
             self.register_event(CorrectionAsked(self._id, self._story, answer.at))
+
+    def apply(self, stage: StageName, at: Moment) -> None:
+        """A stage applied the person's answer: the record is applied, by that stage."""
+        if self._state is not DecisionState.ANSWERED:
+            raise NotAnswered(self._id, self._state)
+        self._state = DecisionState.APPLIED
+        self._applied = Applied(stage, at)
+        self.register_event(AnswerApplied(self._id, self._story, stage, at))
+
+    def choose(self, option: OptionKey, by: Person, at: Moment) -> None:
+        """A person's choice among the options of an open record — the option is the whole answer."""
+        if self._state is not DecisionState.OPEN:
+            raise NotOpen(self._id, self._state)
+        if option not in self._options:
+            raise OptionNotOffered(self._id, option, self._options)
+        self.answer(Answer(Given(option.value), by, at))
 
     def accept(self, by: Person, at: Moment) -> None:
         """An acceptance answered `accepted`: the delivery is what the person wanted."""

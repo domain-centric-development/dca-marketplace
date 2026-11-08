@@ -2,6 +2,7 @@
 story."""
 
 from __future__ import annotations
+from ....domain.model.decision_record import StateWord
 
 import contextlib
 import os
@@ -18,7 +19,7 @@ from .....sharedkernel.adapter.outgoing.profile.profile_files import (
     evidence_dir, factory_home, HOME_VARIABLE, in_worktree, places_in, location, METHOD_PROFILE, place, read_flat, shown, unknown_profile_keys)
 from ....application.profile.profile_rules import perspectives_of
 from ....domain.model.decision_record import (
-    ANSWERED_WORDS, RecordId)
+    RecordId)
 from ....domain.model.epic import EpicId
 from ....domain.model.schedule import ContextName
 from ....domain.model.stage import StageName, StoryKind
@@ -34,12 +35,11 @@ from ....domain.model.stage_story import (
 from ....domain.model.story import StoryId
 from ....domain.model.story_state import Detail, HandOverText, Rounds, StatusWord
 from ....domain.service.backlog_checks import EPIC_FIELDS, normal_name
-from ....domain.service.decision_checks import Applying
 from .brief_files import given_digest, named_digest
 from ....domain.model.decision_record import DecisionRecord
 from .decision_record_files import (
     record_of,
-    answer_sentence, decisions_store, needs_human_ids, read_decisions, record_path, stamp_applied)
+    answer_sentence, decisions_store, needs_human_ids, read_decisions, record_path)
 from .epic_files import epic_dependency_problem
 from .findings_files import confirmed_defects, findings_path, findings_rows, project_findings_path
 from .owned_files import owned_changes, write_answered
@@ -568,7 +568,7 @@ class StageEvidenceFiles:
     def answered_records(self, story: StoryId) -> typing.FrozenSet[RecordId]:
         try:
             return frozenset(RecordId(str(front["id"]).strip()) for _p, front, _b, state, _a in records_of(story.value)
-                             if state in ANSWERED_WORDS)
+                             if StateWord(state).answered())
         except GateError:
             return frozenset()
 
@@ -861,16 +861,15 @@ class DecisionStampFiles(DecisionStamps):
         self._runs = runs
         self._epics = epics
 
-    def apply(self, story: Story, applying: Applying) -> typing.Optional[Place]:
-        rid = applying.record.value
+    def answered_line(self, story: Story, record: RecordId) -> typing.Optional[Place]:
+        rid = record.value
         where = find_story(self._epics, story.id.value)
-        found = next(((path, body, answer) for path, front, body, _state, answer
+        found = next(((body, answer) for _path, front, body, _state, answer
                       in read_decisions(decisions_store(where), story.id.value)
                       if str(front["id"]).strip() == rid), None)
         if found is None:
             return None
-        path, body, answer = found
-        stamp_applied(path, applying.stage.value)
+        body, answer = found
         written = write_answered(where, self._runs, rid, answer_sentence(body, answer))
         return Place(shown(where)) if written else None
 

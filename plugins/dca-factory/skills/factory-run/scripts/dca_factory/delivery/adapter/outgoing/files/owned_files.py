@@ -166,11 +166,18 @@ def write_answered(story_path: str, runs: str, rid: str, sentence: str) -> bool:
             lines.insert(last + 1, "")
     with open(story_path, "w", encoding="utf-8", newline="") as handle:
         handle.write(newline.join(lines))
+    regard_gate_line(story_path, runs)
+    return True
+
+
+def regard_gate_line(story_path: str, runs: str) -> None:
+    """A line the gate wrote into the story is its own: the planned digest (`.story-digest`) and an open window's
+    owned digest take the new text, so it does not read as "the story changed after it was planned"; any other
+    change still does."""
     story_id = story_id_of(story_path)
     if os.path.isfile(os.path.join(evidence_dir(runs, story_id), STORY_DIGEST)):
         write_mark(runs, story_id, STORY_DIGEST, story_digest(story_path))
     rebaseline_owned(story_path)
-    return True
 
 
 def mark_window_files(runs: str, story_id: str, window: str) -> None:

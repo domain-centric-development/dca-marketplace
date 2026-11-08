@@ -35,6 +35,9 @@ from ..delivery.application.delivery import stage_checks  # noqa: F401 — regis
 from ..delivery.application.delivery.check_change import CheckChangeUseCase
 from ..delivery.application.delivery.check_parity import CheckParityUseCase
 from ..delivery.application.delivery.check_stage import run_checks, run_passed, StageRun, Verdict
+from ..delivery.adapter.outgoing.files.decision_record_files import DecisionRecordFiles
+from ..delivery.application.delivery.adopt_on_plan import AdoptOnPlanUseCase
+from ..delivery.application.delivery.apply_answer import ApplyAnswerUseCase
 from ..delivery.application.delivery.deliver_story import DeliverStoryUseCase
 from ..delivery.application.shared.stage_delivery import Landing
 from ..delivery.domain.model.moment import Moment
@@ -73,7 +76,6 @@ def stage_run(close: typing.Callable[[StageRun], None], **fields: typing.Any) ->
     run.tests = StageTestFiles(run.cwd, run.runs, run.profile)
     run.main_line = MainLineEvidence(run.cwd, run.runs, run.args.epics, run.profile)
     run.marks = StageMarkFiles(run.cwd, run.runs, run.kind)
-    run.stamps = DecisionStampFiles(run.runs, run.args.epics)
     run.describe = check_description(run.cwd, run.profile)
     run.runs_port = StageRunFiles(run.cwd, run.runs, run.profile)
     wire_delivery(run)
@@ -99,6 +101,9 @@ def wire_delivery(run: typing.Any) -> None:
         Landing.STORY: DeliverStoryUseCase(StoryFiles(run.cwd, run.args.epics), events, transactions),
         Landing.CHECKOUT: DeliverStoryUseCase(StoryFiles(run.cwd, checkout_epics(run.cwd, run.args.epics)), events, transactions),
     }
+    run.adoptions = AdoptOnPlanUseCase(StoryFiles(run.cwd, run.args.epics), events, transactions)
+    run.answers = ApplyAnswerUseCase(DecisionRecordFiles(run.cwd, run.args.epics),
+                                     DecisionStampFiles(run.runs, run.args.epics), events, transactions)
     run.now = now
 
 

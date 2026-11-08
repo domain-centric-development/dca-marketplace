@@ -6,7 +6,7 @@ import dataclasses
 import typing
 
 from ....building_blocks import DomainEventPublisher, TransactionBoundary, UseCase
-from ...domain.model.decision_record import Answer, Asker, DecisionState, Given, OptionKey, RecordId
+from ...domain.model.decision_record import Asker, NotOpen, OptionKey, OptionNotOffered, RecordId
 from ...domain.model.moment import Moment
 from ...domain.model.person import Person
 from ..shared.decision_record_repository import DecisionRecordRepository
@@ -46,10 +46,12 @@ class AnswerQuestionUseCase(AnswerQuestionInputPort):
 
     def execute(self, command: AnswerQuestionCommand) -> AnswerQuestionResult:
         record = self._records.get(command.record)
-        if record.asker is not Asker.REQUEST or record.state is not DecisionState.OPEN \
-                or command.option not in record.options:
-            return NeedsSkill("a stage's question, an answered one, or an option the record does not offer")
-        record.answer(Answer(Given(command.option.value), command.by, command.at))
+        if record.asker is not Asker.REQUEST:
+            return NeedsSkill("a stage's question — the decisions skill weighs what its answer changes")
+        try:
+            record.choose(command.option, command.by, command.at)
+        except (NotOpen, OptionNotOffered) as refused:
+            return NeedsSkill(str(refused))
 
         def save() -> None:
             self._records.save(record)

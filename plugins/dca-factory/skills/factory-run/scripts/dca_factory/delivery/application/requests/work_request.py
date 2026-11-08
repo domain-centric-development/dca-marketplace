@@ -2,11 +2,16 @@
 itself, and what it wrote committed as the backlog's."""
 
 from __future__ import annotations
+from ...domain.model.decision_record import StateWord
 
 import dataclasses
 import typing
 
-from ....building_blocks import UseCase
+from ....building_blocks import DomainEventPublisher, TransactionBoundary, UseCase
+from ...domain.model.decision_record import DecisionState, RecordId
+from ...domain.model.moment import Moment
+from ...domain.model.stage import StageName
+from ..shared.decision_record_repository import DecisionRecordRepository
 from ..shared.backlog_changes import BacklogChanges
 from ..shared.request_records import RequestRecords
 from ..shared.request_settlement import RequestSettlement
@@ -15,7 +20,6 @@ from ..shared.request_skill import HandedFileRead, RequestSkill
 from ..shared.requests import (Kind, KIND, Request, RequestRefused, RequestStore, named_files,
                                written_keys)
 from .list_requests import target_text
-from ...domain.model.decision_record import WAITING_WORDS
 from ..delivery.pipeline_rules import decides
 from .request_writes import RequestWrites
 from .request_worked import RequestWorked as RequestWorked, Said as Said
@@ -38,6 +42,10 @@ class WorkRequestInputPort(UseCase[WorkRequestCommand, RequestWorked], typing.Pr
     """Work one request."""
 
 
+#: Who applies a request's own question: the request that asked it, run again — no stage of a story.
+REQUEST_STAGE = StageName("request")
+
+
 class WorkRequestUseCase(WorkRequestInputPort):
     """A request whose skill did its part and whose commit was refused commits what it wrote and runs no skill again;
     one that no longer holds fails; one the factory settles itself is settled; any other runs its skill. A skill that
@@ -45,7 +53,12 @@ class WorkRequestUseCase(WorkRequestInputPort):
     description only, never code and never what a person had changed before."""
 
     def __init__(self, store: RequestStore, records: RequestRecords, changes: BacklogChanges, skill: RequestSkill,
-                 settlement: RequestSettlement, now: typing.Callable[[], str], files: HandedFileStore) -> None:
+                 settlement: RequestSettlement, now: typing.Callable[[], str], files: HandedFileStore, *,
+                 answers: DecisionRecordRepository, events: DomainEventPublisher,
+                 transactions: TransactionBoundary) -> None:
+        self._answers = answers
+        self._events = events
+        self._transactions = transactions
         self._store = store
         self._settling = RequestSettling(store, changes, settlement, now)
         self._writes = RequestWrites(store, changes)
@@ -55,6 +68,21 @@ class WorkRequestUseCase(WorkRequestInputPort):
         self._skill = skill
         self._settlement = settlement
         self._now = now
+
+    def _apply_answers(self, request: str) -> None:
+        """Every answered record the request asked: applied by the request that ran again — through its aggregate,
+        saved with its event."""
+        for _where, rid, state in self._records.asked(request):
+            if state != DecisionState.ANSWERED.value:
+                continue
+            record = self._answers.get(RecordId(rid))
+            record.apply(REQUEST_STAGE, Moment(self._now()))
+
+            def save() -> None:
+                self._answers.save(record)
+                self._events.publish_and_clear_events(record)
+
+            self._transactions.in_transaction(save)
 
     @decides(
         "RUN-REQUEST-4",
@@ -114,7 +142,7 @@ class WorkRequestUseCase(WorkRequestInputPort):
             self._store.journal("request-end", kind.name, request["id"], f"exit={ran.code}", "state=failed")
             return RequestWorked(1, [("err", f"factory: request {request['id']} — the tool {why}; it stays as failed "
                                              f"(`factory.sh requests`).")])
-        asked = [(where, rid) for where, rid, state in self._records.asked(request["id"]) if state in WAITING_WORDS]
+        asked = [(where, rid) for where, rid, state in self._records.asked(request["id"]) if StateWord(state).waits()]
         if asked:
             commit, refusal = self._writes.commit(request, before, said)
             self._store.update(request, state="waiting", worker=None, record_file=asked[0][0],
@@ -124,7 +152,7 @@ class WorkRequestUseCase(WorkRequestInputPort):
             said.append(("out", f"factory: request {request['id']} asks a person — {asked[0][0]}; it runs again once "
                                 f"answered."))
             return RequestWorked(3, said, commit)
-        self._records.applied(request["id"])
+        self._apply_answers(request["id"])
         wrote = self._writes.wrote(request, before)
         if kind.name in ("wish", "stories"):
             self._records.questioned(wrote.split(), request["id"])

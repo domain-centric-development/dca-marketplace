@@ -38,10 +38,14 @@ class StageDelivery(OutputPort, typing.Protocol):
         """The story's digest as planned, the baseline of the tests that existed before it, the plan's signal."""
         ...
 
-    def adopt(self, result: typing.Any, story: str, story_path: str, held: typing.Sequence[typing.Tuple[str, str]],
-              whole: bool) -> None:
-        """The scenarios the plan found holding, `(key, test)`: the whole story adopted, or those split off into an
-        adopted story beside it."""
+    def split_off(self, result: typing.Any, story: str, story_path: str,
+                  held: typing.Sequence[typing.Tuple[str, str]]) -> None:
+        """The scenarios the plan found holding, `(key, test)`, split off into an adopted story beside it."""
+        ...
+
+    def adopted(self, result: typing.Any, story: str, story_path: str) -> None:
+        """The whole story adopted by its aggregate: the line the plan left in it is the gate's own — the story as
+        planned takes it, so it does not read as the story changed after it was planned."""
         ...
 
     def red_tree(self, result: typing.Any, story: str) -> None:

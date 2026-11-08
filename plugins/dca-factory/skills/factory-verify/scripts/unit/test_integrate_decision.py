@@ -5,7 +5,11 @@ import os
 import unittest
 
 from support import evidence, gate_story, project, verdict, write
+from dca_factory.delivery.adapter.outgoing.files.decision_record_files import DecisionRecordFiles
+from dca_factory.delivery.adapter.outgoing.files.journal_events import JournalEventPublisher
 from dca_factory.delivery.adapter.outgoing.files.stage_evidence_files import DecisionStampFiles
+from dca_factory.delivery.application.delivery.apply_answer import ApplyAnswerCommand, ApplyAnswerUseCase
+from dca_factory.delivery.domain.model.moment import Moment
 from dca_factory.delivery.application.delivery.pipeline_workflow import workflow
 from dca_factory.delivery.domain.model.stage import StageName, StoryKind
 from dca_factory.delivery.domain.service.decision_checks import Applying, DecisionChecks
@@ -33,16 +37,29 @@ at: 2026-10-21T18:30:00Z
 """
 
 
+class Directly:
+    """A transaction that runs its work as it is."""
+
+    def in_transaction(self, work):
+        return work()
+
+
 class IntegrateDecision(unittest.TestCase):
 
     def checks(self, p, story, gating):
         front, body = read_front_matter(story)
         checked = gate_story("S-1", story, front, body)
-        result, stamps = verdict(), DecisionStampFiles(p.runs, p.epics)
+        result = verdict()
+        answers = ApplyAnswerUseCase(DecisionRecordFiles(p.root, p.epics), DecisionStampFiles(p.runs, p.epics),
+                                     JournalEventPublisher(p.runs), Directly())
         for item in DecisionChecks.check(checked, StageName(gating), evidence(p.root, p.runs),
                                          workflow().order(StoryKind.STORY)).items:
-            result.take((item.finding(stamps.apply(checked, item)),) if isinstance(item, Applying)
-                        else (item,))
+            if isinstance(item, Applying):
+                applied = answers.execute(ApplyAnswerCommand(checked, item.record, item.stage,
+                                                             Moment("2026-11-08T10:00:00Z")))
+                result.take((item.finding(applied.written),))
+            else:
+                result.take((item,))
         return {(kind, check) for kind, check, _ in result.entries}, result
 
     def test_the_gates_before_wait_and_the_integrate_gate_stamps_it(self):
@@ -57,7 +74,8 @@ class IntegrateDecision(unittest.TestCase):
             kinds, result = self.checks(p, story, "integrate")
             self.assertIn(("pass", "decisions"), kinds, result.entries)
             with open(record, encoding="utf-8") as handle:
-                self.assertIn("## Applied", handle.read())
+                applied = handle.read()
+            self.assertIn("## Applied\nat: 2026-11-08T10:00:00Z\nstage: integrate", applied)
             with open(story, encoding="utf-8") as handle:
                 self.assertIn("(S-1-01)", handle.read())
 

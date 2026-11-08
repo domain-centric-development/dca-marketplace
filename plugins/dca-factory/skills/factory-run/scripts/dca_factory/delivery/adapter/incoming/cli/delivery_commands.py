@@ -119,7 +119,8 @@ def undeliver_branch(cwd: str, runs: str, epics: str, story_id: str) -> int:
     """WP-93 F: a published branch whose merge request lost the race goes back to before its delivery
     (`TakeBackDeliveryUseCase`), so the integrate step merges the remote main line and the delivering function merges
     again under the new rules."""
-    taken = root.wiring.take_back_delivery(cwd, runs, epics).execute(TakeBackDeliveryCommand(story_id))
+    taken = root.wiring.take_back_delivery(cwd, runs, epics).execute(
+        TakeBackDeliveryCommand(StoryId(story_id), Moment(time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))))
     if taken is None:
         print(f"integrate: {story_id} has no published branch in this checkout")
         return 1

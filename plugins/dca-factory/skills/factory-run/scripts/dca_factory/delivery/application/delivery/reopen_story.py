@@ -8,7 +8,8 @@ import typing
 from ....building_blocks import DomainEventPublisher, TransactionBoundary, UseCase
 from ...domain.model.decision_record import RecordId
 from ...domain.model.moment import Moment
-from ...domain.model.story import StoryId
+from ...domain.model.story import CitedCorrection, StoryId
+from ...domain.model.story_words import Detail
 from ..shared.acceptances import Acceptances
 from ..shared.story_repository import StoryRepository
 from ..shared.story_runs import StoryRuns
@@ -76,7 +77,6 @@ class ReopenStoryUseCase(ReopenStoryInputPort):
 
     def execute(self, command: ReopenStoryCommand) -> ReopenStoryResult:
         story = self._stories.get(command.story)
-        story.reopen(command.at)
         record = self._acceptances.correction_of(story.id)
         if record is None:
             return NoCorrection()
@@ -88,6 +88,7 @@ class ReopenStoryUseCase(ReopenStoryInputPort):
         changed = tuple(self._acceptances.changed_since_accepted(story.id))
         if changed:
             return NewWish(changed)
+        story.reopen(CitedCorrection(Detail(record.value)), command.at)
         kept = self._runs.keep_pass(story.id)
 
         def save() -> None:

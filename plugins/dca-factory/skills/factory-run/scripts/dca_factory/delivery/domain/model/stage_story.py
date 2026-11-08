@@ -525,6 +525,12 @@ class PlanAdoption(Value):
 
     rows: typing.Tuple[AdoptRow, ...]
 
+    def whole(self) -> Detail:
+        """Why the whole story is adopted, as its answered line says it: every scenario holds, with the test that
+        shows it."""
+        return Detail("every scenario holds on today's code, and no delivered story carries it — the plan adopted the "
+                      "story: " + ", ".join(f"{row.key.value} ({row.test.value})" for row in self.rows))
+
 
 class SymbolName(Value):
     """A type or a method as the source names it — `OrderChangedSinceReviewException`, `openFindings`."""

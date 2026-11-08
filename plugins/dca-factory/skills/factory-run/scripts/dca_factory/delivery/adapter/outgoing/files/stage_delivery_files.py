@@ -19,7 +19,8 @@ from .delivery_writes import (
     acceptance_applies, ask_acceptance, checkout_story, commit_delivery, keep_beside_delivery, keep_published_status,
     prepare_delivery, publish_story, record_red_tree, record_tests_baseline, take_into_home)
 from .run_marks import STORY_DIGEST, write_mark
-from .plan_adoption_files import adopt_split, adopt_whole
+from .owned_files import regard_gate_line
+from .plan_adoption_files import adopt_split
 from .signals import journal_signal, plan_left_open
 from .story_layout import story_digest
 from ....application.shared.stage_delivery import StageDelivery
@@ -39,12 +40,12 @@ class StageDeliveryFiles(StageDelivery):
         plan = os.path.join(self._runs, story, "plan.md")
         journal_signal(self._runs, story, "plan", open=len(plan_left_open(read_text(plan))) if os.path.isfile(plan) else 0)
 
-    def adopt(self, result: typing.Any, story: str, story_path: str, held: typing.Sequence[typing.Tuple[str, str]],
-              whole: bool) -> None:
-        if whole:
-            adopt_whole(self._runs, story_path, held)
-            result.ok("plan-adopts", f"{story} is `status: adopted` now — the runner goes on with the adoption")
-            return
+    def adopted(self, result: typing.Any, story: str, story_path: str) -> None:
+        regard_gate_line(story_path, self._runs)
+        result.ok("plan-adopts", f"{story} is `status: adopted` now — the runner goes on with the adoption")
+
+    def split_off(self, result: typing.Any, story: str, story_path: str,
+                  held: typing.Sequence[typing.Tuple[str, str]]) -> None:
         new_id = adopt_split(self._runs, story_path, story, held)
         # the story as planned is the story without what moved: the digest the later gates compare takes it
         write_mark(self._runs, story, STORY_DIGEST, story_digest(story_path))
@@ -106,4 +107,4 @@ class StageDeliveryFiles(StageDelivery):
         if landing is Landing.STORY:
             commit_delivery(result, home, story, front, close)
             return
-        publish_story(result, self._cwd, story_path, story, self._runs, claim_config_here(home))
+        publish_story(result, self._cwd, story_path, story, self._runs, claim_config_here(home) or {})

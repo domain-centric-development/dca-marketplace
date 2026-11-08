@@ -7,7 +7,7 @@ import enum
 import typing
 
 from ....building_blocks import Value
-from ..model.decision_record import ANSWERED_STATES, DecisionState, Given, RecordKind, WAITING
+from ..model.decision_record import DecisionRecord
 from ..model.stage_story import Presence
 from ..model.story import StoryId
 from ..model.story_state import Acceptance, AcceptanceVerdict, Detail
@@ -90,38 +90,14 @@ class FlakyFinding(Value):
         return tuple(found)
 
 
-class RecordAnswer(Value):
-    """A decision record's answer as the acceptance reads it: the record's kind, its state (None where there is no
-    record) and what the person gave."""
-
-    kind: RecordKind
-    state: typing.Optional[DecisionState]
-    given: Given
-
-    def accepts(self) -> Presence:
-        """An answer that accepts the delivery: it begins with `accept`."""
-        return Presence.PRESENT if self.given.value.strip().lower().startswith("accept") else Presence.ABSENT
-
-    def corrects(self) -> Presence:
-        """An acceptance answered with anything but `accept…`: the person asks for a correction."""
-        return Presence.PRESENT if self.state in ANSWERED_STATES and self.accepts() is Presence.ABSENT \
-            else Presence.ABSENT
-
-    def backs_change(self) -> Presence:
-        """A person's answer that backs a change of what holds: a question answered, or an acceptance's correction —
-        never an acceptance that accepted."""
-        if self.kind is RecordKind.ACCEPTANCE:
-            return self.corrects()
-        return Presence.PRESENT if self.state in ANSWERED_STATES else Presence.ABSENT
-
-    def verdict(self, same_story: Presence) -> AcceptanceVerdict:
-        """Where the story's acceptance stands, from its latest record: none asks for one; one waiting is open; an
-        answer holds only for the story it was given for — a story changed since (a correction written in) is asked
-        again once it has run —; it accepts or it asks for a correction."""
-        if self.state is None:
-            return AcceptanceVerdict.ASK
-        if self.state in WAITING:
-            return AcceptanceVerdict.OPEN
-        if same_story is Presence.ABSENT:
-            return AcceptanceVerdict.ASK
-        return AcceptanceVerdict.ACCEPTED if self.accepts() is Presence.PRESENT else AcceptanceVerdict.CORRECTION
+def acceptance_verdict(record: typing.Optional[DecisionRecord], same_story: Presence) -> AcceptanceVerdict:
+    """Where the story's acceptance stands, from its latest record: none asks for one; one waiting is open; an answer
+    holds only for the story it was given for — a story changed since (a correction written in) is asked again once it
+    has run —; it accepts or it asks for a correction. The record decides what its answer says."""
+    if record is None:
+        return AcceptanceVerdict.ASK
+    if record.waits():
+        return AcceptanceVerdict.OPEN
+    if same_story is Presence.ABSENT:
+        return AcceptanceVerdict.ASK
+    return AcceptanceVerdict.ACCEPTED if record.accepts() else AcceptanceVerdict.CORRECTION

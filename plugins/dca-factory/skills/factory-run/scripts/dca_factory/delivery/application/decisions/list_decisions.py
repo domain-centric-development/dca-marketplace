@@ -1,6 +1,7 @@
 """List the decisions: the inbox, what waits for a person first."""
 
 from __future__ import annotations
+from ...domain.model.decision_record import StateWord
 
 import dataclasses
 import typing
@@ -12,7 +13,6 @@ from ..shared.requests import PENDING, RequestStore, place_of
 from ..shared.story_repository import StoryRepository
 from ..shared.actions import Action, make_action, NamesStory, offered
 from ..status.texts import parse_time
-from ...domain.model.decision_record import ANSWERED_WORDS, WAITING_WORDS
 
 Model = typing.Dict[str, typing.Any]
 
@@ -52,17 +52,17 @@ class ListDecisionsUseCase(ListDecisionsInputPort):
             if query.story and facts["story"] != query.story:
                 continue
             state, answer = facts["state"], facts["answer"]
-            given = f" → {answer.get('answer')} ({answer.get('by')})" if state in ANSWERED_WORDS else ""
+            given = f" → {answer.get('answer')} ({answer.get('by')})" if StateWord(state).answered() else ""
             record: Model = dict(rank=RANKS[state], id=facts["id"], state=state, kind=facts["kind"],
                                  story=facts["story"], stage=facts["stage"], asked=parse_time(facts["asked"]),
                                  text=facts["title"] + given, options=facts["options"],
                                  recommended=facts["recommended"], path=facts["path"], sections=facts["sections"],
                                  place=place_of(facts.get("request") or ""))
             record["actions"] = mark_pending(record_actions(record, self._stories.names_story)
-                                             if state in WAITING_WORDS else [], pending)
+                                             if StateWord(state).waits() else [], pending)
             records.append(record)
         records.sort(key=lambda r: (r["rank"], r["id"]))
-        waiting = [r for r in records if r["state"] in WAITING_WORDS | {"unreadable"}]
+        waiting = [r for r in records if (StateWord(r["state"]).waits() or r["state"] == "unreadable")]
         # what a person does with the first record that waits: the inbox skill, or the answer written by hand
         how = make_action(self._stories.names_story, skill="/factory-decisions",
                           shell=f"write the answer into {waiting[0]['path']} under `## Answer`") if waiting else None

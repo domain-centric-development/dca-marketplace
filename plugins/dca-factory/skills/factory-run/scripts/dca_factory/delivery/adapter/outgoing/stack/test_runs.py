@@ -15,13 +15,11 @@ from ....domain.model.stage_story import (
     CommandKey, Count, Evidence, Place, Presence, RedLedger, RunEnd, RunState, ScenarioKey, Selector, TestOutcome,
     TestRun)
 from ....domain.model.story_state import Detail
-from ..files.decision_record_files import acceptance_records, answered_decisions
+from ..files.decision_record_files import acceptance_records, answered_decisions, record_of
 from ..files.kept_files import read_red_digests, red_ledger_path
 from ..files.story_layout import file_digest
 from .commands import command_for, discriminates, joined_filter, recorded_run, red_on_timeout, run, tail
 from .test_reports import display_name_of, fill, normalise, outcome_for
-from ....domain.model.decision_record import DecisionState, Given, RecordKind
-from ....domain.model.acceptance import RecordAnswer
 
 Located = typing.Mapping[str, str]
 #: {command: (key, code, output, ran)} of a command run whole
@@ -154,10 +152,8 @@ def red_ledger(cwd: str, runs: typing.Optional[str], story: typing.Optional[str]
     if red:
         changed_on = answered_decisions(cwd, story or "", "test")
         with contextlib.suppress(GateError):
-            changed_on += [rid for rid, _f, state, answer, _b in acceptance_records(cwd, story or "")
-                           if RecordAnswer(RecordKind.ACCEPTANCE, DecisionState(state),
-                                        Given(str(answer.get("answer", "")))).corrects()
-                           is Presence.PRESENT]
+            changed_on += [rid for rid, front, state, answer, body in acceptance_records(cwd, story or "")
+                           if record_of(rid, front, body, state, answer).corrects()]
     built = bool(runs and story) and os.path.isfile(os.path.join(runs or "", story or "", stage_files()["build"]))
     moved = frozenset(Selector(selector) for selector, recorded in digests.items()
                       if recorded and located.get(selector) and os.path.isfile(os.path.join(cwd, located[selector]))

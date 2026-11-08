@@ -14,10 +14,6 @@ class RequestRecords(OutputPort, typing.Protocol):
         """Every record the request wrote to ask: (where, as a person reads it; its id; its state)."""
         ...
 
-    def applied(self, request: str) -> None:
-        """Every answered record of the request stamped applied."""
-        ...
-
     def questioned(self, paths: typing.Sequence[str], request: str) -> None:
         """The drafts the request wrote carry the question pass that ran on them as they stand."""
         ...

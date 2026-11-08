@@ -6,8 +6,6 @@ import re
 import typing
 
 from ...domain.model.decision_record import Given, RecordKind
-from ...domain.model.stage_story import Presence
-from ...domain.model.acceptance import RecordAnswer
 
 #: The key an item carries its creation under.
 CREATED_KEY = "created"
@@ -26,7 +24,8 @@ def created_of(front: typing.Mapping[str, typing.Any]) -> str:
 
 def accepted(answer: typing.Mapping[str, typing.Any]) -> bool:
     """An answer that accepts the delivery: it begins with `accept`."""
-    return RecordAnswer(RecordKind.ACCEPTANCE, None, Given(str(answer.get("answer", "")))).accepts() is Presence.PRESENT
+    return Given(str(answer.get("answer", ""))).accepts()
+
 
 
 def front_text(value: typing.Any) -> str:

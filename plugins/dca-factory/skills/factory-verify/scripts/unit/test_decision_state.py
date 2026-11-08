@@ -7,7 +7,9 @@ import support  # noqa: F401 — puts the package on the path
 from dca_factory.delivery.domain.model.decision_record import AnswerField, DecisionState, Given, RecordKind, Section
 from dca_factory.delivery.domain.model.stage_story import Presence
 from dca_factory.delivery.domain.model.story_state import AcceptanceVerdict
-from dca_factory.delivery.domain.model.acceptance import RecordAnswer
+from dca_factory.delivery.domain.model.acceptance import acceptance_verdict
+from dca_factory.delivery.domain.model.decision_record import Asker, DecisionRecord, RecordContent, RecordId
+from dca_factory.delivery.domain.model.story_words import Detail
 
 FULL = {AnswerField("answer"), AnswerField("by"), AnswerField("at")}
 
@@ -29,26 +31,30 @@ class Acceptance(unittest.TestCase):
 
     def test_none_asks_one_waiting_is_open_and_a_changed_story_is_asked_again(self):
         same, changed = Presence.PRESENT, Presence.ABSENT
-        self.assertIs(RecordAnswer(RecordKind.ACCEPTANCE, None, Given("")).verdict(same), AcceptanceVerdict.ASK)
-        self.assertIs(RecordAnswer(RecordKind.ACCEPTANCE, DecisionState.DRAFT, Given("accepted")).verdict(same), AcceptanceVerdict.OPEN)
-        self.assertIs(RecordAnswer(RecordKind.ACCEPTANCE, DecisionState.ANSWERED, Given("accepted")).verdict(changed),
-                      AcceptanceVerdict.ASK)
+        self.assertIs(acceptance_verdict(None, same), AcceptanceVerdict.ASK)
+        self.assertIs(acceptance_verdict(record(DecisionState.DRAFT, "accepted"), same), AcceptanceVerdict.OPEN)
+        self.assertIs(acceptance_verdict(record(DecisionState.ANSWERED, "accepted"), changed), AcceptanceVerdict.ASK)
 
     def test_an_answer_beginning_accept_accepts_any_other_asks_for_a_correction(self):
-        self.assertIs(RecordAnswer(RecordKind.ACCEPTANCE, DecisionState.APPLIED, Given(" Accepted ")).verdict(Presence.PRESENT),
+        self.assertIs(acceptance_verdict(record(DecisionState.APPLIED, " Accepted "), Presence.PRESENT),
                       AcceptanceVerdict.ACCEPTED)
-        self.assertIs(RecordAnswer(RecordKind.ACCEPTANCE, DecisionState.ANSWERED, Given("the button is red")).verdict(Presence.PRESENT),
+        self.assertIs(acceptance_verdict(record(DecisionState.ANSWERED, "the button is red"), Presence.PRESENT),
                       AcceptanceVerdict.CORRECTION)
 
     def test_a_correction_and_an_answered_question_back_a_change_an_acceptance_that_accepted_does_not(self):
         answered, waiting = DecisionState.ANSWERED, DecisionState.OPEN
-        self.assertIs(RecordAnswer(RecordKind.ACCEPTANCE, answered, Given("the label is wrong")).corrects(), Presence.PRESENT)
-        self.assertIs(RecordAnswer(RecordKind.ACCEPTANCE, answered, Given("accepted")).corrects(), Presence.ABSENT)
-        self.assertIs(RecordAnswer(RecordKind.ACCEPTANCE, waiting, Given("")).corrects(), Presence.ABSENT)
-        self.assertIs(RecordAnswer(RecordKind.QUESTION, answered, Given("b")).backs_change(), Presence.PRESENT)
-        self.assertIs(RecordAnswer(RecordKind.QUESTION, waiting, Given("")).backs_change(), Presence.ABSENT)
-        self.assertIs(RecordAnswer(RecordKind.ACCEPTANCE, answered, Given("accepted")).backs_change(),
-                      Presence.ABSENT)
+        self.assertTrue(record(answered, "the label is wrong").corrects())
+        self.assertFalse(record(answered, "accepted").corrects())
+        self.assertFalse(record(waiting, "").corrects())
+        self.assertTrue(record(answered, "b", RecordKind.QUESTION).backs_change())
+        self.assertFalse(record(waiting, "", RecordKind.QUESTION).backs_change())
+        self.assertFalse(record(answered, "accepted").backs_change())
+
+
+def record(state, given, kind=RecordKind.ACCEPTANCE):
+    """A record as the files keep it: its state, its answer as written."""
+    return DecisionRecord.restore(RecordId("S-1-01"), kind, Asker.STAGE, state,
+                                  content=RecordContent(Detail("q"), None, Detail(given), Detail("jane"), ()))
 
 
 if __name__ == "__main__":

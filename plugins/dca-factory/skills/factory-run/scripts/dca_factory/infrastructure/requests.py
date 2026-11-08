@@ -6,7 +6,8 @@ from __future__ import annotations
 import typing
 
 from ..building_blocks import UseCaseException
-from ..delivery.adapter.outgoing.files.decision_record_files import RequestRecordFiles
+from ..delivery.adapter.outgoing.files.decision_record_files import DecisionRecordFiles, RequestRecordFiles
+from ..delivery.adapter.outgoing.files.journal_events import FileTransactions, JournalEventPublisher
 from ..delivery.adapter.outgoing.files.handed_files import HandedFileFolder
 from ..delivery.adapter.outgoing.files.request_files import PlacedRequests, RequestFiles, stamp_utc
 from ..delivery.adapter.outgoing.files.scheduled_starts import ScheduledStarts
@@ -52,7 +53,9 @@ def request_queue(home: str, worker: str, placed: typing.Callable[[], typing.Any
 def work_request(home: str, runs: str, profile: typing.Callable[[], typing.Any],
                  lock: typing.Callable[[], typing.ContextManager[None]], skill: RequestSkill) -> WorkRequestUseCase:
     store, changes, settlement = RequestFiles(home), BacklogChangeFiles(home, runs, profile, lock), HeldRequests(home, runs)
-    return WorkRequestUseCase(store, RequestRecordFiles(home), changes, skill, settlement, stamp_utc, HandedFileFolder())
+    return WorkRequestUseCase(store, RequestRecordFiles(home), changes, skill, settlement, stamp_utc, HandedFileFolder(),
+                              answers=DecisionRecordFiles(home), events=JournalEventPublisher(runs),
+                              transactions=FileTransactions())
 
 
 def settle_request(home: str, runs: str, profile: typing.Callable[[], typing.Any],

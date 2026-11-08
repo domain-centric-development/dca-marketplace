@@ -70,6 +70,15 @@ class Assumption(Value):
         if "\n" in self.value or not self.value.strip():
             raise ValueError("an assumption is one line, not empty")
 
+    @classmethod
+    def answered(cls, sentence: Detail, cites: Detail) -> Assumption:
+        """An assumption settled: `- answered: <sentence> (<what it cites>)`."""
+        return cls(f"- answered: {sentence.value} ({cites.value})")
+
+
+#: What the plan's own adoption cites in the answered line it leaves: no decision record, the plan's `## Adopt`.
+PLAN_ADOPT = Detail("plan-adopt")
+
 
 class DeliveredOn(Value):
     """When a story was delivered, as its `delivered:` line says it — "" where the line is missing."""
@@ -137,6 +146,16 @@ class NothingToDeliver(DomainException):
         self.story = story
 
 
+class NotReleased(DomainException):
+    """Only a story a person released, or one the project already has, is delivered by the gate: a draft, or a status
+    nobody knows, is released first."""
+
+    def __init__(self, story: StoryId, status: StoryStatus) -> None:
+        super().__init__(f"{story.value} is {status.value or 'of a status the factory does not know'} — a person "
+                         f"releases it (`status: approved`) before the gate delivers it")
+        self.story = story
+
+
 class NothingToProve(DomainException):
     """A story the gate delivered, its pass on record, is proven already."""
 
@@ -173,15 +192,39 @@ class StoryReleased(DomainEvent):
     at: Moment
 
 
+class CitedCorrection(Value):
+    """A correction a person gave on looking at the delivered story, answered in its acceptance record and written
+    into the story — what a story is reopened for. The record is named by its id: it is another aggregate."""
+
+    record: Detail
+
+
 class StoryReopened(DomainEvent):
     """A delivered story was taken back for a correction: approved again, it runs from plan."""
 
     story: StoryId
+    correction: Detail
     at: Moment
 
 
 class StoryAdoptedForProof(DomainEvent):
     """A claimed delivery was handed to the adopt path, to be proven by the existing tests."""
+
+    story: StoryId
+    at: Moment
+
+
+class StoryAdoptedOnPlan(DomainEvent):
+    """The plan found every scenario of the released story holding on today's code: adopted, it is proven, never
+    built."""
+
+    story: StoryId
+    at: Moment
+
+
+class PublicationTakenBack(DomainEvent):
+    """A delivery published on the story's branch was taken back — its merge request lost the race —: the story is
+    as it was before it was published, to be delivered again."""
 
     story: StoryId
     at: Moment
@@ -213,6 +256,8 @@ class Story(AggregateRoot[StoryId]):
                  named_kind: KindWord = KindWord(""), *, content: StoryContent) -> None:
         super().__init__()
         self._content = content
+        #: whether the story carries a `status:` line — a project may not use the field; any transition writes one
+        self._marked = bool(content.written_status.value)
         self._named_kind = named_kind
         self._id = story_id
         self._epic = epic
@@ -254,7 +299,7 @@ class Story(AggregateRoot[StoryId]):
     def release_state(self) -> ReleaseState:
         """Whether a person released the story: no `status:` is unmarked, `approved` released, `adopted` and
         `delivered` are what they say, any other word is not released."""
-        if not self._content.written_status.value:
+        if not self._marked:
             return ReleaseState.UNMARKED
         return {StoryStatus.APPROVED: ReleaseState.RELEASED, StoryStatus.ADOPTED: ReleaseState.ADOPTED,
                 StoryStatus.DELIVERED: ReleaseState.DELIVERED}.get(self._status, ReleaseState.UNRELEASED)
@@ -278,16 +323,18 @@ class Story(AggregateRoot[StoryId]):
         if self._status is not StoryStatus.DRAFT:
             raise NotADraft(self._id, self._status)
         self._status = StoryStatus.APPROVED
+        self._marked = True
         self._assumptions.append(answered)
         self.register_event(StoryReleased(self._id, at))
 
-    def reopen(self, at: Moment) -> None:
-        """Taken back for a correction: approved again, it runs from plan, and no longer says delivered."""
+    def reopen(self, correction: CitedCorrection, at: Moment) -> None:
+        """Taken back for the correction it cites: approved again, it runs from plan, and no longer says delivered."""
         if self._status is not StoryStatus.DELIVERED:
             raise NotDelivered(self._id)
         self._status = StoryStatus.APPROVED
+        self._marked = True
         self._delivery = None
-        self.register_event(StoryReopened(self._id, at))
+        self.register_event(StoryReopened(self._id, correction.record, at))
 
     def adopt_for_proof(self, gate_pass: GatePass, at: Moment) -> Delivery:
         """A claimed delivery handed to the adopt path: adopted, without its delivered lines — the claim they made is
@@ -298,9 +345,33 @@ class Story(AggregateRoot[StoryId]):
         if claim.by == BY_GATE and gate_pass is GatePass.ON_RECORD:
             raise NothingToProve(self._id)
         self._status = StoryStatus.ADOPTED
+        self._marked = True
         self._delivery = None
         self.register_event(StoryAdoptedForProof(self._id, at))
         return claim
+
+    def adopt_on_plan(self, answered: Assumption, at: Moment) -> None:
+        """The plan found every scenario holding: the released story is adopted, the plan's finding kept as its
+        answered assumption."""
+        if self._status is StoryStatus.DELIVERED:
+            raise AlreadyDelivered(self._id, self._delivery.by if self._delivery else DeliveredBy(""))
+        if self.release_state() not in (ReleaseState.RELEASED, ReleaseState.UNMARKED):
+            raise NotReleased(self._id, self._status)
+        self._status = StoryStatus.ADOPTED
+        self._marked = True
+        if answered not in self._assumptions:
+            self._assumptions.append(answered)
+        self.register_event(StoryAdoptedOnPlan(self._id, at))
+
+    def take_back_publication(self, published_over: StoryStatus, at: Moment) -> None:
+        """A published delivery taken back: the story is again what it was published over — approved, or adopted
+        where the adopt path delivered it —, without its delivered lines."""
+        if self._status is not StoryStatus.DELIVERED:
+            raise NotDelivered(self._id)
+        self._status = published_over if published_over is StoryStatus.ADOPTED else StoryStatus.APPROVED
+        self._marked = True
+        self._delivery = None
+        self.register_event(PublicationTakenBack(self._id, at))
 
     def deliver_by_hand(self, by: Person, at: Moment) -> Delivery:
         """A person built it: delivered, claimed by them — not proven. Returns the delivery."""
@@ -309,16 +380,23 @@ class Story(AggregateRoot[StoryId]):
         if self._status is StoryStatus.SUPERSEDED:
             raise NothingToDeliver(self._id)
         self._status = StoryStatus.DELIVERED
+        self._marked = True
         self._delivery = Delivery(DeliveredOn(at.value), DeliveredBy.hand(by))
         self.register_event(StoryDeliveredByHand(self._id, by, at))
         return self._delivery
 
     def deliver_by_gate(self, at: Moment) -> Delivery:
         """The gate that delivers it: built or adopted, one end state — delivered, by the gate. Returns the
-        delivery."""
+        delivery. Only what a person released, or the project already has, is delivered; a story without a `status:`
+        is not held back — the project may not use the field."""
         if self._status is StoryStatus.DELIVERED:
             raise AlreadyDelivered(self._id, self._delivery.by if self._delivery else DeliveredBy(""))
+        if self._status is StoryStatus.SUPERSEDED:
+            raise NothingToDeliver(self._id)
+        if self.release_state() is ReleaseState.UNRELEASED:
+            raise NotReleased(self._id, self._status)
         self._status = StoryStatus.DELIVERED
+        self._marked = True
         self._delivery = Delivery(DeliveredOn(at.value), BY_GATE)
         self.register_event(StoryDeliveredByGate(self._id, at))
         return self._delivery
