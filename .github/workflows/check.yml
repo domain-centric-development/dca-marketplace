@@ -32,11 +32,7 @@ jobs:
         include:
           - { os: ubuntu-latest, group: all }
           - { os: macos-latest, group: all }
-          - { os: windows-latest, group: checks }
-          - { os: windows-latest, group: runner }
-          - { os: windows-latest, group: worktree }
-          - { os: windows-latest, group: setup }
-          - { os: windows-latest, group: unit }
+          - { os: windows-latest, group: all }
     name: factory (${{ matrix.os }}, ${{ matrix.group }})
     runs-on: ${{ matrix.os }}
     # The limit catches a hang, not a slow platform: the longest job, a Windows group, takes about 25 minutes.
