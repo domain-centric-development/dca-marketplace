@@ -10,17 +10,16 @@ from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from ..pipeline.stage_rows import order_for, stage_files, stage_order
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir, factory_home
-from ....application.shared.front import is_acceptance
-from ....domain.model.decision_record import DecisionState, RecordId, RecordKind
+from ....domain.model.decision_record import RecordId
 from ....domain.model.stage import StageName
 from ....domain.model.story_state import (
-    Acceptance, AcceptanceVerdict, Claimant, Detail, GateReport, HandOverFacts, HandOverText, Mark, RecordFacts,
-    Rounds, RunFacts, StoryMarks, VerdictWord)
+    Acceptance, AcceptanceVerdict, Claimant, Detail, GateReport, HandOverFacts, HandOverText, Mark, Rounds, RunFacts, StoryMarks, VerdictWord)
 from ..claims.remote_claims import cached_claims, PUBLISHED
+from ....domain.model.decision_record import DecisionRecord
 from ....domain.model.story import Story
 from .story_files import story_of
 from ..git.worktrees import has_worktree
-from .decision_record_files import acceptance_state, needs_human_ids, records_of, resume_stage
+from .decision_record_files import acceptance_state, needs_human_ids, record_of, records_of
 from .journal_files import journal_events
 from .run_marks import (
     backlog_digest, current_stage_files, gate_passed_since, OWNED_CHANGED, pass_marks, STORY_DIGEST, verdict_in)
@@ -58,10 +57,9 @@ class StoryFactsFiles(StoryFacts):
     def run(self, story: Story) -> RunFacts:
         texts = current_stage_files(self.runs, self.story_id, order_for(story.kind.value))
         hand_overs = {StageName(stage): self.hand_over(text) for stage, text in texts.items()}
-        records, unreadable = self.records()
         marks = self.marks(texts, pass_marks(self.runs, self.story_id))
         acceptance = self.acceptance() if self.story_path and "document" in texts else None
-        return RunFacts(hand_overs, records, unreadable, frozenset(marks), self.rounds(),
+        return RunFacts(hand_overs, self.unreadable(), frozenset(marks), self.rounds(),
                         tuple(StageName(s) for s in stage_order() if self.present(f".gate-{s}.txt")),
                         frozenset(StageName(s) for s in stage_order() if self.present(stage_files()[s])),
                         self.report(".gate-integrate.txt"), self.report(".gate-document.txt"), acceptance)
@@ -72,18 +70,20 @@ class StoryFactsFiles(StoryFacts):
         return HandOverFacts(HandOverText(text), VerdictWord(verdict_in(text)),
                              tuple(RecordId(i) for i in asks) if asks is not None else None)
 
-    def records(self) -> typing.Tuple[typing.Tuple[RecordFacts, ...], typing.Optional[Detail]]:
+    def records(self, story: Story) -> typing.Sequence[DecisionRecord]:
         try:
             found = records_of(self.story_id, self.story_path)
+        except GateError:
+            return ()
+        return [record_of(os.path.basename(path)[:-3], front, body, state, answer)
+                for path, front, body, state, answer in found]
+
+    def unreadable(self) -> typing.Optional[Detail]:
+        try:
+            records_of(self.story_id, self.story_path)
         except GateError as error:
-            return (), Detail(str(error))
-        facts = []
-        for _path, front, _body, state, answer in found:
-            resumes = resume_stage(front, answer)
-            facts.append(RecordFacts(RecordId(str(front["id"]).strip()), DecisionState(state),
-                                     StageName(resumes) if resumes else None,
-                                     RecordKind.ACCEPTANCE if is_acceptance(front) else RecordKind.QUESTION))
-        return tuple(facts), None
+            return Detail(str(error))
+        return None
 
     def marks(self, texts: typing.Mapping[str, str], passes: typing.Mapping[str, int]) -> typing.Set[Mark]:
         marks = set()

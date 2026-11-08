@@ -9,7 +9,7 @@ import typing
 from ....building_blocks import Value
 from .story import StoryContent as StoryContent
 from .story_words import Count as Count, ScenarioKey as ScenarioKey, RowId as RowId, EventName as EventName, Clause as Clause, ScenarioClauses as ScenarioClauses, Place as Place
-from .decision_record import AnswerField, DecisionState, RecordId, RecordKind
+from .decision_record import RecordId
 from .epic import EpicId
 from .schedule import ContextName
 from .stage import StageName
@@ -215,21 +215,6 @@ class EpicFacts(Value):
     unreadable: typing.Optional[Detail] = None
 
 
-class DecisionFacts(Value):
-    """One decision record of the story, as its gate reads it: where it stands, the stage that asked it (open or a
-    draft) or applies its answer, its question, the answer and who gave it, the answer lines a draft lacks."""
-
-    record: RecordId
-    kind: RecordKind
-    state: DecisionState
-    stage: typing.Optional[StageName]
-    question: Detail
-    place: Place
-    answer: Detail
-    by: Detail
-    missing: typing.Tuple[AnswerField, ...]
-
-
 class HandOverAsk(Value):
     """A stage's hand-over as the decisions check reads it: its text, and the records its `## needs-human` names —
     None where it escalates nothing, none where it escalates without naming one."""
@@ -241,11 +226,10 @@ class HandOverAsk(Value):
 
 
 class DecisionsFacts(Value):
-    """The story's decision records under their store, and the stages' hand-overs — or why the store cannot be
-    read."""
+    """The store of the story's decision records, and the stages' hand-overs — or why the store cannot be read. The
+    records themselves are aggregates, read on their own (`StageEvidence.decision_records`)."""
 
     store: Place
-    records: typing.Tuple[DecisionFacts, ...]
     hand_overs: typing.Tuple[HandOverAsk, ...]
     unreadable: typing.Optional[Detail] = None
 

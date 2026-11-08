@@ -9,7 +9,9 @@ import typing
 from ....building_blocks import AggregateRoot, DomainException, Id, Value
 from .moment import Moment
 from .person import Person
+from .stage import StageName
 from .story import StoryId
+from .story_words import Detail
 
 
 class RecordId(Id):
@@ -124,13 +126,26 @@ class NoAcceptance(DomainException):
         super().__init__(f"{record.value} asks a question, not for an acceptance")
 
 
+class RecordContent(Value):
+    """What a record says, read-only: its question, the stage that asked it (while it waits) or applies its answer,
+    the answer and who gave it as written, and the answer lines a draft lacks."""
+
+    question: Detail
+    stage: typing.Optional[StageName]
+    written_answer: Detail
+    written_by: Detail
+    missing: typing.Tuple[AnswerField, ...]
+
+
 class DecisionRecord(AggregateRoot[RecordId]):
-    """A question beside its story, or the project's own: its options, who asked, its state and its answer."""
+    """A question beside its story, or the project's own: its options, who asked, its state and its answer, and what
+    it says (`content`, read-only — what the gate reads)."""
 
     def __init__(self, record_id: RecordId, kind: RecordKind, asker: Asker, state: DecisionState,
                  options: typing.Sequence[OptionKey] = (), story: typing.Optional[StoryId] = None,
-                 answer: typing.Optional[Answer] = None) -> None:
+                 answer: typing.Optional[Answer] = None, *, content: RecordContent) -> None:
         super().__init__()
+        self._content = content
         self._id = record_id
         self._kind = kind
         self._asker = asker
@@ -166,6 +181,19 @@ class DecisionRecord(AggregateRoot[RecordId]):
     @property
     def answer_given(self) -> typing.Optional[Answer]:
         return self._answer
+
+    @property
+    def content(self) -> RecordContent:
+        """What the record says — its question, the stage, the answer as written."""
+        return self._content
+
+    def waits(self) -> bool:
+        """Whether it still waits for a person: open, or a draft answer nobody signed."""
+        return self._state in WAITING
+
+    def answer_said(self) -> Detail:
+        """The answer and who gave it, as a finding quotes them."""
+        return Detail(f"{self._content.written_answer.value!r} by {self._content.written_by.value}")
 
     def answer(self, answer: Answer) -> None:
         """The person's answer, once: a record answered or applied takes no second one."""

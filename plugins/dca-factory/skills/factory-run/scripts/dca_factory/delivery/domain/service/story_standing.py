@@ -5,9 +5,9 @@ from __future__ import annotations
 import typing
 
 from ....building_blocks import DomainService
-from ..model.decision_record import ANSWERED_STATES, DecisionState, RecordId, RecordKind, WAITING
+from ..model.decision_record import DecisionRecord, ANSWERED_STATES, DecisionState, RecordId, RecordKind
 from ..model.stage import HandOver, StageName, StoryKind
-from ..model.story import Story, StoryStatus
+from ..model.story import ReleaseState, Story, StoryStatus
 from ..model.workflow import Workflow
 from ..model.story_state import (
     AcceptanceVerdict, Detail, Mark, MAX_ROUNDS, RunFacts, StateName, Standing, StoryMarks, VerdictWord)
@@ -27,13 +27,13 @@ class StoryStanding(DomainService):
     @staticmethod
     def before_run(story: Story, marks: StoryMarks) -> typing.Optional[Standing]:
         """Where a story stands that does not run — None for one released to run."""
-        name, status = story.id.value, story.content.written_status.value
+        name = story.id.value
         # Before anything the story says about itself: a stage may have written it (WP-94).
         if Mark.OWNED_CHANGED in marks.marks:
             return Standing(StateName.STOPPED, None, Detail(
                 f"the story or an answer changed under a stage — a person looks at "
                 f"it, then `factory-cli.py --owned-confirm {name}`"))
-        if status == "superseded":
+        if story.status is StoryStatus.SUPERSEDED:
             return Standing(StateName.SUPERSEDED, None, Detail("replaced by another story"))
         # Delivered is delivered: the gate wrote it into the story, and nothing under the run folder — a refusal
         # left from an earlier round, a deleted folder — changes that.
@@ -49,33 +49,34 @@ class StoryStanding(DomainService):
                 "after another landed"))
         if marks.claimant:
             return Standing(StateName.CLAIMED, None, Detail(f"claimed by {marks.claimant.value}"))
-        if status and status not in ("approved", "adopted"):
-            return Standing(StateName.UNRELEASED, None, Detail(f"status {status} — a human releases it first"))
+        if story.release_state() is ReleaseState.UNRELEASED:
+            return Standing(StateName.UNRELEASED, None, Detail(
+                f"status {story.content.written_status.value} — a human releases it first"))
         return None
 
-    def in_run(self, story: Story, run: RunFacts) -> Standing:
-        """Where a released story stands in its run."""
+    def in_run(self, story: Story, run: RunFacts, records: typing.Sequence[DecisionRecord]) -> Standing:
+        """Where a released story stands in its run, with its decision records."""
         texts = run.hand_overs
         order = self._workflow.order(StoryKind.STORY)
         if run.unreadable:
             return Standing(StateName.STOPPED, None, run.unreadable)
-        waiting = [r.id.value for r in run.records if r.state in WAITING]
+        waiting = [r.id.value for r in records if r.waits()]
         if waiting:
             return Standing(StateName.WAITING, None, Detail("decision " + ", ".join(waiting)))
         answered: typing.Dict[typing.Optional[StageName], RecordId] = {}
         resolved: typing.Dict[RecordId, typing.Optional[StageName]] = {}
-        for record in run.records:
+        for record in records:
             if record.kind == RecordKind.ACCEPTANCE:
-                resolved[record.id] = record.resumes
+                resolved[record.id] = record.content.stage
                 continue                             # answered through the document gate, not a stage
-            facts = texts.get(record.resumes) if record.resumes else None
+            facts = texts.get(record.content.stage) if record.content.stage else None
             if record.state in ANSWERED_STATES:
-                resolved[record.id] = record.resumes
+                resolved[record.id] = record.content.stage
             # The record's `stage:` applies the answer — usually the stage that asked, for a judge's
             # story conflict the stage the answer lands in. Until that stage's file cites the id, it is next.
             if record.state == DecisionState.ANSWERED and (
                     facts is None or record.id in (facts.asks or ()) or record.id.value not in facts.text.value):
-                answered.setdefault(record.resumes, record.id)
+                answered.setdefault(record.content.stage, record.id)
         # A story changed since its plan runs from plan, before any answer's stage: that stage would build on a plan
         # of the story as it was (#158). The gate's own `answered:` line takes the planned digest anew, so it does not.
         if texts and Mark.CHANGED_SINCE_PLAN in run.marks:

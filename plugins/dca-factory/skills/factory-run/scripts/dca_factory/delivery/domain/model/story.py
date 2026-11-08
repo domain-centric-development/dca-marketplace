@@ -32,6 +32,19 @@ class StoryStatus(enum.Enum):
     OTHER = ""
 
 
+class ReleaseState(enum.Enum):
+    """Whether a person released the story to be built, as its `status:` says it."""
+
+    #: no `status:` at all — the project may not use the field; nothing to release
+    UNMARKED = "unmarked"
+    RELEASED = "released"
+    #: behaviour the project already has: adopted, never built
+    ADOPTED = "adopted"
+    DELIVERED = "delivered"
+    #: a draft, superseded, or a word nobody knows — a person releases it first
+    UNRELEASED = "unreleased"
+
+
 class KindWord(Value):
     """A story's `kind:` as written — `journey`, `task`, or nothing."""
 
@@ -194,6 +207,23 @@ class Story(AggregateRoot[StoryId]):
     @property
     def assumptions(self) -> typing.Tuple[Assumption, ...]:
         return tuple(self._assumptions)
+
+    def release_state(self) -> ReleaseState:
+        """Whether a person released the story: no `status:` is unmarked, `approved` released, `adopted` and
+        `delivered` are what they say, any other word is not released."""
+        if not self._content.written_status.value:
+            return ReleaseState.UNMARKED
+        return {StoryStatus.APPROVED: ReleaseState.RELEASED, StoryStatus.ADOPTED: ReleaseState.ADOPTED,
+                StoryStatus.DELIVERED: ReleaseState.DELIVERED}.get(self._status, ReleaseState.UNRELEASED)
+
+    def happy_path(self) -> typing.Optional[ScenarioKey]:
+        """The one scenario that shows the story's value — None unless exactly one is marked."""
+        marked = self._content.happy_paths
+        return marked[0] if len(marked) == 1 else None
+
+    def walks(self) -> typing.Tuple[StoryId, ...]:
+        """The stories a journey walks — its `depends_on:`; none for any other kind."""
+        return self._content.depends_on if self.kind is StoryKind.JOURNEY else ()
 
     @property
     def content(self) -> StoryContent:

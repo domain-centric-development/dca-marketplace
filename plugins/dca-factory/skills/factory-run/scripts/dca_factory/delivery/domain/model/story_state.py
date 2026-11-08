@@ -7,7 +7,7 @@ import typing
 
 from ....building_blocks import Value
 from .story_words import Detail as Detail, StatusWord as StatusWord
-from .decision_record import DecisionState, RecordId, RecordKind
+from .decision_record import RecordId
 from .stage import StageName
 from .story import StoryId
 from .verdict import CheckName, Finding, Said
@@ -150,15 +150,6 @@ class HandOverFacts(Value):
     asks: typing.Optional[typing.Tuple[RecordId, ...]]
 
 
-class RecordFacts(Value):
-    """A decision record of the story: its id, its state, the stage its answer resumes at, and its kind."""
-
-    id: RecordId
-    state: DecisionState
-    resumes: typing.Optional[StageName]
-    kind: RecordKind
-
-
 class GateReport(Value):
     """The text of a gate's refusal."""
 
@@ -221,11 +212,11 @@ class Acceptance(Value):
 
 
 class RunFacts(Value):
-    """What the run of a released story left: the current pass's stage files, the records (or why they could not
-    be read), the marks, the refusals, the rounds and the acceptance."""
+    """What the run of a released story left: the current pass's stage files, why its decision records could not be
+    read (the records themselves are aggregates, read on their own), the marks, the refusals, the rounds and the
+    acceptance."""
 
     hand_overs: typing.Mapping[StageName, HandOverFacts]
-    records: typing.Tuple[RecordFacts, ...]
     unreadable: typing.Optional[Detail]
     marks: typing.FrozenSet[Mark]
     rounds: Rounds

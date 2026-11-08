@@ -5,6 +5,7 @@ from __future__ import annotations
 import typing
 
 from ....building_blocks import OutputPort
+from ...domain.model.decision_record import DecisionRecord
 from ...domain.model.story import Story
 from ...domain.model.story_state import RunFacts, StoryMarks
 
@@ -18,6 +19,10 @@ class StoryFacts(OutputPort, typing.Protocol):
 
     def story_marks(self) -> StoryMarks:
         """The marks read before its run: a stage changed it, it is published, another factory claims it."""
+        ...
+
+    def records(self, story: Story) -> typing.Sequence[DecisionRecord]:
+        """The story's decision records — none where they cannot be read (`run` says why)."""
         ...
 
     def run(self, story: Story) -> RunFacts:

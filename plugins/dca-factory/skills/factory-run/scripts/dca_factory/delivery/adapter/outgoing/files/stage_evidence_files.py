@@ -17,9 +17,8 @@ from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_
 from .....sharedkernel.adapter.outgoing.profile.profile_files import (
     evidence_dir, factory_home, HOME_VARIABLE, in_worktree, places_in, location, METHOD_PROFILE, place, read_flat, shown, unknown_profile_keys)
 from ....application.profile.profile_rules import perspectives_of
-from ....application.shared.front import is_acceptance
 from ....domain.model.decision_record import (
-    ANSWERED_WORDS, AnswerField, DecisionState, RecordId, RecordKind, WAITING_WORDS)
+    ANSWERED_WORDS, RecordId)
 from ....domain.model.epic import EpicId
 from ....domain.model.schedule import ContextName
 from ....domain.model.stage import StageName, StoryKind
@@ -29,7 +28,7 @@ from ....domain.model.stage_story import (
     PipelineFacts, PlannedDigest, ProposalFacts, ReviewFacts, StoryPass, SpecDelta, SpecTests, StoryCommit, DecidedRecord, KeptTests, PlannedTestChange, RedProof, StageChanges,
     TestChange, TestEdit, Unobserved, AssertionFact, ByteSize, Clause, ClauseRow, CommandKey, Count,
     ElementName, ElementRules, FileChange, InvariantFacts, InvariantRow, PlannedFile, PortName, Presence, Rule,
-    ScenarioClauses, Selector, ContextMapFacts, HandOverName, HandOverSize, PlanLevels, DecisionFacts, DecisionsFacts, HandOverAsk, ContractNumber, EpicFacts, EpicField, EventName, GateRelease, InstructionFile,
+    ScenarioClauses, Selector, ContextMapFacts, HandOverName, HandOverSize, PlanLevels, DecisionsFacts, HandOverAsk, ContractNumber, EpicFacts, EpicField, EventName, GateRelease, InstructionFile,
     Metric, ModelKey, OwnedFacts, OwnedPart, Place, ProfileKey, ProfileText, RoundsRecord, RowId, RowState,
     ScenarioKey, StoryContent, TestSource, UnknownKey)
 from ....domain.model.story import StoryId
@@ -37,9 +36,10 @@ from ....domain.model.story_state import Detail, HandOverText, Rounds, StatusWor
 from ....domain.service.backlog_checks import EPIC_FIELDS, normal_name
 from ....domain.service.decision_checks import Applying
 from .brief_files import given_digest, named_digest
+from ....domain.model.decision_record import DecisionRecord
 from .decision_record_files import (
-    ANSWER_FIELDS, answer_sentence, decisions_store, needs_human_ids, read_decisions, record_path, resume_stage,
-    stamp_applied)
+    record_of,
+    answer_sentence, decisions_store, needs_human_ids, read_decisions, record_path, stamp_applied)
 from .epic_files import epic_dependency_problem
 from .findings_files import confirmed_defects, findings_path, findings_rows, project_findings_path
 from .owned_files import owned_changes, write_answered
@@ -310,20 +310,9 @@ class StageEvidenceFiles:
         try:
             place_of = self.place_of(story.id).value or find_story(place("epics"), story_id)
             store = decisions_store(place_of)
-            read = read_decisions(store, story_id)
+            read_decisions(store, story_id)
         except GateError as error:
-            return DecisionsFacts(Place(""), (), (), Detail(str(error)))
-        records = []
-        for path, front, body, state, answer in read:
-            asked = state in WAITING_WORDS
-            stage = str(front.get("stage", "")).strip() if asked else resume_stage(front, answer)
-            records.append(DecisionFacts(
-                RecordId(str(front["id"]).strip()), RecordKind.ACCEPTANCE if is_acceptance(front) else RecordKind.QUESTION,
-                DecisionState(state), StageName(stage) if stage else None,
-                Detail((body.strip().splitlines() or ["(no title)"])[0].lstrip("# ").strip()),
-                Place(os.path.relpath(path, self._cwd).replace(os.sep, "/")),     # one spelling on every platform
-                Detail(str(answer.get("answer"))), Detail(str(answer.get("by"))),
-                tuple(AnswerField(f) for f in ANSWER_FIELDS if not answer.get(f))))
+            return DecisionsFacts(Place(""), (), Detail(str(error)))
         hand_overs = []
         for stage_name, name in stage_files().items():
             path = os.path.join(self._runs, story_id, name)
@@ -332,7 +321,16 @@ class StageEvidenceFiles:
                 ids = needs_human_ids(text)
                 hand_overs.append(HandOverAsk(StageName(stage_name), Place(path), HandOverText(text),
                                               tuple(RecordId(i) for i in ids) if ids is not None else None))
-        return DecisionsFacts(Place(shown(store)), tuple(records), tuple(hand_overs))
+        return DecisionsFacts(Place(shown(store)), tuple(hand_overs))
+
+    def decision_records(self, story: Story) -> typing.Sequence[DecisionRecord]:
+        try:
+            store = decisions_store(self.place_of(story.id).value or find_story(place("epics"), story.id.value))
+            read = read_decisions(store, story.id.value)
+        except GateError:
+            return ()
+        return [record_of(os.path.basename(path)[:-3], front, body, state, answer)
+                for path, front, body, state, answer in read]
 
     def record_place(self, story: Story, record: RecordId) -> Place:
         return Place(shown(record_path(story.id.value, record.value, self.place_of(story.id).value)))
@@ -864,7 +862,7 @@ class DecisionStampFiles(DecisionStamps):
         self._epics = epics
 
     def apply(self, story: Story, applying: Applying) -> typing.Optional[Place]:
-        rid = applying.record.record.value
+        rid = applying.record.value
         where = find_story(self._epics, story.id.value)
         found = next(((path, body, answer) for path, front, body, _state, answer
                       in read_decisions(decisions_store(where), story.id.value)

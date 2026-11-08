@@ -10,6 +10,7 @@ import typing
 from ....building_blocks import DomainGateway
 from ..model.decision_record import RecordId
 from ..model.stage import StageName
+from ..model.decision_record import DecisionRecord
 from ..model.story import Story
 from ..model.stage_story import (
     BriefFacts, DecidedRecord, DocumentFacts, PlanAdoption, Integration, MainTests, KeptTests, OutcomeFacts, PipelineFacts, ProposalFacts, ReviewFacts, SpecDelta,
@@ -69,7 +70,11 @@ class StageEvidence(DomainGateway, typing.Protocol):
         ...
 
     def decisions(self, story: Story) -> DecisionsFacts:
-        """The story's decision records and the stages' hand-overs — or why the store cannot be read."""
+        """The store of the story's decision records and the stages' hand-overs — or why the store cannot be read."""
+        ...
+
+    def decision_records(self, story: Story) -> typing.Sequence[DecisionRecord]:
+        """The story's decision records, in id order — none where the store cannot be read (`decisions` says why)."""
         ...
 
     def record_place(self, story: Story, record: RecordId) -> Place:

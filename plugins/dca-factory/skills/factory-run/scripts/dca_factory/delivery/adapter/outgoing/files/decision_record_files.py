@@ -18,8 +18,9 @@ from ....application.shared.front import is_acceptance
 from ....application.shared.story_repository import StoryNotFound
 from ....domain.model.decision_record import (
     ANSWER_FIELDS as DOMAIN_ANSWER_FIELDS, ANSWERED_WORDS, AnswerField, Asker, DecisionRecord, DecisionState, OptionKey,
-    Given, RecordId, RecordKind, Section, WAITING_WORDS)
+    Given, RecordContent, RecordId, RecordKind, Section, WAITING_WORDS)
 from ....domain.model.stage import StageName
+from ....domain.model.story_words import Detail
 from ....domain.model.story_state import AcceptanceVerdict
 from ....domain.model.story import StoryId
 from ....domain.model.stage_story import Presence
@@ -118,14 +119,7 @@ class DecisionRecordFiles(DecisionRecordRepository):
 
     @staticmethod
     def record(name: str, front: Front, body: str, state: str) -> DecisionRecord:
-        story = str(front.get("story", "")).strip()
-        return DecisionRecord(
-            RecordId(str(front.get("id", name)).strip()),
-            RecordKind.ACCEPTANCE if is_acceptance(front) else RecordKind.QUESTION,
-            Asker.REQUEST if str(front.get("request", "")).strip() else Asker.STAGE,
-            DecisionState(state),
-            [OptionKey(option["key"]) for option in decision_options(body)],
-            StoryId(story) if story else None)
+        return record_of(name, front, body, state, decision_state(body)[1])
 
 
 # --- the records as the gate, the runner and the views read them -------------------------------------------------
@@ -480,3 +474,21 @@ class RequestRecordFiles(RequestRecords):
 
     def questioned(self, paths: typing.Sequence[str], request: str) -> None:
         mark_questioned(self._cwd, place("runs"), paths, request)
+
+
+def record_of(name: str, front: Front, body: str, state: str, answer: typing.Mapping[str, typing.Any]) -> DecisionRecord:
+    """The record in a file named <name>, read off its front matter, its body, its state and its `## Answer`."""
+    story = str(front.get("story", "")).strip()
+    stage = str(front.get("stage", "")).strip() if state in WAITING_WORDS else resume_stage(front, answer)
+    return DecisionRecord(
+        RecordId(str(front.get("id", name)).strip()),
+        RecordKind.ACCEPTANCE if is_acceptance(front) else RecordKind.QUESTION,
+        Asker.REQUEST if str(front.get("request", "")).strip() else Asker.STAGE,
+        DecisionState(state),
+        [OptionKey(option["key"]) for option in decision_options(body)],
+        StoryId(story) if story else None,
+        content=RecordContent(
+            Detail((body.strip().splitlines() or ["(no title)"])[0].lstrip("# ").strip()),
+            StageName(stage) if stage else None,
+            Detail(str(answer.get("answer"))), Detail(str(answer.get("by"))),
+            tuple(AnswerField(f) for f in ANSWER_FIELDS if not answer.get(f))))
