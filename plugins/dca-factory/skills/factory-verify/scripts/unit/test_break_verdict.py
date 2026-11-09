@@ -5,7 +5,7 @@ import unittest
 
 import support  # noqa: F401 — puts the package on the path
 from dca_factory.delivery.domain.model.verdict import CheckName, Finding, FindingState, Said
-from dca_factory.delivery.domain.model.stage_story import Presence
+from dca_factory.delivery.domain.model.story_words import Presence
 from dca_factory.delivery.domain.model.story_state import Detail
 from dca_factory.delivery.domain.service.break_checks import BreakOutcome, BreakResult, RuleProof
 

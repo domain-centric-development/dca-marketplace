@@ -6,7 +6,8 @@ from __future__ import annotations
 import typing
 
 from ....building_blocks import Value
-from .stage_story import Count, Presence, Requirement, SUITE, SuiteRun
+from .story_words import Count, Presence
+from .suite_run import Requirement, SUITE, SuiteRun
 from .story_state import Detail
 from .verdict import CheckName, Finding, Findings, Said  # noqa: F401
 

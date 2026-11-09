@@ -14,7 +14,7 @@ from ..files.journal_files import journal_append
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text, split_front
 from ....domain.model.claim import Claim, ClaimedFor, ClaimTitle, ClaimTrace, Fate, IdPrefix, Meeting, Worker
 from ....domain.model.epic import EpicId
-from ....domain.model.stage_story import Presence
+from ....domain.model.story_words import Presence
 from ....domain.model.story import StoryId, StoryStatus
 
 

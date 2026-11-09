@@ -6,8 +6,8 @@ from __future__ import annotations
 import typing
 
 from ....building_blocks import Value
-from .stage_story import (
-    Evidence, Expectation, Presence, RedLedger, RunEnd, RunState, ScenarioKey, Selector, TestOutcome, TestRun)
+from .story_words import Presence, ScenarioKey, Selector
+from .suite_run import Evidence, Expectation, RedLedger, RunEnd, RunState, TestOutcome, TestRun
 from .verdict import CheckName, Finding, GREEN_NOW, RED_CHECK, Said
 
 

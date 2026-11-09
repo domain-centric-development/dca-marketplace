@@ -13,7 +13,7 @@ from ....domain.model.handed_file import ByteSize, FileBytes, FileName
 from ....domain.model.moment import Moment
 from ....domain.model.project_path import ProjectPath
 from ....domain.model.shot import SHOTS, FoundShot, Instant, Shot, TakenFile, kept, shot_name, shown
-from ....domain.model.stage_story import CommandKey
+from ....domain.model.suite_run import CommandKey
 
 
 def head_of(path: str) -> bytes:

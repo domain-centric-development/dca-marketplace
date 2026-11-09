@@ -3,7 +3,7 @@ test's selector."""
 
 import re
 
-from ....domain.model.stage_story import SELECTOR_FORM
+from ....domain.model.story_words import SELECTOR_FORM
 
 
 CRITERION = re.compile(r"^-\s+([a-z0-9][a-z0-9-]*)(?:\s*\(happy path\))?\s*:\s*(\S.*)$")

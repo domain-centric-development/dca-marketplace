@@ -6,7 +6,7 @@ import unittest
 import support  # noqa: F401 — puts the package on the path
 from dca_factory.delivery.domain.model.claim import Claim, ClaimedFor, ClaimTitle, ClaimTrace, Fate, IdPrefix, Meeting, Worker
 from dca_factory.delivery.domain.model.epic import EpicId
-from dca_factory.delivery.domain.model.stage_story import Presence
+from dca_factory.delivery.domain.model.story_words import Presence
 from dca_factory.delivery.domain.model.story import StoryId, StoryStatus
 
 ME, YOU = Worker("me (a)"), Worker("you (b)")

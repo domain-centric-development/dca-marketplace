@@ -13,8 +13,7 @@ from ..gateway.stage_evidence import StageEvidence
 from ..model.decision_record import DecisionState, RecordId, RecordKind
 from ..model.stage import StageName
 from ..model.story import Story
-from ..model.stage_story import Place
-from ..model.story_words import Detail
+from ..model.story_words import Detail, Place
 from ..model.verdict import CheckName, Finding, Said
 
 DECISIONS = CheckName("decisions")

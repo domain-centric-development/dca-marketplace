@@ -5,7 +5,7 @@ import subprocess
 import unittest
 
 from support import evidence, gate_story, project, write
-from dca_factory.delivery.domain.model.stage_story import Presence
+from dca_factory.delivery.domain.model.story_words import Presence
 from dca_factory.delivery.domain.service.kept_checks import KeptChecks
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
 from dca_factory.delivery.application.delivery.pipeline_workflow import workflow

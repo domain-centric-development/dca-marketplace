@@ -3,6 +3,8 @@ evidence and the schedule share — a leaf the other modules of the model import
 
 from __future__ import annotations
 
+import enum
+import re
 import typing
 
 from ....building_blocks import Value
@@ -78,3 +80,18 @@ class ContextName(Value):
     """The bounded context a story changes, as its `context:` names it — "" where it names none."""
 
     value: str
+
+
+#: The form of a test's name in the tests table: the fully qualified class, then the test method.
+SELECTOR_FORM = re.compile(r"^([\w.]+)#([\w]+)$")
+
+
+class Selector(Value):
+    """A test as the tests table names it: `<Class>#<method>`."""
+
+    value: str
+
+
+class Presence(enum.Enum):
+    PRESENT = "present"
+    ABSENT = "absent"

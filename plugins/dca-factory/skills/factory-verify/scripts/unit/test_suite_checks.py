@@ -4,7 +4,7 @@ green."""
 import unittest
 
 import support  # noqa: F401 — puts the package on the path
-from dca_factory.delivery.domain.model.stage_story import Count, Presence
+from dca_factory.delivery.domain.model.story_words import Count, Presence
 from dca_factory.delivery.domain.model.verdict import CheckName, Finding, FindingState, RED_CHECK, Said
 from dca_factory.delivery.domain.model.suite import FLAKY_LIMIT, SuiteJudged
 

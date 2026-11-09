@@ -5,7 +5,7 @@ from __future__ import annotations
 import typing
 
 from ....building_blocks import OutputPort
-from ...domain.model.stage_story import Place
+from ...domain.model.story_words import Place
 from ...domain.model.story import StoryId
 
 

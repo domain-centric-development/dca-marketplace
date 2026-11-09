@@ -6,7 +6,8 @@ from __future__ import annotations
 import typing
 
 from ....building_blocks import Value
-from .stage_story import CommandKey, Count, Place, Presence, Requirement
+from .story_words import Count, Place, Presence
+from .suite_run import CommandKey, Requirement
 from .story_state import Detail
 from .verdict import CheckName, Finding, Findings, Said
 

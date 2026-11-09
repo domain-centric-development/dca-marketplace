@@ -10,7 +10,8 @@ from ....building_blocks import DomainService
 from ..gateway.stage_evidence import StageEvidence
 from ..model.stage import StoryKind
 from ..model.story import Story
-from ..model.stage_story import PlanAdoption, Presence, ScenarioKey
+from ..model.plan_facts import PlanAdoption
+from ..model.story_words import Presence, ScenarioKey
 from ..model.verdict import CheckName, Findings, Said
 
 PLAN_ADOPTS = CheckName("plan-adopts")

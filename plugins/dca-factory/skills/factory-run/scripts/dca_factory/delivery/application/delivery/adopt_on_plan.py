@@ -7,7 +7,7 @@ import typing
 
 from ....building_blocks import DomainEventPublisher, TransactionBoundary, UseCase
 from ...domain.model.moment import Moment
-from ...domain.model.stage_story import PlanAdoption
+from ...domain.model.plan_facts import PlanAdoption
 from ...domain.model.story import PLAN_ADOPT, Assumption, StoryId
 from ..shared.story_repository import StoryRepository
 

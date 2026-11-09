@@ -9,9 +9,8 @@ from ....building_blocks import DomainEventPublisher, TransactionBoundary, UseCa
 from ...domain.model.decision_record import RecordId
 from ...domain.model.moment import Moment
 from ...domain.model.stage import StageName
-from ...domain.model.stage_story import Place
 from ...domain.model.story import StoryId
-from ...domain.model.story_words import Detail
+from ...domain.model.story_words import Detail, Place
 from ..shared.decision_record_repository import DecisionRecordRepository
 from ..shared.decision_stamps import DecisionStamps
 from ..shared.story_repository import StoryRepository

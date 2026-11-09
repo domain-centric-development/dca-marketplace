@@ -11,8 +11,11 @@ from ....building_blocks import DomainService
 from ..gateway.stage_evidence import StageEvidence
 from ..model.stage import StoryKind
 from ..model.story import Story
-from ..model.stage_story import (
-    AssertionAt, Clause, CommandKey, ContractNumber, Count, FileChange, MappedTest, Place, Presence, ScenarioKey)
+from ..model.plan_facts import FileChange
+from ..model.profile_facts import ContractNumber
+from ..model.story_words import Clause, Count, Place, Presence, ScenarioKey
+from ..model.suite_run import CommandKey
+from ..model.test_facts import AssertionAt, MappedTest
 from ..model.story_state import Detail
 from ..model.verdict import CheckName, Findings, Said
 

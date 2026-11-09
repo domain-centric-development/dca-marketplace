@@ -8,7 +8,7 @@ import typing
 
 from ....building_blocks import Value
 from .epic import EpicId
-from .stage_story import Presence
+from .story_words import Presence
 from .story import StoryId, StoryStatus
 
 

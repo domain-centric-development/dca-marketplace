@@ -17,7 +17,8 @@ from .....sharedkernel.adapter.outgoing.profile.profile_files import (
     FLAKY_FINDINGS, JOURNAL, evidence_dir, evidence_rel, factory_home, place, places_in, shown)
 from .....spec.api import (
     derived, lint_context, merge, merge_context, read_delta, read_spec, render_spec, scenarios_path, story_entries)
-from ....domain.model.stage_story import Presence
+from ....domain.model.backlog_facts import DONE_ROW, OPEN_ROW
+from ....domain.model.story_words import Presence
 from ....domain.model.story import Delivery, StoryId
 from ....domain.model.story_state import Detail
 from ....domain.model.acceptance import AcceptanceMode, FlakyFinding, Viewing
@@ -38,7 +39,6 @@ from .snapshots import git_tree
 from .stage_evidence_files import closed_rows, closes_of
 from .story_layout import journeys_hold, story_digest, story_folder, story_kind
 from .test_files import locate_tests, read_mapping
-from ....domain.model.stage_story import DONE_ROW, OPEN_ROW
 from ....domain.model.verdict import CheckName, Finding, FindingState, Said
 
 Front = typing.Mapping[str, typing.Any]

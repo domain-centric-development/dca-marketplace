@@ -7,14 +7,16 @@ import typing
 
 from ....building_blocks import DomainException
 from ...domain.model.stage import Role, Stage, StageName, StoryKind, TESTED_KINDS, Trait
-from ...domain.model.stage_story import ContractNumber, Count, HandOverName, MappedTest, Place, ScenarioKey, Selector, TestTable
+from ...domain.model.plan_facts import HandOverName
+from ...domain.model.profile_facts import ContractNumber
+from ...domain.model.story_words import Count, Place, Presence, ScenarioKey, Selector
+from ...domain.model.test_facts import MappedTest, TestTable
 from ...domain.model.story import StoryId
 from ...domain.model.verdict import CheckName, Said
 from ...domain.service.adopt_checks import AdoptChecks
 from ...domain.service.kept_checks import KeptChecks
 from ...domain.service.decision_checks import Applying, DecisionChecks
 from ...domain.service.integration_checks import IntegrationChecks
-from ...domain.model.stage_story import Presence
 from ..description.check_description import CheckDescriptionCommand
 from ...domain.service.backlog_checks import BacklogChecks
 from ...domain.service.delivery_checks import DeliveryChecks

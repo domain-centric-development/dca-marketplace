@@ -12,7 +12,7 @@ from .story_layout import STORY_FILE
 from .story_layout import (
     deliverer_of, named_kind, delivered_by, delivered_on, epic_folder, find_story, story_files, story_folder, story_id_of, story_ids)
 from .....sharedkernel.adapter.outgoing.profile.profile_files import place, release_required, shown
-from ....domain.model.stage_story import Place
+from ....domain.model.story_words import Place
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError, MarkdownError, read_front_matter, read_text
 from .....sharedkernel.adapter.outgoing.markdown.sections import section_of
 from .owned_files import write_story_fields

@@ -7,7 +7,8 @@ from ....building_blocks import DomainService
 from ..gateway.stage_evidence import StageEvidence
 from ..model.stage import StoryKind
 from ..model.story import ReleaseState, Story
-from ..model.stage_story import ContractNumber, OPEN_ROW
+from ..model.backlog_facts import OPEN_ROW
+from ..model.profile_facts import ContractNumber
 from ..model.story_state import MAX_ROUNDS
 from ..model.verdict import CheckName, Findings, Said
 

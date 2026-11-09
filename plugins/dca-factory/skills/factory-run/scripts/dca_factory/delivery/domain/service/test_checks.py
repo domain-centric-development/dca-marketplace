@@ -9,8 +9,10 @@ from ....building_blocks import DomainService
 from ..gateway.stage_evidence import StageEvidence
 from ..model.stage import StoryKind
 from ..model.story import Story
-from ..model.stage_story import (
-    CommandKey, ContractNumber, HandOverName, MappedTest, TestTable, TitleFound)
+from ..model.plan_facts import HandOverName
+from ..model.profile_facts import ContractNumber
+from ..model.suite_run import CommandKey
+from ..model.test_facts import MappedTest, TestTable, TitleFound
 from ..model.verdict import CheckName, Findings, Said
 
 TESTS_MAPPED = CheckName("tests-mapped")

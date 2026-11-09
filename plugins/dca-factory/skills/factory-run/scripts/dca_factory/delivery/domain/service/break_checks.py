@@ -10,7 +10,7 @@ import typing
 from ....building_blocks import DomainService, Value
 from ..model.stage import StoryKind
 from ..model.story import Story
-from ..model.stage_story import Place, Presence, Selector
+from ..model.story_words import Place, Presence, Selector
 from ..model.story_state import Detail
 from ..model.verdict import CheckName, Finding, FindingState, Findings, Said
 

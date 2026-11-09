@@ -10,7 +10,7 @@ import contextlib
 import os
 import typing
 
-from ....domain.model.stage_story import CommandRun, RedLedger, SuiteCommands, SuiteRun, TestRun
+from ....domain.model.suite_run import CommandRun, RedLedger, SuiteCommands, SuiteRun, TestRun
 from ..files.decision_record_files import answered_decisions
 from ..files.design_files import read_invariant_rows
 from ..files.journal_files import journal_append

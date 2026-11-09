@@ -10,8 +10,9 @@ import typing
 from .hand_over_patterns import CRITERION, MAPPING_ROW, SELECTOR
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_text
-from ....domain.model.stage_story import (
-    CommandKey, MappedTest, Place, ScenarioKey, Selector, TestLocation, TitleCheck, TitleFound)
+from ....domain.model.story_words import Place, ScenarioKey, Selector
+from ....domain.model.suite_run import CommandKey
+from ....domain.model.test_facts import MappedTest, TestLocation, TitleCheck, TitleFound
 from ....domain.model.story_state import Detail
 from ..stack.commands import command_for
 from ..stack.test_reports import display_name_of, unescape_literal

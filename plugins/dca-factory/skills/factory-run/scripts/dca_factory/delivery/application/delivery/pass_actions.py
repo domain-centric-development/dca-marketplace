@@ -4,7 +4,7 @@ integration — through the output port StageDelivery."""
 from __future__ import annotations
 
 from ....building_blocks import DomainException, UseCaseException
-from ...domain.model.stage_story import Presence
+from ...domain.model.story_words import Presence
 from ...domain.model.verdict import Said
 from ...domain.model.acceptance import ACCEPTANCE, AcceptanceStep
 from ...domain.service.adopt_checks import AdoptChecks, Adoption

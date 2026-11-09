@@ -8,7 +8,7 @@ import typing
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError, read_front_matter
 from .....sharedkernel.adapter.outgoing.profile.profile_files import shown
 from ....application.shared.backlog_entries import BacklogEntry
-from ....domain.model.stage_story import Place
+from ....domain.model.story_words import Place
 from ....domain.model.story import StoryId
 from ....domain.model.story_state import Detail, StatusWord
 from .criteria_files import criteria_of

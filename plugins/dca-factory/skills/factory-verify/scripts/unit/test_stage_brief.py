@@ -13,7 +13,8 @@ from dca_factory.delivery.domain.model.jump import RuleId
 from dca_factory.delivery.domain.model.stack_profile import SkillName
 from dca_factory.delivery.domain.model.stage import StageName, StoryKind
 from dca_factory.delivery.domain.model.workflow_rule import RulePart
-from dca_factory.delivery.domain.model.stage_story import BriefFacts, Place
+from dca_factory.delivery.domain.model.brief_facts import BriefFacts
+from dca_factory.delivery.domain.model.story_words import Place
 from dca_factory.delivery.domain.model.story_state import Detail
 from dca_factory.delivery.domain.service.stage_brief import Carrier, CarrierRole, MARKER, StageBrief, written
 

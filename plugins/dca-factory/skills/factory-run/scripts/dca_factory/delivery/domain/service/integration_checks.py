@@ -8,7 +8,7 @@ import typing
 from ....building_blocks import DomainService
 from ..gateway.stage_evidence import StageEvidence
 from ..model.story import Story
-from ..model.stage_story import Presence
+from ..model.story_words import Presence
 from ..model.verdict import CheckName, Finding, Findings, Said
 
 INTEGRATE = CheckName("integrate")

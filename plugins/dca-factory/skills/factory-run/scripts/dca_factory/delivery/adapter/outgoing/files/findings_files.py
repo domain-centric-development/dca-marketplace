@@ -10,7 +10,8 @@ import typing
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_text
 from .....sharedkernel.adapter.outgoing.profile.profile_files import findings_dir, PROJECT_FINDINGS
 from .story_layout import story_files, story_folder, story_id_of
-from ....domain.model.stage_story import FindingKey, OPEN_ROW, Place
+from ....domain.model.backlog_facts import FindingKey, OPEN_ROW
+from ....domain.model.story_words import Place
 from ....domain.model.story_state import Detail
 
 

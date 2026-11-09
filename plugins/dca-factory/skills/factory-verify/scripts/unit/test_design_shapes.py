@@ -8,7 +8,7 @@ import unittest
 import support  # noqa: F401 — puts the package on the path
 from support import gate_story
 from dca_factory.delivery.adapter.outgoing.files.design_files import adapter_shapes, plan_invariants
-from dca_factory.delivery.domain.model.stage_story import Clause, Count
+from dca_factory.delivery.domain.model.story_words import Clause, Count
 from dca_factory.delivery.domain.model.story_state import Detail
 from dca_factory.delivery.domain.service.design_checks import states_stored as stored
 

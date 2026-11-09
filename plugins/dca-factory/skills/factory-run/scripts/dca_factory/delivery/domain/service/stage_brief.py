@@ -12,7 +12,7 @@ from ....building_blocks import DomainService, Value
 from ..model.jump import RuleId
 from ..model.stack_profile import SkillName
 from ..model.stage import HandOver, Stage, StageName, StageText, StoryKind, Window
-from ..model.stage_story import Place
+from ..model.story_words import Place
 from ..model.workflow import Workflow
 from ..model.workflow_rule import OutcomeState, RulePart, RuleText, WorkflowRule
 

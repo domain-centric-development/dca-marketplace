@@ -3,7 +3,8 @@
 import unittest
 
 import support  # noqa: F401 — puts the package on the path
-from dca_factory.delivery.domain.model.stage_story import Presence, TestDiff, TestEdit
+from dca_factory.delivery.domain.model.story_words import Presence
+from dca_factory.delivery.domain.model.test_facts import TestDiff, TestEdit
 
 YES, NO = Presence.PRESENT, Presence.ABSENT
 

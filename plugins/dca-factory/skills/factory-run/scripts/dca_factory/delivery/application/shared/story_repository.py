@@ -6,7 +6,7 @@ import typing
 
 from ....building_blocks import Repository, UseCaseException
 from ...domain.model.epic import EpicId
-from ...domain.model.stage_story import Place
+from ...domain.model.story_words import Place
 from ...domain.model.story import Story, StoryId
 
 

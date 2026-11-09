@@ -20,10 +20,9 @@ from ....domain.model.decision_record import (
     ANSWER_FIELDS as DOMAIN_ANSWER_FIELDS, AnswerField, Asker, DecisionRecord, DecisionState, OptionKey,
     Given, OptionLine, RecordContent, RecordId, RecordKind, Section)
 from ....domain.model.stage import StageName
-from ....domain.model.story_words import Detail
+from ....domain.model.story_words import Detail, Presence
 from ....domain.model.story_state import AcceptanceVerdict
 from ....domain.model.story import StoryId
-from ....domain.model.stage_story import Presence
 from ....domain.model.acceptance import AcceptanceMode, acceptance_verdict
 from ....application.delivery.pipeline_workflow import workflow
 from ....application.shared.decision_inbox import DecisionInbox

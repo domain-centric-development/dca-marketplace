@@ -9,9 +9,10 @@ import typing
 
 from ...domain.model.stage import Stage, StageName, StoryKind, Trait
 from ...domain.model.story import Story
-from ...domain.model.stage_story import Requirement
-from ...domain.model.stage_story import (
-    CommandKey, ContractNumber, Expectation, MappedTest, Place, Presence, ScenarioKey, Selector, SELECTOR_FORM)
+from ...domain.model.profile_facts import ContractNumber
+from ...domain.model.story_words import Place, Presence, ScenarioKey, Selector, SELECTOR_FORM
+from ...domain.model.suite_run import CommandKey, Expectation, Requirement
+from ...domain.model.test_facts import MappedTest
 from ...domain.model.story_state import Detail
 from ...domain.model.verdict import CheckName, Finding, FindingState, Findings, Said
 from ...domain.gateway.stage_evidence import StageEvidence

@@ -5,11 +5,10 @@ import unittest
 
 import support  # noqa: F401 — puts the package on the path
 from dca_factory.delivery.domain.model.decision_record import AnswerField, DecisionState, Given, RecordKind, Section
-from dca_factory.delivery.domain.model.stage_story import Presence
 from dca_factory.delivery.domain.model.story_state import AcceptanceVerdict
 from dca_factory.delivery.domain.model.acceptance import acceptance_verdict
 from dca_factory.delivery.domain.model.decision_record import Asker, DecisionRecord, RecordContent, RecordId
-from dca_factory.delivery.domain.model.story_words import Detail
+from dca_factory.delivery.domain.model.story_words import Detail, Presence
 
 FULL = {AnswerField("answer"), AnswerField("by"), AnswerField("at")}
 

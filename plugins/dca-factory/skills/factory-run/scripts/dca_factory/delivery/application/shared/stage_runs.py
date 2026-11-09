@@ -8,7 +8,7 @@ from ...domain.model.story_state import Judged
 import typing
 
 from ....building_blocks import OutputPort
-from ...domain.model.stage_story import CommandRun, RedLedger, SuiteCommands, SuiteRun, TestRun
+from ...domain.model.suite_run import CommandRun, RedLedger, SuiteCommands, SuiteRun, TestRun
 
 Mapping = typing.Mapping[str, typing.Sequence[str]]
 Located = typing.Mapping[str, str]

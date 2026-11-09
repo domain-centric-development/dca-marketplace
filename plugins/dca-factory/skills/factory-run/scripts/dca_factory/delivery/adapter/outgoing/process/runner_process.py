@@ -57,7 +57,7 @@ from ..tools.tool_choice import ToolChoice
 from ..tools.tool_processes import err, exit_field, flush, ToolProcesses, utc
 from ....application.shared.run_stop import Stopped
 from ....domain.model.stage import StageText, Window
-from ....domain.model.stage_story import Place
+from ....domain.model.story_words import Place
 from ....domain.service.stage_brief import Brief, written
 from ..files.brief_files import brief_dir, EVERY_STAGE, write_brief, write_every_stage, write_told_everywhere
 from ..files.request_files import default_by, REQUEST_JOURNAL, requests_dir

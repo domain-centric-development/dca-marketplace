@@ -11,7 +11,8 @@ from ....building_blocks import DomainService
 from ..gateway.stage_evidence import StageEvidence
 from ..model.stage import StoryKind
 from ..model.story import Story
-from ..model.stage_story import Clause, MappedTest, Place, ShownLiteral, TestSource
+from ..model.story_words import Clause, Place
+from ..model.test_facts import MappedTest, ShownLiteral, TestSource
 from ..model.verdict import CheckName, Findings, Said
 
 TESTS_ASSERT_THEN = CheckName("tests-assert-then")

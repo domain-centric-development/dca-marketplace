@@ -6,8 +6,9 @@ import unittest
 import support  # noqa: F401 — puts the package on the path
 from support import gate_story
 from dca_factory.delivery.adapter.outgoing.files.criteria_files import criteria_of
-from dca_factory.delivery.domain.model.stage_story import (
-    Clause, CommandKey, Count, MappedTest, Place, ScenarioKey, Selector, TestSource)
+from dca_factory.delivery.domain.model.story_words import Clause, Count, Place, ScenarioKey, Selector
+from dca_factory.delivery.domain.model.suite_run import CommandKey
+from dca_factory.delivery.domain.model.test_facts import MappedTest, TestSource
 from dca_factory.delivery.domain.model.story_state import Detail
 from dca_factory.delivery.domain.model.verdict import FindingState
 from dca_factory.delivery.domain.service.then_checks import ThenChecks, shown_literals

@@ -9,7 +9,7 @@ from ..gateway.stage_evidence import StageEvidence
 from ..model.schedule import ContextName
 from ..model.stage import StoryKind
 from ..model.story import Story
-from ..model.stage_story import ContractNumber
+from ..model.profile_facts import ContractNumber
 from ..model.verdict import CheckName, Findings, Said
 
 APPROVED = CheckName("approved")

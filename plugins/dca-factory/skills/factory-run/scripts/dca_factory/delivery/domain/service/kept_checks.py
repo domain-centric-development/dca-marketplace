@@ -10,7 +10,9 @@ from ....building_blocks import DomainService
 from ..gateway.stage_evidence import StageEvidence
 from ..model.stage import StageName, Trait
 from ..model.story import Story
-from ..model.stage_story import MappedTest, Presence, TestChange, Unobserved
+from ..model.delivery_facts import Unobserved
+from ..model.story_words import Presence
+from ..model.test_facts import MappedTest, TestChange
 from ..model.story_state import Detail
 from ..model.verdict import CheckName, Finding, Findings, Said
 from ..model.workflow import Workflow

@@ -12,7 +12,7 @@ from dca_factory.delivery.domain.model.shot import (REUSED_WITHIN, SHOWN, FoundS
                                                     ShotTaker, TakenFile, kept, shot_name, shown, taken_by_the_run,
                                                     taken_since)
 from dca_factory.delivery.domain.model.shown_file import FileNotShown, Refusal, ShownAs, ShownFile, ShownPath
-from dca_factory.delivery.domain.model.stage_story import CommandKey
+from dca_factory.delivery.domain.model.suite_run import CommandKey
 from dca_factory.delivery.domain.model.words import MAX_LENGTH, Words, WordsRefused
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\0" * 32

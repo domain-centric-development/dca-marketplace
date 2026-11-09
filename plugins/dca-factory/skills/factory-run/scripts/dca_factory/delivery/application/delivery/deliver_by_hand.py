@@ -8,7 +8,7 @@ import typing
 from ....building_blocks import DomainEventPublisher, Refusal, TransactionBoundary, UseCase
 from ...domain.model.moment import Moment
 from ...domain.model.person import Person
-from ...domain.model.stage_story import Place
+from ...domain.model.story_words import Place
 from ...domain.model.story import Delivery, StoryId
 from ..shared.story_claims import ClaimHeld, StoryClaims
 from ..shared.story_journal import StoryJournal

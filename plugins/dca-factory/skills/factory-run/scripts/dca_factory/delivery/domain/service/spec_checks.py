@@ -8,7 +8,7 @@ import typing
 from ....building_blocks import DomainService
 from ..gateway.stage_evidence import StageEvidence
 from ..model.story import Story
-from ..model.stage_story import MappedTest
+from ..model.test_facts import MappedTest
 from ..model.verdict import CheckName, Findings, Said
 
 SPEC_DELTA = CheckName("spec-delta")

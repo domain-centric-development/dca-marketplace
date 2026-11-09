@@ -8,7 +8,7 @@ import typing
 
 from ....building_blocks import Value
 from ..model.decision_record import DecisionRecord
-from ..model.stage_story import Presence
+from ..model.story_words import Presence
 from ..model.story import StoryId
 from ..model.story_state import Acceptance, AcceptanceVerdict, Detail
 from ..model.verdict import CheckName, Findings, Said

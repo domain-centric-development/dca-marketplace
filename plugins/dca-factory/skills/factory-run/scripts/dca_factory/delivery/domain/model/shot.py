@@ -11,7 +11,7 @@ from ....building_blocks import Value
 from .handed_file import MAX_BYTES, ByteSize, FileBytes, FileName, kind_of
 from .moment import Moment
 from .project_path import ProjectPath
-from .stage_story import CommandKey
+from .suite_run import CommandKey
 
 #: At most this many pictures a story's place shows — the newest.
 SHOWN = 24

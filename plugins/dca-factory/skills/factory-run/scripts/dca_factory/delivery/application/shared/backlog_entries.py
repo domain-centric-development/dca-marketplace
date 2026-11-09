@@ -7,7 +7,7 @@ import typing
 
 from ....building_blocks import OutputPort
 from ...domain.model.story import Story
-from ...domain.model.stage_story import Place
+from ...domain.model.story_words import Place
 from ...domain.model.story import StoryId
 from ...domain.model.story_state import Detail, StatusWord
 

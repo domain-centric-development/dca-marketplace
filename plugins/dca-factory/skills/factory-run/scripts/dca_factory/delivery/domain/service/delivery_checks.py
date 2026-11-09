@@ -12,7 +12,9 @@ from ....building_blocks import DomainService, Value
 from ..gateway.stage_evidence import StageEvidence
 from ..model.stage import HandOver, StageName, StoryKind
 from ..model.story import Story
-from ..model.stage_story import ContractNumber, PlannedDigest, Presence
+from ..model.plan_facts import PlannedDigest
+from ..model.profile_facts import ContractNumber
+from ..model.story_words import Presence
 from ..model.verdict import CheckName, Findings, Said
 
 STORY_PASS = CheckName("story-pass")

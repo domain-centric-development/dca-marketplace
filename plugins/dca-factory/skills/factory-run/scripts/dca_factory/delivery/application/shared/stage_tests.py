@@ -5,7 +5,7 @@ from __future__ import annotations
 import typing
 
 from ....building_blocks import OutputPort
-from ...domain.model.stage_story import MappedTest, TestLocation
+from ...domain.model.test_facts import MappedTest, TestLocation
 
 Mapping = typing.Dict[str, typing.List[str]]
 
