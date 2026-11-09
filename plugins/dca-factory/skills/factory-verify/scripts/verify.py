@@ -173,6 +173,8 @@ GATE_MODULE = "delivery/adapter/incoming/gate/gate_command"
 GATE_SIDE = ("contract", GATE_MODULE)
 #: The cli's command line, an incoming adapter: what shows and coordinates.
 CLI_MODULE = "delivery/adapter/incoming/cli/cli_command"
+#: `factory.sh`'s command line, an incoming adapter: the script finds a Python and hands over to it.
+SHELL_MODULE = "delivery/adapter/incoming/shell/shell_command"
 #: The cli's commands of one feature each, beside the command line that dispatches to them.
 CLI_FEATURES = tuple(f"delivery/adapter/incoming/cli/{name}_commands" for name in (
     "backlog", "checkout", "delivery", "lifecycle", "requests", "session", "upkeep"))
@@ -2834,11 +2836,15 @@ exit 0
         os.makedirs(os.path.join(newer, "factory-brand-new"))
         with open(os.path.join(newer, "factory-brand-new", "SKILL.md"), "w", encoding="utf-8") as handle:
             handle.write("---\nname: factory-brand-new\ndescription: a skill added in a later release\n---\n")
-        newer_runner = os.path.join(newer, "factory-run", "scripts", "factory.sh")
-        body = open(newer_runner, encoding="utf-8").read().replace(
-            '  check_dca_setup "$from"\n', '  check_dca_setup "$from"\n  : > .agents/factory/added-by-the-newer-install\n', 1)
-        with open(newer_runner, "w", encoding="utf-8", newline="\n") as handle:
-            handle.write(body)
+        # the newer release's install step, in its package — the project's runner hands the update to that release
+        newer_install = os.path.join(newer, "factory-run", "scripts", PACKAGE, "delivery", "adapter", "outgoing",
+                                     "install", "installer.py")
+        step = "        self.governance(source)\n"
+        body = open(newer_install, encoding="utf-8").read()
+        assert step in body, "the install step the case extends moved"
+        with open(newer_install, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(body.replace(step, step + '        open(".agents/factory/added-by-the-newer-install", "w")'
+                                                   '.close()\n', 1))
         project = os.path.join(root, "project")
         os.makedirs(project)
         build_project(project)
@@ -3729,6 +3735,15 @@ DOC_COMMAND = re.compile(r"(factory\.sh|story-gate\.py|factory-cli\.py)\b([^`#]*
 PASSED_ON = {"backlog": "cli", "decisions": "cli", "follow": "cli", "help": "cli", "discover": "cli",
              "up": "cli", "down": "cli", "serve": "cli", "request": "cli", "requests": "cli", "rules": "cli",
              "check": "gate", "verify": "verify"}
+
+
+def shell_flags(text):
+    """The flags `factory.sh`'s command line reads itself: each word it compares a flag with — `word == "--x"`,
+    `word in ("--x", "--y")`, `args[:1] == ["--x"]` —, not the ones it hands on to the cli or the gate."""
+    compared = re.findall(r'word == "(--[\w-]+)"', text) + re.findall(r'args\[:1\] == \["(--[\w-]+)"\]', text)
+    for group in re.findall(r"word in \(([^)]*)\)", text):
+        compared += re.findall(r'"(--[\w-]+)"', group)
+    return set(compared)
 
 
 def doc_unknown_flags(text, accepted):
@@ -4674,8 +4689,7 @@ def verify_setup(runner, verbose=False):
                 "cli": argparse_flags(modules[CLI_MODULE]) | argparse_flags(rules_cli)
                        | {flag for text in feature_clis.values() for flag in argparse_flags(text)},
                 "verify": argparse_flags(open(__file__, encoding="utf-8").read()),
-                "sh": {flag for labels in re.findall(r"^\s*((?:--[\w-]+\|?)+)\)", runner_text, re.M)
-                       for flag in labels.split("|")}}
+                "sh": shell_flags(package_text(runner, (SHELL_MODULE,))[SHELL_MODULE])}
     readme = open(os.path.join(os.path.dirname(runner), "..", "..", "..", "README.md"), encoding="utf-8").read()
     unknown = doc_unknown_flags(readme, accepted)
     planted = doc_unknown_flags("`factory.sh run --no-such-flag` · `factory.sh follow --once`", accepted)

@@ -82,7 +82,7 @@ dca-marketplace/
   beside them (stdlib only, each module imports by name from the ones above it), and the runner reads every
   project file with the package's readers, in its own process, never with `sed`. Carriers are portable by rule: `SKILL.md` folders and the gate script, no agent
   frontmatter, no `disable-model-invocation`, and no stage that needs a tool's hooks or the runner — Codex
-  discovers the same folder from a project's `.codex/skills/`. The runner (`factory.sh`, which checks and then hands the run to the package's runner, `delivery/adapter/incoming/runner/run_command.py`) is optional, the git
+  discovers the same folder from a project's `.codex/skills/`. The runner (`factory.sh`, which finds a Python 3.12 or newer and hands over at once to the package's command line `delivery/adapter/incoming/shell/shell_command.py`, wired by `infrastructure/shell.py` — the checks before a run, the setup and the update are there, the cli's and the gate's command lines run in its process, and `run` becomes the package's runner, `delivery/adapter/incoming/runner/run_command.py`) is optional, the git
   pre-commit hook is the one hook the pipeline relies on, and Claude's SessionStart hook only primes a session. Project knowledge lives in two places the project owns: the stack profile
   (`dca-factory.profile.yaml` at the project root) and `product/` — the description (product, tech, designed
   domain) and the epics with their stories, each story carrying its state and its decisions beside it —

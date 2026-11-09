@@ -1,7 +1,7 @@
 """The runner's questions to the cli — the stage table as bash lines, a place, one of the profile's values — answered
-without the rest of the cli's command line. `factory.sh` asks for the stage table at every start and the runner asks
-the profile many times per story; the whole command line imports every view and use case first, a process start's
-worth of time for one line of answer. Only exactly these argument shapes are taken here (`parse`); anything else, a
+without the rest of the cli's command line. A script asks for the stage table in one call and a process asks the
+profile many times per story; the whole command line imports every view and use case first, a process start's worth
+of time for one line of answer. Only exactly these argument shapes are taken here (`parse`); anything else, a
 mistake among it, goes to the cli's whole command line, which answers it or says what is wrong."""
 
 from __future__ import annotations
@@ -102,7 +102,7 @@ def answer(profile_path: typing.Optional[str], question: Question, **fields: str
 
 
 def stages_shell(table: Model) -> int:
-    """The stage table (`ShowStageTableUseCase`) as the runner reads it once at its start, one bash assignment per
+    """The stage table (`ShowStageTableUseCase`) as a shell script reads it in one call, one bash assignment per
     line, then the tool table and the places asked for, quoted. Every name is checked to be a plain word."""
     names = [row["name"] for row in table["rows"]] + list(table["windows"]) + sorted({k for k, _s in table["kinds"]})
     bad = [name for name in names if not SHELL_WORD.fullmatch(name)]

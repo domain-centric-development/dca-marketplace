@@ -1,4 +1,4 @@
-"""The light paths stay light: what `factory.sh` and the runner ask many times per story loads a part of the package,
+"""The light paths stay light: what the runner and a script ask many times per story loads a part of the package,
 not all of it (WP-197). A module imported at the top of one of these paths would pull hundreds back in unnoticed —
 the answer stays right, only every call slows down — so the count of the package's modules each one loads is held
 here, with room for growth, against the whole command line's."""
@@ -14,11 +14,12 @@ from support import SCRIPTS
 
 #: (entry point, arguments, at most this many of the package's modules)
 LIGHT = (
-    ("factory-cli.py", ["--stages", "--shell", "--place", "runs"], 90),     # factory.sh, at every start
+    ("factory-cli.py", ["--stages", "--shell", "--place", "runs"], 90),     # the stage table, one call
     ("factory-cli.py", ["--get", "model"], 90),                             # the runner's profile questions
+    ("factory-cli.py", ["--sh", "python3", "no-such-verb"], 75),            # factory.sh, before any verb
     ("story-gate.py", ["--owned", "start", "plan", "--story", "S-1"], 110),  # every stage window, twice
     ("story-gate.py", ["--record-base", "--story", "S-1"], 110),
-    ("story-gate.py", ["--check-contract"], 170),                           # factory.sh, before every run
+    ("story-gate.py", ["--check-contract"], 170),                           # before a run, another release's gate
 )
 
 

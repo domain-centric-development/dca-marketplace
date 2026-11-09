@@ -57,6 +57,16 @@ on the stories it worked on.
 
 **Related terms:** `Usage`, `Price` — use cases `book_request_cost`
 
+### Setup (setup)
+
+**Definition:** The pipeline put into a project and kept up to date: its files beside the gate, the tools' skill
+folders — linked into a checkout or copied from a plugin cache —, the stack profile against what detection finds.
+
+**Type:** Feature
+
+**Related terms:** `Skill mode` (link or copy), `Proposal` — use cases `install_pipeline`, `refresh_pipeline`,
+`check_detected_profile`, `write_detected_profile`; `factory.sh setup` and `update` are their command line
+
 ---
 
 ## Aggregate Roots

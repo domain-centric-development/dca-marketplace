@@ -16,7 +16,6 @@ from ..pipeline.stage_rows import stage_of
 import argparse
 import contextlib
 import glob
-import hashlib
 import io
 import os
 import re
@@ -52,7 +51,8 @@ from ..stack.commands import run as run_command
 from ..git.integration import integration_target, lost_text
 from ....application.profile.profile_rules import first_word, perspectives_of
 from ..tools.agents import TOOL, TOOLS
-from .gate_process import file_sha, GateProcess, hashing
+from .gate_process import GateProcess, hashing
+from ..files.pipeline_digest import GATE_FILES, PIPELINE_FILES, STAMP, pipeline_digest
 from ..files.snapshots import Edge
 from ..tools.tool_choice import ToolChoice
 from ..tools.tool_processes import err, exit_field, flush, ToolProcesses, utc
@@ -316,23 +316,7 @@ class Run(ProfileSource):
     def pipeline_hash(self, folder: typing.Optional[str] = None,
                       names: typing.Sequence[str] = ()) -> typing.Optional[str]:
         """One SHA-256 over the installed files' digests — the stamp's `sha256:` line (or over <names> alone)."""
-        if not hashing():
-            return None
-        folder = folder or os.path.join(self.home, ".agents", "factory")
-        listing = ""
-        for name in names or PIPELINE_FILES:
-            path = os.path.join(folder, name)
-            if name.endswith("/"):
-                if not os.path.isdir(path):
-                    listing += f"missing  {name}\n"
-                    continue
-                for module in package_modules(path):
-                    listing += f"{file_sha(os.path.join(path, module))}  {name}{module}\n"
-            elif os.path.isfile(path):
-                listing += f"{file_sha(path)}  {name}\n"
-            else:
-                listing += f"missing  {name}\n"
-        return hashlib.sha256(listing.encode("utf-8")).hexdigest()
+        return pipeline_digest(folder or os.path.join(self.home, ".agents", "factory"), names or PIPELINE_FILES)
 
     def runs_the_gate(self, gate_path: str) -> bool:
         """The gate at <gate_path> is this process's own package — its modules, its workflow and its entry point the
@@ -1356,25 +1340,6 @@ class ChildProcess(Child):
 
 
 # --- the run's start ---------------------------------------------------------------------------------------------
-STAMP = ".agents/factory/gate.installed"
-#: The files the install puts into .agents/factory/, in the stamp's order; a name ending in `/` is the package.
-PIPELINE_FILES = ("story-gate.py", "factory-cli.py", "observe.py", "factory.sh", "dca_factory/", "workflow/")
-#: What the gate runs on: alike by content in the runner's folder and the gate's, the gate may run in the runner.
-GATE_FILES = ("story-gate.py", "dca_factory/", "workflow/")
-
-
-def package_modules(folder: str) -> typing.List[str]:
-    """Every module of the package under <folder>, its subpackages' too — and every file of the workflow beside it —
-    by its path below the folder with `/`, in the order the install's hash lists them (the C locale's, as Python
-    sorts)."""
-    found: typing.List[str] = []
-    for top, dirs, files in os.walk(folder):
-        dirs[:] = [d for d in dirs if d != "__pycache__"]
-        below = os.path.relpath(top, folder).replace(os.sep, "/")
-        found += [name if below == "." else f"{below}/{name}" for name in files if name.endswith((".py", ".md"))]
-    return sorted(found)
-
-
 def read_bytes(path: str) -> bytes:
     with open(path, "rb") as handle:
         return handle.read()

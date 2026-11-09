@@ -31,6 +31,9 @@ def wire() -> None:
 
 
 def main(argv: typing.Sequence[str]) -> int:
+    if list(argv[:1]) == ["--sh"]:                # `factory.sh`, handed over at once: its own command line and root
+        from . import shell
+        return shell.main(argv[1:])
     if "--rules" in argv:
         from ..rulebook.adapter.incoming.cli import rules_command
         from . import rulebook
