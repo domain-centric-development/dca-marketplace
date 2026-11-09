@@ -82,7 +82,7 @@ on. For projects that adopt DCA late; a new project has nothing to freeze.
    `dca.rule.<id>.reason` either way.
 3. Write the choice into `dca-archunit.properties`:
 
-   **Java — a baseline** (ArchUnit's freezing store):
+   **A baseline** — the same keys in Java and .NET:
 
    ```properties
    dca.rules.freeze        = DCA-ONI-002,DCA-HEX-003
@@ -92,13 +92,14 @@ on. For projects that adopt DCA late; a new project has nothing to freeze.
    The first run records the current violations in the store directory and passes; every later run fails only
    on a violation the store does not hold, and a fixed violation leaves the store. **Commit the store** with the
    change — without it the next checkout records a new baseline and hides everything. The same in code:
-   `DcaRuleSelection.all().frozen(...).withFreezeStore(Path.of(...))` in `additionalSelection()`; the file form
-   is preferred because the report shows it. Only rules that are a single ArchUnit rule can be frozen: the
-   context-map set and the rules that iterate over bounded contexts fail with a message naming them — lower
-   those to `warn` or ignore by pattern instead.
+   `DcaRuleSelection.all().frozen(...).withFreezeStore(Path.of(...))` in `additionalSelection()` (C#:
+   `.Frozen(...).WithFreezeStore(...)`); the file form is preferred because the report shows it. The store is per
+   language: Java keeps ArchUnit's text store, .NET a JSON file (`FrozenRules.json`) — a project with both stacks
+   keeps two. Only the rules marked `"freezable": true` in the library's `rules.json` can be frozen, the same ids in
+   both libraries: the context-map set and the rules that iterate over bounded contexts fail with a message naming
+   them — lower those to `warn` or ignore by pattern instead.
 
-   **.NET — no baseline.** `DomainCentric.ArchRules` rejects `dca.rules.freeze` with a message saying so. The
-   equivalent is an ignore pattern over what is already broken, one regular expression per key:
+   **An ignore pattern** over what is already broken, one regular expression per key:
 
    ```properties
    dca.rule.DCA-ONI-002.ignore   = .*\.Legacy\..*
@@ -106,9 +107,8 @@ on. For projects that adopt DCA late; a new project has nothing to freeze.
    ```
 
    The value is **one** expression, commas included; a second one goes into `.ignore.1`, `.ignore.2`, …. The
-   rule then reports only what the pattern does not cover. `ignore` works for every rule and means the same in
-   both libraries — where a project keeps one configuration for both stacks, prefer it over `freeze` on the
-   Java side too.
+   rule then reports only what the pattern does not cover. `ignore` works for every rule — the documented
+   exception a reviewer can read; the baseline is the quick start that shrinks on its own.
 4. Run the architecture test again: green, with the frozen, ignored and lowered rules named in the report.
 
 ## `formatter`

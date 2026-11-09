@@ -27,4 +27,6 @@ dca.rules.warn              = DCA-STR-012
 # A documented exception: violations matching the pattern are ignored for that rule.
 #dca.rule.DCA-STR-003.ignore = .*Legacy.*
 
-# No baseline dial here: ArchUnitNET has no FreezingArchRule; dca.rules.freeze is rejected.
+# Baseline: existing violations are frozen, only new ones fail (single ArchUnit rules only).
+#dca.rules.freeze            = DCA-ONI-002
+#dca.rules.freeze.store      = arch/frozen
