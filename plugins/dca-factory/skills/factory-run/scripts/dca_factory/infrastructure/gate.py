@@ -9,6 +9,7 @@ import typing
 
 from ..delivery.adapter.outgoing.files.owned_files import owned_end, record_owned
 from ..delivery.adapter.outgoing.files.snapshots import record_base, record_changes
+from ..delivery.adapter.outgoing.git.checkout import Checkouts
 from .workflow import load_workflow
 
 # the stages and the rules, from their repositories — once per process, held against every binding
@@ -31,9 +32,10 @@ Report = typing.Callable[[typing.Optional[str]], int]
 # --- what checks something: the checking half, imported on first use ---------------------------------------------
 
 
-def gate_story(result: Verdict, args: typing.Any, cwd: str, profile: Profile, report: Report) -> int:
+def gate_story(result: Verdict, args: typing.Any, cwd: str, profile: Profile, report: Report,
+               checkouts: typing.Optional[Checkouts] = None) -> int:
     from . import gate_checks
-    return gate_checks.gate_story(result, args, cwd, profile, report)
+    return gate_checks.gate_story(result, args, cwd, profile, report, checkouts)
 
 
 def check_backlog(cwd: str, epics: str, profile: Profile) -> CheckBacklogInputPort:
@@ -101,9 +103,9 @@ def window_end(runs: str, story_id: str, window: str, ran: str) -> int:
     return owned_end(runs, story_id, window, ran)
 
 
-def story_base(cwd: str, runs: str, story_id: str) -> None:
+def story_base(cwd: str, runs: str, story_id: str, checkouts: typing.Optional[Checkouts] = None) -> None:
     """The tree a story's diff is taken against."""
-    record_base(cwd, runs, story_id)
+    record_base(cwd, runs, story_id, checkouts)
 
 
 def stage_changes(cwd: str, runs: str, story_id: str, stage: str) -> None:
@@ -111,9 +113,56 @@ def stage_changes(cwd: str, runs: str, story_id: str, stage: str) -> None:
     record_changes(cwd, runs, story_id, stage)
 
 
-def main(argv: typing.Sequence[str]) -> int:
-    """The gate's command line, given the composition root it builds its use cases from."""
+class GateCall:
+    """The composition root of one gate call: the root's commands, with the checkouts the call stands in — its own,
+    or the run's where the runner calls the gate in its process (WP-202). Dropped with the call."""
+
+    def __init__(self, checkouts: Checkouts) -> None:
+        self._checkouts = checkouts
+
+    def check_backlog(self, cwd: str, epics: str, profile: Profile) -> CheckBacklogInputPort:
+        return check_backlog(cwd, epics, profile)
+
+    def check_change(self, cwd: str, profile: Profile) -> CheckChangeInputPort:
+        return check_change(cwd, profile)
+
+    def check_parity(self) -> CheckParityInputPort:
+        return check_parity()
+
+    def check_profile(self, profile: Profile) -> CheckProfileInputPort:
+        return check_profile(profile)
+
+    def check_description(self, cwd: str, profile: typing.Mapping[str, str]) -> CheckDescriptionInputPort:
+        return check_description(cwd, profile)
+
+    def check_discovery(self, cwd: str, folder: str, topic: str) -> typing.Tuple[bool, str]:
+        return check_discovery(cwd, folder, topic)
+
+    def gate_story(self, result: Verdict, args: typing.Any, cwd: str, profile: Profile, report: Report) -> int:
+        return gate_story(result, args, cwd, profile, report, self._checkouts)
+
+    def layout_note(self, cwd: str, profile: Profile) -> typing.Optional[str]:
+        return layout_note(cwd, profile)
+
+    def missing_tools(self) -> typing.List[typing.Tuple[str, str]]:
+        return missing_tools()
+
+    def stage_changes(self, cwd: str, runs: str, story_id: str, stage: str) -> None:
+        stage_changes(cwd, runs, story_id, stage)
+
+    def story_base(self, cwd: str, runs: str, story_id: str) -> None:
+        story_base(cwd, runs, story_id, self._checkouts)
+
+    def window_end(self, runs: str, story_id: str, window: str, ran: str) -> int:
+        return window_end(runs, story_id, window, ran)
+
+    def window_start(self, runs: str, story_id: str) -> None:
+        window_start(runs, story_id)
+
+
+def main(argv: typing.Sequence[str], checkouts: typing.Optional[Checkouts] = None) -> int:
+    """The gate's command line, given the composition root it builds its use cases from — one per call, with the
+    run's checkouts where a run calls it in its process, else the call's own."""
     from ..delivery.adapter.incoming.gate import gate_command
-    from . import gate as root
-    gate_command.wire(root)
+    gate_command.wire(GateCall(checkouts if checkouts is not None else Checkouts()))
     return gate_command.main(argv)

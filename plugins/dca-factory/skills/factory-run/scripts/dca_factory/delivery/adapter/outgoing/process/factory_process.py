@@ -240,8 +240,9 @@ def up(cwd: str, run_args: typing.Sequence[str] = (), serve_too: bool = False, p
     record = dict(pid=process.pid, started=started, log=log_path.replace(os.sep, "/"), by=by, args=list(run_args))
     write_json(own_file(FACTORY_FILE), record)
     deadline = time.time() + wait
+    claimed_at = claim_path(cwd)                 # the checkout asked once for the wait, not at every look
     while time.time() < deadline:
-        held = read_claim(claim_path(cwd)) or {}
+        held = read_claim(claimed_at) or {}
         runner = owner_pid(held.get("owner"))
         # the runner's claim: its pid is the one started here — or, where bash's `exec` starts a process of its own
         # (Git Bash), a runner of this host that claimed the checkout since this start
@@ -331,9 +332,10 @@ def down(cwd: str, now: bool = False, wait: bool = True, by: str = "") -> int:
     if not wait:
         return 0
     last = time.time()
+    claimed_at = claim_path(cwd)                 # the checkout asked once for the wait, not at every look
     try:
         while True:
-            held = read_claim(claim_path(cwd)) or {}
+            held = read_claim(claimed_at) or {}
             if held.get("owner") != info["owner"] or (info["pid"] and not alive(info["pid"])):
                 break
             if time.time() - last >= 30:

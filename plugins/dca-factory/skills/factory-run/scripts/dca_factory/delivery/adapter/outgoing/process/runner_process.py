@@ -42,6 +42,7 @@ from ..tools.streams import tokens_of
 from .....infrastructure.schedule import start_of
 from ..claims.remote_claims import claim_config_here
 from ..claims.checkout_claim import claim
+from ..git.checkout import Checkouts
 from ..files.windows import freeze_all
 from ..files.usage_files import journal_usage
 from ..files.run_marks import back_in, run_stories, step_open
@@ -132,8 +133,11 @@ class Run(ProfileSource):
     starts are the composition root's (`cases`)."""
 
     def __init__(self, options: argparse.Namespace, home: str, runs: str, worker: typing.Optional[str] = None,
-                 cases: typing.Optional[RunCases] = None) -> None:
+                 cases: typing.Optional[RunCases] = None, checkouts: typing.Optional[Checkouts] = None) -> None:
         self._cases = cases
+        #: the checkouts this run stands in — the main one and a story's worktree — each asked of git once for the
+        #: run (WP-202), given by the composition root
+        self.checkouts = checkouts if checkouts is not None else Checkouts()
         self.py = os.environ.get("FACTORY_RUNNER_PYTHON") or "python3"   # the name the prompts and the list carry
         self.scripts = scripts_dir()
         self.cli_path = os.path.join(self.scripts, "factory-cli.py")
@@ -428,7 +432,7 @@ class Run(ProfileSource):
         self.profile()
         freeze_all(place("runs"))
         try:
-            return claim(os.getcwd(), self.worker, say)
+            return claim(os.getcwd(), self.worker, say, self.checkouts)
         except (OSError, ValueError):
             return 1
 
@@ -1127,8 +1131,8 @@ class Run(ProfileSource):
         with self.step(story, "merge") if resumed else contextlib.nullcontext():
             self.take_lock()
             try:
-                _, out = self.as_home(lambda home, story: worktree_prepare(home, place("runs"), story), story,
-                                      capture="out")
+                _, out = self.as_home(lambda home, story: worktree_prepare(home, place("runs"), story,
+                                                                           self.checkouts), story, capture="out")
             finally:
                 self.drop_lock()
         wt = out.split("\n")[-1] if out else ""
@@ -1147,6 +1151,7 @@ class Run(ProfileSource):
                           if os.path.isdir(f"{self.home}/{linked}")]
         os.chdir(wt)
         self.pwd = wt
+        self.checkouts.enter(wt)                 # the story's worktree: a checkout of its own, asked as it is entered
         os.environ["FACTORY_HOME"] = self.home
         self.runs = f"{self.home}/{self.runs_rel}"
         try:
@@ -1172,6 +1177,7 @@ class Run(ProfileSource):
                 self.as_home(worktree_remove, story, capture="none")
             finally:
                 self.drop_lock()
+            self.checkouts.leave(wt)
         return code
 
     # --- requests (WP-91) --------------------------------------------------------------------------------------

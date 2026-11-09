@@ -9,20 +9,22 @@ import socket
 import typing
 from datetime import datetime, timezone
 from .....sharedkernel.adapter.outgoing.profile.profile_files import factory_home, in_worktree
-from ..git.repository import git
+from ..git.checkout import Checkouts
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_text
 from ..tools.streams import current_session
 from ....application.status.texts import parse_time
 from ..files.run_marks import stale_after
 
 
-def claim_path(cwd: str) -> str:
+def claim_path(cwd: str, checkouts: typing.Optional[Checkouts] = None) -> str:
+    """The claim's file in the checkout's git folder — the checkout asked of `checkouts`, the run's or the call's, so a
+    runner that renews its claim before every stage asks git once (WP-202); without them, asked for this call."""
     # One claim per main checkout: a stage in a story's worktree renews the runner's claim there, not one of its own.
     if in_worktree(cwd):
         cwd = typing.cast(str, factory_home())
-    code, git_dir = git(cwd, "rev-parse", "--git-dir")
-    if code == 0 and git_dir:
-        return os.path.join(cwd, git_dir, "dca-factory-worker.lock")
+    checkout = (checkouts or Checkouts()).at(cwd)
+    if checkout is not None:
+        return os.path.join(checkout.git_dir, "dca-factory-worker.lock")
     return os.path.join(cwd, ".agents", "factory", "worker.lock")
 
 
@@ -69,10 +71,11 @@ def dead_runner(owner: typing.Any) -> typing.Optional[int]:
     return None
 
 
-def claim(cwd: str, owner: str, say: typing.Callable[..., typing.Any] = print) -> int:
+def claim(cwd: str, owner: str, say: typing.Callable[..., typing.Any] = print,
+          checkouts: typing.Optional[Checkouts] = None) -> int:
     """0 when `owner` holds the checkout now (claimed, renewed or taken over), 3 when another does; `say` gets
     the line that tells which."""
-    path = claim_path(cwd)
+    path = claim_path(cwd, checkouts)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     # Written aside, then linked into place: a link fails when the claim exists, so the file appears
     # with its content or not at all — an empty claim between create and write would read as unreadable.
@@ -126,10 +129,10 @@ def claim(cwd: str, owner: str, say: typing.Callable[..., typing.Any] = print) -
 # A session that listens on the backlog (`/loop /factory-run`) holds no claim while nothing is ready,
 # so from outside a waiting listener and an ended one look the same. Each look leaves a mark next to
 # the claim — who looked, and when — which `--status` shows. It only informs; it locks nothing.
-def listener_path(cwd: str) -> str:
-    return claim_path(cwd).replace("dca-factory-worker.lock", "dca-factory-listener.json") \
-        if claim_path(cwd).endswith("dca-factory-worker.lock") else \
-        os.path.join(cwd, ".agents", "factory", "listener.json")
+def listener_path(cwd: str, checkouts: typing.Optional[Checkouts] = None) -> str:
+    held = claim_path(cwd, checkouts)
+    return held.replace("dca-factory-worker.lock", "dca-factory-listener.json") \
+        if held.endswith("dca-factory-worker.lock") else os.path.join(cwd, ".agents", "factory", "listener.json")
 
 
 def listen_stale_after() -> int:
@@ -139,18 +142,18 @@ def listen_stale_after() -> int:
         return 3600
 
 
-def mark_listening(cwd: str) -> int:
+def mark_listening(cwd: str, checkouts: typing.Optional[Checkouts] = None) -> int:
     owner = session_owner() or "a session without an id"
-    path = listener_path(cwd)
+    path = listener_path(cwd, checkouts)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     write_claim(path, owner, None)
     print(f"listening: {owner} looked at the backlog")
     return 0
 
 
-def listener_line(cwd: str) -> typing.Optional[str]:
+def listener_line(cwd: str, checkouts: typing.Optional[Checkouts] = None) -> typing.Optional[str]:
     """`listening: …` for the status, or None when no session has looked."""
-    held = read_claim(listener_path(cwd))
+    held = read_claim(listener_path(cwd, checkouts))
     if not held:
         return None
     beat = parse_time(held.get("beat"))
@@ -162,8 +165,8 @@ def listener_line(cwd: str) -> typing.Optional[str]:
             + (" — no look for longer than a loop waits, probably ended" if ended else ""))
 
 
-def release(cwd: str, owner: str) -> int:
-    path = claim_path(cwd)
+def release(cwd: str, owner: str, checkouts: typing.Optional[Checkouts] = None) -> int:
+    path = claim_path(cwd, checkouts)
     held = read_claim(path)
     if held and held.get("owner") == owner:
         os.remove(path)

@@ -30,6 +30,7 @@ from ..delivery.domain.service.stage_brief import Brief
 from ..delivery.adapter.outgoing.process.runner_ports import (
     RunnerBacklog, RunnerIntegration, RunnerRequestSkill, RunnerStages)
 from ..delivery.adapter.outgoing.process.runner_process import Run
+from ..delivery.adapter.outgoing.git.checkout import Checkouts
 from ..sharedkernel.adapter.outgoing.profile.profile_files import (
     place,
     read_profile,
@@ -46,7 +47,10 @@ load_workflow()
 
 class RunnerCases:
     """The use cases a step of a run starts, tied to the run's adapters here — the run calls them, never builds them
-    (`RunCases`)."""
+    (`RunCases`); the gate it calls in its process stands in the run's checkouts."""
+
+    def __init__(self, checkouts: typing.Optional[Checkouts] = None) -> None:
+        self._checkouts = checkouts if checkouts is not None else Checkouts()
 
     def run_story(self, run: Run, tool: str, story: str, start: typing.Optional[str], dry: bool, gate_first: bool,
                   shared: typing.FrozenSet[Window]) -> int:
@@ -91,7 +95,7 @@ class RunnerCases:
         # what a gate's process starts without: the tools it found missing, the suite record of its last call
         commands.MISSING_TOOLS.clear()
         commands.SUITES_RECORD = None
-        return gate.main(list(argv))
+        return gate.main(list(argv), self._checkouts)
 
     @staticmethod
     def _integration(run: Run, tool: str) -> IntegrateStoryUseCase:
@@ -107,21 +111,28 @@ def placed(cwd: str) -> None:
     set_places(read_profile(resolve_profile(os.environ.get("FACTORY_PROFILE") or None, cwd)))
 
 
+def wired_run(options: argparse.Namespace, home: str, worker: typing.Optional[str]) -> Run:
+    """A run and its use cases over one set of checkouts — built here, once for the run, and dropped with it: the
+    claim renewed before every stage, a window's observation and the gate the run calls in its process ask git where
+    a checkout is once (WP-202)."""
+    checkouts = Checkouts()
+    return Run(options, home, place("runs"), worker=worker, cases=RunnerCases(checkouts), checkouts=checkouts)
+
+
 def run_for(options: argparse.Namespace) -> Run:
     """The run in the checkout it is started in — or, as a story's child, under its parent's worker."""
     cwd = os.getcwd()
     home = os.environ.get("FACTORY_HOME") or os.path.realpath(cwd)
     placed(cwd)
     worker = os.environ.get("FACTORY_RUNNER_WORKER") if options.child else None
-    return Run(options, home, place("runs"), worker=worker, cases=RunnerCases())
+    return wired_run(options, home, worker)
 
 
 def request_run_for(options: argparse.Namespace, worker: typing.Optional[str]) -> Run:
     """The run a request's own process works under: the runner's claim (`worker`), else one of its own."""
     cwd = os.getcwd()
     placed(cwd)
-    return Run(options, os.path.realpath(cwd), place("runs"), worker=worker,
-               cases=RunnerCases())
+    return wired_run(options, os.path.realpath(cwd), worker)
 
 
 def settle(cwd: str, kind_name: str, fields: typing.Mapping[str, str], words: str, by: str,
@@ -133,8 +144,7 @@ def settle(cwd: str, kind_name: str, fields: typing.Mapping[str, str], words: st
     checked = delivery.check_request(cwd).execute(CheckRequestCommand(kind_name, dict(fields), words,
                                                                       against_waiting=True))
     worker = os.environ.get("FACTORY_RUNNER_WORKER")
-    run = Run(options, os.path.realpath(cwd), place("runs"), worker=worker,
-              cases=RunnerCases())
+    run = wired_run(options, os.path.realpath(cwd), worker)
     request = run.press(kind_name, checked.fields, checked.words, by)
     return request, requests.settle_request(run.home, run.runs_rel, run.profile, run.locked).execute(
         SettleRequestCommand(request, KIND[kind_name]))

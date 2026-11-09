@@ -15,6 +15,7 @@ from ..pipeline.stage_rows import stage_order
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir, evidence_rel
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_text
 from .owned_files import run_owned
+from ..git.checkout import Checkout, Checkouts
 from ....domain.model.project_path import ProjectPath
 from ....domain.model.tree_observation import (
     DELETED as DELETED_DIGEST, Digest, Hashing, ObjectName, ObservedFile, Tracking, TreeChange, TreeObservation, UNHASHED)
@@ -45,32 +46,13 @@ class Edge(enum.Enum):
     END = "after"
 
 
-class CheckoutPlace(typing.NamedTuple):
-    """Where a folder sits in its checkout: its prefix below the top, and the checkout's index file."""
-
-    prefix: str
-    index_file: str
-
-
-def checkout_place(cwd: str) -> typing.Optional[CheckoutPlace]:
-    """One `rev-parse` for both — None outside a repository."""
-    asked = subprocess.run(["git", "rev-parse", "--show-prefix", "--git-path", "index"], cwd=cwd, capture_output=True,
-                           text=True)
-    if asked.returncode != 0:
-        return None
-    lines = asked.stdout.split("\n")
-    if len(lines) < 2:
-        return None
-    return CheckoutPlace(lines[0].strip(), os.path.join(cwd, lines[1].strip()))
-
-
-def take_tree(cwd: str, place: typing.Optional[CheckoutPlace] = None) -> typing.Optional[str]:
+def take_tree(cwd: str, checkouts: typing.Optional[Checkouts] = None) -> typing.Optional[str]:
     """A tree object of the project as it is — `git add -A` into a throwaway index, never a commit. The index starts
     as a copy of the checkout's, so a file git tracks although the ignore rules name it (an editor's settings committed
     on purpose) stays in the tree as it is in a commit's, and git hashes only what changed since the checkout's index
     saw it: the base a worktree takes from the main line is a commit's tree, and an empty index would drop the file and
     count it removed by the story."""
-    place = place or checkout_place(cwd)
+    place = (checkouts or Checkouts()).at(cwd)
     if place is None:
         return None
     with tempfile.TemporaryDirectory() as scratch:
@@ -86,9 +68,9 @@ def take_tree(cwd: str, place: typing.Optional[CheckoutPlace] = None) -> typing.
         return tree.stdout.strip() if tree.returncode == 0 and tree.stdout.strip() else None
 
 
-def git_tree(cwd: str) -> typing.Optional[str]:
+def git_tree(cwd: str, checkouts: typing.Optional[Checkouts] = None) -> typing.Optional[str]:
     """The tree of the project now, between two edges — a gate inside an open window, the red tree at the test gate."""
-    return take_tree(cwd)
+    return take_tree(cwd, checkouts)
 
 
 class Take(enum.Enum):
@@ -99,23 +81,17 @@ class Take(enum.Enum):
 
 
 def observe(cwd: str, tree: Take, hashing: Hashing = Hashing.HASHED,
-            places: typing.Optional[typing.Dict[str, typing.Optional[CheckoutPlace]]] = None
-            ) -> typing.Optional[TreeObservation]:
+            checkouts: typing.Optional[Checkouts] = None) -> typing.Optional[TreeObservation]:
     """The working tree now: every file under `cwd` git reports as differing from HEAD, with its sha256 or `deleted`,
     whether git tracks it, HEAD — and the tree object where `tree` asks for it. None outside a repository: an empty
     observation would read as "nothing changed", the strongest claim a record can make, from no evidence at all.
-    `places` keeps the checkout's place for the run that asks, so a run asks git for it once per folder."""
+    `checkouts` are the run's, so a run asks git where the folder sits once per checkout (WP-202)."""
     listing = subprocess.run(["git", "-c", "core.fileMode=false", "status", "--porcelain=v2", "--branch", "-z",
                               "-uall", "--", "."], cwd=cwd, capture_output=True)
     if listing.returncode != 0:
         return None
-    key = os.path.abspath(cwd)
-    if places is not None and key in places:
-        place = places[key]
-    else:
-        place = checkout_place(cwd)
-        if places is not None:
-            places[key] = place
+    checkouts = checkouts if checkouts is not None else Checkouts()
+    place: typing.Optional[Checkout] = checkouts.at(cwd)       # asked only once `status` found a repository
     prefix = place.prefix if place else ""
     local = lambda path: path[len(prefix):] if prefix and path.startswith(prefix) else path
     # the story journals are committed (WP-150), and the pipeline appends to them all the time: no one's change
@@ -149,7 +125,7 @@ def observe(cwd: str, tree: Take, hashing: Hashing = Hashing.HASHED,
             if fields[1][0] == "R" and origin and not origin.startswith(protocol):
                 files[origin] = ObservedFile(ProjectPath(origin), DELETED_DIGEST, Tracking.TRACKED)
             seen(local(fields[-1]), Tracking.TRACKED, fields[1])
-    taken = take_tree(cwd, place) if tree is Take.WITH_TREE and place else None
+    taken = take_tree(cwd, checkouts) if tree is Take.WITH_TREE and place else None
     return TreeObservation(tuple(files[path] for path in sorted(files)), head,
                            ObjectName(taken) if taken else None, hashing)
 
@@ -244,13 +220,13 @@ def observation_path(folder: str, edge: Edge, window: str) -> str:
 
 
 def observe_edge(cwd: str, folder: str, edge: Edge, window: str, hashing: Hashing = Hashing.HASHED,
-                 places: typing.Optional[typing.Dict[str, typing.Optional[CheckoutPlace]]] = None) -> None:
+                 checkouts: typing.Optional[Checkouts] = None) -> None:
     """The one observation of a window's edge, kept in the story's evidence folder. The end takes the tree the record
     reads; a start takes one only where the story has no base yet, and the base is written from it."""
     os.makedirs(folder, exist_ok=True)
     base = os.path.join(folder, BASE_TREE)
     needs_base = edge is Edge.START and not os.path.isfile(base)
-    seen = observe(cwd, Take.WITH_TREE if edge is Edge.END or needs_base else Take.FILES, hashing, places)
+    seen = observe(cwd, Take.WITH_TREE if edge is Edge.END or needs_base else Take.FILES, hashing, checkouts)
     write_observation(observation_path(folder, edge, window), seen)
     if needs_base:
         with open(base, "w", encoding="utf-8") as handle:
@@ -319,14 +295,14 @@ def story_change(cwd: str, base: str, now: str, runs: str
     return rows, (diff if not diff or diff.endswith("\n") else diff + "\n")
 
 
-def record_base(cwd: str, runs: str, story_id: str) -> None:
+def record_base(cwd: str, runs: str, story_id: str, checkouts: typing.Optional[Checkouts] = None) -> None:
     """`--record-base`: the tree the story's diff is taken against, where no window's start wrote it yet. Written
     once."""
     folder = evidence_dir(runs, story_id)
     os.makedirs(folder, exist_ok=True)
     base = os.path.join(folder, BASE_TREE)
     if not os.path.isfile(base):
-        tree = git_tree(cwd)
+        tree = git_tree(cwd, checkouts)
         with open(base, "w", encoding="utf-8") as handle:
             handle.write((tree or "none") + "\n")
 

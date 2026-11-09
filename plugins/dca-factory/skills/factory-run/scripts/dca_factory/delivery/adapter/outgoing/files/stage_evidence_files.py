@@ -81,6 +81,7 @@ from .kept_files import (
     red_tree, switched_off, TESTS_BASELINE, tidy_moves, unproven_tests)
 from .run_marks import last_ended, stage_open, window_open
 from .snapshots import git_tree, listed_files, snapshot_reason, tree_changes
+from ..git.checkout import Checkouts
 from .story_layout import file_digest
 from .design_files import (
     adapter_shapes, asserts_at, locate_selector, MOCK_MARKERS, mocked_ports, PLAN_FILE_LINE, plan_domain_elements,
@@ -230,11 +231,14 @@ class StageEvidenceFiles(StageEvidence):
     """The evidence of the project <cwd> with its run folder <runs>, its epics under <epics> and its profile, read
     once."""
 
-    def __init__(self, cwd: str, runs: str, epics: str, profile: Front) -> None:
+    def __init__(self, cwd: str, runs: str, epics: str, profile: Front,
+                 checkouts: typing.Optional[Checkouts] = None) -> None:
         self._cwd = cwd
         self._runs = runs
         self._epics = epics
         self._profile = profile
+        #: the gate call's checkouts — the run's where the runner calls the gate in its process (WP-202)
+        self._checkouts = checkouts if checkouts is not None else Checkouts()
 
     def gate(self) -> GateRelease:
         return GateRelease(ContractNumber(CONTRACT), Detail(VERSION))
@@ -462,7 +466,7 @@ class StageEvidenceFiles(StageEvidence):
             # story changed so far is the tree against its base: checked now, the builder can still list a file it
             # forgot — found only by the runner afterwards, it costs a round.
             base = read_text(base_file).strip()
-            now = git_tree(self._cwd) if base and base != "none" else None
+            now = git_tree(self._cwd, self._checkouts) if base and base != "none" else None
             rows = tree_changes(self._cwd, base, now, runs) if now else None
             if rows is not None:
                 record, handovers, changed_now = None, listing, [path for _kind, path in rows]
@@ -667,7 +671,8 @@ class StageEvidenceFiles(StageEvidence):
         if not files:
             return None
         held = set(git(cwd, "ls-tree", "-r", "--name-only", "HEAD", "--", *files)[1].split("\n"))
-        prefix = git(cwd, "rev-parse", "--show-prefix")[1].strip()
+        checkout = self._checkouts.at(cwd)
+        prefix = checkout.prefix if checkout is not None else ""
         # `git` strips its answer, so the first line's leading status column may be gone: the path is what follows the
         # code
         dirty = {line.split(None, 1)[1].split(" -> ")[-1] for line in

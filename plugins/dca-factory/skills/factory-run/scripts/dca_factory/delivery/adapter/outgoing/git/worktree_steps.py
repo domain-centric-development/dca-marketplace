@@ -26,6 +26,7 @@ from ..files.snapshots import listed_files, STAGES_MADE
 from ..files.story_layout import find_story, is_delivered, story_files, story_folder, story_kind
 from .integration import (
     CONFLICT_MARKER, integration_target, merge_target, rebase_tests_baseline, record_main_tests)
+from .checkout import Checkout, Checkouts
 from .repository import git, git_identity
 from .worktrees import has_worktree, uncommitted_story, worktree_of, worktrees_dir
 from ....domain.model.story import StoryStatus
@@ -66,13 +67,12 @@ def unlink_folder(path: str) -> None:
         os.rmdir(path)                           # a junction goes, its target stays
 
 
-def exclude_worktrees(cwd: str) -> None:
+def exclude_worktrees(checkout: typing.Optional[Checkout]) -> None:
     """The worktrees folder is git's business only: kept out of the main checkout's status in `.git/info/exclude`
     (local, never committed — the project's `.gitignore` stays the person's)."""
-    code, common = git(cwd, "rev-parse", "--git-common-dir")
-    if code != 0 or not common.strip():
+    if checkout is None:
         return
-    path = os.path.join(cwd, common.strip(), "info", "exclude")
+    path = os.path.join(checkout.common_dir, "info", "exclude")
     line = "/" + worktrees_dir().strip("/") + "/"
     text = read_text(path) if os.path.isfile(path) else ""
     if line not in text.splitlines():
@@ -143,17 +143,19 @@ def write_base(path: str, runs: str, story_id: str, tree: str) -> None:
         rebase_tests_baseline(path, runs, story_id, tree, old)
 
 
-def worktree_prepare(cwd: str, runs: str, story_id: str) -> int:
+def worktree_prepare(cwd: str, runs: str, story_id: str, checkouts: typing.Optional[Checkouts] = None) -> int:
     """Before a story's stages: its worktree, made where it is not, brought onto the main line where it has no
     commit of its own and nothing of it is in the way, and linked to the main checkout. Prints the worktree's path
-    as the last line — or `none — <why>` where the project cannot have one, and the story runs in the checkout."""
-    if git(cwd, "rev-parse", "--verify", "--quiet", "HEAD")[0] != 0:
+    as the last line — or `none — <why>` where the project cannot have one, and the story runs in the checkout.
+    `checkouts` are the run's: where the main checkout's git folder is, asked once for the run (WP-202)."""
+    checkout = (checkouts or Checkouts()).at(cwd)
+    if (checkout is None or checkout.head() is None) and git(cwd, "rev-parse", "--verify", "--quiet", "HEAD")[0] != 0:
         print("none — the repository has no commit yet, so a story has no branch to start from")
         return 0
     path, branch = worktree_of(story_id, cwd), STORY_BRANCH + story_id
     target_file = os.path.join(evidence_dir(runs, story_id), "target")
     on = git(cwd, "symbolic-ref", "--quiet", "--short", "HEAD")[1].strip()
-    exclude_worktrees(cwd)
+    exclude_worktrees(checkout)
     if not has_worktree(story_id, cwd):
         known = git(cwd, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}")[0] == 0
         if not known and os.path.isfile(os.path.join(runs, story_id, stage_files()[stage_of(Role.TESTS)])) and not is_delivered(

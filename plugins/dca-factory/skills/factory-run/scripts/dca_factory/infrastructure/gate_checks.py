@@ -10,6 +10,7 @@ import time
 import typing
 
 from ..delivery.adapter.outgoing.stack.commands import MISSING_TOOLS
+from ..delivery.adapter.outgoing.git.checkout import Checkouts
 from ..delivery.adapter.outgoing.stack.stage_runs import StageRunFiles
 from ..delivery.adapter.outgoing.files.criteria_files import criteria_of
 from ..delivery.adapter.outgoing.files.gate_journal import close_record, journal_gate
@@ -69,18 +70,21 @@ def check_parity() -> CheckParityUseCase:
     return CheckParityUseCase(ParityReportFiles())
 
 
-def stage_run(close: typing.Callable[[StageRun], None], **fields: typing.Any) -> StageRun:
+def stage_run(close: typing.Callable[[StageRun], None], checkouts: typing.Optional[Checkouts] = None,
+              **fields: typing.Any) -> StageRun:
     """What one gate run over a story knows: the fields the gate read, the story, its evidence and its contract from
-    them, and the ports its checks reach the project through; `close` journals a delivery's last events."""
+    them, and the ports its checks reach the project through — those that ask git where the checkout is through the
+    call's `checkouts`; `close` journals a delivery's last events."""
+    checkouts = checkouts if checkouts is not None else Checkouts()
     run: typing.Any = StageRun(**fields)
     run.kind = story_kind(run.front)
-    run.evidence = StageEvidenceFiles(run.cwd, run.runs, run.args.epics, run.profile)
+    run.evidence = StageEvidenceFiles(run.cwd, run.runs, run.args.epics, run.profile, checkouts)
     run.tests = StageTestFiles(run.cwd, run.runs, run.profile)
     run.main_line = MainLineEvidence(run.cwd, run.runs, run.args.epics, run.profile)
-    run.marks = StageMarkFiles(run.cwd, run.runs, run.kind)
+    run.marks = StageMarkFiles(run.cwd, run.runs, run.kind, checkouts)
     run.describe = check_description(run.cwd, run.profile)
     run.runs_port = StageRunFiles(run.cwd, run.runs, run.profile)
-    wire_delivery(run)
+    wire_delivery(run, checkouts)
     run.close = lambda: close(run)
     run.story = story_of(run.story_path, run.front, run.body, run.criteria)
     run.contract = run.evidence.gate().reads(run.evidence.declared_contract())
@@ -94,10 +98,10 @@ def now() -> Moment:
     return Moment(time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
 
 
-def wire_delivery(run: typing.Any) -> None:
+def wire_delivery(run: typing.Any, checkouts: typing.Optional[Checkouts] = None) -> None:
     """The ports a passing gate delivers through: its writes, the story delivered by the gate — where the gate read
     it, and in the story's own checkout for a published delivery —, the clock."""
-    run.delivery = StageDeliveryFiles(run.cwd, run.runs, run.profile)
+    run.delivery = StageDeliveryFiles(run.cwd, run.runs, run.profile, checkouts)
     events, transactions = JournalEventPublisher(run.runs), FileTransactions()
     run.deliveries = {
         Landing.STORY: DeliverStoryUseCase(StoryFiles(run.cwd, run.args.epics), events, transactions),
@@ -136,7 +140,8 @@ def missing_tools() -> typing.List[typing.Tuple[str, str]]:
 
 
 
-def gate_story(result: Verdict, args: typing.Any, cwd: str, profile: Profile, report: Report) -> int:
+def gate_story(result: Verdict, args: typing.Any, cwd: str, profile: Profile, report: Report,
+               checkouts: typing.Optional[Checkouts] = None) -> int:
     """One gate run over a story: its file read, the stage's checks over it, a passing gate's actions, the run
     journaled — a file the gate cannot read refused as `gate`."""
     story_path = story_id = None
@@ -148,7 +153,7 @@ def gate_story(result: Verdict, args: typing.Any, cwd: str, profile: Profile, re
         criteria = criteria_of(story_path, body, front)
         run = stage_run(close_record, result=result, args=args, cwd=cwd, runs=args.runs, stage=stage_named()[args.stage],
                         story_id=story_id, story_path=story_path, front=front, body=body, criteria=criteria,
-                        profile=profile)
+                        profile=profile, checkouts=checkouts)
         run_checks(run)
     except GateError as error:
         result.fail("gate", str(error))

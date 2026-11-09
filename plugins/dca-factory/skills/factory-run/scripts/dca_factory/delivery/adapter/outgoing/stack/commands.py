@@ -13,6 +13,7 @@ import subprocess
 import typing
 from datetime import datetime, timezone
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir, runs_top
+from ..git.checkout import Checkouts
 from ..git.repository import git
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_text
 from .test_reports import clock_marker, executed_tests, fill, normalise, report_state, reports_from_this_run, SENTINEL
@@ -97,14 +98,19 @@ def run(command: str, cwd: str) -> typing.Tuple[int, str]:
 SUITES_RECORD: typing.Optional[typing.Dict[str, typing.Any]] = None
 
 
-def suites_tree_key(cwd: str, runs: str) -> str:
+def suites_tree_key(cwd: str, runs: str, checkouts: typing.Optional[Checkouts] = None) -> str:
     """What a recorded run is keyed by: a digest of every source file's path and content — the run folder,
     the tools' folders and the build outputs left out — plus HEAD where there is one. The gate report the
     runner copies into the evidence folder between two gates must not turn an unchanged tree into a new one, and a
-    project before its `git init` has a tree as well."""
+    project before its `git init` has a tree as well. HEAD is read from the checkout's files where they say it — the
+    checkout the run's or the call's (`checkouts`, WP-202) — and asked of git where they do not."""
     digest = hashlib.sha256()
-    code, head = git(cwd, "rev-parse", "HEAD")
-    digest.update((head.strip() if code == 0 else "no-head").encode("utf-8"))
+    checkout = (checkouts or Checkouts()).at(cwd)
+    head = checkout.head() if checkout is not None else None
+    if head is None and checkout is not None:
+        code, asked = git(cwd, "rev-parse", "HEAD")
+        head = asked.strip() if code == 0 else None
+    digest.update((head or "no-head").encode("utf-8"))
     skipped = SKIP_DIRS | {runs_top()}
     for root, dirs, files in os.walk(cwd):
         dirs[:] = sorted(d for d in dirs if d not in skipped and not d.startswith("."))
@@ -126,11 +132,12 @@ def suites_signature(key: str, tree: str, invocation: str, code: typing.Any, ran
                     hashlib.sha256).hexdigest()
 
 
-def open_suites_record(cwd: str, runs: str, story_id: str, key: str) -> typing.Dict[str, typing.Any]:
+def open_suites_record(cwd: str, runs: str, story_id: str, key: str,
+                       checkouts: typing.Optional[Checkouts] = None) -> typing.Dict[str, typing.Any]:
     """The rows of `.verify/suites.tsv` for this tree whose signature the runner's key confirms. A row
     written by anything else — a stage, a hand — carries no valid signature and is not read."""
     path = os.path.join(evidence_dir(runs, story_id), "suites.tsv")
-    tree = suites_tree_key(cwd, runs)
+    tree = suites_tree_key(cwd, runs, checkouts)
     rows: typing.Dict[str, typing.Tuple[str, int, typing.Any]] = {}
     if tree and os.path.isfile(path):
         for line in read_text(path).splitlines():

@@ -15,7 +15,8 @@ import sys
 import typing
 
 from ..files.owned_files import OWNED_DIGEST, WINDOW_DIGEST
-from ..files.snapshots import CheckoutPlace, Edge, observe_edge
+from ..files.snapshots import Edge, observe_edge
+from ..git.checkout import Checkouts
 from ....domain.model.tree_observation import Hashing
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir, place
 from ..tools.tool_processes import err, flush, utc
@@ -41,6 +42,7 @@ class GateHost(typing.Protocol):
     gate_path: str
     runs: str
     suites_key: str
+    checkouts: Checkouts
 
     def evidence(self, story: str) -> str: ...
 
@@ -62,8 +64,6 @@ class GateProcess:
 
     def __init__(self, host: GateHost) -> None:
         self._host = host
-        #: Where each folder sits in its checkout, asked of git once per folder for this run's lifetime.
-        self._places: typing.Dict[str, typing.Optional[CheckoutPlace]] = {}
 
     def installed(self) -> bool:
         return os.path.isfile(self._host.gate_path)
@@ -157,7 +157,7 @@ class GateProcess:
             err("factory:   that needs a digest as not observed. Install one of the three for full evidence.")
         with contextlib.suppress(OSError):
             observe_edge(os.getcwd(), self._host.evidence(story), edge, window,
-                         Hashing.HASHED if hashed else Hashing.NAMES_ONLY, self._places)
+                         Hashing.HASHED if hashed else Hashing.NAMES_ONLY, self._host.checkouts)
 
 
 class _Both(io.TextIOBase):

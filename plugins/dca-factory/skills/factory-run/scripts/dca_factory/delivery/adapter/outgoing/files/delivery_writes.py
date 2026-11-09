@@ -36,6 +36,7 @@ from .journal_files import flaky_tests
 from .kept_files import RED_TREE, TESTS_BASELINE
 from .run_marks import write_mark
 from .snapshots import git_tree
+from ..git.checkout import Checkouts
 from .stage_evidence_files import closed_rows, closes_of
 from .story_layout import journeys_hold, story_digest, story_folder, story_kind
 from .test_files import locate_tests, read_mapping
@@ -65,22 +66,23 @@ def close_findings(result: typing.Any, front: Front) -> None:
         result.ok("findings", f"closed {', '.join(closed)} — set to done in their findings.md")
 
 
-def record_red_tree(result: typing.Any, cwd: str, runs: str, story_id: str) -> None:
+def record_red_tree(result: typing.Any, cwd: str, runs: str, story_id: str,
+                    checkouts: typing.Optional[Checkouts] = None) -> None:
     """At the test gate's pass: the tree as it is, when every mapped test was red in this run. A pass that let a test
     through green — a back round after the build, a decision — has production code past the red state: the tree an
     earlier pass recorded stays, since tidy's tests are laid over it anyway."""
     if any(Finding(FindingState(st), CheckName(c), Said(m)).lets_through_green()
            for st, c, m in result.entries):
         return
-    tree = git_tree(cwd)
+    tree = git_tree(cwd, checkouts)
     if tree:
         write_mark(runs, story_id, RED_TREE, tree)
 
 
-def record_tests_baseline(cwd: str, runs: str, story_id: str) -> None:
+def record_tests_baseline(cwd: str, runs: str, story_id: str, checkouts: typing.Optional[Checkouts] = None) -> None:
     """Write the baseline once per story; a later plan gate must not launder a change into it."""
     path = os.path.join(evidence_dir(runs, story_id), TESTS_BASELINE)
-    if os.path.isfile(path) or git(cwd, "rev-parse", "--git-dir")[0]:
+    if os.path.isfile(path) or (checkouts or Checkouts()).at(cwd) is None:
         return
     files = test_files(cwd)
     blobs: typing.List[str] = []

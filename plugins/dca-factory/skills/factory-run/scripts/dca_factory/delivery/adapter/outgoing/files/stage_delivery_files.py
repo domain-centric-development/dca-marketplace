@@ -19,6 +19,7 @@ from .delivery_writes import (
     acceptance_applies, checkout_story, commit_delivery, keep_beside_delivery, keep_published_status,
     prepare_delivery, publish_story, record_red_tree, record_tests_baseline, take_into_home)
 from .run_marks import STORY_DIGEST, write_mark
+from ..git.checkout import Checkouts
 from .owned_files import regard_gate_line
 from .signals import journal_signal, plan_left_open
 from .story_layout import story_digest
@@ -28,14 +29,16 @@ from ....application.shared.stage_delivery import StageDelivery
 class StageDeliveryFiles(StageDelivery):
     """The writes of a passing gate in the project <cwd> with its run folder <runs> and its profile."""
 
-    def __init__(self, cwd: str, runs: str, profile: typing.Mapping[str, typing.Any]) -> None:
+    def __init__(self, cwd: str, runs: str, profile: typing.Mapping[str, typing.Any],
+                 checkouts: typing.Optional[Checkouts] = None) -> None:
         self._cwd = cwd
         self._runs = runs
         self._profile = profile
+        self._checkouts = checkouts if checkouts is not None else Checkouts()
 
     def plan_marks(self, story: str, story_path: str) -> None:
         write_mark(self._runs, story, STORY_DIGEST, story_digest(story_path))
-        record_tests_baseline(self._cwd, self._runs, story)
+        record_tests_baseline(self._cwd, self._runs, story, self._checkouts)
         plan = os.path.join(self._runs, story, "plan.md")
         journal_signal(self._runs, story, "plan", open=len(plan_left_open(read_text(plan))) if os.path.isfile(plan) else 0)
 
@@ -50,7 +53,7 @@ class StageDeliveryFiles(StageDelivery):
         result.ok("plan-adopts", f"{', '.join(scenarios)} moved into the adopted story {into}; {story} builds the rest")
 
     def red_tree(self, result: typing.Any, story: str) -> None:
-        record_red_tree(result, self._cwd, self._runs, story)
+        record_red_tree(result, self._cwd, self._runs, story, self._checkouts)
 
     def acceptance(self, story: str, story_path: str) -> AcceptanceFacts:
         try:

@@ -11,6 +11,7 @@ from ..pipeline.stage_rows import order_for
 from ..stack import commands
 from ..stack.commands import open_suites_record
 from .run_marks import current_stage_files
+from ..git.checkout import Checkouts
 from .signals import record_judge_signal
 from ....application.shared.stage_marks import StageMarks
 
@@ -18,10 +19,11 @@ from ....application.shared.stage_marks import StageMarks
 class StageMarkFiles(StageMarks):
     """The marks of a gate run over a story of the kind <kind>, in the project <cwd> with its run folder <runs>."""
 
-    def __init__(self, cwd: str, runs: str, kind: str) -> None:
+    def __init__(self, cwd: str, runs: str, kind: str, checkouts: Checkouts) -> None:
         self._cwd = cwd
         self._runs = runs
         self._kind = kind
+        self._checkouts = checkouts
 
     def judge_passed(self, story: str) -> None:
         record_judge_signal(self._runs, story, current_stage_files(self._runs, story, order_for(self._kind))[stage_of(Role.JUDGES)])
@@ -30,5 +32,5 @@ class StageMarkFiles(StageMarks):
         key = os.environ.get("FACTORY_SUITES_KEY", "")
         if not key:
             return False
-        commands.SUITES_RECORD = open_suites_record(self._cwd, self._runs, story, key)
+        commands.SUITES_RECORD = open_suites_record(self._cwd, self._runs, story, key, self._checkouts)
         return True

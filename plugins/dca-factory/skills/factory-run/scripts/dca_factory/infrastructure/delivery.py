@@ -11,6 +11,7 @@ from ..delivery.adapter.outgoing.process.factory_process_files import FactoryPro
 from ..delivery.adapter.outgoing.tools.runner_table_files import RunnerTableFiles
 from ..delivery.adapter.outgoing.tools.tool_binary_files import ToolBinaryFiles
 from ..delivery.adapter.outgoing.claims.checkout_files import CheckoutFiles
+from ..delivery.adapter.outgoing.git.checkout import Checkouts
 from ..delivery.adapter.outgoing.files.project_upkeep_files import ProjectUpkeepFiles
 from ..delivery.adapter.outgoing.files.hand_over_skeleton_files import HandOverSkeletonFiles
 from ..delivery.adapter.outgoing.files.session_mark_files import SessionMarkFiles
@@ -166,7 +167,7 @@ def book_request_cost(cwd: str, runs: str) -> BookRequestCostUseCase:
 
 
 def status_facts(cwd: str, epics: str, runs: str) -> StatusFactFiles:
-    return StatusFactFiles(cwd, epics, runs, lambda: schedule_data(cwd, epics, runs))
+    return StatusFactFiles(cwd, epics, runs, lambda: schedule_data(cwd, epics, runs), Checkouts())
 
 
 def show_status(cwd: str, epics: str, runs: str) -> ShowStatusUseCase:
@@ -288,17 +289,17 @@ def append_journal(cwd: str, runs: str) -> AppendJournalUseCase:
 
 
 def take_checkout(cwd: str, runs: str) -> TakeCheckoutUseCase:
-    return TakeCheckoutUseCase(CheckoutFiles(cwd, runs))
+    return TakeCheckoutUseCase(CheckoutFiles(cwd, runs, Checkouts()))
 
 
 
 def give_checkout_back(cwd: str, runs: str) -> GiveCheckoutBackUseCase:
-    return GiveCheckoutBackUseCase(CheckoutFiles(cwd, runs))
+    return GiveCheckoutBackUseCase(CheckoutFiles(cwd, runs, Checkouts()))
 
 
 
 def mark_listening(cwd: str, runs: str) -> MarkListeningUseCase:
-    return MarkListeningUseCase(CheckoutFiles(cwd, runs))
+    return MarkListeningUseCase(CheckoutFiles(cwd, runs, Checkouts()))
 
 
 def show_brief(cwd: str) -> ShowBriefUseCase:

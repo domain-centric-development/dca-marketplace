@@ -22,6 +22,7 @@ from ..tools.streams import follow_lines, READERS, session_reader, session_usage
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError, read_front_matter, read_text
 from ..claims.remote_claims import cached_claims
 from ..claims.checkout_claim import claim_path, listener_line, read_claim
+from ..git.checkout import Checkouts
 from .usage_files import resolve_window
 from .run_marks import running_stages, story_title
 from .journal_files import flaky_tests
@@ -291,8 +292,10 @@ class StatusFactFiles(StatusFacts):
     """The status's facts, read from the project <cwd> with its epics and run folder as the profile places them;
     the schedule is the schedule's read model, which the composition root hands in."""
 
-    def __init__(self, cwd: str, epics: str, runs: str, schedule: typing.Callable[[], Facts]) -> None:
+    def __init__(self, cwd: str, epics: str, runs: str, schedule: typing.Callable[[], Facts],
+                 checkouts: Checkouts) -> None:
         self._cwd, self._epics, self._runs, self._schedule = cwd, epics, runs, schedule
+        self._checkouts = checkouts
 
     def now(self) -> datetime.datetime:
         return datetime.datetime.now(datetime.timezone.utc)
@@ -340,7 +343,7 @@ class StatusFactFiles(StatusFacts):
         return story_round(self._runs, story_id)
 
     def claim(self) -> typing.Optional[Facts]:
-        return read_claim(claim_path(self._cwd))
+        return read_claim(claim_path(self._cwd, self._checkouts))
 
     def activity(self, owner: str, started: str, now: datetime.datetime, story_id: str) -> str:
         output = (follow_newest(self._runs, story_id) or (None, None, None))[2]
@@ -366,7 +369,7 @@ class StatusFactFiles(StatusFacts):
         return ended(self._cwd)
 
     def listener(self) -> typing.Optional[str]:
-        return listener_line(self._cwd)
+        return listener_line(self._cwd, self._checkouts)
 
     def dangling_skill_links(self) -> typing.List[str]:
         return dangling_skill_links(self._cwd)
