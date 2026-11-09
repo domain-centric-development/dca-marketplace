@@ -16,9 +16,12 @@ dataclass by its base: it declares its fields and carries no decorator of its ow
     DomainEventPublisher       publishes an aggregate's events once it is saved
     TransactionBoundary        runs a use case's writes as one unit
     UseCaseException           a use case's failure about the request, not about an invariant
+    Refusal                    a case of a closed use-case result that refuses the request
     OutputPortException        a failure an output port reports, outside what the model or the request can say
     BoundedContext, Upstream   a context's declaration, `__dca__` in its package, and the contexts it depends on
+    ExternalUpstream           a system outside this code base a context depends on
     SharedKernel               the shared kernel's declaration
+    OpenHostService            a published interface another context may call; an api package of functions declares it
 
 A marker that exists is not a duty to use it: an entity, an aggregate, a repository is used where something has a
 life cycle, a value where something is described.
@@ -290,6 +293,13 @@ class UseCaseException(Exception):
     """
 
 
+class Refusal:
+    """Marks a case of a closed use-case result that refuses the request: the use case returns it instead of raising,
+    and the incoming adapter answers it. A case that reports success never carries it."""
+
+    __slots__ = ()
+
+
 class OutputPortException(Exception):
     """The base of every failure an output port reports to the application: the outside did not answer as it should,
     or ended the work. It names no technology — the adapter translates its own failure into it."""
@@ -309,6 +319,13 @@ class Consumes(enum.Enum):
     EVENTS = "events"
 
 
+class Interaction(enum.Enum):
+    """Who calls whom across the boundary to an external system."""
+
+    OUTBOUND = "outbound"
+    INBOUND = "inbound"
+
+
 @dataclasses.dataclass(frozen=True)
 class Upstream:
     """Another bounded context this context depends on, through its published interface."""
@@ -320,6 +337,20 @@ class Upstream:
 
 
 @dataclasses.dataclass(frozen=True)
+class ExternalUpstream:
+    """A system outside this code base that this context depends on — a program it runs, a service it calls;
+    `contract_packages` name the modules that hold its contract types, where it has any."""
+
+    name: str
+    translation: Translation
+    interaction: Interaction
+    contract_packages: tuple[str, ...] = ()
+    protocol: str = ""
+    exchanges: str = ""
+    rationale: str = ""
+
+
+@dataclasses.dataclass(frozen=True)
 class BoundedContext:
     """The declaration of a bounded context, as `__dca__` in its package's `__init__.py`. The architecture rules read
     it from the source, so its arguments are literals and the enums above."""
@@ -327,6 +358,7 @@ class BoundedContext:
     name: str
     description: str = ""
     upstreams: tuple[Upstream, ...] = ()
+    external_upstreams: tuple[ExternalUpstream, ...] = ()
 
 
 @dataclasses.dataclass(frozen=True)
@@ -334,3 +366,11 @@ class SharedKernel:
     """The declaration of the shared kernel, as `__dca__` in its package's `__init__.py`."""
 
     description: str = ""
+
+
+class OpenHostService:
+    """Marks a published interface another bounded context may call: it sits in the context's `api` package or in an
+    incoming adapter. A class extends it; an api of functions declares its package instead, as a context does —
+    `__dca__ = OpenHostService()` in the package's `__init__.py`."""
+
+    __slots__ = ()

@@ -5,7 +5,7 @@ from __future__ import annotations
 import dataclasses
 import typing
 
-from ....building_blocks import UseCase
+from ....building_blocks import Refusal, UseCase
 from ...domain.model.story import StoryId
 from ..shared.owned_changes import OwnedChanges
 from ..shared.story_journal import StoryJournal
@@ -23,7 +23,7 @@ class Confirmed:
 
 
 @dataclasses.dataclass(frozen=True)
-class NothingToConfirm:
+class NothingToConfirm(Refusal):
     """No stage changed the story or an answer."""
 
 

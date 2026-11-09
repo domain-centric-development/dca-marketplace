@@ -5,12 +5,15 @@ from __future__ import annotations
 import os
 import typing
 
+from ...building_blocks import OpenHostService
 from ...sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError, read_front_matter
 from ...sharedkernel.adapter.outgoing.profile.profile_files import place
 from ..adapter.outgoing.files.epic_files import epic_holding
 from ..adapter.outgoing.files.story_layout import story_files
 from ..adapter.outgoing.files.hand_over_patterns import SELECTOR
 from ..adapter.outgoing.files.test_files import locate_tests
+
+__dca__ = OpenHostService()
 
 #: A story's states that hold no change any more: delivered, adopted (it describes what holds), set aside.
 CLOSED = ("delivered", "adopted", "superseded")

@@ -5,7 +5,7 @@ from __future__ import annotations
 import dataclasses
 import typing
 
-from ....building_blocks import DomainEventPublisher, TransactionBoundary, UseCase
+from ....building_blocks import DomainEventPublisher, Refusal, TransactionBoundary, UseCase
 from ...domain.model.decision_record import RecordId
 from ...domain.model.moment import Moment
 from ...domain.model.story import CitedCorrection, StoryId
@@ -30,26 +30,26 @@ class Reopened:
 
 
 @dataclasses.dataclass(frozen=True)
-class NoCorrection:
+class NoCorrection(Refusal):
     """No acceptance record answered with a correction."""
 
 
 @dataclasses.dataclass(frozen=True)
-class CheckoutHeld:
+class CheckoutHeld(Refusal):
     """Other stories hold the checkout with unfinished code — one story at a time."""
 
     holders: typing.Tuple[StoryId, ...]
 
 
 @dataclasses.dataclass(frozen=True)
-class NotCited:
+class NotCited(Refusal):
     """The correction is not written into the story."""
 
     record: RecordId
 
 
 @dataclasses.dataclass(frozen=True)
-class NewWish:
+class NewWish(Refusal):
     """After an acceptance the correction changes accepted criteria — a new story, not this one reopened."""
 
     changed: typing.Tuple[str, ...]

@@ -6,12 +6,15 @@ from __future__ import annotations
 import os
 import typing
 
+from ...building_blocks import OpenHostService
 from ...infrastructure import discovery as wiring
 from ...sharedkernel.adapter.outgoing.markdown.front_matter import read_text
 from ..adapter.outgoing.files.report_files import discovery_items, ReportFiles
 from ..application.check_report import CheckReportCommand, ReportChecked
 from ..application.list_reports import ListReportsQuery
 from ..domain.model.report import DESCRIPTION_CHANGES, PROPOSED_WORK, Topic
+
+__dca__ = OpenHostService()
 
 __all__ = ("check_report", "DESCRIPTION_CHANGES", "discovery_items", "list_reports", "proposals_in", "report_of",
            "ReportChecked")

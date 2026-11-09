@@ -5,7 +5,7 @@ from __future__ import annotations
 import dataclasses
 import typing
 
-from ....building_blocks import DomainEventPublisher, TransactionBoundary, UseCase
+from ....building_blocks import DomainEventPublisher, Refusal, TransactionBoundary, UseCase
 from ...domain.model.moment import Moment
 from ...domain.model.person import Person
 from ...domain.model.stage_story import Place
@@ -35,14 +35,14 @@ class DeliveredByHand:
 
 
 @dataclasses.dataclass(frozen=True)
-class ClaimedElsewhere:
+class ClaimedElsewhere(Refusal):
     """Another factory builds the story."""
 
     claim: ClaimHeld
 
 
 @dataclasses.dataclass(frozen=True)
-class ChangesWhatHolds:
+class ChangesWhatHolds(Refusal):
     """The story changes what holds: the delta of a change is planned, not taken by hand."""
 
     change: SpecChange

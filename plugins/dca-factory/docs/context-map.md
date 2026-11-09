@@ -44,6 +44,12 @@ its package, the shared kernel `__dca__ = SharedKernel()`; the rule suite of DCA
 Besides the crossings above, two run back: discovery asks delivery's `api` which proposals became epics, and spec
 asks it for the open stories and their proofs.
 
+**Open host services and external systems, in the code.** The `api` packages of delivery, spec and discovery are
+functions, so each declares its package `__dca__ = OpenHostService()`. Delivery is the one context that reaches outside
+the code base; it declares what it runs as `ExternalUpstream`: git, the git remote (a claim held across factories), and
+the agent tools claude, codex and opencode — each behind an outgoing adapter (`adapter/outgoing/git/`,
+`adapter/outgoing/tools/`) that translates their output into delivery's terms.
+
 **spec → discovery — not built.** An epic delivered and unguarded, or an outcome that does not happen, would start a
 new discovery: a future crossing, shown so it is not forgotten.
 
