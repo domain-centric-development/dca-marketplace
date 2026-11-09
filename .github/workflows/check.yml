@@ -74,19 +74,26 @@ jobs:
           cd "$RUNNER_TEMP" && rm -rf probe && mkdir probe && cd probe && git init -q && git commit -q --allow-empty -m x
           G="$GITHUB_WORKSPACE/plugins/dca-factory/skills/factory-run/scripts"
           cp -R "$G/dca_factory" "$G/workflow" "$G/story-gate.py" "$G/factory-cli.py" .
-          each() { local label=$1; shift; local s e; s=$(date +%s%N); for i in $(seq 20); do "$@" >/dev/null 2>&1; done; e=$(date +%s%N); echo "$label: $(( (e - s) / 20000000 )) ms"; }
-          each "bash fork (true in a subshell)" bash -c '( true )'
-          each "external /usr/bin/true" /usr/bin/true
-          each "sed" sed -n 1p story-gate.py
-          each "git rev-parse --git-dir" git rev-parse --git-dir
-          each "git status --porcelain" git status --porcelain
-          each "python -c pass" python -c pass
-          each "python -S -c pass" python -S -c pass
-          each "gate --help (light root)" python story-gate.py --help
-          each "cli --stages (cli root)" python factory-cli.py --stages --shell
-          each "gate --check-contract" python story-gate.py --check-contract
-          each "shasum one file" shasum -a 256 story-gate.py
-          each "sha256sum one file" sha256sum story-gate.py
+          python - <<'PROBE'
+          import shutil, subprocess, sys, time
+          probes = [("bash, a subshell", ["bash", "-c", "( true )"]), ("sed", ["sed", "-n", "1p", "story-gate.py"]),
+                    ("git rev-parse --git-dir", ["git", "rev-parse", "--git-dir"]),
+                    ("git status --porcelain", ["git", "status", "--porcelain"]),
+                    ("python -c pass", [sys.executable, "-c", "pass"]), ("python -S -c pass", [sys.executable, "-S", "-c", "pass"]),
+                    ("gate --help (light root)", [sys.executable, "story-gate.py", "--help"]),
+                    ("cli --stages", [sys.executable, "factory-cli.py", "--stages", "--shell"]),
+                    ("shasum, one file", ["shasum", "-a", "256", "story-gate.py"]),
+                    ("sha256sum, one file", ["sha256sum", "story-gate.py"])]
+          for label, argv in probes:
+              found = shutil.which(argv[0]) or argv[0]
+              start = time.perf_counter()
+              for _ in range(20):
+                  subprocess.run([found, *argv[1:]], capture_output=True)
+              print(f"{label}: {(time.perf_counter() - start) / 20 * 1000:.0f} ms")
+          start = time.perf_counter()
+          subprocess.run([shutil.which("bash"), "-c", "for i in $(seq 100); do x=$(true); done"], capture_output=True)
+          print(f"inside bash, one $( ) fork: {(time.perf_counter() - start) / 100 * 1000:.0f} ms")
+          PROBE
       - name: factory-verify
         run: python plugins/dca-factory/skills/factory-verify/scripts/verify.py --group ${{ matrix.group }} --junit verify-report.xml
       - uses: actions/upload-artifact@v4
