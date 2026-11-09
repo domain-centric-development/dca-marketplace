@@ -18,6 +18,8 @@ in Block A, rule by rule — here it asks only what that rule cannot see.
 - [ ] Aggregate references other aggregates by ID, not direct field
 - [ ] No Spring/JPA annotations (`@Entity`, `@Component`, `@Service`, `@Table`); C#: no EF Core/ASP.NET attributes, no `async` member (the domain stays synchronous)
 - [ ] No setters (C#: no public `set`/`init` on state that carries an invariant)
+- [ ] A yes/no fact is a `boolean` field with a predicate; no method takes a yes/no parameter (a transition is a method of its own, `complete()` not `setCompleted(true)`), and no two-case enum names one fact and its negation (`PRESENT`/`ABSENT`, `YES`/`NO`) — `DCA-TAC-025`
+- [ ] A decision asks the aggregate, never a copy of its state (a list of status words, a read model's field)
 - [ ] `domainEvents()` and `clearDomainEvents()` exposed
 - [ ] **Anti-pattern flag:** if aggregate has only getters/setters → anemic
 
@@ -135,6 +137,7 @@ The explicit exception to "domain services over supplied facts". Legitimate, not
 
 - [ ] Extends `UseCase<INPUT, OUTPUT>`
 - [ ] Single method `execute(INPUT)` returning `OUTPUT`
+- [ ] `OUTPUT` is a result type, a value or a closed result — never a bare `String`, `Integer` or `Boolean` (C#: `string`, `int`, `bool`) such as an exit code or a status word (`DCA-USE-022`)
 - [ ] Naming matches project convention (e.g. `PlaceOrderInputPort` or `PlaceOrderUseCase`)
 
 ### Implementation class
@@ -144,6 +147,7 @@ The explicit exception to "domain services over supplied facts". Legitimate, not
 - [ ] No remote-capable output port (another context's API, payment provider, mail gateway) called inside a `@Transactional` use case — such use cases fetch remote data first and wrap save + publish in `TransactionBoundary.inTransaction(...)` (`DCA-USE-013`); C#: remote reads before `InTransactionAsync`, never inside
 - [ ] C#: ports are async (`Task<TOut> ExecuteAsync(TIn, CancellationToken)`), the domain they call is not — no `.Result`/`.Wait()` bridging
 - [ ] Constructor injection only (no `@Autowired` field injection)
+- [ ] Stateless: only `final` fields set by the constructor (C#: `readonly`) — nothing a call writes stays on the instance (`DCA-USE-021`)
 - [ ] Implements the input port
 - [ ] **Cohesion review prompt:** more than five output ports prompts a responsibility review; it is not a numerical violation threshold
 - [ ] **Anti-pattern flag — Leaking infrastructure:** depends on JDBC/JPA/Kafka classes directly (must go through ports)
@@ -360,6 +364,7 @@ DCA distinguishes Repository (for Aggregate Roots) from Store (for operational d
 - [ ] In `adapter/outgoing/persistence/`
 - [ ] Implements the output port from `application/shared/`
 - [ ] No business logic — only persistence
+- [ ] Stores and loads what the aggregate holds: calls no state-changing method of the root and writes no lifecycle field (status, delivered, applied) on its own (`DCA-HEX-021` sees the call, not the direct write)
 - [ ] Mapping, construction and reconstitution of domain objects is allowed and expected here (`reconstitute` factories, row → aggregate); it restores state and makes no new business decision
 
 ### Integration event publishers
