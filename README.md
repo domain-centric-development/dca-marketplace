@@ -1,8 +1,9 @@
 # dca-marketplace
 
-Three Claude Code plugins for **Domain-Centric Architecture (DCA)**: the architecture method, the
-craftsmanship practices around it, and a delivery pipeline that puts one story through gates
-instead of through good intentions.
+Claude Code plugins for **Domain-Centric Architecture (DCA)**: the architecture method (`dca-core`),
+the craftsmanship practices around it (`dca-craft`), a delivery pipeline that puts one story through
+gates instead of through good intentions (`dca-factory`), and an optional cockpit for that pipeline
+(`dca-factory-cockpit`).
 
 They also work outside Claude Code — Codex and OpenCode read the same skill folders (see
 [Other tools](#other-tools)).
@@ -15,7 +16,7 @@ Add the marketplace once, then install what you need. No clone, no build step:
 /plugin marketplace add domain-centric-development/dca-marketplace
 
 /plugin install dca-core@dca-marketplace       # the architecture method
-/plugin install dca-craft@dca-marketplace      # TDD, Clean Code, ADRs, end-user tests, glossary, context map, reviews
+/plugin install dca-craft@dca-marketplace      # TDD, Clean Code, ADRs, end-user tests, frontend, discovery, glossary, context map, reviews
 /plugin install dca-factory@dca-marketplace    # the delivery pipeline
 /plugin install dca-factory-cockpit@dca-marketplace   # optional, Claude Code only: the pipeline as a cockpit
 ```
@@ -43,7 +44,7 @@ Only for working *on* these plugins — a clone, so edits take effect without a 
 |---|---|
 | write DDD/hexagonal code with the conventions enforced, ask what DCA says about something | `dca-core` |
 | start a DCA project from nothing, or add DCA to an existing one | `dca-core` (`/dca-new`, `/dca-init`) |
-| TDD, Clean Code, ADRs, end-user tests, a glossary, a context map and an outside review — with or without DCA | `dca-craft` |
+| TDD, Clean Code, ADRs, end-user tests, a maintainable frontend, product discovery, a glossary, a context map and an outside review — with or without DCA | `dca-craft` |
 | deliver stories through plan → test → build → tidy → judge → document with a gate between | `dca-factory` (+ `dca-core` for the method) |
 | see and steer that cycle in a Claude Code pane and a band above the prompt — discover feeding backlog, run, decide, delivered | `dca-factory-cockpit` (optional, Claude Code only) |
 
@@ -59,13 +60,13 @@ how the code should look.
 |---|---|
 | **from zero** | `/dca-describe` (what is to be built) → `/dca-new` (a running skeleton: generator, git, the DCA part, a formatter, a browser runner where there are pages) |
 | **an existing project** | `/dca-init` (the DCA part: packages, one architecture test, the method's section in `AGENTS.md`) |
-| **one capability later** | `/dca-add rules <module>` · `freeze` · `formatter` · `browser` · `integration-tests` · `http-stub` · `coverage` |
+| **one capability later** | `/dca-add rules <set>` · `freeze` · `formatter` · `browser` · `integration-tests` · `http-stub` · `coverage` · `event-delivery` |
 | **delivering stories** | `/factory-setup` → `/factory-backlog` → `/factory-run` |
 
 ### Start a project, or adopt DCA in one
 
 ```
-/dca-describe     # project/product.md, tech.md, domain.md — with you, one question per heading
+/dca-describe     # product/overview.md, tech.md, domain.md — with you, one question per heading
 /dca-new          # from an empty directory: the skeleton from the stack's generator, then the rest
 /dca-init         # in an existing project: the DCA part only
 ```
@@ -109,7 +110,7 @@ Details, skill by skill: **[dca-core/README.md](plugins/dca-core/README.md)**.
 With `acceptance: pages` in the profile, a story with something to see waits for a human's look
 before it is delivered; a correction goes into the same story, which runs again.
 
-The pipeline needs three things from your project: a **project description** under `project/`, a
+The pipeline needs three things from your project: a **project description** under `product/`, a
 **stack profile** (`dca-factory.profile.yaml` — your build and test commands, detected
 from presets) and the gate script next to it. `/factory-setup` sees to all three; underneath it runs
 
@@ -127,6 +128,7 @@ Details, including the backlog contract and every gate check:
 /clean-code           # names, function size, smells, while you edit
 /adr                  # record a decision so the next reader finds the reasoning
 /e2e-testing          # Page Objects, stable selectors, one flow per test — and setting up a runner
+/frontend             # pages, components, stylesheets that stay maintainable
 /ubiquitous-language  # the glossary per context
 /context-map          # the designed context map
 /product-discovery    # a problem, its evidence and an observable outcome, every claim with its source
@@ -136,9 +138,10 @@ Details, including the backlog contract and every gate check:
 No DCA assumptions; usable on any project.
 Details: **[dca-craft/README.md](plugins/dca-craft/README.md)**.
 
-## How the three fit together
+## How they fit together
 
-Three layers with three owners, which is why they are three plugins:
+Three layers with three owners, which is why they are separate plugins; the cockpit only draws the
+pipeline and owns nothing:
 
 | Layer | Owner | Where it lives |
 |---|---|---|
