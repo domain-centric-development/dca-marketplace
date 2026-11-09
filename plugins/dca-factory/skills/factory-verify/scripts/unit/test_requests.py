@@ -31,6 +31,13 @@ from dca_factory.delivery.adapter.outgoing.files import journal_files as journal
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
 from dca_factory.sharedkernel.adapter.outgoing.markdown import front_matter as markdown
 from dca_factory.delivery.adapter.outgoing.files import windows
+from dca_factory.delivery.domain.model.claim import Worker
+from dca_factory.delivery.domain.model.decision_record import RecordId
+from dca_factory.delivery.domain.model.moment import Moment
+from dca_factory.delivery.domain.model.project_path import ProjectPath
+from dca_factory.delivery.domain.model.request import (NoRecord, Request, RequestId, RequestNotInState,
+                                                       RequestOperation, RequestState, Why)
+from dca_factory.delivery.domain.model.story_words import Count
 
 
 def validate(cwd, kind, fields, words):
@@ -386,6 +393,120 @@ class Ended(unittest.TestCase):
             os.remove(service.stop_file())
             write(service.own_file(service.FACTORY_FILE), json.dumps(dict(pid=os.getpid(), started="x")))
             self.assertIsNone(service.ended(os.getcwd()), "a factory that runs has not ended")
+
+
+
+AT = Moment("2026-11-09T10:00:00Z")
+
+
+def names(request):
+    return [type(event).__name__ for event in request.domain_events()]
+
+
+class RequestAggregate(unittest.TestCase):
+    """A request is an aggregate (WP-192): every change of where it stands is one of its operations, guarded, with
+    its event — and the files keep what it asks while a save writes where it stands."""
+
+    def test_one_worker_takes_a_queued_request_and_counts_the_attempt(self):
+        request = Request.restore(RequestId("r1"), RequestState.QUEUED, attempts=Count(1), error=Why("earlier"))
+        request.take(Worker("me"), AT)
+        self.assertEqual((request.state, request.worker, request.started, request.attempts, request.error),
+                         (RequestState.RUNNING, Worker("me"), AT, Count(2), None))
+        with self.assertRaises(RequestNotInState):          # taken once: a second worker does not take it
+            request.take(Worker("other"), AT)
+        self.assertEqual(["RequestTaken"], names(request))
+
+    def test_a_running_request_waits_only_on_a_record(self):
+        request = Request.restore(RequestId("r1"), RequestState.RUNNING, worker=Worker("me"))
+        with self.assertRaises(NoRecord):
+            request.wait(ProjectPath(""), (), AT)
+        request.wait(ProjectPath("e/s/decisions/D-1.md"), (), AT)
+        self.assertEqual((request.state, request.worker, request.record_file),
+                         (RequestState.WAITING, None, ProjectPath("e/s/decisions/D-1.md")))
+        with self.assertRaises(RequestNotInState):
+            Request.restore(RequestId("r2"), RequestState.QUEUED).wait(ProjectPath("x"), (), AT)
+        request.wake((RecordId("D-1"),), AT)
+        self.assertEqual((request.state, request.record_file, request.answered),
+                         (RequestState.QUEUED, None, (RecordId("D-1"),)))
+        self.assertEqual(["RequestWaiting", "RequestQueued"], names(request))
+
+    def test_an_orphan_is_queued_again_and_a_running_request_of_this_worker_is_none(self):
+        mine = Request.restore(RequestId("r1"), RequestState.RUNNING, worker=Worker("me"), started=AT)
+        self.assertFalse(mine.orphaned_by(Worker("me")))
+        with self.assertRaises(RequestNotInState):
+            mine.requeue_orphan(Worker("me"), AT)
+        theirs = Request.restore(RequestId("r2"), RequestState.RUNNING, worker=Worker("other"), started=AT)
+        theirs.requeue_orphan(Worker("me"), AT)
+        self.assertEqual((theirs.state, theirs.worker, theirs.started), (RequestState.QUEUED, None, None))
+
+    def test_a_stopped_request_is_queued_with_what_it_wrote_and_a_failed_one_retried(self):
+        request = Request.restore(RequestId("r1"), RequestState.RUNNING, worker=Worker("me"), started=AT)
+        request.requeue_stopped(AT, (ProjectPath("e/s/story.md"),))
+        self.assertEqual((request.state, request.wrote), (RequestState.QUEUED, (ProjectPath("e/s/story.md"),)))
+        with self.assertRaises(RequestNotInState):          # only a failed request is retried
+            request.retry(AT)
+        request.fail(Why("no longer holds"), AT)
+        self.assertEqual((request.state, request.error), (RequestState.FAILED, Why("no longer holds")))
+        self.assertTrue(request.allows(RequestOperation.RETRY))
+        request.retry(AT)
+        self.assertEqual((request.state, request.error), (RequestState.QUEUED, None))
+        self.assertEqual(["RequestQueued", "RequestFailed", "RequestQueued"], names(request))
+
+    def test_a_running_request_is_not_dropped_and_a_settled_one_is_done(self):
+        request = Request.restore(RequestId("r1"), RequestState.RUNNING, worker=Worker("me"))
+        self.assertFalse(request.allows(RequestOperation.DROP))
+        request.settle(AT)
+        self.assertEqual(request.state, RequestState.DONE)
+        with self.assertRaises(RequestNotInState):
+            request.settle(AT)
+        with self.assertRaises(RequestNotInState):
+            Request.restore(RequestId("r2"), RequestState.WAITING).settle(AT)
+
+    def test_a_refused_commit_leaves_the_request_failed_and_worked(self):
+        request = Request.restore(RequestId("r1"), RequestState.RUNNING, worker=Worker("me"))
+        request.leave_uncommitted(Why("the hook refused"), (ProjectPath("e/s/story.md"),), AT)
+        self.assertEqual((request.state, request.worker, request.worked, request.wrote),
+                         (RequestState.FAILED, None, AT, (ProjectPath("e/s/story.md"),)))
+
+    def test_a_save_keeps_what_the_request_asks_and_writes_where_it_stands(self):
+        with project() as p:
+            rid, path = write_request(p.root, "wish", {}, "line one\nline two", "a")
+            store = request_files.RequestFiles(p.root)
+            request = store.get(RequestId(rid))
+            request.take(Worker("runner:h:1"), AT)
+            store.save(request)
+            again = request_files.find_request(rid)
+            self.assertEqual((again["state"], again["worker"], again["attempts"], again["started"], again["words"],
+                              again["by"]), ("running", "runner:h:1", "1", AT.value, "line one\nline two", "a"))
+
+    def test_a_request_the_store_took_away_comes_back_and_one_dropped_meanwhile_stays_gone(self):
+        with project() as p:
+            rid, path = write_request(p.root, "wish", {}, "x", "a")
+            store = request_files.RequestFiles(p.root)
+            request = store.get(RequestId(rid))
+            request.take(Worker("me"), AT)
+            store.delete_by_id(request.id)                  # gone before its commit
+            request.leave_uncommitted(Why("refused"), (), AT)
+            store.save(request)
+            self.assertEqual(request_files.find_request(rid)["state"], "failed")
+            other_id, other_path = write_request(p.root, "wish", {}, "y", "a")
+            other = request_files.RequestFiles(p.root).get(RequestId(other_id))
+            os.remove(other_path)                           # a person dropped it meanwhile
+            other.fail(Why("late"), AT)
+            request_files.RequestFiles(p.root).save(other)
+            self.assertFalse(os.path.exists(other_path))
+
+    def test_a_settled_request_goes_and_writing_one_queues_it_with_its_event(self):
+        with project() as p:
+            rid, path = write_request(p.root, "wish", {}, "x", "a")
+            store = request_files.RequestFiles(p.root)
+            request = store.get(RequestId(rid))
+            request.settle(AT)
+            store.save(request)
+            self.assertFalse(os.path.exists(path))
+            events = os.path.join(request_files.factory_dir(), "events.journal")
+            with open(events, encoding="utf-8") as handle:
+                self.assertIn(f"RequestQueued\trequest={rid}", handle.read())
 
 
 if __name__ == "__main__":

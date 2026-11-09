@@ -13,7 +13,7 @@ from ...domain.model.words import Words, WordsRefused
 from .decision_record_repository import DecisionRecordRepository, RecordNotFound
 from .discovery_reports import DiscoveryReports
 from .epic_catalog import EpicCatalog
-from .requests import DuplicateRequest, ID_WORD, KIND, PENDING, Request, RequestRefused, written_keys
+from .requests import DuplicateRequest, ID_WORD, KIND, PENDING, RequestFacts, RequestRefused, written_keys
 from .stage_table import StageTable
 from .story_repository import StoryNotFound, StoryRepository
 from ...domain.model.decision_record import ANSWERED_STATES
@@ -86,10 +86,10 @@ class RequestCheck:
                 raise RequestRefused(f"from: {fields['from']} names no stage ({' '.join(names)})")
         return fields, words
 
-    def against(self, kind_name: str, fields: Fields, words: str, pending: typing.Iterable[Request]) -> None:
+    def against(self, kind_name: str, fields: Fields, words: str, pending: typing.Iterable[RequestFacts]) -> None:
         """The checked request against the ones not done: DuplicateRequest where the same waits already; refused
         where a record has another answer queued."""
-        wanted: Request = dict(fields, kind=kind_name, words=words)
+        wanted: RequestFacts = dict(fields, kind=kind_name, words=words)
         deciding = ("answer", "accept", "correct")
         for existing in pending:
             if existing["state"] not in PENDING:
@@ -166,6 +166,6 @@ class RequestCheck:
         fields["report"] = report
 
 
-def same_request(one: Request, other: Request) -> bool:
+def same_request(one: RequestFacts, other: RequestFacts) -> bool:
     keys = ("kind", "story", "epic", "record", "topic", "proposal", "option", "from")
     return all(str(one.get(k) or "") == str(other.get(k) or "") for k in keys) and one["words"] == other["words"]

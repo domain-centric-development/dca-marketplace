@@ -5,7 +5,7 @@ from __future__ import annotations
 import typing
 
 from ....building_blocks import OutputPort
-from .requests import Kind, Request
+from .requests import Kind, RequestFacts
 
 
 class RequestSettlement(OutputPort, typing.Protocol):
@@ -15,6 +15,6 @@ class RequestSettlement(OutputPort, typing.Protocol):
         """Nothing where what held when the request was written still holds; RequestRefused, saying why, where not."""
         ...
 
-    def settle(self, request: Request, at: str) -> typing.Optional[typing.List[str]]:
+    def settle(self, request: RequestFacts, at: str) -> typing.Optional[typing.List[str]]:
         """The ids of what settling it wrote, or None where a skill must work it; RequestRefused where it cannot."""
         ...

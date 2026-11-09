@@ -19,7 +19,7 @@ from ....application.shared.run_stop import SIGNAL_EXITS, Stopped
 from ....domain.model.stage import Trait
 from ....application.delivery.pipeline_workflow import workflow
 from ....application.requests.work_request import RequestWorked
-from ....application.shared.requests import Request
+from ....application.shared.requests import RequestFacts
 
 
 class RunSession(typing.Protocol):
@@ -50,7 +50,7 @@ class RunRoot(typing.Protocol):
     def run_for(self, options: argparse.Namespace) -> RunSession: ...
     def request_run_for(self, options: argparse.Namespace, worker: typing.Optional[str]) -> RunSession: ...
     def settle(self, cwd: str, kind_name: str, fields: typing.Mapping[str, str], words: str, by: str,
-               options: argparse.Namespace) -> typing.Tuple[Request, typing.Optional[RequestWorked]]: ...
+               options: argparse.Namespace) -> typing.Tuple[RequestFacts, typing.Optional[RequestWorked]]: ...
 
 
 #: the composition root, given by `wire` before the command line runs

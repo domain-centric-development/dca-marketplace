@@ -6,7 +6,7 @@ import dataclasses
 import typing
 
 from ....building_blocks import UseCase
-from ..shared.requests import KINDS, MadeItems, operations_of, place_of, Request, RequestStore, STATES
+from ..shared.requests import KINDS, MadeItems, operations_of, place_of, RequestFacts, RequestStore, STATES
 from ..shared.actions import make_action
 
 #: The word on a request's button for each operation.
@@ -67,7 +67,7 @@ class ListRequestsUseCase(ListRequestsInputPort):
         return sorted(trail, key=lambda w: w["asked"], reverse=True)
 
 
-def wish_entry(request: Request, drafts: typing.List[typing.Dict[str, str]]) -> typing.Dict[str, typing.Any]:
+def wish_entry(request: RequestFacts, drafts: typing.List[typing.Dict[str, str]]) -> typing.Dict[str, typing.Any]:
     """One wish as its trail shows it: its words, who and when, its state in words and what a person can do there."""
     state = request["state"]
     first = drafts[0] if drafts else None
@@ -89,7 +89,7 @@ def wish_entry(request: Request, drafts: typing.List[typing.Dict[str, str]]) -> 
                 else [dict(name=o, label=OPERATION_LABELS[o]) for o in operations_of(state) if o != "follow"])
 
 
-def target_text(request: Request) -> str:
+def target_text(request: RequestFacts) -> str:
     """What a request is about, as one short phrase."""
     for key in ("record", "story", "epic"):
         if request.get(key):

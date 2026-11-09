@@ -9,7 +9,7 @@ import typing
 from ....application.backlog.release_stories import ReleaseStoriesInputPort
 from ....application.decisions.accept_delivery import AcceptDeliveryInputPort
 from ....application.decisions.answer_question import AnswerQuestionInputPort
-from ....application.shared.requests import Request
+from ....application.shared.requests import RequestFacts
 from .settle_decision import DecisionSettlement
 from .settle_release import ReleaseSettlement
 
@@ -21,7 +21,7 @@ class Settlement:
                  release: ReleaseStoriesInputPort) -> None:
         self._features = (DecisionSettlement(accept, answer), ReleaseSettlement(release))
 
-    def settle(self, request: Request, at: str) -> typing.Optional[typing.List[str]]:
+    def settle(self, request: RequestFacts, at: str) -> typing.Optional[typing.List[str]]:
         """The ids of what it wrote — records, stories — or None where a skill must work it."""
         for feature in self._features:
             if request["kind"] in feature.KINDS:

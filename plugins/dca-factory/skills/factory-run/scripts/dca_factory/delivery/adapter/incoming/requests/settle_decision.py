@@ -7,7 +7,7 @@ import typing
 
 from ....application.decisions.accept_delivery import AcceptDeliveryCommand, AcceptDeliveryInputPort, Accepted
 from ....application.decisions.answer_question import Answered, AnswerQuestionCommand, AnswerQuestionInputPort
-from ....application.shared.requests import Request
+from ....application.shared.requests import RequestFacts
 from ....domain.model.decision_record import OptionKey, RecordId
 from ....domain.model.moment import Moment
 from ....domain.model.person import Person
@@ -24,7 +24,7 @@ class DecisionSettlement:
         self._accept = accept
         self._answer = answer
 
-    def settle(self, request: Request, at: str) -> typing.Optional[typing.List[str]]:
+    def settle(self, request: RequestFacts, at: str) -> typing.Optional[typing.List[str]]:
         by, moment = Person(str(request.get("by", ""))), Moment(at)
         if request["kind"] == "accept":
             accepted = self._accept.execute(AcceptDeliveryCommand(StoryId(request["story"]), by, moment))

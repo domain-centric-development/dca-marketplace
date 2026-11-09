@@ -6,25 +6,28 @@ from __future__ import annotations
 import typing
 
 from ..shared.backlog_changes import BacklogChanges
-from ..shared.requests import Request, RequestStore
+from ..shared.requests import RequestFacts, RequestRepository
+from ...domain.model.request import RequestId
 from .request_worked import Said
 from .list_requests import target_text
 
 
 class RequestWrites:
-    """The writes of one request in the checkout <changes>, its file in <store>."""
+    """The writes of one request in the checkout <changes>, its file in <requests>."""
 
-    def __init__(self, store: RequestStore, changes: BacklogChanges) -> None:
-        self._store = store
+    def __init__(self, requests: RequestRepository, changes: BacklogChanges) -> None:
+        self._requests = requests
         self._changes = changes
 
-    def remove(self, request: Request) -> None:
+    def remove(self, request: RequestFacts) -> None:
+        """Its file gone before its commit: a crash between the two leaves what it wrote uncommitted — never a request
+        that would run its skill a second time. A refused commit writes it back (the repository took it away)."""
         try:
-            self._store.remove(request)
+            self._requests.delete_by_id(RequestId(request["id"]))
         except OSError:
             pass
 
-    def wrote(self, request: Request, before: typing.Mapping[str, str]) -> str:
+    def wrote(self, request: RequestFacts, before: typing.Mapping[str, str]) -> str:
         """What a request wrote so far — the people's paths it changed that were clean before, and what an earlier
         attempt of it wrote —, kept in its file when it fails or is interrupted: an attempt after it commits them as
         its own, never as a person's."""
@@ -33,7 +36,7 @@ class RequestWrites:
         own = set(str(request.get("wrote") or "").split())
         return " ".join(sorted(self._changes.people((new | own) & set(after))))
 
-    def commit(self, request: Request, before: typing.Mapping[str, str], said: Said) -> typing.Tuple[str, str]:
+    def commit(self, request: RequestFacts, before: typing.Mapping[str, str], said: Said) -> typing.Tuple[str, str]:
         """What the request wrote, committed on its own: the paths it changed that were clean before — or that an
         earlier attempt of it wrote (`wrote:`) — and that are the backlog or the description. A path a person had
         changed before, or code, stays as it is and is named. (commit, why it was refused)"""

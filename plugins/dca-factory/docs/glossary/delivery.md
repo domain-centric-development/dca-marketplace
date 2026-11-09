@@ -142,6 +142,43 @@ over once its stories are delivered.
 
 ---
 
+### Request (Request)
+
+**Definition:** A person's press, kept as one file until it is done: an asynchronous command for one of the use cases
+— write a wish, release, answer, accept, correct, run, stop. Two processes change one request — the page and the cli
+queue it, the runner takes, parks, fails, queues again and settles it — so it is one consistency boundary. Queued
+until one worker takes it, running until its skill ends: waiting where it asked a person, failed where it ended
+without a result, done where it did its part — then its file goes. What it asks (its kind, what it names, the
+person's words) is read with it and never changed by it; listings and the runner read it as `RequestFacts`, a read
+model. The files under `.dca-factory/requests/` are its inbox and its repository (`RequestRepository`); the runner
+takes the next one through `RequestQueue`, works it with the use case `work_request`, and `settle` decides which press
+needs no judgement and executes its use case.
+
+**Type:** Aggregate Root
+
+**Identity:** `RequestId` — `<stamp>-<kind>`, its file's name
+
+**Related terms:** `RequestState` (queued, running, waiting, failed, done), `Worker` (who works it), `Why` (why it
+failed), `Decision record` (the record it waits on, by its path)
+
+**Operations:** every change of its state is one of these, each guarded (`RequestNotInState`) and raising its event.
+- write (`written`) — a new request, queued (`RequestQueued`);
+- take (`take`) — one worker takes a queued request, its attempt counted (`RequestTaken`);
+- wait (`wait`) — a running request whose skill asked a person, only on the record that asks (`NoRecord`)
+  (`RequestWaiting`);
+- wake (`wake`) — a waiting request whose records are answered, queued with the answers; ask again (`ask_again`) —
+  one whose record is gone (`RequestQueued`);
+- requeue an orphan (`requeue_orphan`) — running for another worker than the one that holds the claim now; requeue a
+  stopped one (`requeue_stopped`) — its process stopped by a signal (`RequestQueued`);
+- fail (`fail`) — a request in hand that no longer holds or whose skill ended without a result; leave uncommitted
+  (`leave_uncommitted`) — its skill did its part and its commit was refused, its work marked done (`RequestFailed`);
+- retry (`retry`) — only a failed one, queued again as written (`RequestQueued`);
+- settle (`settle`) — worked to its end, its file gone (`RequestSettled`);
+- take back (`drop`) — a person removes one that does not run (`allows`, `RequestOperation`).
+
+**Queries — the request decides, never a copy of it:** whether it is queued (`queued`), waits (`waiting`), is in
+hand (`in_hand`), is an orphan of another worker (`orphaned_by`), and what a person may do with it (`allows`).
+
 ## Value Objects
 
 ### Story id (StoryId) · Record id (RecordId) · Epic id (EpicId)
@@ -505,7 +542,7 @@ needs and only reads — the profile, the run folder, the epic, the context map 
 
 ### Domain event · Delivery event (DeliveryEvent)
 
-**Definition:** Something that happened to a story or a decision record, named in the past tense and raised by the
+**Definition:** Something that happened to a story, a decision record or a request, named in the past tense and raised by the
 aggregate in the operation that made it happen — every event of the context carries its moment and the story it
 concerns (`DeliveryEvent`), or none for a record of the project's own. A use case saves the aggregate and publishes
 its events in one transaction; the journal records each as a line of kind `event` — the story's journal, or the
@@ -519,14 +556,3 @@ factory's own. The journal is what reads them today: a person, and the views ove
 the story's record.
 
 **Type:** Concept
-
-### Request (request)
-
-**Definition:** A person's press, kept as one file until it is done: an asynchronous command for one of the use cases
-— write a wish, release, answer, accept, correct, run, stop. No term of the model: the folder is an incoming adapter
-and a store; the runner takes the next one through `RequestQueue`, works it with the use case `work_request`, and
-`settle` decides which press needs no judgement and executes its use case.
-
-**Type:** Concept
-
-**Operations:** write (`write`), take back (`drop`), retry (`retry`), settle (`settle`), work (`work`)

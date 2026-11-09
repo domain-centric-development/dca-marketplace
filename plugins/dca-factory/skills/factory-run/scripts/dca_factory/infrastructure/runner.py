@@ -12,7 +12,7 @@ import typing
 from ..delivery.application.requests.check_request import CheckRequestCommand
 from ..delivery.application.requests.settle_request import SettleRequestCommand
 from ..delivery.application.requests.work_request import RequestWorked
-from ..delivery.application.shared.requests import KIND, Request
+from ..delivery.application.shared.requests import KIND, RequestFacts
 from ..delivery.adapter.incoming.runner.usage import book_request_usage
 from ..delivery.adapter.outgoing.process.console_lines import ConsoleLines
 from ..delivery.application.backlog.run_backlog import RunBacklogCommand, RunBacklogUseCase
@@ -125,7 +125,7 @@ def request_run_for(options: argparse.Namespace, worker: typing.Optional[str]) -
 
 
 def settle(cwd: str, kind_name: str, fields: typing.Mapping[str, str], words: str, by: str,
-           options: argparse.Namespace) -> typing.Tuple[Request, typing.Optional[RequestWorked]]:
+           options: argparse.Namespace) -> typing.Tuple[RequestFacts, typing.Optional[RequestWorked]]:
     """A press settled at once where the factory can: the request as it would be written, and what settling it said
     — None where a skill must work it. The settle and its commit hold the checkout's commit lock, as the factory's
     own requests do, whether a factory is up or not."""

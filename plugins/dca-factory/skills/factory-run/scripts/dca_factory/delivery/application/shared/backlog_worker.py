@@ -6,7 +6,7 @@ from __future__ import annotations
 import typing
 
 from ....building_blocks import OutputPort
-from .requests import Request
+from .requests import RequestFacts
 
 
 class Child(OutputPort, typing.Protocol):
@@ -80,7 +80,7 @@ class BacklogWorker(OutputPort, typing.Protocol):
         """Every request a skill works that is about no story in <busy>, one after another."""
         ...
 
-    def start_request(self, request: Request) -> Child:
+    def start_request(self, request: RequestFacts) -> Child:
         """A request worked as a process of its own beside the run."""
         ...
 

@@ -10,7 +10,7 @@ from ....building_blocks import UseCase
 from ..requests.request_queue import RequestQueue, RunAsked
 from ..shared.backlog_schedule import BacklogSchedule, ScheduleRead
 from ..shared.backlog_worker import BacklogCheckout, BacklogWorker, Child
-from ..shared.requests import Request, stories_of
+from ..shared.requests import RequestFacts, stories_of
 from ..shared.run_lines import RunLines
 from ..delivery.pipeline_rules import decides
 
@@ -135,8 +135,8 @@ class RunBacklogUseCase(RunBacklogInputPort):
         backlog, and the backlog's stories start only while it is on."""
         slots, lane = command.slots, command.lane
         children: typing.Dict[str, typing.Tuple[Child, str]] = {}          # a story's process and its start
-        asked: typing.Dict[str, typing.Tuple[Child, Request]] = {}         # a request's process by the request's id
-        ran_for: typing.Dict[str, Request] = {}                            # a `run` request by the story it runs
+        asked: typing.Dict[str, typing.Tuple[Child, RequestFacts]] = {}         # a request's process by the request's id
+        ran_for: typing.Dict[str, RequestFacts] = {}                            # a `run` request by the story it runs
         seen: typing.Set[typing.Tuple[str, str]] = set()
         failed, stopping, previous = 0, typing.cast(typing.Optional[typing.Union[int, str]], None), ""
         schedule = ScheduleRead(True, "")

@@ -1,14 +1,11 @@
-"""A person's request: what it may name and where it stands — the application's, not the model's.
+"""A person's request as the application handles it: what it may name, its repository and its read model.
 
 A request is an asynchronous command arriving as a file (WP-91): a press on the page, `factory.sh request`, a
-session's view. It is no term of the model — deleted once done, it carries a use case's command until the factory
-works it. While it lives, its state says where it is:
-
-    queued    written, nobody took it yet
-    running   a factory works it (`worker:`, `started:`)
-    waiting   the skill it ran asked a person: a decision record names it (`request: <id>`), `record:` says which;
-              answered, the request runs again with the answer
-    failed    refused when it was read, or its skill ended without a result (`error:`); a person drops or retries it
+session's view. It is an aggregate of delivery (`domain/model/request.py`): two processes change one request — the
+page and the cli queue it, the runner takes, parks, fails, queues again and settles it — so every change of its state
+is one of the aggregate's operations, saved through the `RequestRepository` with its events. Deleted once done, it
+carries a use case's command until the factory works it. Its states — queued, running, waiting, failed — are
+`RequestState`'s; what it asks is read as `RequestFacts`, the read model listings and the runner read.
 
 Every kind names what it is about in its own key — `story:`, `epic:`, `record:`, `topic:` with `proposal:` — and the
 person's words, where it takes any, are the body. `option:` carries an option key (an answer's, a correction's code).
@@ -17,16 +14,19 @@ person's words, where it takes any, are the body. `option:` carries an option ke
 from __future__ import annotations
 
 import dataclasses
-import enum
 import re
 import typing
 
-from ....building_blocks import OutputPort, Store, UseCaseException
+from ....building_blocks import (DomainEventPublisher, OutputPort, Repository, Store, TransactionBoundary,
+                                 UseCaseException)
+from ...domain.model.project_path import ProjectPath
+from ...domain.model.request import Request, RequestId, RequestOperation, RequestState
 from ...domain.model.handed_file import FileRefused, HandedFileId
 from ...domain.model.reach import Network, Reach
 
-#: A request as the store keeps it: its front keys, `id`, `path`, `words` (the body) and `state` — strings all.
-Request = typing.Dict[str, typing.Any]
+#: A request as the store reads it — a read model: its front keys, `id`, `path`, `words` (the body) and `state`,
+#: strings all. What it asks is read here; where it stands is decided by the aggregate `Request`.
+RequestFacts = typing.Dict[str, typing.Any]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -76,7 +76,7 @@ KINDS = (
 KIND = {kind.name: kind for kind in KINDS}
 
 
-def named_files(requests: typing.Iterable["Request"]) -> typing.List[HandedFileId]:
+def named_files(requests: typing.Iterable["RequestFacts"]) -> typing.List[HandedFileId]:
     """The handed files the requests name (WP-184) — an id of the wrong form is no file of theirs."""
     found = []
     for request in requests:
@@ -92,22 +92,8 @@ def named_files(requests: typing.Iterable["Request"]) -> typing.List[HandedFileI
 ID_WORD = re.compile(r"^[A-Za-z0-9][\w.#-]*$")
 
 
-class RequestState(enum.Enum):
-    """Where a request is — and what a person can do with it there: follow one that runs, queue a failed one again,
-    take back one that does not run."""
-
-    QUEUED = "queued"
-    RUNNING = "running"
-    WAITING = "waiting"
-    FAILED = "failed"
-
-    def operations(self) -> typing.List[str]:
-        return (["follow"] if self is RequestState.RUNNING else []) \
-            + (["retry"] if self is RequestState.FAILED else []) \
-            + (["drop"] if self is not RequestState.RUNNING else [])
-
-
-STATES = tuple(state.value for state in RequestState)
+#: The states a request's file says: every state but done — a done request has no file.
+STATES = tuple(state.value for state in RequestState if state is not RequestState.DONE)
 
 #: The states of a request that is not done: written, taken, or asking a person back.
 PENDING = ("queued", "running", "waiting")
@@ -115,7 +101,8 @@ PENDING = ("queued", "running", "waiting")
 
 def operations_of(state: str) -> typing.List[str]:
     """What a person can do with a request in this state — `factory.sh requests --retry/--drop`, the page's buttons."""
-    return RequestState(state).operations() if state in STATES else ["drop"]
+    return [operation.value for operation in RequestState(state).operations()] if state in STATES \
+        else [RequestOperation.DROP.value]
 
 
 #: Where a question a request's skill asks back is answered: beside what the request was about — a discovery's on the
@@ -135,7 +122,7 @@ def written_keys(kind: Kind) -> typing.Set[str]:
         | ({"from"} if kind.name == "run" else set())
 
 
-def stories_of(request: Request) -> typing.Set[str]:
+def stories_of(request: RequestFacts) -> typing.Set[str]:
     """The stories a request changes or runs — what must not run while it is worked, and the reverse."""
     return set(str(request.get("story") or "").split())
 
@@ -153,12 +140,14 @@ class DuplicateRequest(RequestRefused):
 
 
 class RequestStore(Store, typing.Protocol):
-    """The requests, one file each, oldest first — the order the factory works them in."""
+    """The requests read, one file each, oldest first — the order the factory works them in —, a new one written, and
+    what has no life cycle beside them: the journal and the notes of worked requests. Where a request stands changes
+    through the `RequestRepository` alone."""
 
-    def all(self) -> typing.List[Request]:
+    def all(self) -> typing.List[RequestFacts]:
         ...
 
-    def find(self, request_id: str) -> Request:
+    def find(self, request_id: str) -> RequestFacts:
         """The request with this id; RequestRefused where there is none."""
         ...
 
@@ -166,18 +155,11 @@ class RequestStore(Store, typing.Protocol):
         """Write a queued request, later than every request there: (id, path)."""
         ...
 
-    def update(self, request: Request, restore: bool = False, **fields: typing.Optional[str]) -> None:
-        """Set — or with None remove — front keys; `restore` writes back one the factory took away itself."""
-        ...
-
-    def remove(self, request: Request) -> None:
-        ...
-
     def where(self) -> str:
         """The store's folder, as a person reads it."""
         ...
 
-    def shown(self, request: Request) -> str:
+    def shown(self, request: RequestFacts) -> str:
         """Where the request is kept, as a person reads it."""
         ...
 
@@ -185,12 +167,12 @@ class RequestStore(Store, typing.Protocol):
         """One line of the request journal: what happened to a request, when."""
         ...
 
-    def keep_done(self, request: Request, wrote: str, commit: str, at: str) -> None:
+    def keep_done(self, request: RequestFacts, wrote: str, commit: str, at: str) -> None:
         """A note of a worked request that wrote something new — its words, who asked, what it wrote and its commit —,
         kept beside the queue until a person releases what it made or hides it."""
         ...
 
-    def done(self) -> typing.List[Request]:
+    def done(self) -> typing.List[RequestFacts]:
         """The notes of worked requests, newest first, `state: done`."""
         ...
 
@@ -205,3 +187,39 @@ class MadeItems(OutputPort, typing.Protocol):
     def at(self, paths: typing.Sequence[str]) -> typing.List[typing.Dict[str, str]]:
         """Per item it finds: kind (story, task, epic, finding), id, title, status — in the order of the paths."""
         ...
+
+
+class RequestRepository(Repository[Request, RequestId], typing.Protocol):
+    """The requests as aggregates: where each stands. A save writes its state into its file and keeps what it asks; a
+    done request's file goes; one dropped meanwhile stays gone — unless the factory took it away itself, then the
+    save writes it back."""
+
+    def get(self, request_id: RequestId) -> Request:
+        """The request with this id; RequestRefused where there is none."""
+        ...
+
+    def every(self) -> typing.List[Request]:
+        """Every request, oldest first."""
+        ...
+
+
+def paths(text: str) -> typing.Tuple[ProjectPath, ...]:
+    """The paths a request wrote, as a space-separated list names them."""
+    return tuple(ProjectPath(path) for path in text.split())
+
+
+class RequestKeeping:
+    """A request's change kept: saved, and its events published, in one transaction — as every aggregate's."""
+
+    def __init__(self, repository: RequestRepository, events: DomainEventPublisher,
+                 transactions: TransactionBoundary) -> None:
+        self._repository = repository
+        self._events = events
+        self._transactions = transactions
+
+    def keep(self, request: Request) -> None:
+        def save() -> None:
+            self._repository.save(request)
+            self._events.publish_and_clear_events(request)
+
+        self._transactions.in_transaction(save)

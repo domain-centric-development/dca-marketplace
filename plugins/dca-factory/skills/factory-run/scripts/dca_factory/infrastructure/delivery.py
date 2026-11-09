@@ -42,7 +42,7 @@ from .profile import ask_profile as ask_profile
 from .questions import show_stage_table as show_stage_table
 from .schedule import schedule_data as schedule_data, start_of as start_of
 from ..delivery.adapter.outgoing.files.story_files import StoryFiles
-from ..sharedkernel.adapter.outgoing.profile.profile_files import ProfileFiles, resolve_profile
+from ..sharedkernel.adapter.outgoing.profile.profile_files import place, ProfileFiles, resolve_profile
 from ..delivery.adapter.outgoing.files.story_runs import StoryRunFiles
 from ..delivery.adapter.outgoing.spec.story_spec_files import StorySpecFiles
 from ..delivery.adapter.outgoing.spec.delivered_spec_files import DeliveredSpecFiles
@@ -121,8 +121,14 @@ def show_project_file(cwd: str) -> ShowProjectFileUseCase:
     return ShowProjectFileUseCase(ShownProjectFiles(cwd))
 
 
+def request_events() -> JournalEventPublisher:
+    """Where a request's events go: the factory's own journal — a request names no story's."""
+    return JournalEventPublisher(str(place("runs")))
+
+
 def write_request(cwd: str) -> WriteRequestUseCase:
-    return WriteRequestUseCase(request_check(cwd), RequestFiles(cwd), HandedFileFolder())
+    return WriteRequestUseCase(request_check(cwd), RequestFiles(cwd), HandedFileFolder(), request_events(),
+                               FileTransactions(), stamp_utc)
 
 
 def check_request(cwd: str) -> CheckRequestUseCase:
@@ -130,11 +136,13 @@ def check_request(cwd: str) -> CheckRequestUseCase:
 
 
 def take_back_request(cwd: str) -> TakeBackRequestUseCase:
-    return TakeBackRequestUseCase(RequestFiles(cwd))
+    requests = RequestFiles(cwd)
+    return TakeBackRequestUseCase(requests, requests, FileTransactions())
 
 
 def retry_request(cwd: str) -> RetryRequestUseCase:
-    return RetryRequestUseCase(RequestFiles(cwd))
+    requests = RequestFiles(cwd)
+    return RetryRequestUseCase(requests, requests, request_events(), FileTransactions(), stamp_utc)
 
 
 def list_requests(cwd: str) -> ListRequestsUseCase:

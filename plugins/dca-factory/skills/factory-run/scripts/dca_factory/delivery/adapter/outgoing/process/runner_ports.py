@@ -32,7 +32,7 @@ from ....domain.model.stage import StageName, StoryKind
 from ....domain.model.story_state import GateReport, Judged, Rounds
 from ..files.run_marks import judged_of
 from ..files.decision_record_files import request_records
-from ....application.shared.requests import KIND, Kind, Request
+from ....application.shared.requests import KIND, Kind, RequestFacts
 from ....application.shared.backlog_worker import Child
 from ....application.shared.story_integration import Lost
 from .runner_process import Run
@@ -76,7 +76,7 @@ class RunnerRequestSkill(RequestSkill):
     def known(tool: str) -> bool:
         return bool(os.environ.get("FACTORY_TOOL_CMD")) or tool in TOOL
 
-    def run(self, request: Request, kind: Kind, unit: str, tool: str,
+    def run(self, request: RequestFacts, kind: Kind, unit: str, tool: str,
             handed: typing.Sequence[HandedFileRead] = ()) -> SkillRun:
         run = self._run
         run.tool_in_flight = tool
@@ -103,7 +103,7 @@ class RunnerRequestSkill(RequestSkill):
         return f"the {kind.skill} skill"
 
     @staticmethod
-    def request_arguments(request: Request, words_as: typing.Optional[str] = None) -> str:
+    def request_arguments(request: RequestFacts, words_as: typing.Optional[str] = None) -> str:
         """The arguments a session would give the skill for this request — the same words the cockpit sends; with
         `words_as`, the person's words named by it, for a prompt that gives them in their frame."""
         kind, words, option = request["kind"], request.get("words", ""), request.get("option", "")
@@ -131,7 +131,7 @@ class RunnerRequestSkill(RequestSkill):
             return f"{story}{' ' + record if record else ''}: correction: {code}{words}"
         return words
 
-    def request_prompt(self, request: Request, tool: str, handed: typing.Sequence[HandedFileRead] = ()) -> str:
+    def request_prompt(self, request: RequestFacts, tool: str, handed: typing.Sequence[HandedFileRead] = ()) -> str:
         kind = KIND[request["kind"]]
         reference = next((f"{d}/factory-run/reference/requests.md" for d in self._run.skill_dirs(tool)
                           if os.path.isfile(f"{d}/factory-run/reference/requests.md")), "")
@@ -430,7 +430,7 @@ class RunnerBacklog(BacklogSchedule, BacklogCheckout, BacklogWorker):
     def work(self, busy: typing.Sequence[str]) -> None:
         self._run.work_requests(self._tool, busy)
 
-    def start_request(self, request: Request) -> Child:
+    def start_request(self, request: RequestFacts) -> Child:
         return self._run.start_request_child(request, self._tool)
 
     def capped(self) -> bool:

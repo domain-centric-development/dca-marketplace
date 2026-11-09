@@ -11,6 +11,11 @@ from dca_factory.delivery.application.requests.take_back_request import TakeBack
 from dca_factory.delivery.application.shared.requests import RequestRefused
 
 
+class Transactions:
+    def in_transaction(self, work):
+        return work()
+
+
 class Store:
     def __init__(self, queue, notes):
         self.queue, self.notes = queue, notes
@@ -72,10 +77,10 @@ class WishTrailTest(unittest.TestCase):
 
     def test_a_hidden_note_is_gone_and_what_it_made_stays(self):
         store = Store([], [wish("c", "done", "2026-11-02T12:00:00Z")])
-        TakeBackRequestUseCase(store).execute(TakeBackRequestCommand("c"))
+        TakeBackRequestUseCase(store, store, Transactions()).execute(TakeBackRequestCommand("c"))
         self.assertEqual([], store.notes)
         with self.assertRaises(RequestRefused):
-            TakeBackRequestUseCase(store).execute(TakeBackRequestCommand("c"))
+            TakeBackRequestUseCase(store, store, Transactions()).execute(TakeBackRequestCommand("c"))
 
 
 if __name__ == "__main__":

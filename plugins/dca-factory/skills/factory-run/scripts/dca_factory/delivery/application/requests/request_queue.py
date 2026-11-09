@@ -7,11 +7,16 @@ import dataclasses
 import typing
 
 from ..shared.request_records import RequestRecords
-from ..shared.requests import KIND, Request, RequestRefused, RequestStore, stories_of
+from ....building_blocks import DomainEventPublisher, TransactionBoundary
+from ..shared.requests import (KIND, RequestFacts, RequestKeeping, RequestRefused, RequestRepository, RequestStore,
+                               stories_of)
 from ..shared.run_lines import RunLines
 from ..shared.story_starts import StoryStarts
 from ..delivery.pipeline_rules import decides
-from ...domain.model.decision_record import DecisionState
+from ...domain.model.claim import Worker
+from ...domain.model.decision_record import DecisionState, RecordId
+from ...domain.model.moment import Moment
+from ...domain.model.request import Request, RequestId, Why
 
 #: The exits of a request's process that end it with no word of its own: a hang-up, an interrupt, a TERM.
 STOPPED_EXITS = (129, 130, 143)
@@ -21,7 +26,7 @@ STOPPED_EXITS = (129, 130, 143)
 class RunAsked:
     """A `run` request taken: its story starts next, from `start`; `named` when the request named the stage."""
 
-    request: Request
+    request: RequestFacts
     start: str
     named: bool
 
@@ -31,8 +36,12 @@ class RequestQueue:
     one, and in a slot of its own in a parallel run — oldest first."""
 
     def __init__(self, store: RequestStore, records: RequestRecords, starts: StoryStarts, worker: str,
-                 lines: RunLines) -> None:
+                 lines: RunLines, *, requests: RequestRepository, events: DomainEventPublisher,
+                 transactions: TransactionBoundary, now: typing.Callable[[], str]) -> None:
         self._store = store
+        self._requests = requests
+        self._keeping = RequestKeeping(requests, events, transactions)
+        self._now = now
         self._records = records
         self._starts = starts
         self._worker = worker
@@ -41,31 +50,35 @@ class RequestQueue:
     def requeue_orphans(self) -> None:
         """A request a factory left `running` when it ended — crashed, killed — is queued again: this runner holds the
         claim now, so nobody else works it."""
-        for request in self._store.all():
-            if request["state"] == "running" and request.get("worker") != self._worker:
-                self._store.update(request, state="queued", worker=None, started=None)
-                self._lines.out(f"factory: request {request['id']} was left running by "
-                                f"{request.get('worker') or 'a factory'} — queued again")
+        me = Worker(self._worker)
+        for request in self._requests.every():
+            if request.orphaned_by(me):
+                left_by = request.worker
+                request.requeue_orphan(me, self._at())
+                self._keeping.keep(request)
+                self._lines.out(f"factory: request {request.id.value} was left running by "
+                                f"{left_by.value if left_by else 'a factory'} — queued again")
 
     @decides("RUN-REQUEST-2")
     def wake_waiting(self) -> None:
         """A waiting request whose records are all answered is queued again, with the answers to read."""
-        for request in self._store.all():
-            if request["state"] != "waiting":
+        for request in self._requests.every():
+            if not request.waiting():
                 continue
-            records = self._records.asked(request["id"])
+            records = self._records.asked(request.id.value)
             if not records:                     # its record was removed by hand: it runs again and asks again
-                self._store.update(request, state="queued", record_file=None)
-                self._lines.out(f"factory: request {request['id']} waited on a record that is gone — it runs again")
+                request.ask_again(self._at())
+                self._keeping.keep(request)
+                self._lines.out(f"factory: request {request.id.value} waited on a record that is gone — it runs again")
                 continue
             if all(DecisionState(state).answered for _p, _id, state in records):
-                self._store.update(request, state="queued", record_file=None,
-                                   answered=" ".join(rid for _p, rid, _s in records))
-                self._lines.out(f"factory: request {request['id']} — its question is answered; it runs again")
+                request.wake(tuple(RecordId(rid) for _p, rid, _s in records), self._at())
+                self._keeping.keep(request)
+                self._lines.out(f"factory: request {request.id.value} — its question is answered; it runs again")
 
     @decides("RUN-REQUEST-1")
     def next(self, busy: typing.Iterable[str] = (),
-             kinds: typing.Optional[typing.Sequence[str]] = None) -> typing.Optional[Request]:
+             kinds: typing.Optional[typing.Sequence[str]] = None) -> typing.Optional[RequestFacts]:
         """The oldest queued request this runner may work now: of the kinds given (else every kind a skill works), and
         about no story in <busy>."""
         self.wake_waiting()
@@ -89,7 +102,7 @@ class RequestQueue:
         request = self.next(kinds=("stop",))
         if not request:
             return False
-        self._store.remove(request)
+        self._settle(request)
         self._store.journal("request", "stop", request["id"], "-", f"by={request.get('by', '')}", "exit=0")
         self._lines.out(f"factory: request {request['id']} — {request.get('by') or 'a person'} stops the factory; "
                         "nothing more starts.")
@@ -104,42 +117,54 @@ class RequestQueue:
                 return None
             start, why = self._start_of(request)
             if start:
-                self._store.remove(request)
+                self._settle(request)
                 self._store.journal("request", "run", request["id"], request["story"], f"by={request.get('by', '')}",
                                     f"from={start}")
                 self._lines.out(f"factory: request {request['id']} — {request.get('by') or 'a person'} runs "
                                 f"{request['story']} from {start} now")
                 return RunAsked(request, start, bool(request.get("from")))
-            self._store.update(request, state="failed", error=f"nothing runs: {why}")
+            failed = self._requests.get(RequestId(request["id"]))
+            failed.fail(Why(f"nothing runs: {why}"), self._at())
+            self._keeping.keep(failed)
             self._store.journal("request", "run", request["id"], request["story"], f"by={request.get('by', '')}",
                                 "exit=1", why)
             self._lines.err(f"factory: request {request['id']} — {why}; nothing runs.")
 
-    def run_ended(self, request: Request, code: int) -> None:
+    def run_ended(self, request: RequestFacts, code: int) -> None:
         """A `run` request's story ended: the journal says how."""
         self._store.journal("request-end", "run", request["id"], f"exit={code}")
 
     @decides("RUN-REQUEST-3")
-    def ended(self, request: Request, code: int) -> None:
+    def ended(self, request: RequestFacts, code: int) -> None:
         """After a request's process: one that ended without saying how — killed, a crash before its first line — is
         failed, so it is never taken again on its own; one stopped by a signal is queued for the next start."""
         if code in (0, 3):
             return
         try:
-            now = self._store.find(request["id"])
+            now: typing.Optional[Request] = self._requests.get(RequestId(request["id"]))
         except RequestRefused:
             now = None
-        if now is not None and now["state"] in ("queued", "running"):
+        if now is not None and now.in_hand():
             if code in STOPPED_EXITS or code < 0:
-                self._store.update(now, state="queued", worker=None, started=None)
+                now.requeue_stopped(self._at())
+                self._keeping.keep(now)
                 self._lines.err(f"factory: request {request['id']} was stopped — queued again for the next start.")
                 return
-            self._store.update(now, state="failed", worker=None,
-                               error=f"its process ended with exit {code} before it said how")
+            now.fail(Why(f"its process ended with exit {code} before it said how"), self._at())
+            self._keeping.keep(now)
         self._lines.err(f"factory: request {request['id']} ended with exit {code} — `factory.sh requests` says why; "
                         "the factory goes on.")
 
-    def _start_of(self, request: Request) -> typing.Tuple[typing.Optional[str], str]:
+    def _at(self) -> Moment:
+        return Moment(self._now())
+
+    def _settle(self, facts: RequestFacts) -> None:
+        """A request the runner works itself — a stop, a story run now — is settled as it is taken: its file goes."""
+        request = self._requests.get(RequestId(facts["id"]))
+        request.settle(self._at())
+        self._keeping.keep(request)
+
+    def _start_of(self, request: RequestFacts) -> typing.Tuple[typing.Optional[str], str]:
         """(start stage or None, why not) — where a `run` request's story begins: the stage it names, else where its
         files say, as `run --story` decides it."""
         story, start = request["story"], request.get("from", "")

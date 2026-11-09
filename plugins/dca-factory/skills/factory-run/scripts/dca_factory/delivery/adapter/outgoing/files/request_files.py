@@ -14,8 +14,14 @@ from .....sharedkernel.adapter.outgoing.profile.profile_files import place, show
 from ..git.repository import git
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import (
     MarkdownError, read_front_matter, read_text, split_front)
-from ....application.shared.requests import ID_WORD, KIND, Request, RequestRefused, STATES
-from ....application.shared.requests import RequestStore
+from ....application.shared.requests import ID_WORD, KIND, RequestFacts, RequestRefused, STATES
+from ....application.shared.requests import paths, RequestRepository, RequestStore
+from ....domain.model.claim import Worker
+from ....domain.model.decision_record import RecordId
+from ....domain.model.moment import Moment
+from ....domain.model.project_path import ProjectPath
+from ....domain.model.request import Request, RequestId, RequestState, Why
+from ....domain.model.story_words import Count
 
 REQUESTS = "requests"
 REQUEST_JOURNAL = "journal.tsv"
@@ -80,7 +86,7 @@ def write_atomic(path: str, text: str) -> None:
     os.replace(temporary, path)
 
 
-def read_request(path: str) -> Request:
+def read_request(path: str) -> RequestFacts:
     """The request as a dict — its id, path, front keys, `words` (the body) and `state`; a file that cannot be read
     is `failed` with the reason, so a broken request shows and is never worked."""
     request_id = os.path.basename(path)[:-3]
@@ -88,7 +94,7 @@ def read_request(path: str) -> Request:
         front, body = read_front_matter(path)
     except (MarkdownError, OSError, UnicodeDecodeError) as error:
         return dict(id=request_id, path=path, kind="?", words="", state="failed", error=f"unreadable — {error}")
-    request: Request = {k: (" ".join(v) if isinstance(v, list) else str(v)).strip() for k, v in front.items()}
+    request: RequestFacts = {k: (" ".join(v) if isinstance(v, list) else str(v)).strip() for k, v in front.items()}
     request.update(id=request_id, path=path, words=body.strip())
     if request.get("kind") not in KIND:
         request.update(state="failed", error=request.get("error") or f"no request kind {request.get('kind')!r}")
@@ -97,7 +103,7 @@ def read_request(path: str) -> Request:
     return request
 
 
-def list_requests() -> typing.List[Request]:
+def list_requests() -> typing.List[RequestFacts]:
     """Every request, oldest first — the order the factory works them in."""
     folder = requests_dir()
     if not os.path.isdir(folder):
@@ -106,14 +112,14 @@ def list_requests() -> typing.List[Request]:
             if name.endswith(".md") and not name.startswith(".")]
 
 
-def find_request(request_id: str) -> Request:
+def find_request(request_id: str) -> RequestFacts:
     path = request_path(request_id)
     if not ID_WORD.match(request_id) or not os.path.isfile(path):
         raise RequestRefused(f"no request {request_id} — `factory.sh requests` lists them")
     return read_request(path)
 
 
-def update_request(request: Request, restore: bool = False, **fields: typing.Optional[str]) -> None:
+def update_request(request: RequestFacts, restore: bool = False, **fields: typing.Optional[str]) -> None:
     """Set — or with None remove — front keys of a request, its words kept. `restore` writes it back where the
     factory took it away itself (a done request whose commit was refused); else one dropped meanwhile stays gone."""
     path = request["path"]
@@ -183,7 +189,7 @@ def done_path(request_id: str) -> str:
     return os.path.join(requests_dir(), REQUEST_DONE, f"{request_id}.md")
 
 
-def keep_done(request: Request, wrote: str, commit: str, at: str) -> None:
+def keep_done(request: RequestFacts, wrote: str, commit: str, at: str) -> None:
     """The note of a worked request: its front keys and words, `state: done`, what it wrote, its commit, when."""
     front = {k: v for k, v in request.items() if k in FRONT_KEYS and k not in ("worker", "started", "error", "record_file")}
     front.update(state="done", wrote=wrote, commit=commit, worked=at)
@@ -191,7 +197,7 @@ def keep_done(request: Request, wrote: str, commit: str, at: str) -> None:
     write_atomic(done_path(request["id"]), front_text(front) + (f"\n{words}\n" if words else ""))
 
 
-def list_done() -> typing.List[Request]:
+def list_done() -> typing.List[RequestFacts]:
     folder = os.path.join(requests_dir(), REQUEST_DONE)
     if not os.path.isdir(folder):
         return []
@@ -232,40 +238,114 @@ def prune_outputs(days: int = 7, now: typing.Optional[float] = None) -> None:
                 os.remove(path)
 
 
-class RequestFiles(RequestStore):
-    """The request store as files, relative to the project the process works in."""
+def moment_of(text: typing.Any) -> typing.Optional[Moment]:
+    """A moment as a request's file writes it; None where it writes none, or none a moment reads."""
+    try:
+        return Moment(str(text)) if text else None
+    except ValueError:
+        return None
+
+
+def count_of(text: typing.Any) -> Count:
+    try:
+        return Count(int(text or 0))
+    except ValueError:
+        return Count(0)
+
+
+def aggregate_of(facts: RequestFacts) -> Request:
+    """The request as its file says where it stands."""
+    return Request.restore(
+        RequestId(facts["id"]), RequestState(facts["state"]),
+        worker=Worker(str(facts["worker"])) if facts.get("worker") else None,
+        started=moment_of(facts.get("started")), attempts=count_of(facts.get("attempts")),
+        error=Why(str(facts["error"])) if facts.get("error") else None,
+        record_file=ProjectPath(str(facts["record_file"])) if facts.get("record_file") else None,
+        answered=tuple(RecordId(word) for word in str(facts.get("answered") or "").split()),
+        wrote=paths(str(facts.get("wrote") or "")), worked=moment_of(facts.get("worked")))
+
+
+def life_of(request: Request) -> typing.Dict[str, typing.Optional[str]]:
+    """The front keys that say where the request stands, None for one it carries no more."""
+    def word(value: typing.Any) -> typing.Optional[str]:
+        return str(value.value) if value is not None else None
+
+    return dict(state=request.state.value, worker=word(request.worker), started=word(request.started),
+                attempts=str(request.attempts.value) if request.attempts.value else None, error=word(request.error),
+                record_file=word(request.record_file),
+                answered=" ".join(rid.value for rid in request.answered) or None,
+                wrote=" ".join(path.value for path in request.wrote) or None, worked=word(request.worked))
+
+
+class RequestFiles(RequestStore, RequestRepository):
+    """The requests as files, relative to the project the process works in — read, written, and the aggregate kept.
+    What a request asks is kept as it was read; a save writes where it stands over it."""
 
     def __init__(self, cwd: str) -> None:
         self._cwd = cwd
+        #: what each request read through this store asks — written back with its state
+        self._read: typing.Dict[str, RequestFacts] = {}
+        #: the requests this store took away itself: a save writes such a one back
+        self._taken: typing.Set[str] = set()
 
-    def all(self) -> typing.List[Request]:
+    def all(self) -> typing.List[RequestFacts]:
         return list_requests()
 
-    def find(self, request_id: str) -> Request:
+    def find(self, request_id: str) -> RequestFacts:
         return find_request(request_id)
 
     def add(self, kind: str, fields: typing.Mapping[str, str], words: str, by: str) -> typing.Tuple[str, str]:
         return write_request(self._cwd, kind, fields, words, by)
 
-    def update(self, request: Request, restore: bool = False, **fields: typing.Optional[str]) -> None:
-        update_request(request, restore, **fields)
+    def get(self, request_id: RequestId) -> Request:
+        facts = find_request(request_id.value)
+        self._read[request_id.value] = facts
+        return aggregate_of(facts)
 
-    def remove(self, request: Request) -> None:
-        os.remove(request["path"])
+    def every(self) -> typing.List[Request]:
+        found = list_requests()
+        self._read.update((facts["id"], facts) for facts in found)
+        return [aggregate_of(facts) for facts in found]
+
+    def find_by_id(self, aggregate_id: RequestId) -> typing.Optional[Request]:
+        try:
+            return self.get(aggregate_id)
+        except RequestRefused:
+            return None
+
+    def save(self, aggregate: Request) -> Request:
+        key = aggregate.id.value
+        if aggregate.state is RequestState.DONE:
+            with contextlib.suppress(OSError):
+                self.delete_by_id(aggregate.id)
+            return aggregate
+        facts = self._read.get(key)
+        if facts is None:
+            try:
+                facts = self._read[key] = find_request(key)
+            except RequestRefused:
+                return aggregate                        # dropped meanwhile: nothing left to save
+        update_request(facts, key in self._taken, **life_of(aggregate))
+        return aggregate
+
+    def delete_by_id(self, aggregate_id: RequestId) -> None:
+        facts = self._read.get(aggregate_id.value)
+        self._taken.add(aggregate_id.value)
+        os.remove(facts["path"] if facts else request_path(aggregate_id.value))
 
     def where(self) -> str:
         return str(shown(requests_dir()))
 
-    def shown(self, request: Request) -> str:
+    def shown(self, request: RequestFacts) -> str:
         return str(shown(request["path"]))
 
     def journal(self, *fields: str) -> None:
         journal(*fields)
 
-    def keep_done(self, request: Request, wrote: str, commit: str, at: str) -> None:
+    def keep_done(self, request: RequestFacts, wrote: str, commit: str, at: str) -> None:
         keep_done(request, wrote, commit, at)
 
-    def done(self) -> typing.List[Request]:
+    def done(self) -> typing.List[RequestFacts]:
         return list_done()
 
     def hide_done(self, request_id: str) -> bool:
@@ -280,10 +360,18 @@ class PlacedRequests(RequestFiles):
         super().__init__(cwd)
         self._placed = placed
 
-    def all(self) -> typing.List[Request]:
+    def all(self) -> typing.List[RequestFacts]:
         self._placed()
         return super().all()
 
-    def find(self, request_id: str) -> Request:
+    def find(self, request_id: str) -> RequestFacts:
         self._placed()
         return super().find(request_id)
+
+    def get(self, request_id: RequestId) -> Request:
+        self._placed()
+        return super().get(request_id)
+
+    def every(self) -> typing.List[Request]:
+        self._placed()
+        return super().every()

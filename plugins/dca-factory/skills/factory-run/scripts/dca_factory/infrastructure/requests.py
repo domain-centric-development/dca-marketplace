@@ -18,7 +18,7 @@ from ..delivery.application.requests.request_queue import RequestQueue
 from ..delivery.application.requests.settle_request import SettleRequestUseCase
 from ..delivery.application.requests.work_request import WorkRequestUseCase
 from ..delivery.application.shared.request_skill import RequestSkill
-from ..delivery.application.shared.requests import Kind, Request, RequestRefused
+from ..delivery.application.shared.requests import Kind, RequestFacts, RequestRefused
 from ..sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError
 from . import delivery as wiring
 from ..delivery.application.shared.request_settlement import RequestSettlement
@@ -38,7 +38,7 @@ class HeldRequests(RequestSettlement):
         except (UseCaseException, MarkdownError) as error:
             raise RequestRefused(str(error)) from error
 
-    def settle(self, request: Request, at: str) -> typing.Optional[typing.List[str]]:
+    def settle(self, request: RequestFacts, at: str) -> typing.Optional[typing.List[str]]:
         try:
             return wiring.settlement(self._cwd, self._runs).settle(request, at)
         except (UseCaseException, MarkdownError) as error:
@@ -46,8 +46,10 @@ class HeldRequests(RequestSettlement):
 
 
 def request_queue(home: str, worker: str, placed: typing.Callable[[], typing.Any]) -> RequestQueue:
-    return RequestQueue(PlacedRequests(home, placed), RequestRecordFiles(home), ScheduledStarts(home), worker,
-                        ConsoleLines())
+    requests = PlacedRequests(home, placed)
+    return RequestQueue(requests, RequestRecordFiles(home), ScheduledStarts(home), worker, ConsoleLines(),
+                        requests=requests, events=wiring.request_events(), transactions=FileTransactions(),
+                        now=stamp_utc)
 
 
 def work_request(home: str, runs: str, profile: typing.Callable[[], typing.Any],
@@ -55,11 +57,13 @@ def work_request(home: str, runs: str, profile: typing.Callable[[], typing.Any],
     store, changes, settlement = RequestFiles(home), BacklogChangeFiles(home, runs, profile, lock), HeldRequests(home, runs)
     return WorkRequestUseCase(store, RequestRecordFiles(home), changes, skill, settlement, stamp_utc, HandedFileFolder(),
                               answers=DecisionRecordFiles(home), events=JournalEventPublisher(runs),
-                              transactions=FileTransactions())
+                              transactions=FileTransactions(), requests=store)
 
 
 def settle_request(home: str, runs: str, profile: typing.Callable[[], typing.Any],
                    lock: typing.Callable[[], typing.ContextManager[None]]) -> SettleRequestUseCase:
     """A request the factory settles itself, written and committed at once."""
-    return SettleRequestUseCase(RequestFiles(home), BacklogChangeFiles(home, runs, profile, lock), HeldRequests(home, runs),
-                                stamp_utc)
+    requests = RequestFiles(home)
+    return SettleRequestUseCase(requests, BacklogChangeFiles(home, runs, profile, lock), HeldRequests(home, runs),
+                                stamp_utc, requests=requests, events=JournalEventPublisher(runs),
+                                transactions=FileTransactions())

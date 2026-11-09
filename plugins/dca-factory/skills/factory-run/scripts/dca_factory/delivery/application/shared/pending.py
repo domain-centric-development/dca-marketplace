@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import typing
 
-from .requests import Request
+from .requests import RequestFacts
 
 #: An action as a view draws it: its text, skill, shell form, label — and `request`, what pressing it writes.
 Action = typing.Dict[str, typing.Any]
 
 
-def pending_id(request: Request, pending: typing.Sequence[Request]) -> str:
+def pending_id(request: RequestFacts, pending: typing.Sequence[RequestFacts]) -> str:
     """The id of a request in <pending> (queued, running or waiting) that already does what <request> — an action's,
     as `request_of` reads it — would ask for: the same kind, about the same story, epic, record or proposal. '' where
     none does, and for one that still takes the person's words."""
@@ -40,7 +40,7 @@ def pending_id(request: Request, pending: typing.Sequence[Request]) -> str:
     return ""
 
 
-def chosen(request: Request, other: Request) -> bool:
+def chosen(request: RequestFacts, other: RequestFacts) -> bool:
     """Whether the pending request <other> is the very choice <request> offers: the same kind and, for an answer,
     the same option — or the person's words, where the action takes words and <other> named no option."""
     if other.get("kind") != request.get("kind"):
@@ -52,7 +52,7 @@ def chosen(request: Request, other: Request) -> bool:
     return request.get("words", "") in (str(other.get("option") or ""), other.get("words", ""))
 
 
-def mark_pending(actions: typing.List[Action], pending: typing.Sequence[Request]) -> typing.List[Action]:
+def mark_pending(actions: typing.List[Action], pending: typing.Sequence[RequestFacts]) -> typing.List[Action]:
     """Every action whose request is written already says so instead of being offered twice: `queued` names that
     request. Where a record takes one answer and another choice of it is pending, the action says what it waits on
     (`waits_on`) — a view draws the chosen one and leaves the others out; `queued_text` says where the request is."""

@@ -5,7 +5,9 @@ from __future__ import annotations
 import dataclasses
 import typing
 
-from ....building_blocks import UseCase
+from ....building_blocks import DomainEventPublisher, TransactionBoundary, UseCase
+from ...domain.model.moment import Moment
+from ...domain.model.request import Request, RequestId
 from ...domain.model.handed_file import FileBytes, FileName, FileRefused, HandedFile, HandedFiles
 from ..shared.handed_file_store import HandedFileStore
 from ..shared.request_check import RequestCheck
@@ -39,10 +41,14 @@ class WriteRequestUseCase(WriteRequestInputPort):
     waits already, RequestRefused with the reason otherwise —, the files beside its words taken as the domain takes
     them and kept, then written, queued: all or nothing — a request not written keeps no file."""
 
-    def __init__(self, check: RequestCheck, store: RequestStore, files: HandedFileStore) -> None:
+    def __init__(self, check: RequestCheck, store: RequestStore, files: HandedFileStore, events: DomainEventPublisher,
+                 transactions: TransactionBoundary, now: typing.Callable[[], str]) -> None:
+        self._transactions = transactions
         self._check = check
         self._store = store
         self._files = files
+        self._events = events
+        self._now = now
 
     def execute(self, command: WriteRequestCommand) -> RequestWritten:
         handed = self._handed(command)
@@ -58,6 +64,9 @@ class WriteRequestUseCase(WriteRequestInputPort):
             for ref in kept:
                 self._files.drop(ref.id)
             raise
+        # the file is the request as written, queued; the aggregate says so (`RequestQueued`)
+        written = Request.written(RequestId(request_id), Moment(self._now()))
+        self._transactions.in_transaction(lambda: self._events.publish_and_clear_events(written))
         return RequestWritten(request_id, path)
 
     @staticmethod

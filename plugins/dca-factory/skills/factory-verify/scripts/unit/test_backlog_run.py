@@ -8,6 +8,8 @@ from dca_factory.delivery.application.backlog.run_backlog import RunBacklogComma
 from dca_factory.delivery.application.requests.request_queue import RequestQueue
 from dca_factory.delivery.application.shared.backlog_schedule import ScheduleRead
 from dca_factory.delivery.application.shared.requests import RequestRefused
+from dca_factory.delivery.adapter.outgoing.files.request_files import aggregate_of, life_of
+from dca_factory.delivery.domain.model.request import RequestState
 
 
 class Lines:
@@ -38,17 +40,54 @@ class Store:
                 return dict(r)
         raise RequestRefused(f"no request {request_id}")
 
-    def update(self, request, restore=False, **fields):
+    # RequestRepository: the aggregate over the same dicts
+    def every(self):
+        return [aggregate_of(r) for r in self.requests]
+
+    def get(self, request_id):
+        return aggregate_of(self.find(request_id.value))
+
+    def save(self, request):
+        if request.state is RequestState.DONE:
+            self.delete_by_id(request.id)
+            return request
         for r in self.requests:
-            if r["id"] == request["id"]:
-                for key, value in fields.items():
+            if r["id"] == request.id.value:
+                for key, value in life_of(request).items():
                     if value is None:
                         r.pop(key, None)
                     else:
                         r[key] = value
+        return request
 
-    def remove(self, request):
-        self.requests = [r for r in self.requests if r["id"] != request["id"]]
+    def delete_by_id(self, request_id):
+        self.requests = [r for r in self.requests if r["id"] != request_id.value]
+
+    def journal(self, *fields):
+        self.journaled.append(fields)
+
+
+class Events:
+    def __init__(self):
+        self.published = []
+
+    def publish(self, event):
+        self.published.append(event)
+
+    def publish_and_clear_events(self, aggregate):
+        for event in aggregate.domain_events():
+            self.publish(event)
+        aggregate.clear_domain_events()
+
+
+class Transactions:
+    def in_transaction(self, work):
+        return work()
+
+
+def queue_of(store, records, starts, lines, events=None):
+    return RequestQueue(store, records, starts, "me", lines, requests=store, events=events or Events(),
+                        transactions=Transactions(), now=lambda: "2026-11-09T10:00:00Z")
 
     def journal(self, *fields):
         self.journaled.append(fields)
@@ -137,7 +176,8 @@ class Worker:
 
 def backlog(schedule, worker, store=None):
     lines = Lines()
-    queue = RequestQueue(store or Store(), Records(), Starts(), "me", lines)
+    store = store or Store()
+    queue = queue_of(store, Records(), Starts(), lines)
     use_case = RunBacklogUseCase(schedule, worker, worker, queue, lines)
     return use_case, lines
 
@@ -235,7 +275,7 @@ class LaneWorker(Worker):
 
     def start_request(self, request):
         self.started.append(("request", request["id"]))
-        self.store.remove(request)                  # its process takes it and, done, removes its file
+        self.store.requests = [r for r in self.store.requests if r["id"] != request["id"]]  # its process works it; done, its file goes
         return Child(0, after=1)
 
 
@@ -273,16 +313,19 @@ class Queue(unittest.TestCase):
         lines = Lines()
         store = Store({"id": "r1", "kind": "wish", "state": "running", "worker": "me"},
                       {"id": "r2", "kind": "wish", "state": "running", "worker": "me"})
-        queue = RequestQueue(store, Records(), Starts(), "me", lines)
+        events = Events()
+        queue = queue_of(store, Records(), Starts(), lines, events)
         queue.ended({"id": "r1"}, 143)
         queue.ended({"id": "r2"}, 1)
         self.assertEqual([r["state"] for r in store.requests], ["queued", "failed"])
         self.assertIn("before it said how", store.requests[1]["error"])
+        self.assertNotIn("worker", store.requests[0])
+        self.assertEqual(["RequestQueued", "RequestFailed"], [type(e).__name__ for e in events.published])
 
     def test_a_run_request_for_a_story_that_cannot_start_fails_and_says_why(self):
         lines = Lines()
         store = Store({"id": "r1", "kind": "run", "state": "queued", "story": "A-1"})
-        queue = RequestQueue(store, Records(), Starts({"A-1": ("delivered", None, "")}), "me", lines)
+        queue = queue_of(store, Records(), Starts({"A-1": ("delivered", None, "")}), lines)
         self.assertIsNone(queue.take_run())
         self.assertEqual(store.requests[0]["state"], "failed")
         self.assertIn("A-1 is delivered; nothing runs.", lines.text())
@@ -290,15 +333,32 @@ class Queue(unittest.TestCase):
     def test_a_waiting_request_runs_again_once_its_records_are_answered(self):
         lines = Lines()
         store = Store({"id": "r1", "kind": "wish", "state": "waiting", "record_file": "x"})
-        queue = RequestQueue(store, Records({"r1": [("x", "D-1", "answered")]}), Starts(), "me", lines)
+        queue = queue_of(store, Records({"r1": [("x", "D-1", "answered")]}), Starts(), lines)
         self.assertEqual(queue.next()["id"], "r1")
         self.assertEqual(store.requests[0]["answered"], "D-1")
+        self.assertNotIn("record_file", store.requests[0])
+
+    def test_a_waiting_request_whose_record_is_gone_runs_again_and_asks_again(self):
+        lines = Lines()
+        store = Store({"id": "r1", "kind": "wish", "state": "waiting", "record_file": "x"})
+        queue = queue_of(store, Records(), Starts(), lines)
+        self.assertEqual(queue.next()["id"], "r1")
+        self.assertNotIn("answered", store.requests[0])
+        self.assertIn("a record that is gone", lines.text())
+
+    def test_a_run_request_taken_is_settled_and_gone(self):
+        lines, events = Lines(), Events()
+        store = Store({"id": "r1", "kind": "run", "state": "queued", "story": "A-1", "from": "plan"})
+        asked = queue_of(store, Records(), Starts(), lines, events).take_run()
+        self.assertEqual(asked.start, "plan")
+        self.assertEqual(store.requests, [])
+        self.assertEqual(["RequestSettled"], [type(e).__name__ for e in events.published])
 
     def test_a_request_left_running_by_another_factory_is_queued_again(self):
         lines = Lines()
         store = Store({"id": "r1", "kind": "wish", "state": "running", "worker": "other"},
                       {"id": "r2", "kind": "wish", "state": "running", "worker": "me"})
-        RequestQueue(store, Records(), Starts(), "me", lines).requeue_orphans()
+        queue_of(store, Records(), Starts(), lines).requeue_orphans()
         self.assertEqual([r["state"] for r in store.requests], ["queued", "running"])
 
 

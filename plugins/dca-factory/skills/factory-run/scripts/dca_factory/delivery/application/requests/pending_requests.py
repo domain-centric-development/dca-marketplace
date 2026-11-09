@@ -6,7 +6,7 @@ import dataclasses
 import typing
 
 from ....building_blocks import UseCase
-from ..shared.requests import PENDING, Request, RequestStore
+from ..shared.requests import PENDING, RequestFacts, RequestStore
 
 
 @dataclasses.dataclass(frozen=True)
@@ -16,7 +16,7 @@ class PendingRequestsQuery:
 
 @dataclasses.dataclass(frozen=True)
 class PendingRequests:
-    requests: typing.List[Request]
+    requests: typing.List[RequestFacts]
 
 
 class PendingRequestsInputPort(UseCase[PendingRequestsQuery, PendingRequests], typing.Protocol):

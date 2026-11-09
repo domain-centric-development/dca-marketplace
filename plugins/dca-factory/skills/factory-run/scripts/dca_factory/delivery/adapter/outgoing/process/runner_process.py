@@ -64,7 +64,7 @@ from ....application.requests.list_requests import target_text
 from ..files.run_readers import needs_human_lines, open_decision_files, verdict_of_story
 from ....application.requests.request_queue import RequestQueue
 from ....application.requests.work_request import RequestWorked
-from ....application.shared.requests import Request
+from ....application.shared.requests import RequestFacts
 from ....application.shared.story_integration import Lost
 from ....application.delivery.pipeline_rules import decides
 from ....application.shared.backlog_worker import Child
@@ -1183,7 +1183,7 @@ class Run(ProfileSource):
         """The requests as this runner works them (`RequestQueue`), read where the profile puts them."""
         return self.cases.queue(self)
 
-    def request_argv(self, request: Request, tool: str) -> typing.List[str]:
+    def request_argv(self, request: RequestFacts, tool: str) -> typing.List[str]:
         argv = [sys.executable, self.cli_path, "--work-request", request["id"], "--tool", tool]
         return argv
 
@@ -1246,7 +1246,7 @@ class Run(ProfileSource):
         self.profile()
         return self.cases.work_request(self, request_id, tool)
 
-    def press(self, kind_name: str, fields: typing.Mapping[str, str], words: str, by: str) -> Request:
+    def press(self, kind_name: str, fields: typing.Mapping[str, str], words: str, by: str) -> RequestFacts:
         """A press as the request it would write: its fields, an id of now, the person who pressed."""
         return dict(fields, id=f"{utc('%Y%m%dT%H%M%S')}-{kind_name}", kind=kind_name, words=words,
                     by=" ".join((by or default_by(self.home)).split()), path=None)
@@ -1292,7 +1292,7 @@ class Run(ProfileSource):
             return 2
         return self.cases.run_backlog(self, tool, slots, watch, interval, dry)
 
-    def start_request_child(self, request: Request, tool: str) -> ChildProcess:
+    def start_request_child(self, request: RequestFacts, tool: str) -> ChildProcess:
         """A request's process beside the stories of a parallel run, its lines named with the request's id."""
         print(f"══ request {request['id']}  ({request['kind']} {target_text(request)}, by {request.get('by', '?')})")
         flush()

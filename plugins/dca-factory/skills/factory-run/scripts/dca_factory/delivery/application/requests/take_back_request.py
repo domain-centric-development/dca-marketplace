@@ -5,8 +5,9 @@ from __future__ import annotations
 import dataclasses
 import typing
 
-from ....building_blocks import UseCase
-from ..shared.requests import operations_of, Request, RequestRefused, RequestStore
+from ....building_blocks import TransactionBoundary, UseCase
+from ...domain.model.request import RequestId, RequestOperation
+from ..shared.requests import RequestFacts, RequestRefused, RequestRepository, RequestStore
 
 
 @dataclasses.dataclass(frozen=True)
@@ -16,7 +17,7 @@ class TakeBackRequestCommand:
 
 @dataclasses.dataclass(frozen=True)
 class TakenBack:
-    request: Request
+    request: RequestFacts
 
 
 class TakeBackRequestInputPort(UseCase[TakeBackRequestCommand, TakenBack], typing.Protocol):
@@ -27,8 +28,10 @@ class TakeBackRequestUseCase(TakeBackRequestInputPort):
     """A request that does not run is removed; one that runs now is the factory's until it ends; the note of a worked
     one is hidden."""
 
-    def __init__(self, store: RequestStore) -> None:
+    def __init__(self, store: RequestStore, requests: RequestRepository, transactions: TransactionBoundary) -> None:
         self._store = store
+        self._requests = requests
+        self._transactions = transactions
 
     def execute(self, command: TakeBackRequestCommand) -> TakenBack:
         try:
@@ -38,7 +41,7 @@ class TakeBackRequestUseCase(TakeBackRequestInputPort):
             if self._store.hide_done(command.request):
                 return TakenBack(dict(id=command.request, state="done"))
             raise
-        if "drop" not in operations_of(request["state"]):
+        if not self._requests.get(RequestId(command.request)).allows(RequestOperation.DROP):
             raise RequestRefused(f"{command.request} runs now — it can be dropped once it ended")
-        self._store.remove(request)
+        self._transactions.in_transaction(lambda: self._requests.delete_by_id(RequestId(command.request)))
         return TakenBack(request)
