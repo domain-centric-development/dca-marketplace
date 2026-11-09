@@ -88,6 +88,19 @@ PLACES_REL: typing.Dict[str, str] = {}
 RELEASE: typing.Dict[str, str] = {}
 
 
+@contextlib.contextmanager
+def kept_places() -> typing.Iterator[None]:
+    """The places as they are, put back afterwards: a call that sets its own (the gate's command line, run in the
+    runner's process) leaves the caller's as they were."""
+    kept = dict(PLACES), dict(PLACES_REL), dict(RELEASE)
+    try:
+        yield
+    finally:
+        for table, before in zip((PLACES, PLACES_REL, RELEASE), kept):
+            table.clear()
+            table.update(before)
+
+
 def release_required() -> bool:
     """The profile's `release: required`: only a story a person released is delivered — a draft, or one without
     `status:`, never. Without the line a story without `status:` is not held back, as before the key existed."""

@@ -27,6 +27,7 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 import typing
 from .factory_process import scripts_dir
 from ..git.worktree_steps import integrate_finish, link_places, worktree_prepare, worktree_remove
@@ -34,7 +35,7 @@ from ..git.worktrees import has_worktree, worktree_of
 from ..pipeline.stage_rows import stage_windows, stage_named, stage_files, stage_order
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from .....sharedkernel.adapter.outgoing.profile.profile_files import (
-    place, PROFILE_FILE, read_profile, resolve_profile, set_places)
+    kept_places, place, PROFILE_FILE, read_profile, resolve_profile, set_places)
 from ..files.story_layout import find_story, is_delivered, story_kind
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
 from ..tools.streams import tokens_of
@@ -118,6 +119,9 @@ class RunCases(typing.Protocol):
     def every_stage(self, run: Run) -> StageText:
         """What every stage is told, for a session that works no stage (`ShowEveryStageUseCase`)."""
 
+    def gate_here(self, argv: typing.Sequence[str]) -> int:
+        """The gate's command line (`story-gate.py <argv>`) in this process, wired by its composition root; its exit."""
+
 
 class Run(ProfileSource):
     """One runner process: the story or the backlog it runs, and what it keeps between stages. The use cases a step
@@ -170,6 +174,9 @@ class Run(ProfileSource):
         self.timeout = self.tools.stage_timeout(self.gate_installed())
         self.processes = ToolProcesses(self, self.tools)
         self.gates = GateProcess(self)
+        #: gate folder → whether its gate is this process's own package, by content (`runs_the_gate`)
+        self.same_gate: typing.Dict[str, bool] = {}
+        self.own_digest: typing.Optional[str] = None
 
     @property
     def cases(self) -> RunCases:
@@ -274,13 +281,14 @@ class Run(ProfileSource):
         return f"{self.runs}/{story}/{self.stage_file(stage)}"
 
     # --- the pipeline, unchanged ---------------------------------------------------------------------------
-    def pipeline_hash(self, folder: typing.Optional[str] = None) -> typing.Optional[str]:
-        """One SHA-256 over the installed files' digests — the stamp's `sha256:` line."""
+    def pipeline_hash(self, folder: typing.Optional[str] = None,
+                      names: typing.Sequence[str] = ()) -> typing.Optional[str]:
+        """One SHA-256 over the installed files' digests — the stamp's `sha256:` line (or over <names> alone)."""
         if not hashing():
             return None
         folder = folder or os.path.join(self.home, ".agents", "factory")
         listing = ""
-        for name in PIPELINE_FILES:
+        for name in names or PIPELINE_FILES:
             path = os.path.join(folder, name)
             if name.endswith("/"):
                 if not os.path.isdir(path):
@@ -293,6 +301,40 @@ class Run(ProfileSource):
             else:
                 listing += f"missing  {name}\n"
         return hashlib.sha256(listing.encode("utf-8")).hexdigest()
+
+    def runs_the_gate(self, gate_path: str) -> bool:
+        """The gate at <gate_path> is this process's own package — its modules, its workflow and its entry point the
+        same by content —, so its command line may run here instead of in a process of its own (WP-197). Asked once
+        per gate folder; a run built without the composition root's use cases, or FACTORY_GATE_PROCESS=1, keeps the
+        process."""
+        if self._cases is None or os.environ.get("FACTORY_GATE_PROCESS") == "1" or not hashing():
+            return False
+        folder = os.path.realpath(os.path.dirname(os.path.abspath(gate_path)))
+        if folder not in self.same_gate:
+            if self.own_digest is None:
+                self.own_digest = self.pipeline_hash(self.scripts, GATE_FILES) or ""
+            self.same_gate[folder] = bool(self.own_digest) and self.own_digest == self.pipeline_hash(folder, GATE_FILES)
+        return self.same_gate[folder]
+
+    def gate_here(self, argv: typing.Sequence[str], *, quiet: bool = False) -> int:
+        """The gate's command line in this process, as its own process would end: its places put back afterwards
+        (`kept_places`), what it prints dropped where the process's would be (`quiet`), an exit it asks for its code,
+        and a failure its traceback on stderr and exit 1."""
+        flush()
+        sink = io.StringIO()
+        quieted = (contextlib.redirect_stdout(sink), contextlib.redirect_stderr(sink)) if quiet else ()
+        with kept_places(), contextlib.ExitStack() as stack:
+            for redirect in quieted:
+                stack.enter_context(redirect)
+            try:
+                return self.cases.gate_here(argv)
+            except SystemExit as ended:
+                return ended.code if isinstance(ended.code, int) else (0 if ended.code is None else 1)
+            except Exception:                   # noqa: BLE001 — a crashed gate process would say the same and exit 1
+                traceback.print_exc()
+                return 1
+            finally:
+                flush()
 
     def guard_pipeline_start(self) -> int:
         stamp = os.path.join(self.home, STAMP)
@@ -1285,6 +1327,8 @@ class ChildProcess(Child):
 STAMP = ".agents/factory/gate.installed"
 #: The files the install puts into .agents/factory/, in the stamp's order; a name ending in `/` is the package.
 PIPELINE_FILES = ("story-gate.py", "factory-cli.py", "observe.py", "factory.sh", "dca_factory/", "workflow/")
+#: What the gate runs on: alike by content in the runner's folder and the gate's, the gate may run in the runner.
+GATE_FILES = ("story-gate.py", "dca_factory/", "workflow/")
 
 
 def package_modules(folder: str) -> typing.List[str]:

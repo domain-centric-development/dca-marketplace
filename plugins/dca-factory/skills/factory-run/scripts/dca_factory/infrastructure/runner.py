@@ -81,6 +81,14 @@ class RunnerCases:
     def every_stage(self, run: Run) -> StageText:
         return ShowEveryStageUseCase().execute()
 
+    def gate_here(self, argv: typing.Sequence[str]) -> int:
+        from ..delivery.adapter.outgoing.stack import commands
+        from . import gate
+        # what a gate's process starts without: the tools it found missing, the suite record of its last call
+        commands.MISSING_TOOLS.clear()
+        commands.SUITES_RECORD = None
+        return gate.main(list(argv))
+
     @staticmethod
     def _integration(run: Run, tool: str) -> IntegrateStoryUseCase:
         return IntegrateStoryUseCase(RunnerIntegration(run, tool), ConsoleLines())
