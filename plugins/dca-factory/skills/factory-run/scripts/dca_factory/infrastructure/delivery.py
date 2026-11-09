@@ -39,6 +39,7 @@ from ..delivery.adapter.outgoing.process.factory_process import (
     cli_path as cli_path, own_file as own_file, read_json as read_json, say as say, SERVE_FILE as SERVE_FILE,
     write_json as write_json)
 from .profile import ask_profile as ask_profile
+from .questions import show_stage_table as show_stage_table
 from .schedule import schedule_data as schedule_data, start_of as start_of
 from ..delivery.adapter.outgoing.files.story_files import StoryFiles
 from ..sharedkernel.adapter.outgoing.profile.profile_files import ProfileFiles, resolve_profile
@@ -316,8 +317,6 @@ def read_tool_usage() -> ReadToolUsageUseCase:
     return ReadToolUsageUseCase(ToolBinaryFiles())
 
 
-def show_stage_table() -> ShowStageTableUseCase:
-    return ShowStageTableUseCase(RunnerTableFiles())
 
 
 def release_story_claim(cwd: str, epics: str, runs: str) -> ReleaseStoryClaimUseCase:

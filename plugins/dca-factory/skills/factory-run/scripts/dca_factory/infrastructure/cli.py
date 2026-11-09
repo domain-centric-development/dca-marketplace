@@ -20,7 +20,9 @@ def wire() -> None:
     from ..delivery.adapter.incoming.web import service as web_service
     from ..rulebook.adapter.incoming.cli import rules_command
     from ..spec.adapter.incoming.cli import spec_command
-    from . import delivery, rulebook, runner, spec
+    from ..delivery.adapter.incoming.cli import question_command
+    from . import delivery, questions, rulebook, runner, spec
+    question_command.wire(questions)
     cli_root.wire(delivery)
     run_command.wire(runner)
     rules_command.wire(rulebook)
@@ -39,6 +41,12 @@ def main(argv: typing.Sequence[str]) -> int:
         from . import spec
         spec_command.wire(spec)
         return spec_command.main(argv)
+    from ..delivery.adapter.incoming.cli import question_command
+    asked = question_command.parse(argv)
+    if asked is not None:                     # the runner's questions: the stage table, a place, a profile value
+        from . import questions
+        question_command.wire(questions)
+        return question_command.main(asked)
     from ..delivery.adapter.incoming.cli import cli_command
     from ..delivery.adapter.incoming.cli import root as cli_root
     from ..delivery.adapter.incoming.runner import run_command

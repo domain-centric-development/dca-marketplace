@@ -9746,6 +9746,13 @@ def run_groups(args):
 #: writes code — a file of its own per story and a line in one file every story touches, so two stories meet.
 STAND_IN_WORKTREE = """#!/bin/sh
 echo "$FACTORY_STORY $FACTORY_STAGE $(pwd -P)" >> "$FIXTURE_LOG"
+# FIXTURE_AWAIT="<story>:<other> …": <story>'s plan waits (a minute at most) until <other> has begun — two slots shown
+# to overlap by what they did, not by how fast a machine ran them
+for pair in ${FIXTURE_AWAIT:-}; do
+  if [ "$FACTORY_STORY" = "${pair%%:*}" ] && [ "$FACTORY_STAGE" = plan ]; then
+    i=0; while ! grep -q "^${pair#*:} " "$FIXTURE_LOG" && [ $i -lt 600 ]; do sleep 0.1; i=$((i+1)); done
+  fi
+done
 [ "$FACTORY_STAGE" = plan ] && printf '%s' "$FACTORY_PROMPT" > "$FIXTURE_LOG.prompt"
 d=".dca-factory/runs/$FACTORY_STORY"
 e=".dca-factory/evidence/$FACTORY_STORY"
@@ -10373,6 +10380,7 @@ def verify_worktrees(runner, verbose=False):
     # depends on another starts once that one is on the main line
     for root in throwaway():
         log, env = fixture(root, [("STORY-2", []), ("STORY-3", ["STORY-1"])])
+        env["FIXTURE_AWAIT"] = "STORY-1:STORY-2 STORY-2:STORY-1"
         code, output = run_runner(runner, root, "run", "--parallel", "2", env=env)
         ran = lines(log)
         first = lambda story: next((i for i, l in enumerate(ran) if l.startswith(story + " ")), -1)
