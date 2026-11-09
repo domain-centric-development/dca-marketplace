@@ -124,8 +124,7 @@ def git_tree(cwd: str) -> typing.Optional[str]:
     import tempfile
     with tempfile.TemporaryDirectory() as scratch:
         env = dict(os.environ, GIT_INDEX_FILE=os.path.join(scratch, "index"))
-        if subprocess.run(["git", "rev-parse", "--verify", "--quiet", "HEAD"], cwd=cwd, capture_output=True).returncode == 0:
-            subprocess.run(["git", "read-tree", "HEAD"], cwd=cwd, env=env, capture_output=True)
+        subprocess.run(["git", "read-tree", "HEAD"], cwd=cwd, env=env, capture_output=True)   # no HEAD yet: stays empty
         if subprocess.run(["git", "add", "-A", "--", "."], cwd=cwd, env=env, capture_output=True).returncode != 0:
             return None
         tree = subprocess.run(["git", "write-tree"], cwd=cwd, env=env, capture_output=True, text=True)

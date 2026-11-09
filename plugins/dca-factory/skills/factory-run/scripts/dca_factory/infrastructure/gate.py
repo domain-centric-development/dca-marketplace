@@ -52,8 +52,11 @@ def check_parity() -> CheckParityInputPort:
 
 
 def check_profile(profile: Profile) -> CheckProfileInputPort:
-    from . import gate_checks
-    return gate_checks.check_profile(profile)
+    """The profile checked on its own — the evidence's reader of it alone, not the checks' whole wiring: `factory.sh`
+    asks it before every run."""
+    from ..delivery.adapter.outgoing.files.stage_evidence_files import StageEvidenceFiles
+    from ..delivery.application.profile.check_profile import CheckProfileUseCase
+    return CheckProfileUseCase(StageEvidenceFiles(".", "", "", profile))
 
 
 def check_description(cwd: str, profile: typing.Mapping[str, str]) -> CheckDescriptionInputPort:

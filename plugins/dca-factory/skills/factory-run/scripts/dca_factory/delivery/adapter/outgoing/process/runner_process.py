@@ -122,6 +122,9 @@ class RunCases(typing.Protocol):
     def gate_here(self, argv: typing.Sequence[str]) -> int:
         """The gate's command line (`story-gate.py <argv>`) in this process, wired by its composition root; its exit."""
 
+    def cli_here(self, argv: typing.Sequence[str]) -> int:
+        """The cli's command line (`factory-cli.py <argv>`) in this process, wired by its composition root; its exit."""
+
 
 class Run(ProfileSource):
     """One runner process: the story or the backlog it runs, and what it keeps between stages. The use cases a step
@@ -215,9 +218,33 @@ class Run(ProfileSource):
 
     def cli(self, *args: str, quiet: bool = True, merge: bool = False, cwd: typing.Optional[str] = None,
             env: typing.Optional[typing.Mapping[str, str]] = None) -> typing.Tuple[int, str]:
-        """The cli beside this runner: (exit code, stdout without its last newlines)."""
+        """The cli beside this runner: (exit code, stdout without its last newlines). The runner is that cli's own
+        package, so a question asked from here, in this folder and environment, is answered in this process — no
+        process start for it (WP-197); FACTORY_CLI_PROCESS=1 keeps the process."""
+        if cwd is None and env is None and self._cases is not None and os.environ.get("FACTORY_CLI_PROCESS") != "1":
+            return self.cli_answer(args, quiet=quiet and not merge, merge=merge)
         return self.run([sys.executable, self.cli_path, *args], capture=True, quiet=quiet and not merge, merge=merge,
                         cwd=cwd, env=env)
+
+    def cli_answer(self, argv: typing.Sequence[str], *, quiet: bool, merge: bool) -> typing.Tuple[int, str]:
+        """The cli's command line in this process, as its own process would answer: what it prints kept (its errors
+        among it with `merge`, dropped with `quiet`), its places and this process's folder put back afterwards, an exit
+        it asks for its code and a failure its traceback and exit 1."""
+        flush()
+        out, dropped = io.StringIO(), io.StringIO()
+        here = os.getcwd()
+        with kept_places(), contextlib.redirect_stdout(out), \
+                contextlib.redirect_stderr(out if merge else dropped if quiet else sys.stderr):
+            try:
+                code = self.cases.cli_here(argv)
+            except SystemExit as ended:
+                code = ended.code if isinstance(ended.code, int) else (0 if ended.code is None else 1)
+            except Exception:                   # noqa: BLE001 — a crashed cli process would say the same and exit 1
+                traceback.print_exc()
+                code = 1
+            finally:
+                os.chdir(here)
+        return code, out.getvalue().replace("\r\n", "\n").rstrip("\n")
 
     def profile(self) -> typing.Dict[str, str]:
         """The stack profile as a cli started here would read it, with the places set from it — in a story's
