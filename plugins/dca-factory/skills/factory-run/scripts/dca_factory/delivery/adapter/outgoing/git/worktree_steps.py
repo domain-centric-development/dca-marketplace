@@ -89,7 +89,8 @@ def restore_places(path: str) -> None:
         full = os.path.join(path, rel)
         if is_linked(full):
             unlink_folder(full)
-    tracked = [rel for rel in folders + files if git(path, "ls-files", "--", rel)[1].strip()]
+    listed = git(path, "ls-files", "--", *folders, *files)[1].splitlines()   # one git, not one per place
+    tracked = [rel for rel in folders + files if any(line == rel or line.startswith(rel + "/") for line in listed)]
     if tracked:
         git(path, "checkout", "--", *tracked)
     for rel in files:

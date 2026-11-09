@@ -5101,7 +5101,19 @@ def stage_lists(modules, runner_text):
     return found
 
 
+def quiet_git_maintenance():
+    """The fixtures commit thousands of times, and after a commit git may start its automatic maintenance as a
+    process of its own — costly where a process start is (Git Bash), and nothing a throwaway repository needs. Through
+    the environment, so every git the suite and the factory start reads it; the person's own settings stay."""
+    count = int(os.environ.get("GIT_CONFIG_COUNT", "0") or 0)
+    for key, value in (("maintenance.auto", "false"), ("gc.auto", "0")):
+        os.environ[f"GIT_CONFIG_KEY_{count}"], os.environ[f"GIT_CONFIG_VALUE_{count}"] = key, value
+        count += 1
+    os.environ["GIT_CONFIG_COUNT"] = str(count)
+
+
 def main(argv=None):
+    quiet_git_maintenance()
     parser = argparse.ArgumentParser(description="verify the factory")
     parser.add_argument("--gate", default=DEFAULT_GATE)
     parser.add_argument("--cli", default=DEFAULT_CLI, help="the CLI beside the gate (default: beside --gate)")
