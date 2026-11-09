@@ -16,22 +16,11 @@ from ....application.status.texts import parse_time
 from ..files.run_marks import stale_after
 
 
-#: checkouts whose own `.git` folder holds the claim, asked of git once per process — the runner asks for the claim's
-#: path on every stage. Only a `.git` in the checkout itself is kept: a folder that is no repository yet answers with
-#: the git folder of one above it, and kept, every project below that one would share a claim once it has its own.
-OWN_GIT: typing.Set[str] = set()
-
-
 def claim_path(cwd: str) -> str:
     # One claim per main checkout: a stage in a story's worktree renews the runner's claim there, not one of its own.
     if in_worktree(cwd):
         cwd = typing.cast(str, factory_home())
-    here = os.path.abspath(cwd)
-    if here in OWN_GIT and os.path.isdir(os.path.join(here, ".git")):
-        return os.path.join(cwd, ".git", "dca-factory-worker.lock")
     code, git_dir = git(cwd, "rev-parse", "--git-dir")
-    if code == 0 and git_dir == ".git":
-        OWN_GIT.add(here)
     if code == 0 and git_dir:
         return os.path.join(cwd, git_dir, "dca-factory-worker.lock")
     return os.path.join(cwd, ".agents", "factory", "worker.lock")
