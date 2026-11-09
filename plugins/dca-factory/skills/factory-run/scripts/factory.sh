@@ -235,14 +235,15 @@ STAMP=".agents/factory/gate.installed"
 # the C locale's order, as Python sorts them — so a module added, moved or removed changes the hash too.
 PIPELINE_FILES="story-gate.py factory-cli.py observe.py factory.sh dca_factory/ workflow/"
 pipeline_hash() {                           # pipeline_hash [<folder>] — one SHA-256 over PIPELINE_FILES
-  local dir=${1:-$HOME_DIR/.agents/factory} hash file module LC_ALL=C
+  local dir=${1:-$HOME_DIR/.agents/factory} hash file LC_ALL=C
   hash=$(hasher); [ "$hash" = none ] && return 1
   for file in $PIPELINE_FILES; do
     case $file in
       */) if [ -d "$dir/$file" ]; then
-            ( cd "$dir" && find "$file" -type f \( -name '*.py' -o -name '*.md' \) ) | LC_ALL=C sort | while IFS= read -r module; do
-              printf '%s  %s\n' "$($hash "$dir/$module" | cut -d" " -f1)" "$module"
-            done
+            # one hasher process per batch, not per file: on Git Bash a process start costs tens of milliseconds and
+            # the package has hundreds of files. Every hasher prints `<hash> <mark><path>`; the mark (` ` or `*`) goes.
+            ( cd "$dir" && find "$file" -type f \( -name '*.py' -o -name '*.md' \) | LC_ALL=C sort \
+                | xargs -r -n 100 $hash ) | sed 's/^\([0-9a-fA-F]*\) [ *]/\1  /'
           else printf 'missing  %s\n' "$file"; fi ;;
       *)  if [ -f "$dir/$file" ]; then printf '%s  %s\n' "$($hash "$dir/$file" | cut -d" " -f1)" "$file"
           else printf 'missing  %s\n' "$file"; fi ;;

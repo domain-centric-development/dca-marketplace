@@ -75,16 +75,19 @@ from .....contract import CONTRACT, VERSION
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from .....sharedkernel.adapter.outgoing.profile.profile_files import (
     location, place, PROFILE_FILE, read_profile, resolve_profile, set_places)
-from ....application.backlog.check_backlog import CheckBacklogInputPort
-from ....application.delivery.check_change import CheckChangeCommand, CheckChangeInputPort
-from ....application.delivery.check_parity import CheckParityCommand, CheckParityInputPort
 from ....application.delivery.check_stage import Verdict
 from ....application.delivery.pipeline_rules import decides
-from ....application.description.check_description import CheckDescriptionInputPort
-from ....application.profile.check_profile import CheckProfileQuery, CheckProfileInputPort
 from ....domain.model.stage import Trait
 from ....application.delivery.pipeline_workflow import workflow
-from . import backlog_check, description_check
+
+# What checks something is imported where it is used: the runner keeps its records through this command line many
+# times per story (`--owned`, `--record-base`, `--record-changes`), and such a call loads none of the checks.
+if typing.TYPE_CHECKING:
+    from ....application.backlog.check_backlog import CheckBacklogInputPort
+    from ....application.delivery.check_change import CheckChangeInputPort
+    from ....application.delivery.check_parity import CheckParityInputPort
+    from ....application.description.check_description import CheckDescriptionInputPort
+    from ....application.profile.check_profile import CheckProfileInputPort
 
 Profile = typing.Mapping[str, typing.Any]
 Report = typing.Callable[[typing.Optional[str]], int]
@@ -121,11 +124,13 @@ def wire(root: GateRoot) -> None:
 
 def check_contract(result: Verdict, profile: Profile) -> None:
     """The profile's contract and its unknown keys (`GateRelease.profile_findings`)."""
+    from ....application.profile.check_profile import CheckProfileQuery
     result.take(wiring.check_profile(profile).execute(CheckProfileQuery()).contract)
 
 
 def check_models(result: Verdict, profile: Profile) -> None:
     """The profile's model keys, each bound to a tool (`ProfileChecks.models`)."""
+    from ....application.profile.check_profile import CheckProfileQuery
     result.take(wiring.check_profile(profile).execute(CheckProfileQuery()).models)
 
 
@@ -134,11 +139,13 @@ def check_models(result: Verdict, profile: Profile) -> None:
 #: and nothing merges them, so the pair is compared and a difference is named.
 def check_project(result: Verdict, cwd: str, profile: Profile) -> bool:
     """The two mandatory parts of the project description (`description_check`)."""
+    from . import description_check
     return description_check.check_project(result, wiring.check_description(cwd, profile))
 
 
 def check_backlog(cwd: str, epics: str, profile: Profile, only: typing.Optional[str] = None) -> int:
     """The plan gate's backlog checks (`backlog_check`)."""
+    from . import backlog_check
     return backlog_check.check_backlog(wiring.check_backlog(cwd, epics, profile), wiring.layout_note(cwd, profile),
                                        epics, only)
 
@@ -343,10 +350,12 @@ def main(argv: typing.Sequence[str]) -> int:
                 if hint:
                     result.fail("layout", hint)
                 check_contract(result, profile)
+                from ....application.delivery.check_change import CheckChangeCommand
                 changed = wiring.check_change(cwd, profile).execute(CheckChangeCommand(args.staged, args.checks))
                 result.entries += changed.entries
                 result.flaky += changed.flaky
             else:
+                from ....application.delivery.check_parity import CheckParityCommand
                 result.take(wiring.check_parity().execute(CheckParityCommand(args.parity)))
         except GateError as error:
             result.fail("gate", str(error))

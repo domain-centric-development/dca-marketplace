@@ -25,11 +25,17 @@ jobs:
   factory:
     strategy:
       fail-fast: false
+      # Windows starts each process three to five times slower than macOS under Git Bash (measured
+      # 2026-11-08; Defender costs about 5 % of it), and the whole suite there is about four runner-hours of
+      # shard time: on one runner it reaches any limit. So Windows runs one job per group, side by side.
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - { os: ubuntu-latest, group: all }
+          - { os: macos-latest, group: all }
+          - { os: windows-latest, group: all }
+    name: factory (${{ matrix.os }}, ${{ matrix.group }})
     runs-on: ${{ matrix.os }}
-    # Windows runs the suite in about 43 minutes (Git Bash starts each process slowly) and crossed 45 on
-    # 2026-11-05 without a hang; the limit catches a hang, not a slow platform.
+    # The limit catches a hang, not a slow platform: the longest job, a Windows group, takes about 25 minutes.
     timeout-minutes: 60
     defaults:
       run:
@@ -61,11 +67,11 @@ jobs:
       - name: the report of dca-new and dca-init
         run: python plugins/dca-core/skills/dca-init/scripts/dca-report.py --self-test
       - name: factory-verify
-        run: python plugins/dca-factory/skills/factory-verify/scripts/verify.py --junit verify-report.xml
+        run: python plugins/dca-factory/skills/factory-verify/scripts/verify.py --group ${{ matrix.group }} --junit verify-report.xml
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: verify-report-${{ matrix.os }}
+          name: verify-report-${{ matrix.os }}-${{ matrix.group }}
           path: verify-report.xml
 
   types:

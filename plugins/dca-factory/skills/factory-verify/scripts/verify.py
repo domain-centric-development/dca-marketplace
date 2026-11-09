@@ -142,9 +142,16 @@ DEFAULT_CLI = os.path.normpath(os.path.join(HERE, "..", "..", "factory-run", "sc
 # Every case's verdict, in the order it ran, for the JUnit report `--junit` writes: (group, name, ok, detail).
 RESULTS = []
 CURRENT_GROUP = ["checks"]
+#: How long each case took, in seconds, by (group, name): the time since the result before it in this process — the
+#: work a case does lies before its verdict. Written into the JUnit report, so a slow platform shows where it spends it.
+TIMES = {}
+LAST_RESULT = [time.monotonic()]
 
 
 def note_result(name, ok, detail=""):
+    now = time.monotonic()
+    TIMES.setdefault((CURRENT_GROUP[0], name), now - LAST_RESULT[0])
+    LAST_RESULT[0] = now
     RESULTS.append((CURRENT_GROUP[0], name, ok, detail))
 
 
@@ -5094,7 +5101,19 @@ def stage_lists(modules, runner_text):
     return found
 
 
+def quiet_git_maintenance():
+    """The fixtures commit thousands of times, and after a commit git may start its automatic maintenance as a
+    process of its own — costly where a process start is (Git Bash), and nothing a throwaway repository needs. Through
+    the environment, so every git the suite and the factory start reads it; the person's own settings stay."""
+    count = int(os.environ.get("GIT_CONFIG_COUNT", "0") or 0)
+    for key, value in (("maintenance.auto", "false"), ("gc.auto", "0")):
+        os.environ[f"GIT_CONFIG_KEY_{count}"], os.environ[f"GIT_CONFIG_VALUE_{count}"] = key, value
+        count += 1
+    os.environ["GIT_CONFIG_COUNT"] = str(count)
+
+
 def main(argv=None):
+    quiet_git_maintenance()
     parser = argparse.ArgumentParser(description="verify the factory")
     parser.add_argument("--gate", default=DEFAULT_GATE)
     parser.add_argument("--cli", default=DEFAULT_CLI, help="the CLI beside the gate (default: beside --gate)")
@@ -5140,7 +5159,8 @@ def main(argv=None):
     finally:
         if args.results:
             with open(args.results, "w", encoding="utf-8") as handle:
-                json.dump([(group, name, bool(ok), str(detail)) for group, name, ok, detail in RESULTS], handle)
+                json.dump({"rows": [(group, name, bool(ok), str(detail)) for group, name, ok, detail in RESULTS],
+                           "times": [[group, name, seconds] for (group, name), seconds in TIMES.items()]}, handle)
         if args.junit:
             write_junit(args.junit)
 
@@ -5168,9 +5188,9 @@ def run_shards(args):
             process = subprocess.Popen(common + ["--group", group, "--shard", f"{index}/{args.jobs}",
                                                  "--results", results.name],
                                        stdout=log, stderr=subprocess.STDOUT)
-            running.append((group, index, results.name, process, log))
+            running.append((group, index, results.name, process, log, time.monotonic()))
         for entry in list(running):
-            group, index, path, process, log = entry
+            group, index, path, process, log, began = entry
             if process.poll() is None:
                 continue
             running.remove(entry)
@@ -5183,8 +5203,11 @@ def run_shards(args):
                 pass
             try:
                 with open(path, encoding="utf-8") as handle:
-                    found = [tuple(row) for row in json.load(handle)]
-            except (OSError, ValueError):
+                    written = json.load(handle)
+                found = [tuple(row) for row in written["rows"]]
+                for group_, name_, seconds in written["times"]:
+                    TIMES.setdefault((group_, name_), seconds)
+            except (OSError, ValueError, KeyError, TypeError):
                 found = []
             finally:
                 try:
@@ -5195,7 +5218,7 @@ def run_shards(args):
             fresh = [row for row in found if (row[0], row[1]) not in known]
             RESULTS.extend(fresh)
             names = {n for _g, n, _ok, _d in fresh}
-            print(f"\n── {group} {index + 1}/{args.jobs}")
+            print(f"\n── {group} {index + 1}/{args.jobs} ({int(time.monotonic() - began)} s)")
             for line in output.splitlines():
                 if line.startswith("  ok    ") and line[8:] not in names:
                     continue                       # a case every shard runs, shown by the first
@@ -5237,7 +5260,8 @@ def write_junit(path):
         failed = sum(1 for _, ok, _ in cases if not ok)
         lines.append(f'  <testsuite name={quoteattr(group)} tests="{len(cases)}" failures="{failed}">')
         for name, ok, detail in cases:
-            lines.append(f'    <testcase classname={quoteattr(group)} name={quoteattr(name)}>')
+            seconds = TIMES.get((group, name), 0.0)
+            lines.append(f'    <testcase classname={quoteattr(group)} name={quoteattr(name)} time="{seconds:.3f}">')
             if not ok:
                 lines.append(f'      <failure message={quoteattr(str(detail)[:400])}/>')
             lines.append("    </testcase>")
