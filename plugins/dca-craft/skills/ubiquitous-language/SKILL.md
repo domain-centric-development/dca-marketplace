@@ -76,13 +76,27 @@ früheren Iterationen im Umlauf, sind aber abgelöst.
 ausliefern (`fulfill`)
 ```
 
-Required fields: `Definition`, `Type`; `Operations` as well for an `Aggregate Root`.
+Required fields: `Definition`, `Type`; `Operations` as well for every term of the domain that has operations a
+person of the domain names.
+
+### What a glossary covers
+
+A context's glossary describes its **domain** and its **application**:
+
+- **Domain:** the aggregates, entities and value objects that carry the domain's meaning — each with its
+  operations — and the events: the domain events, and the integration events other contexts read.
+- **Application:** the features and the use cases.
+
+`Operations` lists what a person of the domain names as something done with or asked of the term: the commands, and
+the queries too (*is it available*, *does it match*). Not entered: constructors and conversions (`of`, `fromHash`),
+getters, and objects that are only technical. The test for an operation and for a term is the same — would a person
+of the domain name it?
 
 A **feature** is a term as well — `**Type:** Feature`: a part of the context's behaviour its people name, which groups
 use cases and, in a project with a living spec, a folder of what holds (`<spec>/<context>/<feature>/scenarios.md`).
 The heading carries the term and, in parentheses, the name as a code package spells it — `### Produktdetails
 (productdetails)` —; the definition says what it groups, `Related terms` its use cases where the code mirrors them.
-Optional: `Identity`, `Synonyms (avoid)`, `Related terms`, `Operations` (other types), `Notes`.
+Optional: `Identity`, `Synonyms (avoid)`, `Related terms`, `Notes`.
 
 The heading carries the term as the people who own it say it, and — where the code's word differs —
 that word in parentheses: `### Titel (TaskTitle)`. Whoever looks a term up, a reader or a delivery
@@ -140,7 +154,7 @@ and whatever the code calls the operation, and the event is the term plus the pa
 (`OrderPlaced` for `place`).
 
 `Type` is one of: `Aggregate Root`, `Entity`, `Value Object`, `Domain Event`,
-`Integration Event`, `Domain Service`, `Specification`, `Concept` (anything else).
+`Integration Event`, `Domain Service`, `Specification`, `Feature`, `Use Case`, `Concept` (anything else).
 
 ## Operations
 
