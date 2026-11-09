@@ -81,6 +81,10 @@ class RunnerCases:
     def every_stage(self, run: Run) -> StageText:
         return ShowEveryStageUseCase().execute()
 
+    def cli_here(self, argv: typing.Sequence[str]) -> int:
+        from . import cli
+        return cli.main(list(argv))
+
     def gate_here(self, argv: typing.Sequence[str]) -> int:
         from ..delivery.adapter.outgoing.stack import commands
         from . import gate

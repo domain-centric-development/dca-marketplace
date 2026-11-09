@@ -35,6 +35,27 @@ def git_blob(cwd: str, spec: str) -> typing.Tuple[int, str]:
     return completed.returncode, (completed.stdout + completed.stderr).strip()
 
 
+def head_blobs(cwd: str, paths: typing.Sequence[str]) -> typing.Dict[str, str]:
+    """{path: blob} of those <paths> HEAD holds as files — paths from the checkout's top, as `HEAD:<path>` reads them —
+    asked of git once for all of them, not once per path."""
+    if not paths:
+        return {}
+    try:
+        completed = subprocess.run(["git", "ls-tree", "-z", "--full-tree", "HEAD", "--", *paths], cwd=cwd,
+                                   capture_output=True)
+    except OSError:
+        return {}
+    if completed.returncode != 0:
+        return {}
+    found: typing.Dict[str, str] = {}
+    for entry in completed.stdout.decode("utf-8", "replace").split("\0"):
+        head, _, path = entry.partition("\t")
+        fields = head.split()
+        if len(fields) == 3 and fields[1] == "blob":
+            found[path] = fields[2]
+    return found
+
+
 def git_identity(cwd: str) -> typing.List[str]:
     """`-c user.name=… -c user.email=…` where the repository names no committer — a factory commit must not
     fail on a machine that never committed."""

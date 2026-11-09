@@ -117,5 +117,36 @@ class AsItsProcessWouldEnd(unittest.TestCase):
         self.assertEqual(self.gate_here(fails, quiet=True), 1)
 
 
+class TheCliHere(unittest.TestCase):
+    """`Run.cli_answer`: the cli's command line in the runner's process, answered as its process would."""
+
+    def answer(self, cli, quiet=False, merge=False):
+        run = a_run(SCRIPTS, cases=types.SimpleNamespace(cli_here=cli))
+        run.cases = run._cases
+        return Run.cli_answer(run, ["--x"], quiet=quiet, merge=merge)
+
+    def test_what_it_prints_is_the_answer_its_folder_and_places_put_back(self):
+        here, before = os.getcwd(), dict(profiles.PLACES)
+
+        def wanders(argv):
+            os.chdir(tempfile.gettempdir())
+            profiles.PLACES["epics"] = "elsewhere"
+            print("next: STORY-1")
+            print("said aside", file=sys.stderr)
+            return 0
+        self.assertEqual(self.answer(wanders, merge=True), (0, "next: STORY-1\nsaid aside"))
+        self.assertEqual(self.answer(wanders, quiet=True), (0, "next: STORY-1"))
+        self.assertEqual((os.getcwd(), profiles.PLACES), (here, before))
+
+    def test_an_exit_is_its_code_and_a_failure_exit_1(self):
+        def refuses(argv):
+            raise SystemExit(2)
+
+        def breaks(argv):
+            raise KeyError("x")
+        self.assertEqual(self.answer(refuses, quiet=True)[0], 2)
+        self.assertEqual(self.answer(breaks, quiet=True)[0], 1)
+
+
 if __name__ == "__main__":
     unittest.main()

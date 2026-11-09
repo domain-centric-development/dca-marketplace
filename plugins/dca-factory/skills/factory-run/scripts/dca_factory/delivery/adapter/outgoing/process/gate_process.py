@@ -63,6 +63,7 @@ class GateProcess:
 
     def __init__(self, host: GateHost) -> None:
         self._host = host
+        self._prefixes: typing.Dict[str, str] = {}
 
     def installed(self) -> bool:
         return os.path.isfile(self._host.gate_path)
@@ -145,6 +146,17 @@ class GateProcess:
             else:
                 os.environ["FACTORY_SUITES_KEY"] = before
 
+    def _prefix(self) -> str:
+        """Where the working folder lies below its checkout's top, asked of git once per folder (a snapshot per stage
+        window would ask it again and again)."""
+        here = os.getcwd()
+        if here not in self._prefixes:
+            asked = subprocess.run(["git", "rev-parse", "--show-prefix"], capture_output=True, text=True)
+            if asked.returncode != 0:
+                return ""
+            self._prefixes[here] = asked.stdout.strip()
+        return self._prefixes[here]
+
     def snapshot(self, story: str, label: str) -> None:
         """What the working tree looks like right now, so a later stage's claim about what it changed can be
         checked rather than believed."""
@@ -156,7 +168,7 @@ class GateProcess:
             err("factory:   record file names without content, and factory-verify reports every check")
             err("factory:   that needs a digest as not observed. Install one of the three for full evidence.")
         lines = [NO_HASHES] if not hashed else []
-        prefix = subprocess.run(["git", "rev-parse", "--show-prefix"], capture_output=True, text=True).stdout.strip()
+        prefix = self._prefix()
         status = subprocess.run(["git", "-c", "core.fileMode=false", "status", "--porcelain", "-z", "-uall", "--", "."],
                                 capture_output=True).stdout.decode("utf-8", errors="replace")
 

@@ -44,7 +44,6 @@ from ..delivery.application.delivery.deliver_story import DeliverStoryUseCase
 from ..delivery.application.delivery.split_off_on_plan import SplitOffOnPlanUseCase
 from ..delivery.application.shared.stage_delivery import Landing
 from ..delivery.domain.model.moment import Moment
-from ..delivery.application.profile.check_profile import CheckProfileUseCase
 from ..discovery.api import check_report
 from ..sharedkernel.adapter.outgoing.markdown.front_matter import GateError, read_front_matter
 from .workflow import load_workflow
@@ -111,11 +110,6 @@ def wire_delivery(run: typing.Any) -> None:
     run.acceptances = AskAcceptanceUseCase(AcceptanceRecordFiles(run.cwd, run.args.epics, run.runs, run.profile),
                                            events, transactions)
     run.now = now
-
-
-def check_profile(profile: Profile) -> CheckProfileUseCase:
-    """The profile checked on its own: its contract and unknown keys, its model keys."""
-    return CheckProfileUseCase(StageEvidenceFiles(".", "", "", profile))
 
 
 def check_discovery(cwd: str, folder: str, topic: str) -> typing.Tuple[bool, str]:
