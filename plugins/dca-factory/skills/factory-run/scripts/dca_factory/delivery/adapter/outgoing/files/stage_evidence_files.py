@@ -34,6 +34,7 @@ from ....domain.model.stage_story import (
     ScenarioClauses, Selector, ContextMapFacts, HandOverName, HandOverSize, PlanLevels, DecisionsFacts, HandOverAsk, ContractNumber, EpicFacts, EpicField, EventName, GateRelease, InstructionFile,
     Metric, ModelKey, OwnedFacts, OwnedPart, Place, ProfileKey, ProfileText, RoundsRecord, RowId, RowState,
     ScenarioKey, StoryContent, TestSource, UnknownKey)
+from ....domain.gateway.stage_evidence import StageEvidence
 from ....domain.model.story import StoryId
 from ....domain.model.story_state import Detail, HandOverText, Rounds, StatusWord
 from ....domain.service.backlog_checks import EPIC_FIELDS, normal_name
@@ -214,7 +215,7 @@ def spec_front(story: Story) -> typing.Dict[str, typing.Any]:
             "kind": story.kind.value if story.kind in (StoryKind.JOURNEY, StoryKind.TASK) else ""}
 
 
-class StageEvidenceFiles:
+class StageEvidenceFiles(StageEvidence):
     """The evidence of the project <cwd> with its run folder <runs>, its epics under <epics> and its profile, read
     once."""
 

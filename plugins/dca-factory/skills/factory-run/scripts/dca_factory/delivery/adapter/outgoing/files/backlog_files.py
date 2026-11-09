@@ -18,6 +18,7 @@ from .....sharedkernel.adapter.outgoing.profile.profile_files import (
 from ....application.shared.backlog_facts import BacklogStory, OpenStage
 from ....application.status.texts import parse_time
 from ....domain.model.schedule import EpicGraph
+from ....domain.gateway.main_line import MainLine
 from ....domain.model.story import StoryId
 from ....domain.model.story_state import Detail, Standing, StateName
 from .story_files import story_of
@@ -94,7 +95,7 @@ class BacklogFiles(BacklogFacts):
         return stale_after()
 
 
-class MainLineGit:
+class MainLineGit(MainLine):
     """The main line as git has it, for the stories of the backlog."""
 
     def __init__(self, cwd: str, home: str, runs: str, stories: typing.Sequence[BacklogStory]) -> None:
