@@ -13,7 +13,8 @@ writes the description from those answers and never invents one. Take from it:
 - **the frontend approach** — server-rendered pages, a client application, or none;
 - **the surfaces** — web pages, an HTTP API, a command line, events; which of them has pages decides the
   browser runner (step 6);
-- **the persistence** — a data starter or package now, or in-memory until a later story.
+- **the persistence** — a data starter or package now, or in-memory until a later story; that story moves the
+  repository to a database and keeps the in-memory adapter as the unit tests' fake.
 
 **Every question in one pass, from the catalogue.** `reference/questions.md` lists every decision this mode
 needs — the description's open entries (`dca-describe`'s catalogue), this mode's own (base package, formatter
