@@ -5,7 +5,6 @@ import subprocess
 import unittest
 
 from support import evidence, gate_story, project, write
-from dca_factory.delivery.domain.model.story_words import Presence
 from dca_factory.delivery.domain.service.kept_checks import KeptChecks
 from dca_factory.sharedkernel.adapter.outgoing.profile import profile_files as profiles
 from dca_factory.delivery.application.delivery.pipeline_workflow import workflow
@@ -63,7 +62,7 @@ class Renamed(unittest.TestCase):
             kept = self.story(p, {"src/main/java/NewFailure.java": "class NewFailure {}\n",
                                   JAVA_TEST: "class OrderTest {\n  void t() {\n    assertThrows(NewFailure.class, x);\n  }\n}\n"},
                               removed=("src/main/java/OldFailure.java",))
-            self.assertIs(kept.renamed[0].renames[0].in_glossary, Presence.PRESENT)
+            self.assertIs(kept.renamed[0].renames[0].in_glossary, True)
 
     def test_a_rename_with_a_changed_literal_still_changes_the_test(self):
         with project() as p:

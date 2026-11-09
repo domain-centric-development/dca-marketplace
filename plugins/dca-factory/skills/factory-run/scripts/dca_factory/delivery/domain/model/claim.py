@@ -8,7 +8,6 @@ import typing
 
 from ....building_blocks import Value
 from .epic import EpicId
-from .story_words import Presence
 from .story import StoryId, StoryStatus
 
 
@@ -72,15 +71,25 @@ class ClaimTrace(Value):
     line has no such story), whether this factory published it, whether a local story branch carries it."""
 
     on_main: typing.Optional[StoryStatus]
-    published: Presence
-    branch: Presence
+    _published: bool
+    _has_branch: bool
+
+    @property
+    def published(self) -> bool:
+        """Whether this factory published the claim."""
+        return self._published
+
+    @property
+    def has_branch(self) -> bool:
+        """Whether a local story branch carries the story."""
+        return self._has_branch
 
     def fate(self) -> Fate:
         """A claim whose story is delivered on the remote main line goes; one whose story the main line does not
         have — and that no published mark or local story branch says is on its way — is an orphan."""
         if self.on_main is StoryStatus.DELIVERED:
             return Fate.RELEASED
-        if self.on_main is None and self.published is Presence.ABSENT and self.branch is Presence.ABSENT:
+        if self.on_main is None and not self.published and not self.has_branch:
             return Fate.ORPHAN
         return Fate.HOLDS
 
@@ -101,6 +110,6 @@ class Claim(Value):
             return Meeting.COLLISION
         return Meeting.OTHERS
 
-    def released_by(self, me: Worker, force: Presence) -> Presence:
-        """A factory releases its own claim; another's only with force."""
-        return Presence.PRESENT if self.holder == me or force is Presence.PRESENT else Presence.ABSENT
+    def released_by(self, me: Worker) -> bool:
+        """A factory releases its own claim; another's only by force, which takes any claim away."""
+        return self.holder == me

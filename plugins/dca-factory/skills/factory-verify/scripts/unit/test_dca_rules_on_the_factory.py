@@ -19,8 +19,6 @@ RULES_SOURCE = os.path.join(DCA_PYTHON, "dca-rules", "src")
 #: The ids the package does not hold yet (WP-188), with what stands behind them.
 NOT_YET_HELD = {
     # WP-193 (2026-11-09): the rules the factory's DDD review asked for, held to the package they came from.
-    "DCA-TAC-025": "five two-case enums that name one fact and its negation (Presence, Wait, TitleFound, "
-                   "CheckNaming, Reach) — WP-196",
     "DCA-USE-021": "RunBacklogUseCase keeps the skipped stories in self between calls",
     "DCA-USE-022": "19 use cases answer with an exit code or a bare string — the outcomes of WP-192 step 9a for "
                    "the rest",

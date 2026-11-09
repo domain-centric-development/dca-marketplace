@@ -11,7 +11,7 @@ from ..gateway.stage_evidence import StageEvidence
 from ..model.stage import StoryKind
 from ..model.story import Story
 from ..model.plan_facts import PlanAdoption
-from ..model.story_words import Presence, ScenarioKey
+from ..model.story_words import ScenarioKey
 from ..model.verdict import CheckName, Findings, Said
 
 PLAN_ADOPTS = CheckName("plan-adopts")
@@ -47,7 +47,7 @@ class AdoptChecks(DomainService):
         unknown = [row.key.value for row in adoption.rows if row.key.value not in criteria]
         if unknown:
             return (PLAN_ADOPTS.fail(Said(f"`## Adopt` names what is no criterion of the story: {', '.join(unknown)}")),)
-        absent = [f"{row.key.value} → {row.test.value}" for row in adoption.rows if row.present is Presence.ABSENT]
+        absent = [f"{row.key.value} → {row.test.value}" for row in adoption.rows if not row.present]
         if absent:
             return (PLAN_ADOPTS.fail(Said(f"`## Adopt` names a test that is not there: {'; '.join(absent)} — a row names "
                                           f"the test that shows the scenario holds today")),)

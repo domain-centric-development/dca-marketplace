@@ -3,7 +3,6 @@ evidence and the schedule share — a leaf the other modules of the model import
 
 from __future__ import annotations
 
-import enum
 import re
 import typing
 
@@ -90,8 +89,3 @@ class Selector(Value):
     """A test as the tests table names it: `<Class>#<method>`."""
 
     value: str
-
-
-class Presence(enum.Enum):
-    PRESENT = "present"
-    ABSENT = "absent"

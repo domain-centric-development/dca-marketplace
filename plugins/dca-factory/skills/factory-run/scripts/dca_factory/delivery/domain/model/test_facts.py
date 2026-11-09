@@ -7,23 +7,21 @@ import typing
 
 from ....building_blocks import Value
 from .story_state import Detail
-from .story_words import Count, Place, Presence, ScenarioKey, Selector
+from .story_words import Count, Place, ScenarioKey, Selector
 from .suite_run import CommandKey
 from .verdict import CheckName, Finding, Said
-
-
-class TitleFound(enum.Enum):
-    """Whether an end-user test is reported under its scenario's title."""
-
-    TITLED = "titled"
-    UNTITLED = "untitled"
 
 
 class TitleCheck(Value):
     """An end-user test's scenario title, and whether the test is reported under it."""
 
     title: Detail
-    found: TitleFound
+    _reported: bool
+
+    @property
+    def reported(self) -> bool:
+        """Whether the test is reported under its scenario's title."""
+        return self._reported
 
 
 class MappedTest(Value):
@@ -117,7 +115,12 @@ class AssertionFact(Value):
     """A test file's line as an assertion: what the line does, and whether the file is one of the given tests."""
 
     state: AssertionAt
-    among: Presence
+    _among: bool
+
+    @property
+    def among(self) -> bool:
+        """Whether the file is one of the given tests."""
+        return self._among
 
 
 class TestChange(enum.Enum):
@@ -141,18 +144,33 @@ class TestEdit(enum.Enum):
 class TestDiff(Value):
     """What a test's diff against the version before the story showed."""
 
-    switched_off: Presence
-    lines_kept: Presence
-    assertions_kept: Presence
+    _switched_off: bool
+    _lines_kept: bool
+    _assertions_kept: bool
+
+    @property
+    def switched_off(self) -> bool:
+        """Whether an added line switches the test off."""
+        return self._switched_off
+
+    @property
+    def lines_kept(self) -> bool:
+        """Whether every line is still there, in its order."""
+        return self._lines_kept
+
+    @property
+    def assertions_kept(self) -> bool:
+        """Whether every assertion is still there."""
+        return self._assertions_kept
 
     def edit(self) -> TestEdit:
         """An added line that switches the test off outweighs all; every line still there in its order is kept;
         every assertion still there is an arrangement; anything else changes what the test expects."""
-        if self.switched_off is Presence.PRESENT:
+        if self.switched_off:
             return TestEdit.SWITCHED_OFF
-        if self.lines_kept is Presence.PRESENT:
+        if self.lines_kept:
             return TestEdit.KEPT
-        return TestEdit.ARRANGED if self.assertions_kept is Presence.PRESENT else TestEdit.CHANGED
+        return TestEdit.ARRANGED if self.assertions_kept else TestEdit.CHANGED
 
 
 class ChangedTest(Value):
@@ -172,7 +190,12 @@ class Rename(Value):
     was: SymbolName
     now: SymbolName
     #: whether a context's glossary names the new name — the ubiquitous language's, or only the code's
-    in_glossary: Presence
+    _in_glossary: bool
+
+    @property
+    def in_glossary(self) -> bool:
+        """Whether a context's glossary names the new name."""
+        return self._in_glossary
 
 
 class RenamedTest(Value):
@@ -207,7 +230,12 @@ class RedProof(Value):
     entries: Count
     unbound: Count
     moved: typing.Tuple[Detail, ...]
-    reproof: Presence
+    _reproof: bool
+
+    @property
+    def reproof(self) -> bool:
+        """Whether tidy reworked a test the red tree can prove again."""
+        return self._reproof
 
 
 class SpecDelta(Value):

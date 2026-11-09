@@ -9,7 +9,7 @@ from ....building_blocks import DomainException
 from ...domain.model.stage import Role, Stage, StageName, StoryKind, TESTED_KINDS, Trait
 from ...domain.model.plan_facts import HandOverName
 from ...domain.model.profile_facts import ContractNumber
-from ...domain.model.story_words import Count, Place, Presence, ScenarioKey, Selector
+from ...domain.model.story_words import Count, Place, ScenarioKey, Selector
 from ...domain.model.test_facts import MappedTest, TestTable
 from ...domain.model.story import StoryId
 from ...domain.model.verdict import CheckName, Said
@@ -280,7 +280,7 @@ def _plan(run: Run) -> None:
 def _document(run: Run) -> None:
     passed = DeliveryChecks.story_pass(run.story, run.evidence, workflow().hand_over(workflow().role(Role.JUDGES)))
     run.result.take(passed.findings)
-    if passed.judge_passed is Presence.PRESENT:
+    if passed.judge_passed:
         run.marks.judge_passed(run.story_id)
     run.result.take(DeliveryChecks.outcome_raised(run.story, run.contract, run.evidence))
     run.result.take(DeliveryChecks.documented(run.story, run.evidence))

@@ -88,13 +88,6 @@ class Slots(Value):
     value: int
 
 
-class Wait(enum.Enum):
-    """Whether something waits that a later look may change: a person's answer, a running stage."""
-
-    YES = "yes"
-    NO = "no"
-
-
 class Schedule(Value):
     """Every story's standing in the order, the stories that start now, and why none does where none does."""
 
@@ -102,6 +95,11 @@ class Schedule(Value):
     standings: typing.Mapping[StoryId, Standing]
     starts: typing.Tuple[StoryId, ...]
     reason: Detail
-    wait: Wait
+    _waits: bool
+
+    @property
+    def waits(self) -> bool:
+        """Whether something waits that a later look may change."""
+        return self._waits
 
 

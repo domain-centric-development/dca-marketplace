@@ -6,7 +6,7 @@ from __future__ import annotations
 import typing
 
 from ....building_blocks import Value
-from .story_words import Count, Place, Presence
+from .story_words import Count, Place
 from .suite_run import CommandKey, Requirement
 from .story_state import Detail
 from .verdict import CheckName, Finding, Findings, Said
@@ -60,7 +60,12 @@ class ParityScenario(Value):
 
     id: Detail
     title: Detail
-    always: Presence
+    _always: bool
+
+    @property
+    def always(self) -> bool:
+        """Whether every configuration has to prove the scenario."""
+        return self._always
 
 
 class ImplementationReports(Value):
@@ -114,7 +119,7 @@ class ParityFacts(Value):
                 outcome = names.get(scenario.title.value)
                 if outcome == "passed":
                     continue
-                if scenario.always is Presence.ABSENT and outcome in (None, "skipped"):
+                if not scenario.always and outcome in (None, "skipped"):
                     unproven.append(scenario.id.value)
                     continue
                 problems.append(f"{scenario.id.value} {outcome or 'missing'} — {scenario.title.value!r}")

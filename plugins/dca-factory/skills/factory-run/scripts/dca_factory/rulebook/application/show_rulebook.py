@@ -9,7 +9,7 @@ import typing
 from ...building_blocks import UseCase
 from ..domain.model.rule import KindName, Rule, StageName, Words
 from ..domain.model.rulebook import FlowEdge, FlowGraph, FlowStep, Rulebook
-from ..domain.model.runs import Journals, ProjectRefusals, Reach, StoryRun, story_run
+from ..domain.model.runs import Journals, ProjectRefusals, StoryRun, story_run
 from ..domain.model.track import TileTurn, Track
 from .shared.decided_rules import DecidedRules
 from .shared.gate_findings import GateFindings
@@ -93,7 +93,7 @@ def run_model(run: StoryRun, book: Rulebook) -> Model:
                 if check.check in rule.reports and (not rule.stages or rule.holds_at(stage.stage)):
                     refused[rule.id.value] = refused.get(rule.id.value, 0) + check.times.value
     return dict(kind=run.kind.value, last=run.last.value, reading=run.reading.value,
-                stages={s.stage.value: dict(reached=s.reach is Reach.REACHED, ended=s.ended.value if s.ended else None,
+                stages={s.stage.value: dict(reached=s.reached, ended=s.ended.value if s.ended else None,
                                             refused=s.refused.value, unnamed=s.unnamed.value, tries=s.tries.value,
                                             checks={c.check.value: c.times.value for c in s.checks})
                         for s in run.stages},

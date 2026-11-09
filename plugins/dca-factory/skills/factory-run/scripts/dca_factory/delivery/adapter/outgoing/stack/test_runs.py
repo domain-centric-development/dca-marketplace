@@ -14,7 +14,7 @@ from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from ..files.hand_over_patterns import SELECTOR
 from ..pipeline.stage_rows import stage_files
 from ....domain.model.decision_record import RecordId
-from ....domain.model.story_words import Count, Place, Presence, ScenarioKey, Selector
+from ....domain.model.story_words import Count, Place, ScenarioKey, Selector
 from ....domain.model.suite_run import CommandKey, Evidence, RedLedger, RunEnd, RunState, TestOutcome, TestRun
 from ....domain.model.story_state import Detail
 from ..files.decision_record_files import acceptance_records, answered_decisions, record_of
@@ -43,7 +43,7 @@ def run_tests(profile: typing.Mapping[str, typing.Any], cwd: str, mapping: typin
     whole = set(whole_for or ())
     whole_runs: WholeRuns = {}
     if not fallback:
-        return TestRun(Presence.ABSENT, ()), whole_runs
+        return TestRun(False, ()), whole_runs
     by_report = profile.get("testEvidence", "").strip() != "exit-code"
     items: typing.List[typing.Union[TestOutcome, RunEnd]] = []
 
@@ -54,7 +54,7 @@ def run_tests(profile: typing.Mapping[str, typing.Any], cwd: str, mapping: typin
         return TestOutcome(ScenarioKey(key), Selector(selector), Place(test_path) if test_path else None,
                            CommandKey(command_key) if command_key else None, state, evidence, Detail(how),
                            Detail(invocation), Detail(alone) if alone else None, Count(code), Detail(tail(output)),
-                           Count(cases), Presence.PRESENT if timeout else Presence.ABSENT)
+                           Count(cases), timeout)
 
     # 1. Every selector resolves to the command that covers it — or to a configuration fail — before anything runs.
     #    Grouped by command, one process then carries every selector it covers.
@@ -135,8 +135,8 @@ def run_tests(profile: typing.Mapping[str, typing.Any], cwd: str, mapping: typin
                                  RunState.PASSED if passed else RunState.FAILED, how=f"report {how}{reused}",
                                  invocation=invocation, alone=alone, output=item_output,
                                  timeout=not passed and red_on_timeout(item_output)))
-        items.append(RunEnd(Detail(invocation), Presence.PRESENT if shared else Presence.ABSENT))
-    return TestRun(Presence.PRESENT, tuple(items)), whole_runs
+        items.append(RunEnd(Detail(invocation), shared))
+    return TestRun(True, tuple(items)), whole_runs
 
 
 def red_ledger(cwd: str, runs: typing.Optional[str], story: typing.Optional[str], red: bool,
@@ -160,7 +160,7 @@ def red_ledger(cwd: str, runs: typing.Optional[str], story: typing.Optional[str]
     moved = frozenset(Selector(selector) for selector, recorded in digests.items()
                       if recorded and located.get(selector) and os.path.isfile(os.path.join(cwd, located[selector]))
                       and file_digest(os.path.join(cwd, located[selector])) != recorded)
-    return RedLedger(Presence.PRESENT if ledger and os.path.isfile(ledger) else Presence.ABSENT,
+    return RedLedger(bool(ledger and os.path.isfile(ledger)),
                      Detail(os.path.basename(ledger) if ledger else ".tests-red"),
                      frozenset(Selector(s) for s in digests), tuple(RecordId(r) for r in changed_on),
-                     Presence.PRESENT if built else Presence.ABSENT, moved)
+                     built, moved)

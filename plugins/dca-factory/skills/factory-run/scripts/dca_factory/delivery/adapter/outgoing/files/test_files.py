@@ -12,7 +12,7 @@ from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_text
 from ....domain.model.story_words import Place, ScenarioKey, Selector
 from ....domain.model.suite_run import CommandKey
-from ....domain.model.test_facts import MappedTest, TestLocation, TitleCheck, TitleFound
+from ....domain.model.test_facts import MappedTest, TestLocation, TitleCheck
 from ....domain.model.story_state import Detail
 from ..stack.commands import command_for
 from ..stack.test_reports import display_name_of, unescape_literal
@@ -232,7 +232,7 @@ def mapped_tests(cwd: str, profile: typing.Mapping[str, typing.Any], body: str,
             title = None
             if path and command in ("e2eTest", "test.journey") and key in titles:
                 carries = carries_title(os.path.join(cwd, path), selector.split("#", 1)[-1], titles[key])
-                title = TitleCheck(Detail(titles[key]), TitleFound.TITLED if carries else TitleFound.UNTITLED)
+                title = TitleCheck(Detail(titles[key]), carries)
             rows.append(MappedTest(ScenarioKey(key), Selector(selector), Place(path) if path else None,
                                    CommandKey(command) if command else None, title))
     return tuple(rows)

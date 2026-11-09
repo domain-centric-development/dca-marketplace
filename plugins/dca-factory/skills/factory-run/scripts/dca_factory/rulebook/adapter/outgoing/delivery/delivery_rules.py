@@ -11,7 +11,7 @@ from ....domain.model.rule import (
     Words)
 from ....domain.model.rule import Moment
 from ....domain.model.rulebook import GateTime, KindOrder, OrderPlace, StageRow
-from ....domain.model.runs import CheckNaming, GateHand, JournalLine, JournalLineKind, StoryJournal
+from ....domain.model.runs import GateHand, JournalLine, JournalLineKind, StoryJournal
 from ..skills.skill_files import plain
 from ....application.shared.decided_rules import DecidedRules
 from ....application.shared.gate_findings import GateFindings
@@ -110,7 +110,7 @@ def run_event(line: typing.Mapping[str, typing.Any]) -> typing.Optional[JournalL
         return JournalLine(JournalLineKind.GATE, at, StageName(line["name"]),
                         state=OutcomeState.FAIL if refused else OutcomeState.PASS,
                         hand=GateHand.RUNNER if fields.get("by", "runner") == "runner" else GateHand.STAGE,
-                        checks=checks, naming=CheckNaming.NAMED if not refused or checks else CheckNaming.UNNAMED)
+                        checks=checks)
     if kind == "jump":
         return JournalLine(JournalLineKind.JUMP, at, StageName(line["name"]), source=StageName(fields.get("from", "")),
                         rule=Words(fields.get("rule", "")))

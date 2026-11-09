@@ -14,7 +14,6 @@ from ..model.stage import HandOver, StageName, StoryKind
 from ..model.story import Story
 from ..model.plan_facts import PlannedDigest
 from ..model.profile_facts import ContractNumber
-from ..model.story_words import Presence
 from ..model.verdict import CheckName, Findings, Said
 
 STORY_PASS = CheckName("story-pass")
@@ -33,7 +32,12 @@ class StoryPassChecked(Value):
     """The findings, and whether the judge passed the story — a signal the gate's run records."""
 
     findings: Findings
-    judge_passed: Presence
+    _judge_passed: bool
+
+    @property
+    def judge_passed(self) -> bool:
+        """Whether the judge passed the story."""
+        return self._judge_passed
 
 
 class DeliveryChecks(DomainService):
@@ -47,16 +51,16 @@ class DeliveryChecks(DomainService):
         facts = evidence.story_pass(story)
         if facts.gaps:
             gaps = ", ".join(f"{g.hand_over.value} ("
-                             f"{'written for an earlier pass' if g.earlier is Presence.PRESENT else 'missing'})"
+                             f"{'written for an earlier pass' if g.earlier else 'missing'})"
                              for g in facts.gaps)
             return StoryPassChecked((STORY_PASS.fail(Said(
                 f"{gaps} — the document gate delivers a story whose stages all ran, in order, in this pass; the story "
-                f"runs on from the first of them")),), Presence.ABSENT)
+                f"runs on from the first of them")),), False)
         if facts.verdict is not Judged.PASS:
             said = "none" if facts.verdict is Judged.MISSING else facts.verdict.value
             return StoryPassChecked((STORY_PASS.fail(Said(
                 f"{judge.value if judge else 'judge.md'} says `verdict: {said}` — only a judge's `pass` "
-                f"lets a story be delivered")),), Presence.ABSENT)
+                f"lets a story be delivered")),), False)
         if facts.planned is PlannedDigest.MISSING:
             found = STORY_PASS.skip(Said("no .story-digest from the plan gate — whether the story changed since it "
                                          "was planned is not checked"))
@@ -67,7 +71,7 @@ class DeliveryChecks(DomainService):
         else:
             found = STORY_PASS.ok(Said("every stage of this pass ran in order, the judge passed it, and the story is "
                                        "the one that was planned"))
-        return StoryPassChecked((found,), Presence.PRESENT)
+        return StoryPassChecked((found,), True)
 
     @staticmethod
     def outcome_raised(story: Story, contract: ContractNumber, evidence: StageEvidence) -> Findings:
@@ -109,7 +113,7 @@ class DeliveryChecks(DomainService):
         where = facts.place.value
         if facts.unreadable is not None:
             return (DOCUMENTED.fail(Said(facts.unreadable.value)),)
-        if facts.asks is Presence.PRESENT:
+        if facts.asks:
             return (DOCUMENTED.fail(Said(f"{where}: the stage stopped with a needs-human section — read it and "
                                          f"decide")),)
         found = []
@@ -133,7 +137,7 @@ class DeliveryChecks(DomainService):
         facts = evidence.proposals(story.id)
         if facts is None:
             return ()
-        if facts.glossary is Presence.ABSENT:
+        if not facts.has_glossary:
             return (GLOSSARY.skip(Said(f"{facts.proposed.value} term(s) proposed in the plan, but the project keeps "
                                        f"no glossary")),)
         if facts.missing:

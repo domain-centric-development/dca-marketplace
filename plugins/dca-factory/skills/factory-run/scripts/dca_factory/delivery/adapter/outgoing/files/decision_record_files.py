@@ -20,10 +20,10 @@ from ....domain.model.decision_record import (
     ANSWER_FIELDS as DOMAIN_ANSWER_FIELDS, AnswerField, Asker, DecisionRecord, DecisionState, OptionKey,
     Given, OptionLine, RecordContent, RecordId, RecordKind, Section)
 from ....domain.model.stage import StageName
-from ....domain.model.story_words import Detail, Presence
+from ....domain.model.story_words import Detail
 from ....domain.model.story_state import AcceptanceVerdict
 from ....domain.model.story import StoryId
-from ....domain.model.acceptance import AcceptanceMode, acceptance_verdict
+from ....domain.model.acceptance import AcceptanceMode, acceptance_verdict, changed_story_verdict
 from ....application.delivery.pipeline_workflow import workflow
 from ....application.shared.decision_inbox import DecisionInbox
 from ....application.shared.decision_record_repository import DecisionRecordRepository
@@ -404,16 +404,17 @@ def acceptance_state(cwd: str, story_id: str,
     story changed since — a correction written in — is asked again once it has run."""
     records = acceptance_records(cwd, story_id, story_path)
     if not records:
-        return acceptance_verdict(None, Presence.ABSENT).value, None
+        return acceptance_verdict(None).value, None
     rid, front, state, answer, body = records[-1]
-    same = Presence.PRESENT if str(front.get("digest", "")).strip() == story_digest(story_path or "") else Presence.ABSENT
-    return acceptance_verdict(record_of(rid, front, body, state, answer), same).value, rid
+    record = record_of(rid, front, body, state, answer)
+    same = str(front.get("digest", "")).strip() == story_digest(story_path or "")
+    return (acceptance_verdict(record) if same else changed_story_verdict(record)).value, rid
 
 
 def latest_verdict(records: Records) -> AcceptanceVerdict:
     """What the latest of a story's acceptance records says, the story's digest left aside."""
     rid, front, state, answer, body = records[-1]
-    return acceptance_verdict(record_of(rid, front, body, state, answer), Presence.PRESENT)
+    return acceptance_verdict(record_of(rid, front, body, state, answer))
 
 
 def record_sections(body: str) -> typing.List[typing.Dict[str, str]]:

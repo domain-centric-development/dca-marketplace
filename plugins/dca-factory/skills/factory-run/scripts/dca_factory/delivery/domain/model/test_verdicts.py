@@ -3,10 +3,11 @@ was seen red, ran by name, and is the version that was."""
 
 from __future__ import annotations
 
+import enum
 import typing
 
 from ....building_blocks import Value
-from .story_words import Presence, ScenarioKey, Selector
+from .story_words import ScenarioKey, Selector
 from .suite_run import Evidence, Expectation, RedLedger, RunEnd, RunState, TestOutcome, TestRun
 from .verdict import CheckName, Finding, GREEN_NOW, RED_CHECK, Said
 
@@ -19,6 +20,14 @@ class BreakProof(Value):
     selector: Selector
 
 
+class GreenProof(enum.Enum):
+    """What lets a green test count: the red ledger — it was seen red before —, or the guard it is — a journey over
+    delivered stories, whose steps exist before it is written."""
+
+    LEDGER = "ledger"
+    GUARD = "guard"
+
+
 class TestsJudged(Value):
     """The findings and break proofs in order, and the tests that count as red now — the red ledger's next entries."""
 
@@ -26,12 +35,21 @@ class TestsJudged(Value):
     now_red: typing.FrozenSet[Selector]
 
     @classmethod
-    def of(cls, expected: Expectation, guard: Presence, run: TestRun, ledger: RedLedger) -> TestsJudged:
-        """What a run proves. Expected red: every mapped test fails. Green: all pass. A guard — a journey over
-        delivered stories — is green without ever having been red: its steps exist before it is written."""
+    def of(cls, expected: Expectation, run: TestRun, ledger: RedLedger) -> TestsJudged:
+        """What a run proves. Expected red: every mapped test fails. Green: all pass."""
+        return cls._judged(expected, GreenProof.LEDGER, run, ledger)
+
+    @classmethod
+    def guarding(cls, run: TestRun, ledger: RedLedger) -> TestsJudged:
+        """What a run of a guard proves — a journey over delivered stories: all pass, green without ever having been
+        red, since its steps exist before it is written."""
+        return cls._judged(Expectation.GREEN, GreenProof.GUARD, run, ledger)
+
+    @classmethod
+    def _judged(cls, expected: Expectation, proof: GreenProof, run: TestRun, ledger: RedLedger) -> TestsJudged:
         name = CheckName(f"tests-{expected.value}")
         red = expected is Expectation.RED
-        if run.command is Presence.ABSENT:
+        if not run.has_command:
             return cls((name.skip(Said("no `e2eTest:` or `test:` command in the stack profile")),),
                                frozenset())
         items: typing.List[typing.Union[Finding, BreakProof]] = []
@@ -39,7 +57,7 @@ class TestsJudged(Value):
         timed_out: typing.List[Selector] = []
         for item in run.items:
             if isinstance(item, RunEnd):
-                if timed_out and item.shared is Presence.PRESENT:
+                if timed_out and item.shared:
                     # One output for the run: which of its red tests hit the timeout is not readable from it.
                     items.append(name.note(Said(
                         f"`{item.invocation.value}`: red on a timeout, not on an assertion, somewhere among "
@@ -98,8 +116,8 @@ class TestsJudged(Value):
                     f"what ran. A runner that exits like a failing test without running one is indistinguishable "
                     f"here.")))
             passed = test.state is RunState.PASSED
-            items += cls._verdict(expected, guard, test, ledger, now_red)
-            if red and not passed and test.timeout is Presence.PRESENT:
+            items += cls._verdict(expected, proof, test, ledger, now_red)
+            if red and not passed and test.timed_out:
                 if test.evidence is Evidence.EXIT_CODE:
                     items.append(name.note(timeout_said(test.selector)))
                 else:
@@ -107,7 +125,7 @@ class TestsJudged(Value):
         return cls(tuple(items), frozenset(now_red))
 
     @staticmethod
-    def _verdict(expected: Expectation, guard: Presence, test: TestOutcome, ledger: RedLedger,
+    def _verdict(expected: Expectation, proof: GreenProof, test: TestOutcome, ledger: RedLedger,
                  now_red: typing.Set[Selector]) -> typing.List[typing.Union[Finding, BreakProof]]:
         """The test's verdict against what the ledger and the stage expect — unchanged by how it ran."""
         changed_on = ", ".join(r.value for r in ledger.changed_on)
@@ -116,9 +134,9 @@ class TestsJudged(Value):
         passed = test.state is RunState.PASSED
         if not passed:
             now_red.add(test.selector)
-        if expected is Expectation.GREEN and passed and guard is Presence.PRESENT:
+        if expected is Expectation.GREEN and passed and proof is GreenProof.GUARD:
             return [green.ok(Said(f"{selector} passes — a journey guards what is delivered ({key})"))]
-        if expected is Expectation.GREEN and passed and ledger.present is Presence.ABSENT:
+        if expected is Expectation.GREEN and passed and not ledger.present:
             # No test stage ran in this checkout — the run artefacts may simply not be committed. Say that the
             # evidence is missing instead of inventing either verdict.
             return [green.skip(Said(f"{selector} is green, but no `{ledger.name.value}` from a test stage is present "
@@ -135,7 +153,7 @@ class TestsJudged(Value):
             return [red.ok(Said(f"{selector} {GREEN_NOW} and was recorded red before; its expectation changed on "
                                 f"decision {changed_on} ({key})"))]
         if expected is Expectation.RED and passed and test.selector in ledger.was_red \
-                and ledger.built_before is Presence.PRESENT:
+                and ledger.built_before:
             if test.selector in ledger.moved:
                 # Changed after its build met it — the judge sent it back as asserting too little. It is green and
                 # can never be seen red again: one change to the code that turns it red shows that the new assertion

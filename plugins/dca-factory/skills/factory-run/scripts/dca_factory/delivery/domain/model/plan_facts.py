@@ -8,7 +8,7 @@ import typing
 from ....building_blocks import Value
 from .profile_facts import ByteSize
 from .story_state import Detail
-from .story_words import Place, Presence, ScenarioKey, Selector
+from .story_words import Place, ScenarioKey, Selector
 
 
 class PlanLevels(Value):
@@ -43,7 +43,12 @@ class PlannedFile(Value):
 
     place: Place
     change: FileChange
-    presence: Presence
+    _exists: bool
+
+    @property
+    def exists(self) -> bool:
+        """Whether the file is there after the build."""
+        return self._exists
 
 
 class AdoptRow(Value):
@@ -51,7 +56,12 @@ class AdoptRow(Value):
 
     key: ScenarioKey
     test: Selector
-    present: Presence
+    _present: bool
+
+    @property
+    def present(self) -> bool:
+        """Whether the test is there."""
+        return self._present
 
 
 class PlanAdoption(Value):

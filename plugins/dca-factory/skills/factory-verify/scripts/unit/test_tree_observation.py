@@ -9,7 +9,7 @@ import unittest
 from support import write
 from dca_factory.sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir
 from dca_factory.delivery.adapter.outgoing.files import snapshots
-from dca_factory.delivery.domain.model.tree_observation import Hashing, Tracking
+from dca_factory.delivery.domain.model.tree_observation import Hashing
 
 STORY = "S-1"
 
@@ -56,9 +56,9 @@ class TreeObservationTest(unittest.TestCase):
         read = snapshots.read_observation(path)
         self.assertEqual(read, taken)
         self.assertEqual(taken.head.value, git(self.root, "rev-parse", "HEAD"))
-        self.assertEqual({f.place.value: f.tracking for f in taken.files},
-                         {"src/A.txt": Tracking.TRACKED, "src/B.txt": Tracking.TRACKED,
-                          "src/new dir/C D.txt": Tracking.UNTRACKED})
+        self.assertEqual({f.place.value: f.tracked for f in taken.files},
+                         {"src/A.txt": True, "src/B.txt": True,
+                          "src/new dir/C D.txt": False})
         self.assertEqual(snapshots.load_snapshot(path)["src/B.txt"], "deleted")
         # the tree is the one a commit of everything now would hold
         git(self.root, "add", "-A")

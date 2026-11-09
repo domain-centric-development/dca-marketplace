@@ -70,7 +70,7 @@ def schedule_backlog(backlog: BacklogFacts, now: datetime.datetime, slots: typin
         counts[shown["state"]] = counts.get(shown["state"], 0) + 1
     starts = [s.value for s in schedule.starts]
     data = dict(stories=stories, order=[s.value for s in schedule.order], next=starts[0] if starts else None,
-                reason=schedule.reason.value, wait=schedule.wait.value == "yes", counts=counts, hint=hint)
+                reason=schedule.reason.value, wait=schedule.waits, counts=counts, hint=hint)
     if slots:
         data["also"] = starts[1:]
     return data

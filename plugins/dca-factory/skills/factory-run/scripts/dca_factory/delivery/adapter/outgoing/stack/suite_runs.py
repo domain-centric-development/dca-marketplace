@@ -14,7 +14,7 @@ from ....domain.model.shot import Instant, RunOrigin, taken_since
 from ..files.hand_over_patterns import SELECTOR
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_text
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir, runs_top
-from ....domain.model.story_words import Count, Presence
+from ....domain.model.story_words import Count
 from ....domain.model.suite_run import CommandKey, CommandRun, Retried, SuiteCommands, SuiteRun
 from ....domain.model.suite import FLAKY_LIMIT, SuiteJudged
 from ....domain.model.story_state import Detail
@@ -123,8 +123,9 @@ def retry_outside(cwd: str, profile: Profile, command: str, code: int, ran: Ran,
         return code, ran, [], []
     own_files = story_test_files(cwd, owner) if len(failed) <= FLAKY_LIMIT.value else None
     # A story whose own tests cannot be told apart counts every red test as its own.
-    own = own_files is None or any(story_owns(cwd, owner, own_files, cls, method) for cls, method in failed)
-    if SuiteJudged.retries(Count(len(failed)), Presence.PRESENT if own else Presence.ABSENT) is Presence.ABSENT:
+    own = len(failed) if own_files is None else \
+        sum(1 for cls, method in failed if story_owns(cwd, owner, own_files, cls, method))
+    if not SuiteJudged.retries(Count(len(failed)), Count(own)):
         return code, ran, [], []
     flaky: typing.List[typing.Tuple[str, str, str]] = []
     still: typing.List[typing.Tuple[str, str, str]] = []
@@ -161,7 +162,7 @@ def suite_run(cwd: str, profile: Profile, key: str, command: str, owner: typing.
     return SuiteRun(Detail(key), CommandRun(Detail(command), Count(code), Detail(tail(output)), Detail(reused)),
                     Count(sum(1 for outcome in ran.values() if outcome != "skipped")),
                     Count(sum(1 for outcome in ran.values() if outcome == "failed")), tuple(flaky), tuple(still),
-                    Presence.PRESENT if profile.get("testEvidence") == "exit-code" else Presence.ABSENT)
+                    profile.get("testEvidence") == "exit-code")
 
 
 def command_run(cwd: str, command: str) -> CommandRun:

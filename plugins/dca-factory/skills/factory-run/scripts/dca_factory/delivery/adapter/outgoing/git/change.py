@@ -13,7 +13,7 @@ from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from .....sharedkernel.adapter.outgoing.profile.profile_files import (
     DEFAULTS, evidence_rel, findings_rel, PLACES_REL, read_profile)
 from ....domain.model.change import ImplementationReports, ParityFacts, ParityScenario, Snapshot
-from ....domain.model.story_words import Count, Place, Presence
+from ....domain.model.story_words import Count, Place
 from ....domain.model.story_state import Detail
 from ..stack.commands import tail, TOOL_FOLDERS
 from ..stack.test_reports import read_scenarios, reported_names
@@ -134,7 +134,7 @@ def parity_facts(config_path: str) -> ParityFacts:
     with open(contract, "rb") as handle:
         digest = hashlib.sha256(handle.read()).hexdigest()[:12]
     scenarios = tuple(ParityScenario(Detail(s["id"]), Detail(s["title"]),
-                                     Presence.PRESENT if s["runs"].strip().lower() == "always" else Presence.ABSENT)
+                                     s["runs"].strip().lower() == "always")
                       for s in read_scenarios(contract))
     implementations = []
     for key in sorted(k for k in config if k.startswith("implementation.")):

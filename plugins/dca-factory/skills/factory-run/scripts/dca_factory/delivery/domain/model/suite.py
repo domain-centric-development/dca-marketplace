@@ -6,7 +6,7 @@ from __future__ import annotations
 import typing
 
 from ....building_blocks import Value
-from .story_words import Count, Presence
+from .story_words import Count
 from .suite_run import Requirement, SUITE, SuiteRun
 from .story_state import Detail
 from .verdict import CheckName, Finding, Findings, Said  # noqa: F401
@@ -44,7 +44,7 @@ class SuiteJudged(Value):
         elif executed:
             found.append(TEST.ok(Said(f"`{run.command.value}` ({key}) ran {executed} case(s), none "
                                       f"failed{run.reused.value}")))
-        elif suite.exit_code_only is Presence.PRESENT:
+        elif suite.exit_code_only:
             found.append(TEST.skip(Said(f"`{run.command.value}` ({key}) exited 0 and writes no report "
                                         f"(`testEvidence: exit-code`) — nothing shows a test ran")))
         else:
@@ -55,12 +55,11 @@ class SuiteJudged(Value):
         return cls(tuple(found), tuple(r.test for r in suite.flaky))
 
     @staticmethod
-    def retries(failed: Count, own_red: Presence) -> Presence:
+    def retries(failed: Count, own: Count) -> bool:
         """Whether the red tests of a run are run again, each alone: some and at most FLAKY_LIMIT, none of them the
         story's own — a red test of the story's own stands as it is. Green alone, a test is flaky and the run counts
         green; red again, the run stays red."""
-        return Presence.PRESENT if 0 < failed.value <= FLAKY_LIMIT.value and own_red is Presence.ABSENT \
-            else Presence.ABSENT
+        return 0 < failed.value <= FLAKY_LIMIT.value and own.value == 0
 
 
 

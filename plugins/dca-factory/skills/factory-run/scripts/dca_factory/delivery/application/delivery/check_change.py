@@ -7,7 +7,7 @@ import dataclasses
 import typing
 
 from ....building_blocks import UseCase
-from ...domain.model.story_words import Count, Presence
+from ...domain.model.story_words import Count
 from ...domain.model.suite_run import CommandKey
 from ...domain.model.story_state import Detail
 from ...domain.model.verdict import CheckName, FindingState

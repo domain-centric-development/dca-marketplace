@@ -8,7 +8,6 @@ import typing
 from ....building_blocks import DomainService
 from ..gateway.stage_evidence import StageEvidence
 from ..model.story import Story
-from ..model.story_words import Presence
 from ..model.verdict import CheckName, Finding, Findings, Said
 
 INTEGRATE = CheckName("integrate")
@@ -25,11 +24,11 @@ class IntegrationChecks(DomainService):
         """No unmerged path, no conflict marker in a file the story's commit changes, and its commit sits on the
         target's tip — a target that moved since is integrated again (`moved`), not refused."""
         facts = evidence.integration(story.id)
-        if facts.worktree is Presence.ABSENT:
+        if not facts.in_worktree:
             return (INTEGRATE.fail(Said(
                 f"the integrate gate runs in the story's worktree, with {facts.home_variable.value} naming the main "
                 f"checkout — the runner's integrate step starts it")),)
-        if facts.recorded is Presence.ABSENT:
+        if not facts.recorded:
             return (INTEGRATE.fail(Said(
                 f"no target recorded for {story.id.value} (<evidence>/<story>/target) — the worktree was not made "
                 f"by the runner")),)
@@ -39,7 +38,7 @@ class IntegrationChecks(DomainService):
         found = [CONFLICTS.fail(Said("a conflict marker is left in " + ", ".join(p.value for p in facts.marked)))
                  if facts.marked else
                  CONFLICTS.ok(Said("no unmerged path, no conflict marker in the story's files"))]
-        if facts.moved is Presence.PRESENT:
+        if facts.moved:
             found.append(MOVED.fail(Said(f"{facts.target.value} moved on since the story was merged with it — the "
                                          f"integrate step merges again")))
         return tuple(found)

@@ -8,7 +8,7 @@ import typing
 from ....building_blocks import Value
 from .decision_record import RecordId
 from .story_state import Detail
-from .story_words import Count, Place, Presence, ScenarioKey, Selector
+from .story_words import Count, Place, ScenarioKey, Selector
 from .verdict import CheckName, Finding, Findings, Said
 
 
@@ -89,22 +89,37 @@ class TestOutcome(Value):
     code: Count
     output: Detail
     cases: Count
-    timeout: Presence
+    _timed_out: bool
+
+    @property
+    def timed_out(self) -> bool:
+        """Whether the test ran into a timeout."""
+        return self._timed_out
 
 
 class RunEnd(Value):
     """The end of one invocation's outcomes — shared where it carried several tests."""
 
     invocation: Detail
-    shared: Presence
+    _shared: bool
+
+    @property
+    def shared(self) -> bool:
+        """Whether the invocation carried several tests."""
+        return self._shared
 
 
 class TestRun(Value):
     """A gate's run of the mapped tests: whether the profile names a test command at all, and what each
     invocation said, in order."""
 
-    command: Presence
+    _has_command: bool
     items: typing.Tuple[typing.Union[TestOutcome, RunEnd], ...]
+
+    @property
+    def has_command(self) -> bool:
+        """Whether the profile names a test command."""
+        return self._has_command
 
 
 class RedLedger(Value):
@@ -112,12 +127,22 @@ class RedLedger(Value):
     corrections that changed an expectation, whether an earlier pass's build met the tests, and the tests whose file
     changed since they were seen red."""
 
-    present: Presence
+    _present: bool
     name: Detail
     was_red: typing.FrozenSet[Selector]
     changed_on: typing.Tuple[RecordId, ...]
-    built_before: Presence
+    _built_before: bool
     moved: typing.FrozenSet[Selector]
+
+    @property
+    def present(self) -> bool:
+        """Whether there is a red ledger."""
+        return self._present
+
+    @property
+    def built_before(self) -> bool:
+        """Whether an earlier pass's build met the tests."""
+        return self._built_before
 
 
 class CommandRun(Value):
@@ -160,7 +185,12 @@ class SuiteRun(Value):
     failed: Count
     flaky: typing.Tuple[Retried, ...]
     still: typing.Tuple[Retried, ...]
-    exit_code_only: Presence
+    _exit_code_only: bool
+
+    @property
+    def exit_code_only(self) -> bool:
+        """Whether the exit code is the only evidence the profile allows."""
+        return self._exit_code_only
 
 
 class SuiteCommands(Value):

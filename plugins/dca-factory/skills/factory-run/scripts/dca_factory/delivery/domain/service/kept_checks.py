@@ -11,7 +11,6 @@ from ..gateway.stage_evidence import StageEvidence
 from ..model.stage import StageName, Trait
 from ..model.story import Story
 from ..model.delivery_facts import Unobserved
-from ..model.story_words import Presence
 from ..model.test_facts import MappedTest, TestChange
 from ..model.story_state import Detail
 from ..model.verdict import CheckName, Finding, Findings, Said
@@ -108,7 +107,7 @@ class KeptChecks(DomainService):
                 f"had is still there, at most with more arguments (a type the test builds gained a field)")))
         for test in kept.renamed:
             names = ", ".join(f"{r.was.value} → {r.now.value} ("
-                              + ("named in a glossary" if r.in_glossary is Presence.PRESENT else "in no glossary")
+                              + ("named in a glossary" if r.in_glossary else "in no glossary")
                               + ")" for r in test.renames)
             found.append(TESTS_KEPT.note(Said(
                 f"{test.place.value} follows a rename the story made — {names}; every assertion it had holds under "
@@ -168,7 +167,7 @@ class KeptChecks(DomainService):
         proof = evidence.red_proof(story.id, stage, tests)
         if proof is None:
             return ()
-        if proof.reproof is Presence.PRESENT:
+        if proof.reproof:
             return (RED_PROOF.ok(Said("tidy changed a test it may rework — `red-reproof` runs it on the tree the "
                                       "test stage left")),)
         entries, unbound = proof.entries.value, proof.unbound.value

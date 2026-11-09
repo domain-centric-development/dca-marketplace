@@ -14,7 +14,6 @@ from ..files.journal_files import journal_append
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text, split_front
 from ....domain.model.claim import Claim, ClaimedFor, ClaimTitle, ClaimTrace, Fate, IdPrefix, Meeting, Worker
 from ....domain.model.epic import EpicId
-from ....domain.model.story_words import Presence
 from ....domain.model.story import StoryId, StoryStatus
 
 
@@ -151,7 +150,7 @@ def refresh_claims(cwd: str, runs: str, config: typing.Mapping[str, str], target
         front = story_on_ref(cwd, main, epics_rel, story)
         published = os.path.isfile(os.path.join(evidence_dir(runs, story), PUBLISHED))
         branch = git(cwd, "rev-parse", "--verify", "--quiet", f"refs/heads/{STORY_BRANCH}{story}")[0] == 0
-        fate = ClaimTrace(status_of(front), present(published), present(branch)).fate()
+        fate = ClaimTrace(status_of(front), published, branch).fate()
         if fate is Fate.RELEASED:
             if git(cwd, "push", "--quiet", remote, "--delete", f"{prefix}{story}")[0] == 0:
                 say(f"claims: {story} is delivered on {remote}/{target} — its claim released")
@@ -249,8 +248,8 @@ def release_claim(cwd: str, runs: str, config: typing.Mapping[str, str], story_i
         say(f"release: {remote} has no claim on {story_id}")
         return 0
     c = claims[story_id]
-    if Claim(worker(c["who"], c["host"]), ClaimedFor(EpicId(c["epic"]), ClaimTitle(c["title"]))).released_by(
-            worker(*identity(cwd)), present(force)) is Presence.ABSENT:
+    if not force and not Claim(worker(c["who"], c["host"]), ClaimedFor(EpicId(c["epic"]), ClaimTitle(c["title"]))) \
+            .released_by(worker(*identity(cwd))):
         say(f"release: {story_id} is claimed by {c['who']} ({c['host']}) since {c['since']} — not this factory's; "
             f"`--force` takes it away")
         return 1
@@ -288,10 +287,6 @@ def free_id(cwd: str, epics: str, config: typing.Optional[typing.Mapping[str, st
 
 def worker(who: str, host: str) -> Worker:
     return Worker(f"{who} ({host})")
-
-
-def present(fact: bool) -> Presence:
-    return Presence.PRESENT if fact else Presence.ABSENT
 
 
 def status_of(front: typing.Optional[typing.Mapping[str, typing.Any]]) -> typing.Optional[StoryStatus]:

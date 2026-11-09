@@ -5,7 +5,6 @@ import unittest
 
 import support  # noqa: F401 — puts the package on the path
 from dca_factory.delivery.domain.model.verdict import CheckName, Finding, FindingState, Said
-from dca_factory.delivery.domain.model.story_words import Presence
 from dca_factory.delivery.domain.model.story_state import Detail
 from dca_factory.delivery.domain.service.break_checks import BreakOutcome, BreakResult, RuleProof
 
@@ -41,7 +40,7 @@ class RuleProofTest(unittest.TestCase):
     GREEN = BreakResult(BreakOutcome.GREEN, Detail(""))
 
     def test_green_now_and_seen_red_before_is_red(self):
-        self.assertIs(RuleProof.RED, RuleProof.of(self.GREEN, None, Presence.PRESENT))
+        self.assertIs(RuleProof.RED, RuleProof.seen_red_before(self.GREEN))
 
     def test_green_now_and_never_seen_red_needs_its_break(self):
         self.assertIs(RuleProof.NO_BREAK, RuleProof.of(self.GREEN, None))

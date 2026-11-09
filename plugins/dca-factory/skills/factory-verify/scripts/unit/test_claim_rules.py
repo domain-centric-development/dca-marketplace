@@ -6,7 +6,6 @@ import unittest
 import support  # noqa: F401 — puts the package on the path
 from dca_factory.delivery.domain.model.claim import Claim, ClaimedFor, ClaimTitle, ClaimTrace, Fate, IdPrefix, Meeting, Worker
 from dca_factory.delivery.domain.model.epic import EpicId
-from dca_factory.delivery.domain.model.story_words import Presence
 from dca_factory.delivery.domain.model.story import StoryId, StoryStatus
 
 ME, YOU = Worker("me (a)"), Worker("you (b)")
@@ -22,7 +21,7 @@ class Claims(unittest.TestCase):
         self.assertIs(Claim(YOU, ClaimedFor(EpicId(""), ClaimTitle(""))).meets(ME, STORY), Meeting.OTHERS)
 
     def test_delivered_on_the_main_line_releases_missing_without_a_trace_orphans(self):
-        absent, present = Presence.ABSENT, Presence.PRESENT
+        absent, present = False, True
         self.assertIs(ClaimTrace(StoryStatus.DELIVERED, absent, absent).fate(), Fate.RELEASED)
         self.assertIs(ClaimTrace(None, absent, absent).fate(), Fate.ORPHAN)
         self.assertIs(ClaimTrace(None, present, absent).fate(), Fate.HOLDS)
@@ -30,9 +29,8 @@ class Claims(unittest.TestCase):
         self.assertIs(ClaimTrace(StoryStatus.APPROVED, absent, absent).fate(), Fate.HOLDS)
 
     def test_only_an_own_claim_is_released_without_force(self):
-        self.assertIs(Claim(YOU, STORY).released_by(ME, Presence.ABSENT), Presence.ABSENT)
-        self.assertIs(Claim(YOU, STORY).released_by(ME, Presence.PRESENT), Presence.PRESENT)
-        self.assertIs(Claim(ME, STORY).released_by(ME, Presence.ABSENT), Presence.PRESENT)
+        self.assertIs(Claim(YOU, STORY).released_by(ME), False)
+        self.assertIs(Claim(ME, STORY).released_by(ME), True)
 
     def test_the_next_id_follows_the_highest_and_keeps_its_width(self):
         used = {StoryId("STORY-007"), StoryId("STORY-12"), StoryId("OTHER-99")}

@@ -8,7 +8,7 @@ import typing
 from ....building_blocks import DomainService
 from ..gateway.main_line import MainLine
 from ..model.epic import EpicId
-from ..model.schedule import Entry, EpicGraph, Holding, Liveness, Schedule, Slots, Wait
+from ..model.schedule import Entry, EpicGraph, Holding, Liveness, Schedule, Slots
 from ..model.story import Story, StoryId
 from ..model.story_words import ContextName
 from ..model.story_state import Detail, RUNNABLE, StateName, Standing
@@ -200,7 +200,7 @@ class Scheduling(DomainService):
                           f"factory.sh run --story {elsewhere[0].value}")
             elif nxt is None:
                 reason = "nothing can run"
-        return Schedule(order, standings, (nxt,) if nxt else (), Detail(reason), Wait.YES if wait else Wait.NO)
+        return Schedule(order, standings, (nxt,) if nxt else (), Detail(reason), wait)
 
     @staticmethod
     def _slotted(order: typing.Tuple[StoryId, ...], stories: typing.Mapping[StoryId, _Row], standings: Standings,
@@ -238,4 +238,4 @@ class Scheduling(DomainService):
                 reason = (f"{len(running)} of {slots.value} slot(s) busy: {', '.join(s.value for s in running)}"
                           if running and len(running) >= slots.value else "nothing can run")
         wait = any(standings[s].state in WAITING for s in order)
-        return Schedule(order, standings, tuple(picked), Detail(reason), Wait.YES if wait else Wait.NO)
+        return Schedule(order, standings, tuple(picked), Detail(reason), wait)

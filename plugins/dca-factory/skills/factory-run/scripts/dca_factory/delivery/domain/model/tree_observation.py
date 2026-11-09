@@ -28,13 +28,6 @@ UNHASHED = Digest("-")
 AS_HEAD = Digest("head")
 
 
-class Tracking(enum.Enum):
-    """Whether git tracks a path: a path an observation does not list is as HEAD has it — there when tracked."""
-
-    TRACKED = "tracked"
-    UNTRACKED = "untracked"
-
-
 class Hashing(enum.Enum):
     """Whether the observation carries content digests, or names only."""
 
@@ -61,7 +54,12 @@ class ObservedFile(Value):
 
     place: ProjectPath
     digest: Digest
-    tracking: Tracking
+    _tracked: bool
+
+    @property
+    def tracked(self) -> bool:
+        """Whether git tracks the path."""
+        return self._tracked
 
 
 class ChangedFile(Value):
@@ -91,7 +89,7 @@ class TreeObservation(Value):
         """The paths whose content differs between `earlier` and this observation. A path one of them does not list is
         as its HEAD has it: there when git tracks it, absent otherwise. `between_heads` names the paths HEAD itself
         changed between the two edges (a window that committed), each as a change of its own."""
-        tracked = {f.place for f in earlier.files + self.files if f.tracking is Tracking.TRACKED}
+        tracked = {f.place for f in earlier.files + self.files if f.tracked}
         was_map, now_map = earlier.digests(), self.digests()
 
         def state(digests: typing.Mapping[ProjectPath, Digest], path: ProjectPath) -> typing.Optional[Digest]:

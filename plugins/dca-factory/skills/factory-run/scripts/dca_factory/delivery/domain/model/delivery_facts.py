@@ -9,7 +9,7 @@ from ....building_blocks import Value
 from .decision_record import RecordId
 from .plan_facts import HandOverName, PlannedDigest
 from .story_state import Detail, Judged
-from .story_words import Count, Place, Presence
+from .story_words import Count, Place
 
 
 class Unobserved(enum.Enum):
@@ -46,7 +46,12 @@ class PassGap(Value):
     """A stage of this pass without its hand-over: missing, or written for an earlier pass."""
 
     hand_over: HandOverName
-    earlier: Presence
+    _earlier: bool
+
+    @property
+    def earlier(self) -> bool:
+        """Whether the hand-over was written for an earlier pass."""
+        return self._earlier
 
 
 class StoryPass(Value):
@@ -65,10 +70,15 @@ class DocumentFacts(Value):
 
     place: Place
     unreadable: typing.Optional[Detail]
-    asks: Presence
+    _asks: bool
     files: Count
     missing: typing.Tuple[Detail, ...]
     unsourced: typing.Tuple[Detail, ...]
+
+    @property
+    def asks(self) -> bool:
+        """Whether the document stage stopped with a question."""
+        return self._asks
 
 
 class ReviewFacts(Value):
@@ -93,13 +103,28 @@ class Integration(Value):
     that names the main checkout), whether its target is recorded, the target, the paths left unmerged, the story's
     files with a conflict marker left, and whether the target moved on since the merge."""
 
-    worktree: Presence
+    _in_worktree: bool
     home_variable: Detail
-    recorded: Presence
+    _recorded: bool
     target: Detail
     unmerged: typing.Tuple[Place, ...]
     marked: typing.Tuple[Place, ...]
-    moved: Presence
+    _moved: bool
+
+    @property
+    def in_worktree(self) -> bool:
+        """Whether the gate runs in the story's worktree."""
+        return self._in_worktree
+
+    @property
+    def recorded(self) -> bool:
+        """Whether the target is recorded."""
+        return self._recorded
+
+    @property
+    def moved(self) -> bool:
+        """Whether the target moved on since the merge."""
+        return self._moved
 
 
 class MainTestLines(Value):

@@ -18,7 +18,6 @@ from .....sharedkernel.adapter.outgoing.profile.profile_files import (
 from .....spec.api import (
     derived, lint_context, merge, merge_context, read_delta, read_spec, render_spec, scenarios_path, story_entries)
 from ....domain.model.backlog_facts import DONE_ROW, OPEN_ROW
-from ....domain.model.story_words import Presence
 from ....domain.model.story import Delivery, StoryId
 from ....domain.model.story_state import Detail
 from ....domain.model.acceptance import AcceptanceMode, FlakyFinding, Viewing
@@ -102,8 +101,8 @@ def acceptance_applies(cwd: str, runs: str, story_id: str, profile: Front) -> bo
         with contextlib.suppress(GateError):
             located = locate_tests(cwd, read_mapping(runs, story_id)[1])[0]
             end_user = any(command_for(profile, path)[0] == "e2eTest" for path in located.values())
-    return mode.asks(Viewing(Presence.PRESENT if browser else Presence.ABSENT,
-                             Presence.PRESENT if end_user else Presence.ABSENT))
+    return mode.asks(Viewing(browser,
+                             end_user))
 
 
 def record_flaky_findings(result: typing.Any, story_path: str, story_id: str, front: Front, runs: str) -> None:

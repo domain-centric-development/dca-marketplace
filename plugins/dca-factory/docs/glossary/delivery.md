@@ -388,7 +388,7 @@ the newest first, at most `SHOWN` (`kept`, `shown`), named for what took it.
 
 **Definition:** The working tree at one edge of a stage window, taken once at its start and once at its end: the files
 that differ from HEAD with the sha256 of their bytes (`Digest`, `deleted` for one gone) and whether git tracks them
-(`Tracking`), HEAD, and — at the end, and at the start of a story's first window — the tree object of everything as it
+(`tracked`), HEAD, and — at the end, and at the start of a story's first window — the tree object of everything as it
 is (`ObjectName`). A stage's changes are the difference of its two edges; the story's are its base tree against the
 end's tree. An observation without content digests (`Hashing`) proves nothing and is read as none.
 

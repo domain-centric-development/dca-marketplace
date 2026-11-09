@@ -18,7 +18,7 @@ from .owned_files import run_owned
 from ..git.checkout import Checkout, Checkouts
 from ....domain.model.project_path import ProjectPath
 from ....domain.model.tree_observation import (
-    DELETED as DELETED_DIGEST, Digest, Hashing, ObjectName, ObservedFile, Tracking, TreeChange, TreeObservation, UNHASHED)
+    DELETED as DELETED_DIGEST, Digest, Hashing, ObjectName, ObservedFile, TreeChange, TreeObservation, UNHASHED)
 
 
 DELETED = DELETED_DIGEST.value
@@ -99,32 +99,32 @@ def observe(cwd: str, tree: Take, hashing: Hashing = Hashing.HASHED,
     files: typing.Dict[str, ObservedFile] = {}
     head: typing.Optional[ObjectName] = None
 
-    def seen(path: str, tracking: Tracking, code: str) -> None:
+    def seen(path: str, tracked: bool, code: str) -> None:
         """One listed path; `code` is git's two-letter state, a `D` in it a file gone from the working tree."""
         if not path or path.startswith(protocol):
             return
         full = os.path.join(cwd, path)
         if "D" in code:
-            files[path] = ObservedFile(ProjectPath(path), DELETED_DIGEST, tracking)
+            files[path] = ObservedFile(ProjectPath(path), DELETED_DIGEST, tracked)
         elif os.path.isfile(full):
             files[path] = ObservedFile(ProjectPath(path), digest_of(full) if hashing is Hashing.HASHED else UNHASHED,
-                                       tracking)
+                                       tracked)
     entries = iter(listing.stdout.decode("utf-8", "replace").split("\0"))
     for entry in entries:
         if entry.startswith("# branch.oid "):
             oid = entry[len("# branch.oid "):].strip()
             head = ObjectName(oid) if oid and oid != "(initial)" else None
         elif entry.startswith("? "):
-            seen(local(entry[2:]), Tracking.UNTRACKED, "??")
+            seen(local(entry[2:]), False, "??")
         elif entry[:2] in ("1 ", "u "):
             fields = entry.split(" ", 8 if entry[0] == "1" else 10)
-            seen(local(fields[-1]), Tracking.TRACKED, fields[1])
+            seen(local(fields[-1]), True, fields[1])
         elif entry.startswith("2 "):
             fields = entry.split(" ", 9)
             origin = local(next(entries, ""))       # -z writes a rename's source as the next entry
             if fields[1][0] == "R" and origin and not origin.startswith(protocol):
-                files[origin] = ObservedFile(ProjectPath(origin), DELETED_DIGEST, Tracking.TRACKED)
-            seen(local(fields[-1]), Tracking.TRACKED, fields[1])
+                files[origin] = ObservedFile(ProjectPath(origin), DELETED_DIGEST, True)
+            seen(local(fields[-1]), True, fields[1])
     taken = take_tree(cwd, checkouts) if tree is Take.WITH_TREE and place else None
     return TreeObservation(tuple(files[path] for path in sorted(files)), head,
                            ObjectName(taken) if taken else None, hashing)
@@ -158,8 +158,8 @@ def write_observation(path: str, seen: typing.Optional[TreeObservation]) -> None
         lines = [NO_HASHES] if seen.hashing is Hashing.NAMES_ONLY else []
         lines += [HEAD_LINE + (seen.head.value if seen.head else "none"),
                   TREE_LINE + (seen.tree.value if seen.tree else "none")]
-        lines += [f"{f.digest.value}  {f.place.value}" for f in seen.files if f.tracking is Tracking.TRACKED]
-        untracked = [f"{f.digest.value}  {f.place.value}" for f in seen.files if f.tracking is Tracking.UNTRACKED]
+        lines += [f"{f.digest.value}  {f.place.value}" for f in seen.files if f.tracked]
+        untracked = [f"{f.digest.value}  {f.place.value}" for f in seen.files if not f.tracked]
         lines += [UNTRACKED_LINE] + untracked if untracked else []
         handle.write("".join(line + "\n" for line in lines))
 
@@ -171,7 +171,7 @@ def read_observation(path: str) -> typing.Optional[TreeObservation]:
         return None
     head: typing.Optional[ObjectName] = None
     tree: typing.Optional[ObjectName] = None
-    hashing, tracking = Hashing.HASHED, Tracking.TRACKED
+    hashing, tracked = Hashing.HASHED, True
     files = []
     for line in read_text(path).splitlines():
         if line.startswith(NOT_OBSERVED):
@@ -183,11 +183,11 @@ def read_observation(path: str) -> typing.Optional[TreeObservation]:
             name = ObjectName(value) if value and value != "none" else None
             head, tree = (name, tree) if line.startswith(HEAD_LINE) else (head, name)
         elif line == UNTRACKED_LINE:
-            tracking = Tracking.UNTRACKED
+            tracked = False
         else:
             digest, _, name_ = line.partition("  ")
             if name_:
-                files.append(ObservedFile(ProjectPath(name_), Digest(digest), tracking))
+                files.append(ObservedFile(ProjectPath(name_), Digest(digest), tracked))
     return TreeObservation(tuple(files), head, tree, hashing)
 
 
@@ -323,8 +323,7 @@ def head_changes(cwd: str, before: TreeObservation, after: TreeObservation) -> t
 
 def with_tracking(seen: TreeObservation, tracked: typing.AbstractSet[str]) -> TreeObservation:
     """An older release's observation, its paths marked tracked or not by the checkout's index."""
-    return TreeObservation(tuple(ObservedFile(f.place, f.digest, Tracking.TRACKED if f.place.value in tracked
-                                              else Tracking.UNTRACKED) for f in seen.files),
+    return TreeObservation(tuple(ObservedFile(f.place, f.digest, f.place.value in tracked) for f in seen.files),
                            seen.head, seen.tree, seen.hashing)
 
 

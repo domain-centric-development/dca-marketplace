@@ -10,7 +10,7 @@ import typing
 from ....building_blocks import DomainService, Value
 from ..model.stage import StoryKind
 from ..model.story import Story
-from ..model.story_words import Place, Presence, Selector
+from ..model.story_words import Place, Selector
 from ..model.story_state import Detail
 from ..model.verdict import CheckName, Finding, FindingState, Findings, Said
 
@@ -61,15 +61,25 @@ class BreakResult(Value):
             return BREAK_PROOF.fail(Said(f"{name}: its break does not apply — {self.said.value}"))
         return BREAK_PROOF.fail(Said(f"{name}: its break could not be checked — {self.said.value}"))
 
-    def reproof(self, selector: Selector, timed_out: Presence) -> Finding:
+    def reproof(self, selector: Selector) -> Finding:
         """A test tidy changed is red again on the tree the test stage left — on an assertion, not a timeout."""
         name = selector.value
-        if self.outcome is BreakOutcome.RED and timed_out is Presence.ABSENT:
+        if self.outcome is BreakOutcome.RED:
             return RED_REPROOF.ok(Said(f"{name}: changed by tidy, red again on the tree the test stage left"))
+        return self._not_reproved(selector)
+
+    def reproof_on_timeout(self, selector: Selector) -> Finding:
+        """A test tidy changed that ran into a timeout on the tree the test stage left proves nothing yet: its red is
+        an action that waited, not an assertion that failed."""
+        name = selector.value
         if self.outcome is BreakOutcome.RED:
             return RED_REPROOF.fail(Said(f"{name}: changed by tidy, and red on the test stage's tree only on a timeout "
                                          f"— an action waited, no assertion failed, so the moved test proves nothing "
                                          f"yet"))
+        return self._not_reproved(selector)
+
+    def _not_reproved(self, selector: Selector) -> Finding:
+        name = selector.value
         if self.outcome is BreakOutcome.GREEN:
             return RED_REPROOF.fail(Said(f"{name}: changed by tidy, and green on the tree the test stage left — the move "
                                          f"changed what it asserts; put it back, a change of what it expects is a "
@@ -89,22 +99,26 @@ class RuleProof(enum.Enum):
     UNCHECKED = "unchecked"
 
     @classmethod
-    def of(cls, before: BreakResult, under: typing.Optional[BreakResult],
-           seen_red: Presence = Presence.ABSENT) -> RuleProof:
+    def of(cls, before: BreakResult, under: typing.Optional[BreakResult]) -> RuleProof:
         """A rule's test: seen red before the build it proves the rule as a criterion's red run does; green already —
-        the rule exists — it needs its break (`under`, None where it has none). Green now but seen red by an earlier
-        run of the gate, in the version of its file there now (`seen_red`), it keeps that proof: the build made the
-        rule, as it makes a criterion's test green, and a run of the gate after it asks for no break."""
+        the rule exists — it needs its break (`under`, None where it has none)."""
         if before.outcome is BreakOutcome.RED:
             return cls.RED
         if before.outcome is not BreakOutcome.GREEN:
             return cls.UNCHECKED
-        if seen_red is Presence.PRESENT:
-            return cls.RED
         if under is None:
             return cls.NO_BREAK
         return {BreakOutcome.RED: cls.KILLED, BreakOutcome.GREEN: cls.SURVIVED,
                 BreakOutcome.UNAPPLIED: cls.NO_BREAK}.get(under.outcome, cls.UNCHECKED)
+
+    @classmethod
+    def seen_red_before(cls, before: BreakResult) -> RuleProof:
+        """A rule's test green now but seen red by an earlier run of the gate, in the version of its file there now,
+        keeps that proof: the build made the rule, as it makes a criterion's test green, and a run of the gate after
+        it asks for no break."""
+        if before.outcome in (BreakOutcome.RED, BreakOutcome.GREEN):
+            return cls.RED
+        return cls.UNCHECKED
 
     def finding(self, selector: Selector, key: Detail, missing: Place, said: Detail) -> Finding:
         """A survived or missing break is refused."""

@@ -30,7 +30,6 @@ from .decision_record_files import answered_decisions
 from .run_marks import last_ended
 from .test_files import read_mapping
 from .test_files import locate_tests
-from ....domain.model.story_words import Presence
 from ....domain.model.story_state import Detail
 from ....domain.service.kept_checks import ProofExcuse, stale
 

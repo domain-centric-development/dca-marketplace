@@ -10,7 +10,7 @@ from .epic import EpicId
 from .profile_facts import ProfileText
 from .stage import StageName
 from .story_state import Detail, HandOverText
-from .story_words import Count, EventName, Place, Presence
+from .story_words import Count, EventName, Place
 
 
 class RowState(Value):
@@ -92,8 +92,13 @@ class ProposalFacts(Value):
     open."""
 
     proposed: Count
-    glossary: Presence
+    _has_glossary: bool
     missing: typing.Tuple[Detail, ...]
+
+    @property
+    def has_glossary(self) -> bool:
+        """Whether the project keeps a glossary."""
+        return self._has_glossary
 
 
 class OutcomeEventPlaces(Value):

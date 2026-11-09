@@ -35,20 +35,6 @@ class JournalLineKind(enum.Enum):
     REOPENED = "reopened"      # a delivered story taken back for a correction at its acceptance
 
 
-class CheckNaming(enum.Enum):
-    """Whether a refused gate line names the checks that refused — a line written before 2026-10-10 names none."""
-
-    NAMED = "named"
-    UNNAMED = "unnamed"
-
-
-class Reach(enum.Enum):
-    """Whether a story's run got to a stage."""
-
-    REACHED = "reached"
-    NOT_REACHED = "not-reached"
-
-
 class GateHand(enum.Enum):
     """Whose gate call it was: the runner's, between the stages, or a stage's own, inside its process."""
 
@@ -59,7 +45,7 @@ class GateHand(enum.Enum):
 class JournalLine(Value):
     """One line of the journal, as the reading needs it: its kind and moment, the stage it names (where a gate ran,
     where a jump goes, where a run starts), and for a gate how it ended, whose it was and the checks that refused —
-    `naming` unnamed where a refused line names none (written before 2026-10-10)."""
+    none on a refused line written before 2026-10-10."""
 
     kind: JournalLineKind
     at: Moment
@@ -68,9 +54,13 @@ class JournalLine(Value):
     state: OutcomeState = OutcomeState.PASS
     hand: GateHand = GateHand.RUNNER
     checks: typing.Tuple[Words, ...] = ()
-    naming: CheckNaming = CheckNaming.NAMED
     rule: Words = Words("")
     reason: Words = Words("")
+
+    def names_checks(self) -> bool:
+        """Whether the line names the checks that refused, where it refused — a line written before 2026-10-10 names
+        none."""
+        return self.state is not OutcomeState.FAIL or bool(self.checks)
 
 
 class StoryJournal(Value):
@@ -121,12 +111,17 @@ class StageRun(Value):
     gate) and by which checks, tried again inside the stage (its own gate calls)."""
 
     stage: StageName
-    reach: Reach
+    _reached: bool
     ended: typing.Optional[OutcomeState]
     refused: Count
     checks: typing.Tuple[CheckTimes, ...]
     unnamed: Count
     tries: Count
+
+    @property
+    def reached(self) -> bool:
+        """Whether the story's run got to the stage."""
+        return self._reached
 
 
 class WayTaken(Value):
@@ -181,7 +176,7 @@ class Journals(Value):
             for event in journal.events:
                 if event.kind is not JournalLineKind.GATE or event.state is not OutcomeState.FAIL:
                     continue
-                if event.naming is CheckNaming.UNNAMED:
+                if not event.names_checks():
                     unnamed += 1
                     continue
                 hit = {rule.id for check in event.checks for rule in by_name.get(check, ())
@@ -278,9 +273,9 @@ def story_run(journal: StoryJournal, track: Track) -> StoryRun:
         for event in between:
             for check in event.checks:
                 checks[check.value] = checks.get(check.value, 0) + 1
-        stages.append(StageRun(stage, Reach.REACHED if stage in reached else Reach.NOT_REACHED, ran[-1].state if ran else None, Count(len(between)),
+        stages.append(StageRun(stage, stage in reached, ran[-1].state if ran else None, Count(len(between)),
                                tuple(CheckTimes(Words(c), Count(n)) for c, n in checks.items()),
-                               Count(sum(1 for e in between if e.naming is CheckNaming.UNNAMED)),
+                               Count(sum(1 for e in between if not e.names_checks())),
                                Count(sum(1 for e in ran if e.hand is GateHand.STAGE and e.state is OutcomeState.FAIL))))
     last = here or next((s for s in reversed(route) if s in reached), route[0] if route else StageName(""))
     return StoryRun(journal.story, track.kind, tuple(stages),

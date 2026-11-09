@@ -4,7 +4,6 @@ integration — through the output port StageDelivery."""
 from __future__ import annotations
 
 from ....building_blocks import DomainException, UseCaseException
-from ...domain.model.story_words import Presence
 from ...domain.model.verdict import Said
 from ...domain.model.acceptance import ACCEPTANCE, AcceptanceStep
 from ...domain.service.adopt_checks import AdoptChecks, Adoption
@@ -103,7 +102,7 @@ def _document_passed(run: Run) -> None:
         if facts.applies and facts.acceptance is not None:
             step = AcceptanceStep.at_delivery(facts.acceptance)
             result.take(step.findings)
-            if step.ask is Presence.PRESENT:
+            if step.asks:
                 try:
                     asked = run.acceptances.execute(AskAcceptanceCommand(run.story.id, run.now())).record
                 except UseCaseException as refused:
@@ -112,7 +111,7 @@ def _document_passed(run: Run) -> None:
                 where = run.delivery.record_place(story_id, story_path, asked.value)
                 result.take((ACCEPTANCE.wait(Said(f"{asked.value} asks a human to accept the story before it is "
                                                    f"delivered — {where}, answered through /factory-decisions")),))
-            if step.goes_on is Presence.ABSENT:
+            if not step.goes_on:
                 return
     if result.failed:
         return
