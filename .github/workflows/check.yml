@@ -71,7 +71,7 @@ jobs:
       - name: What a process start costs here
         if: github.event_name == 'workflow_dispatch'
         run: |
-          cd "$RUNNER_TEMP" && rm -rf probe && mkdir probe && cd probe && git init -q && git commit -q --allow-empty -m x
+          cd "$RUNNER_TEMP" && rm -rf probe && mkdir probe && cd probe && git init -q && git -c user.name=p -c user.email=p@x commit -q --allow-empty -m x
           G="$GITHUB_WORKSPACE/plugins/dca-factory/skills/factory-run/scripts"
           cp -R "$G/dca_factory" "$G/workflow" "$G/story-gate.py" "$G/factory-cli.py" .
           python - <<'PROBE'
