@@ -207,6 +207,11 @@ When writing or editing code that refuses:
   case back, so the delivery is retried.
 - **"Which one, if any" answers none with an empty value.** Not a refusal; "not
   found" refuses only a caller that names a specific thing by its id.
+- **Whoever searches owns the "not found".** The use case looks an aggregate up
+  by its id through the repository, so a missing aggregate is the use case's
+  refusal — never a `DomainException`. The aggregate searches its own parts, so
+  a missing part (an entity named by its local id) is the model's
+  `DomainException`, caught and answered by the use case.
 - **An expected refusal is thrown or returned, uniformly per context** — the
   style the technical description records (below), else what the context's
   use cases show. Returned: a case of the sealed result implementing `Refusal`

@@ -216,6 +216,12 @@ Don't impose patterns the project doesn't use.
   `AlreadySent`) may seal its result all the same, no case marked `Refusal` —
   a marked success would be rolled back. Both styles are equal; a context
   never mixes them.
+- **Whoever searches owns the "not found".** An aggregate addressed by its id
+  is looked up by the use case through the repository, an output port of the
+  application — its absence is the use case's refusal (`UseCaseException`
+  subtype or `Refusal` case). A part inside an aggregate, addressed by its local
+  id, is searched by the aggregate in its own state — its absence is a broken
+  rule of the model, a `DomainException` the use case catches and answers.
 - **Decide, then write.** Load, ask the model and every port that can refuse,
   refuse or go on, and save last. The boundary rolls a returned `Refusal` back
   like a thrown exception — the net, not the design.
