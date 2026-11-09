@@ -95,6 +95,8 @@ jobs:
           print(f"inside bash, one $( ) fork: {(time.perf_counter() - start) / 100 * 1000:.0f} ms")
           PROBE
       - name: factory-verify
+        env:
+          FACTORY_CLI_PROCESS: ${{ runner.os == 'Windows' && '1' || '' }}
         run: python plugins/dca-factory/skills/factory-verify/scripts/verify.py --group ${{ matrix.group }} --junit verify-report.xml
       - uses: actions/upload-artifact@v4
         if: always()
