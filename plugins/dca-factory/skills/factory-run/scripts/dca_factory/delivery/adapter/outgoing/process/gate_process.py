@@ -1,7 +1,7 @@
 """The gate beside the runner — a process of its own, or its command line in the runner's process where the two are one
 package (WP-94: the evidence out of a stage's reach; WP-197): a stage's gate run
 with its report kept, the person's parts recorded and compared across a stage window, the story's base and changes
-recorded, and the snapshot of the working tree before and after a window."""
+recorded, and the one observation of the working tree at each edge of a window."""
 
 from __future__ import annotations
 
@@ -15,12 +15,11 @@ import sys
 import typing
 
 from ..files.owned_files import OWNED_DIGEST, WINDOW_DIGEST
+from ..files.snapshots import CheckoutPlace, Edge, observe_edge
+from ....domain.model.tree_observation import Hashing
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir, place
 from ..tools.tool_processes import err, flush, utc
 
-#: The first line of a snapshot written without a hash: the observer reads such a snapshot as absent, because a
-#: snapshot of empty digests compares equal to every other and would read as "this stage changed nothing".
-NO_HASHES = "# no-sha256-command: names only, no content hashes"
 
 
 def hashing() -> bool:
@@ -63,7 +62,8 @@ class GateProcess:
 
     def __init__(self, host: GateHost) -> None:
         self._host = host
-        self._prefixes: typing.Dict[str, str] = {}
+        #: Where each folder sits in its checkout, asked of git once per folder for this run's lifetime.
+        self._places: typing.Dict[str, typing.Optional[CheckoutPlace]] = {}
 
     def installed(self) -> bool:
         return os.path.isfile(self._host.gate_path)
@@ -146,55 +146,18 @@ class GateProcess:
             else:
                 os.environ["FACTORY_SUITES_KEY"] = before
 
-    def _prefix(self) -> str:
-        """Where the working folder lies below its checkout's top, asked of git once per folder (a snapshot per stage
-        window would ask it again and again)."""
-        here = os.getcwd()
-        if here not in self._prefixes:
-            asked = subprocess.run(["git", "rev-parse", "--show-prefix"], capture_output=True, text=True)
-            if asked.returncode != 0:
-                return ""
-            self._prefixes[here] = asked.stdout.strip()
-        return self._prefixes[here]
-
-    def snapshot(self, story: str, label: str) -> None:
-        """What the working tree looks like right now, so a later stage's claim about what it changed can be
-        checked rather than believed."""
-        journal = self._host.evidence(story)
-        os.makedirs(journal, exist_ok=True)
+    def observe(self, story: str, edge: Edge, window: str) -> None:
+        """The one observation of a window's edge (WP-202): what the working tree looks like right now, so a later
+        stage's claim about what it changed can be checked rather than believed — the end's with the tree the story's
+        record reads, a start's with the base where the story has none yet."""
         hashed = hashing()
         if not hashed:
             err("factory: no sha256 command found (shasum, sha256sum, openssl) — the tree snapshots")
             err("factory:   record file names without content, and factory-verify reports every check")
             err("factory:   that needs a digest as not observed. Install one of the three for full evidence.")
-        lines = [NO_HASHES] if not hashed else []
-        prefix = self._prefix()
-        status = subprocess.run(["git", "-c", "core.fileMode=false", "status", "--porcelain", "-z", "-uall", "--", "."],
-                                capture_output=True).stdout.decode("utf-8", errors="replace")
-
-        def strip(name: str) -> str:
-            return name[len(prefix):] if prefix and name.startswith(prefix) else name
-        origin = ""
-        for entry in status.split("\0"):
-            if not entry:
-                continue
-            if origin:                          # -z writes a rename's source as the next entry
-                if origin == "R":
-                    lines.append(f"deleted  {strip(entry)}")
-                origin = ""
-                continue
-            code, name = entry[:2], strip(entry[3:])
-            if code[:1] in ("R", "C"):
-                origin = code[:1]
-            if "D" in code:
-                lines.append(f"deleted  {name}")
-                continue
-            if not os.path.isfile(name):
-                continue
-            lines.append(f"{file_sha(name) if hashed else '-'}  {name}")
         with contextlib.suppress(OSError):
-            with open(f"{journal}/tree-{label}.txt", "w", encoding="utf-8", newline="\n") as handle:
-                handle.write("".join(line + "\n" for line in lines))
+            observe_edge(os.getcwd(), self._host.evidence(story), edge, window,
+                         Hashing.HASHED if hashed else Hashing.NAMES_ONLY, self._places)
 
 
 class _Both(io.TextIOBase):

@@ -18,7 +18,7 @@ from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_text
 from ..tools.streams import current_session, log_kind, session_usage_allowed, usage_fields, WINDOWS
 from ....application.status.texts import parse_time
 from ....domain.model.usage import USAGE_FIELDS
-from .snapshots import record_base, record_changes, write_snapshot
+from .snapshots import Edge, observe_edge, record_changes
 from .usage_files import resolve_window, window_logs
 from ..claims.checkout_claim import claim, session_owner
 from .story_record import prune_raw
@@ -95,8 +95,7 @@ def mark_stage(cwd: str, runs: str, story_id: str, stage: str, edge: str,
             if requested:
                 print(f"model: the profile asks for {requested} — run this stage as a subagent on it where the "
                       f"tool allows; in this session's own context it cannot take effect")
-            record_base(cwd, runs, story_id)
-            write_snapshot(cwd, runs, story_id, f"before-{stage}")
+            observe_edge(cwd, evidence_dir(runs, story_id), Edge.START, stage)
             # A repeat judge round reads the verdict before it — the runner moves it aside the same way.
             verdict = os.path.join(runs, story_id, "judge.md")
             if stage == stage_of(Role.JUDGES) and os.path.isfile(verdict):
@@ -117,7 +116,7 @@ def mark_stage(cwd: str, runs: str, story_id: str, stage: str, edge: str,
         source = f"log={session_log}" if session_log else \
             f"session={kind.split('-')[0]}:{session_id}" if session_id and kind != "in-session" else ""
         handle.write(f"{stamp}\tstage-end\t{stage}\texit=0\n")
-        write_snapshot(cwd, runs, story_id, f"after-{stage}")
+        observe_edge(cwd, evidence_dir(runs, story_id), Edge.END, stage)
         record_changes(cwd, runs, story_id, stage)
         if not allowed:
             handle.write(f"{stamp}\tusage\t{stage}\ttool={kind}\tunknown\n")

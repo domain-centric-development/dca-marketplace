@@ -167,13 +167,14 @@ def digest(path):
         return None
 
 
-#: The first line the runner writes when the machine has no sha256 command (see `snapshot` in
-#: factory.sh). Such a file carries names and no content.
+#: The first line of an edge's observation taken without content digests (`FACTORY_SHA256=none`).
+#: Such a file carries names and no content.
 NO_HASHES = "# no-sha256-command"
 
 
 def snapshot(path):
-    """`tree-<label>.txt` written by the runner: digest and path per line.
+    """`tree-<edge>-<window>.txt`, the observation of a window's edge: digest and path per line (the header lines —
+    HEAD, the tree, `# untracked` before the untracked paths — carry no digest and are passed over).
 
     A snapshot without content hashes is reported as *absent*, not compared: every digest in it is
     a placeholder, so every comparison against it would come out equal and every check would read

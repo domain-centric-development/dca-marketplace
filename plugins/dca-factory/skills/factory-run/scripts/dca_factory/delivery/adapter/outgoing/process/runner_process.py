@@ -52,6 +52,7 @@ from ..git.integration import integration_target, lost_text
 from ....application.profile.profile_rules import first_word, perspectives_of
 from ..tools.agents import TOOL, TOOLS
 from .gate_process import file_sha, GateProcess, hashing
+from ..files.snapshots import Edge
 from ..tools.tool_choice import ToolChoice
 from ..tools.tool_processes import err, exit_field, flush, ToolProcesses, utc
 from ....application.shared.run_stop import Stopped
@@ -760,8 +761,7 @@ class Run(ProfileSource):
         """One shared process — the builder or the verifier — from its snapshot to its usage line; the tool's exit
         code, or 7 when a person's file changed in it."""
         raw = f"{self.evidence(story)}/{window}.{utc('%H%M%S')}.out"
-        self.gates.record("--record-base", story)
-        self.gates.snapshot(story, f"before-{window}")
+        self.gates.observe(story, Edge.START, window)
         self.gates.owned("start", window, story)
         tool = self.tools.tool_for(window, tool)
         self.journal_line(story, f"{utc()}\tstage-start\t{window}\ttool={tool}{self.tools.effort_field(tool, window)}"
@@ -772,7 +772,7 @@ class Run(ProfileSource):
         self.journal_line(story, f"{utc()}\tstage-end\t{window}\texit={exit_field(invoked)}")
         # What the window changed is recorded however it ended: a file a stage made before the tool failed or a signal
         # stopped it is the story's all the same, and only `stages-made.txt` takes an untracked file into its commit.
-        self.gates.snapshot(story, f"after-{window}")
+        self.gates.observe(story, Edge.END, window)
         self.gates.record("--record-changes", story, window)
         # The window closes before a signal that arrived ends the run: the person may change the story before the next.
         if self.gates.owned("end", window, story, invoked) != 0:
@@ -980,7 +980,6 @@ class Run(ProfileSource):
         # The previous verdict is an input to the next one, not something to overwrite.
         if stage == stage_of(Role.JUDGES) and os.path.isfile(f"{self.runs}/{story}/judge.md"):
             os.replace(f"{self.runs}/{story}/judge.md", f"{self.runs}/{story}/.judge-previous.md")
-        self.gates.record("--record-base", story)
         artefact = self.artefact(story, stage)
         evidence = self.evidence(story)
         had_file = os.path.isfile(artefact)
@@ -994,7 +993,7 @@ class Run(ProfileSource):
         if not had_file and skeleton and os.path.isfile(artefact):
             os.makedirs(evidence, exist_ok=True)
             shutil.copy(artefact, f"{evidence}/{stage}.skeleton")
-        self.gates.snapshot(story, f"before-{stage}")
+        self.gates.observe(story, Edge.START, stage)
         tool = self.tools.tool_for(stage, tool)
         flags, note = self.tools.model_choice(tool, stage)
         requested = self.tools.model_key(tool, stage)
@@ -1010,7 +1009,7 @@ class Run(ProfileSource):
         invoked = self.owned_invoke(story, stage, lambda: self.invoke(tool, self.prompt_for(stage, story), raw, stage, story))
         self.processes.record_usage(story, stage, tool, raw, int(time.time() - began))
         # recorded however the stage ended, as a shared window's: the files it made reach the story's commit
-        self.gates.snapshot(story, f"after-{stage}")
+        self.gates.observe(story, Edge.END, stage)
         self.gates.record("--record-changes", story, stage)
         if self.gates.owned("end", stage, story, invoked) != 0:
             self.journal_line(story, f"{utc()}\tstage-end\t{stage}\texit=owned")
