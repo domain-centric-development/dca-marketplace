@@ -315,7 +315,7 @@ class RequestFiles(RequestStore, RequestRepository):
 
     def save(self, aggregate: Request) -> Request:
         key = aggregate.id.value
-        if aggregate.state is RequestState.DONE:
+        if aggregate.state in (RequestState.DONE, RequestState.DROPPED):
             with contextlib.suppress(OSError):
                 self.delete_by_id(aggregate.id)
             return aggregate

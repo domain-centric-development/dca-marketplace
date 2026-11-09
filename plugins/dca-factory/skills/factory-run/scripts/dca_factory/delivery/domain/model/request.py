@@ -39,6 +39,7 @@ class RequestState(enum.Enum):
                   runs again with the answer
         failed    refused when it was read, or its skill ended without a result (`error`); a person drops or retries it
         done      worked to its end — its file gone, a note of what it made kept where it made something
+        dropped   taken back by a person before it ran or after it failed — its file gone
     """
 
     QUEUED = "queued"
@@ -46,11 +47,13 @@ class RequestState(enum.Enum):
     WAITING = "waiting"
     FAILED = "failed"
     DONE = "done"
+    DROPPED = "dropped"
 
     def operations(self) -> typing.Tuple[RequestOperation, ...]:
         return ((RequestOperation.FOLLOW,) if self is RequestState.RUNNING else ()) \
             + ((RequestOperation.RETRY,) if self is RequestState.FAILED else ()) \
-            + ((RequestOperation.DROP,) if self is not RequestState.RUNNING else ())
+            + ((RequestOperation.DROP,) if self not in (RequestState.RUNNING, RequestState.DONE, RequestState.DROPPED)
+               else ())
 
 
 #: The states a request in hand is in: not yet taken, or taken and not ended.
@@ -113,6 +116,14 @@ class RequestFailed(DomainEvent):
 
 class RequestSettled(DomainEvent):
     """A request is worked to its end: its file is gone."""
+
+    request: RequestId
+    at: Moment
+    story: typing.Optional[StoryId] = None
+
+
+class RequestDropped(DomainEvent):
+    """A person took a request back: it never ran, waited or failed — its file is gone."""
 
     request: RequestId
     at: Moment
@@ -301,6 +312,14 @@ class Request(AggregateRoot[RequestId]):
         self._require(IN_HAND)
         self._state = RequestState.DONE
         self.register_event(RequestSettled(self._id, at))
+
+    def drop(self, at: Moment) -> None:
+        """A person takes back a request that does not run: its file goes (`RequestDropped`)."""
+        if not self.allows(RequestOperation.DROP):
+            raise RequestNotInState(f"request {self._id.value} is {self._state.value} — it can be dropped once it "
+                                    "ended")
+        self._state = RequestState.DROPPED
+        self.register_event(RequestDropped(self._id, at))
 
     def _queue_again(self, at: Moment) -> None:
         self._state = RequestState.QUEUED

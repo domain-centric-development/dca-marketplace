@@ -158,7 +158,7 @@ needs no judgement and executes its use case.
 
 **Identity:** `RequestId` — `<stamp>-<kind>`, its file's name
 
-**Related terms:** `RequestState` (queued, running, waiting, failed, done), `Worker` (who works it), `Why` (why it
+**Related terms:** `RequestState` (queued, running, waiting, failed, done, dropped), `Worker` (who works it), `Why` (why it
 failed), `Decision record` (the record it waits on, by its path)
 
 **Operations:** every change of its state is one of these, each guarded (`RequestNotInState`) and raising its event.
@@ -174,7 +174,8 @@ failed), `Decision record` (the record it waits on, by its path)
   (`leave_uncommitted`) — its skill did its part and its commit was refused, its work marked done (`RequestFailed`);
 - retry (`retry`) — only a failed one, queued again as written (`RequestQueued`);
 - settle (`settle`) — worked to its end, its file gone (`RequestSettled`);
-- take back (`drop`) — a person removes one that does not run (`allows`, `RequestOperation`).
+- take back (`drop`) — a person removes one that does not run, its file gone (`RequestDropped`; `allows`,
+  `RequestOperation`).
 
 **Queries — the request decides, never a copy of it:** whether it is queued (`queued`), waits (`waiting`), is in
 hand (`in_hand`), is an orphan of another worker (`orphaned_by`), and what a person may do with it (`allows`).

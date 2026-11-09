@@ -5,9 +5,10 @@ from __future__ import annotations
 import dataclasses
 import typing
 
-from ....building_blocks import TransactionBoundary, UseCase
+from ....building_blocks import DomainEventPublisher, TransactionBoundary, UseCase
+from ...domain.model.moment import Moment
 from ...domain.model.request import RequestId, RequestOperation
-from ..shared.requests import RequestFacts, RequestRefused, RequestRepository, RequestStore
+from ..shared.requests import RequestFacts, RequestKeeping, RequestRefused, RequestRepository, RequestStore
 
 
 @dataclasses.dataclass(frozen=True)
@@ -28,10 +29,12 @@ class TakeBackRequestUseCase(TakeBackRequestInputPort):
     """A request that does not run is removed; one that runs now is the factory's until it ends; the note of a worked
     one is hidden."""
 
-    def __init__(self, store: RequestStore, requests: RequestRepository, transactions: TransactionBoundary) -> None:
+    def __init__(self, store: RequestStore, requests: RequestRepository, events: DomainEventPublisher,
+                 transactions: TransactionBoundary, now: typing.Callable[[], str]) -> None:
         self._store = store
         self._requests = requests
-        self._transactions = transactions
+        self._keeping = RequestKeeping(requests, events, transactions)
+        self._now = now
 
     def execute(self, command: TakeBackRequestCommand) -> TakenBack:
         try:
@@ -41,7 +44,9 @@ class TakeBackRequestUseCase(TakeBackRequestInputPort):
             if self._store.hide_done(command.request):
                 return TakenBack(dict(id=command.request, state="done"))
             raise
-        if not self._requests.get(RequestId(command.request)).allows(RequestOperation.DROP):
+        life = self._requests.get(RequestId(command.request))
+        if not life.allows(RequestOperation.DROP):
             raise RequestRefused(f"{command.request} runs now — it can be dropped once it ended")
-        self._transactions.in_transaction(lambda: self._requests.delete_by_id(RequestId(command.request)))
+        life.drop(Moment(self._now()))
+        self._keeping.keep(life)
         return TakenBack(request)

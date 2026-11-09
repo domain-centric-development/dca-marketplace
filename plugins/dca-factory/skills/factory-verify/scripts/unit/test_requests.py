@@ -452,6 +452,16 @@ class RequestAggregate(unittest.TestCase):
         self.assertEqual((request.state, request.error), (RequestState.QUEUED, None))
         self.assertEqual(["RequestQueued", "RequestFailed", "RequestQueued"], names(request))
 
+    def test_a_dropped_request_is_gone_with_its_event_and_a_running_one_is_not_dropped(self):
+        request = Request.restore(RequestId("r1"), RequestState.FAILED)
+        request.drop(AT)
+        self.assertEqual(request.state, RequestState.DROPPED)
+        self.assertEqual(["RequestDropped"], names(request))
+        self.assertFalse(request.allows(RequestOperation.DROP))
+        running = Request.restore(RequestId("r2"), RequestState.RUNNING, worker=Worker("me"))
+        with self.assertRaises(RequestNotInState):
+            running.drop(AT)
+
     def test_a_running_request_is_not_dropped_and_a_settled_one_is_done(self):
         request = Request.restore(RequestId("r1"), RequestState.RUNNING, worker=Worker("me"))
         self.assertFalse(request.allows(RequestOperation.DROP))

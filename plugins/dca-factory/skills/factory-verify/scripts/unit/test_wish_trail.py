@@ -77,10 +77,10 @@ class WishTrailTest(unittest.TestCase):
 
     def test_a_hidden_note_is_gone_and_what_it_made_stays(self):
         store = Store([], [wish("c", "done", "2026-11-02T12:00:00Z")])
-        TakeBackRequestUseCase(store, store, Transactions()).execute(TakeBackRequestCommand("c"))
+        TakeBackRequestUseCase(store, store, None, Transactions(), lambda: "2026-11-02T12:00:00Z").execute(TakeBackRequestCommand("c"))
         self.assertEqual([], store.notes)
         with self.assertRaises(RequestRefused):
-            TakeBackRequestUseCase(store, store, Transactions()).execute(TakeBackRequestCommand("c"))
+            TakeBackRequestUseCase(store, store, None, Transactions(), lambda: "2026-11-02T12:00:00Z").execute(TakeBackRequestCommand("c"))
 
 
 if __name__ == "__main__":

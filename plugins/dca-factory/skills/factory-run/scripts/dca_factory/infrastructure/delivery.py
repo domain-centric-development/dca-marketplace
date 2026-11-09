@@ -137,7 +137,7 @@ def check_request(cwd: str) -> CheckRequestUseCase:
 
 def take_back_request(cwd: str) -> TakeBackRequestUseCase:
     requests = RequestFiles(cwd)
-    return TakeBackRequestUseCase(requests, requests, FileTransactions())
+    return TakeBackRequestUseCase(requests, requests, request_events(), FileTransactions(), stamp_utc)
 
 
 def retry_request(cwd: str) -> RetryRequestUseCase:

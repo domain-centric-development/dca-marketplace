@@ -5,8 +5,6 @@ from __future__ import annotations
 import dataclasses
 import typing
 
-import typing
-
 from ....building_blocks import DomainEventPublisher, TransactionBoundary, UseCase
 from ...domain.model.moment import Moment
 from ...domain.model.request import RequestId, RequestOperation

@@ -93,7 +93,7 @@ ID_WORD = re.compile(r"^[A-Za-z0-9][\w.#-]*$")
 
 
 #: The states a request's file says: every state but done — a done request has no file.
-STATES = tuple(state.value for state in RequestState if state is not RequestState.DONE)
+STATES = tuple(state.value for state in RequestState if state not in (RequestState.DONE, RequestState.DROPPED))
 
 #: The states of a request that is not done: written, taken, or asking a person back.
 PENDING = ("queued", "running", "waiting")
