@@ -66,6 +66,34 @@ jobs:
         run: python scripts/check-skills.py --self-test && python scripts/check-skills.py
       - name: the report of dca-new and dca-init
         run: python plugins/dca-core/skills/dca-init/scripts/dca-report.py --self-test
+      # A dispatched run measures what one process costs on this platform, before the suite: the suite's time is
+      # mostly process starts, and their price differs by platform.
+      - name: What a process start costs here
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          cd "$RUNNER_TEMP" && rm -rf probe && mkdir probe && cd probe && git init -q && git -c user.name=p -c user.email=p@x commit -q --allow-empty -m x
+          G="$GITHUB_WORKSPACE/plugins/dca-factory/skills/factory-run/scripts"
+          cp -R "$G/dca_factory" "$G/workflow" "$G/story-gate.py" "$G/factory-cli.py" .
+          python - <<'PROBE'
+          import shutil, subprocess, sys, time
+          probes = [("bash, a subshell", ["bash", "-c", "( true )"]), ("sed", ["sed", "-n", "1p", "story-gate.py"]),
+                    ("git rev-parse --git-dir", ["git", "rev-parse", "--git-dir"]),
+                    ("git status --porcelain", ["git", "status", "--porcelain"]),
+                    ("python -c pass", [sys.executable, "-c", "pass"]), ("python -S -c pass", [sys.executable, "-S", "-c", "pass"]),
+                    ("gate --help (light root)", [sys.executable, "story-gate.py", "--help"]),
+                    ("cli --stages", [sys.executable, "factory-cli.py", "--stages", "--shell"]),
+                    ("shasum, one file", ["shasum", "-a", "256", "story-gate.py"]),
+                    ("sha256sum, one file", ["sha256sum", "story-gate.py"])]
+          for label, argv in probes:
+              found = shutil.which(argv[0]) or argv[0]
+              start = time.perf_counter()
+              for _ in range(20):
+                  subprocess.run([found, *argv[1:]], capture_output=True)
+              print(f"{label}: {(time.perf_counter() - start) / 20 * 1000:.0f} ms")
+          start = time.perf_counter()
+          subprocess.run([shutil.which("bash"), "-c", "for i in $(seq 100); do x=$(true); done"], capture_output=True)
+          print(f"inside bash, one $( ) fork: {(time.perf_counter() - start) / 100 * 1000:.0f} ms")
+          PROBE
       - name: factory-verify
         run: python plugins/dca-factory/skills/factory-verify/scripts/verify.py --group ${{ matrix.group }} --junit verify-report.xml
       - uses: actions/upload-artifact@v4

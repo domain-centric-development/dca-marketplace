@@ -134,30 +134,37 @@ refuse_nested() {
 # reaches the profile and the permission list, so both stay portable between machines. The package needs
 # Python 3.12 or newer; a versioned name is asked after the plain ones, for a machine whose `python3` is the
 # system's older one (macOS' /usr/bin) while a newer one sits beside it on PATH.
+# The first question a Python is asked is the stage table below: the cli beside the runner refuses an older Python
+# itself, so a Python that answers it fits, and is asked nothing more — a process start is what a run pays most for
+# under Git Bash. Only a Python that does not answer is asked for its version alone (no cli beside the runner, a
+# profile it cannot read).
 PY_MIN="3.12"
+# Every Python this runner starts writes UTF-8 — the gate's and the setup's lines carry `—` and `→`,
+# and a Windows console's code page (cp1252) cannot encode them: the print raises and the step dies.
+export PYTHONIOENCODING="${PYTHONIOENCODING:-utf-8}"
 fits() { "$1" -c 'import sys; sys.exit(sys.version_info < (3, 12))' >/dev/null 2>&1; }
+STAGE_TABLE=""
+answers() { STAGE_TABLE=$("$1" "$CLI" --stages --shell --place runs 2>/dev/null); }
 PY="${FACTORY_PYTHON:-}"
 if [ -z "$PY" ]; then
   for candidate in python3 python py python3.14 python3.13 python3.12; do
-    fits "$candidate" && { PY=$candidate; break; }
+    { answers "$candidate" || fits "$candidate"; } && { PY=$candidate; break; }
   done
+  ANSWERED=${PY:+yes}                        # found here: it answered or fits already
 fi
 if [ -z "$PY" ]; then
   echo "factory: needs Python $PY_MIN or newer — none on PATH (python3, python, py, python3.12–3.14); FACTORY_PYTHON names one" >&2
   exit 2
-elif ! fits "$PY"; then
+elif [ -z "${ANSWERED:-}" ] && ! { answers "$PY" || fits "$PY"; }; then
   echo "factory: needs Python $PY_MIN or newer — FACTORY_PYTHON=$PY is older or does not run" >&2
   exit 2
 fi
-# Every Python this runner starts writes UTF-8 — the gate's and the setup's lines carry `—` and `→`,
-# and a Windows console's code page (cp1252) cannot encode them: the print raises and the step dies.
-export PYTHONIOENCODING="${PYTHONIOENCODING:-utf-8}"
 # The stage table and where the run artefacts go, in one call: the gate's stages as bash arrays — names the cli
 # checks to be plain words, never read from a file — and the profile's `runs:` or its default, quoted, read through
 # the cli like every other place: the runner hard-codes no path of the project's and no stage. Without a cli beside
 # the runner there are no stages, and `run` stops before its first one (the cli pair's check names the update).
 # The stop file lives beside the runs.
-eval "$(cli --stages --shell --place runs 2>/dev/null)"
+eval "$STAGE_TABLE"
 RUNS=${PLACE_RUNS:-.dca-factory/runs}
 STOP_FILE="$(dirname "$RUNS")/stop"
 # Every story runs in a worktree of its own (WP-92): the runner works from the main checkout, HOME_DIR, and

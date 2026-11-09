@@ -45,8 +45,6 @@ Options as the gate's: --epics, --runs, --profile (else FACTORY_PROFILE, else th
 import argparse
 import json
 import os
-import re
-import shlex
 import sys
 import textwrap
 import time
@@ -103,6 +101,7 @@ from ....application.delivery.pipeline_workflow import workflow
 
 from . import checkout_commands, delivery_commands, root, session_commands, upkeep_commands
 from .common import placed
+from .question_command import stages_shell
 from .delivery_commands import owned_confirm, reopen, deliver_by_hand, claim_command, undeliver_branch, prove
 from .backlog_commands import backfill_created
 from .lifecycle_commands import up_command, down_command, serve_command
@@ -468,34 +467,6 @@ def spec_check(cwd: str, runs: str, epics: str) -> int:
 # --- the carriers the profile names ------------------------------------------------------
 
 #: A name the shell runner takes as one word: a stage, a shared process, a kind — and a hand-over's file.
-SHELL_WORD = re.compile(r"[a-z][a-z0-9_-]*")
-FILE_WORD = re.compile(r"[a-z0-9][a-z0-9_.-]*")
-
-
-def stages_shell(table: Model) -> int:
-    """The stage table (`ShowStageTableUseCase`) as the runner reads it once at its start, one bash assignment per
-    line, then the tool table and the places asked for, quoted. Every name is checked to be a plain word."""
-    names = [row["name"] for row in table["rows"]] + list(table["windows"]) + sorted({k for k, _s in table["kinds"]})
-    bad = [name for name in names if not SHELL_WORD.fullmatch(name)]
-    bad += [file for file in table["files"].values() if not FILE_WORD.fullmatch(file)]
-    if bad:
-        print(f"factory-cli: the stage table holds a name the runner cannot take as a word: {', '.join(bad)}",
-              file=sys.stderr)
-        return 2
-    if table["tools"] is None:
-        return 2
-    array = lambda name, values: f"{name}=({' '.join(values)})"
-    lines = [array("STAGES", table["order"]), array("STEPS", table["steps"])]
-    lines += [array(f"{window.upper().replace('-', '_')}_STAGES", stages) for window, stages in table["windows"].items()]
-    lines += [array("PRE_GATED", table["pre_gated"]), array("POST_GATED", table["post_gated"]),
-              array("RED_STAGES", table["red"]), array("GUARDED_STAGES", table["guarded"])]
-    lines.append("KIND_STAGES=' " + " ".join(f"{kind}:{stage}" for kind, stage in table["kinds"]) + " '")
-    lines.append("STAGE_FILES=' " + " ".join(f"{name}:{file}" for name, file in table["files"].items()) + " '")
-    lines += table["tools"] + [f"PLACE_{key.upper()}={shlex.quote(value)}" for key, value in table["places"].items()]
-    print("\n".join(lines))
-    return 0
-
-
 def answer(profile_path: typing.Optional[str], question: Question, **fields: str) -> int:
     """The profile's answer to one question, a line per item (`AskProfileUseCase`)."""
     print("\n".join(root.wiring.ask_profile(profile_path).execute(AskProfileQuery(question, **fields))))
