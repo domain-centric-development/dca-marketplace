@@ -46,7 +46,6 @@ ALLOW_EMPTY = (
     ("DCA-NAM-008", "no class named *Converter: an adapter translates in functions"),
     ("DCA-NAM-011", "no class named *ViewModel: the page renders from the use cases' answers"),
     ("DCA-PY-001", "no dataclass decorator in a domain: values, ids and events are frozen by their base"),
-    ("DCA-PY-006", "the incoming adapters branch over a closed result with isinstance, not with match"),
     ("DCA-TAC-005", "no entity below an aggregate root: each aggregate is its root alone"),
     ("DCA-TAC-007", "no entity below an aggregate root: each aggregate is its root alone"),
     ("DCA-TAC-026", "no owned aggregate: the factory serves one project, no aggregate has an owner"),

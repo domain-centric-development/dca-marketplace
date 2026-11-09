@@ -7,11 +7,13 @@ import typing
 from .....sharedkernel.adapter.outgoing.profile.profile_files import (
     shown)
 from ....application.delivery.claim_story import ClaimStoryCommand
-from ....application.delivery.confirm_owned import ConfirmOwnedCommand, NothingToConfirm
+from ....application.delivery.confirm_owned import Confirmed, ConfirmOwnedCommand, NothingToConfirm
 from ....application.shared.story_claims import Claim
-from ....application.delivery.deliver_by_hand import ChangesWhatHolds, ClaimedElsewhere, DeliverByHandCommand
-from ....application.delivery.prove_delivery import ProveDeliveryCommand
-from ....application.delivery.reopen_story import CheckoutHeld, NewWish, NoCorrection, NotCited, ReopenStoryCommand
+from ....application.delivery.deliver_by_hand import (
+    ChangesWhatHolds, ClaimedElsewhere, DeliverByHandCommand, DeliveredByHand)
+from ....application.delivery.prove_delivery import AdoptedForProof, ProveDeliveryCommand
+from ....application.delivery.reopen_story import (
+    CheckoutHeld, NewWish, NoCorrection, NotCited, Reopened, ReopenStoryCommand)
 from ....domain.model.moment import Moment
 from ....domain.model.person import Person
 from ....domain.model.story import AlreadyDelivered, NotDelivered, NothingToDeliver, NothingToProve, StoryId
@@ -28,10 +30,13 @@ def owned_confirm(runs: str, story_id: str, cwd: str = ".") -> int:
     """The person's word that the story and its answers are as they want them after a stage changed them
     (`ConfirmOwnedUseCase`): the mark goes, what changed is journaled, and the story runs on from its files."""
     result = root.wiring.confirm_owned(cwd, runs).execute(ConfirmOwnedCommand(StoryId(story_id)))
-    if isinstance(result, NothingToConfirm):
-        print(f"owned: nothing to confirm for {story_id} — no stage changed its story or an answer")
-    else:
-        print(f"owned: {story_id} — {', '.join(result.parts)} confirmed as the person's; the story runs on")
+    match result:
+        case NothingToConfirm():
+            print(f"owned: nothing to confirm for {story_id} — no stage changed its story or an answer")
+        case Confirmed():
+            print(f"owned: {story_id} — {', '.join(result.parts)} confirmed as the person's; the story runs on")
+        case _:
+            typing.assert_never(result)
     return 0
 
 
@@ -44,24 +49,27 @@ def reopen(cwd: str, runs: str, epics: str, story_id: str) -> int:
         print(f"reopen: {story_id} is not delivered — a correction before delivery goes into the story, "
               f"and the schedule runs it from plan")
         return 1
-    if isinstance(result, NoCorrection):
-        print(f"reopen: {story_id} has no answered correction — /factory-decisions records the human's "
-              f"correction as an acceptance record first")
-    elif isinstance(result, CheckoutHeld):
-        print(f"reopen: {', '.join(h.value for h in result.holders)} holds the checkout with unfinished code — one "
-              f"story at a time; reopen {story_id} once it is delivered")
-    elif isinstance(result, NotCited):
-        rid = result.record.value
-        print(f"reopen: the story does not cite {rid} — write the correction into it first (criteria and "
-              f"an `answered:` line naming {rid})")
-    elif isinstance(result, NewWish):
-        print(f"reopen: after its acceptance the correction changes {', '.join(result.changed)} — that is a new "
-              f"wish: a new story with `## Changed expectations`, not this one reopened")
-    else:
-        print(f"reopen: {story_id} taken back for {result.record.value} — it runs again from plan; the delivered pass "
-              f"is kept as {shown(result.kept) if result.kept else 'nothing (no run folder)'}, and the story no "
-              f"longer says delivered")
-        return 0
+    match result:
+        case NoCorrection():
+            print(f"reopen: {story_id} has no answered correction — /factory-decisions records the human's "
+                  f"correction as an acceptance record first")
+        case CheckoutHeld():
+            print(f"reopen: {', '.join(h.value for h in result.holders)} holds the checkout with unfinished code — "
+                  f"one story at a time; reopen {story_id} once it is delivered")
+        case NotCited():
+            rid = result.record.value
+            print(f"reopen: the story does not cite {rid} — write the correction into it first (criteria and "
+                  f"an `answered:` line naming {rid})")
+        case NewWish():
+            print(f"reopen: after its acceptance the correction changes {', '.join(result.changed)} — that is a new "
+                  f"wish: a new story with `## Changed expectations`, not this one reopened")
+        case Reopened():
+            print(f"reopen: {story_id} taken back for {result.record.value} — it runs again from plan; the delivered "
+                  f"pass is kept as {shown(result.kept) if result.kept else 'nothing (no run folder)'}, and the story "
+                  f"no longer says delivered")
+            return 0
+        case _:
+            typing.assert_never(result)
     return 1
 
 
@@ -83,16 +91,21 @@ def deliver_by_hand(cwd: str, runs: str, epics: str, story_id: str, who: typing.
     except NothingToDeliver:
         print(f"deliver-by-hand: {story_id} is superseded — nothing to deliver")
         return 1
-    if isinstance(result, ClaimedElsewhere):
-        held = result.claim
-        print(f"deliver-by-hand: {story_id} is claimed by {held.who} ({held.host}) since {held.since} — "
-              f"another factory builds it; `--force` delivers it anyway")
-        return 1
-    if isinstance(result, ChangesWhatHolds):
-        print(f"deliver-by-hand: {story_id} changes what holds ({', '.join(result.change.keys)} in "
-              f"{shown(result.change.where)}) — the delta of a change is planned: `factory-cli.py --prove {story_id}` "
-              f"once it is delivered, or run it through the factory")
-        return 1
+    match result:
+        case ClaimedElsewhere():
+            held = result.claim
+            print(f"deliver-by-hand: {story_id} is claimed by {held.who} ({held.host}) since {held.since} — "
+                  f"another factory builds it; `--force` delivers it anyway")
+            return 1
+        case ChangesWhatHolds():
+            print(f"deliver-by-hand: {story_id} changes what holds ({', '.join(result.change.keys)} in "
+                  f"{shown(result.change.where)}) — the delta of a change is planned: "
+                  f"`factory-cli.py --prove {story_id}` once it is delivered, or run it through the factory")
+            return 1
+        case DeliveredByHand():
+            pass
+        case _:
+            typing.assert_never(result)
     if result.unproven.keys:
         print(f"deliver-by-hand: {len(result.unproven.keys)} criterion(s) into {shown(result.unproven.where)}, without "
               f"a test line — unproven until `--prove`")
@@ -142,10 +155,15 @@ def prove(cwd: str, runs: str, epics: str, story_id: str) -> int:
     except NothingToProve:
         print(f"prove: {story_id} is delivered by the gate with its pass on record — nothing to prove")
         return 1
-    if isinstance(result, CheckoutHeld):
-        print(f"prove: {', '.join(h.value for h in result.holders)} holds the checkout with unfinished code — one "
-              f"story at a time; prove {story_id} once it is delivered")
-        return 1
+    match result:
+        case CheckoutHeld():
+            print(f"prove: {', '.join(h.value for h in result.holders)} holds the checkout with unfinished code — "
+                  f"one story at a time; prove {story_id} once it is delivered")
+            return 1
+        case AdoptedForProof():
+            pass
+        case _:
+            typing.assert_never(result)
     by = result.claim.by.line().value or "unknown"
     print(f"prove: {story_id} is `status: adopted` — the adopt path checks it (`factory.sh run --story {story_id}`); "
           f"the claim ({by}) is kept in {shown(result.claim_kept)}"
