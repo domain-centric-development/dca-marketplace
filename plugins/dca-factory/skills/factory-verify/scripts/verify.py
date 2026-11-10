@@ -3850,7 +3850,7 @@ DOC_COMMAND = re.compile(r"(factory\.sh|story-gate\.py|factory-cli\.py)\b([^`#]*
 # The runner's subcommands that hand their flags on — to the cli, the gate or the fixture suite — beside its own.
 PASSED_ON = {"backlog": "cli", "decisions": "cli", "follow": "cli", "help": "cli", "discover": "cli",
              "up": "cli", "down": "cli", "serve": "cli", "request": "cli", "requests": "cli", "rules": "cli",
-             "check": "gate", "verify": "verify"}
+             "lessons": "cli", "check": "gate", "verify": "verify"}
 
 
 def shell_flags(text):

@@ -73,6 +73,23 @@ The description is not part of the cycle: it is amended in parts by the step tha
 structural answer (`/factory-decisions`), the document stage (glossary, map), a released description change
 from a discovery, a new capability (`/dca-add` writes its `## Stack` line).
 
+## Four ways to drive it
+
+One factory, four places to drive it from. They read and write the same files, so you can start a story in one
+and answer its question in another:
+
+| From | Start with | Fits when |
+|---|---|---|
+| **an agent session** — Claude Code, Codex, OpenCode | `/factory-run`, `/factory-status`, `/factory-decisions` | you work beside it and want the conversation: a wish in your words, a question explained |
+| **a terminal or CI** | `bash .agents/factory/factory.sh run --tool claude` | it should run unattended, one process per stage, in the story's worktree |
+| **a browser** | `bash .agents/factory/factory.sh up --serve` | the factory runs in the background and you steer it from a page — release, answer, accept, stop — without a session |
+| **the cockpit** — Claude Code only | `/factory-cockpit` (the `dca-factory-cockpit` plugin) | you want the cycle in a pane beside the session and what waits in a band above the prompt |
+
+The session runs the stages in your session, the other three through the runner. `factory.sh status` and
+`factory.sh follow` show where any of them stands, whoever started it. The browser is
+[the factory without a session](#the-factory-without-a-session); the cockpit has its own README in
+`dca-factory-cockpit`.
+
 ## Install
 
 ```
@@ -250,6 +267,19 @@ bash .agents/factory/factory.sh requests        # what was asked and where each 
 bash .agents/factory/factory.sh down            # ends after the running stage
 ```
 
+A first session in the browser, from a project with the factory set up:
+
+1. `factory.sh up --serve` turns the backlog on, starts the factory and prints the page's URL, token included —
+   open it.
+2. Write a wish: the factory writes it as a draft story. Release it, or any other draft, and the backlog runs it.
+3. When a story waits — a question, an acceptance, a lesson — the decide tab shows it; answer it there.
+4. `factory.sh down` turns the backlog off: running stories finish, no new one starts. `down --now` interrupts
+   the running stage too.
+
+`serve` alone opens the page with the backlog off: your presses are worked — a wish written, an answer recorded,
+a story run now on request — but the backlog starts no story by itself until `up`. `--port <n>` names the port,
+`--open` opens the browser, `serve --stop` ends a page in the background.
+
 `up` starts `run --watch --stay` outside any session and names a factory that is up already instead of starting
 a second. `serve` prints a URL on 127.0.0.1 — each checkout on a port of its own, a token per start — with the
 cockpit's tabs; every press there writes a **request**, the same file `factory.sh request` writes: a wish, a
@@ -293,6 +323,8 @@ in a project goes through one script. Its verbs mirror the skills — `/factory-
 | `factory.sh run [--story <id> [--from <stage>]] [--watch] [--keep-going] [--parallel <n>]` | `factory-run` | one story through the six stages in its worktree, from where its files say, then integrated · `--from` names the stage (or `integrate`) and starts a new count of rounds · without `--story` every story in dependency order, waiting for answers with `--watch`, past a stopped story with `--keep-going`, up to `<n>` at once with `--parallel` |
 | `factory.sh status [--all] [--story <id>] [--epic <id>] [--live] [--format md\|json] [--usage] [--refusals] [--brief]` | `factory-status` | what runs, what waits for you, what comes next and the totals · `--all` the backlog by epic with times and tokens · one story's words, criteria, passes, stages and decisions · one epic with its stories · every token class per stage · the gate refusals, form against substance |
 | `factory.sh decisions [--story <id>]` | `factory-decisions` | the decision inbox |
+| `factory.sh lessons [--write] [--issue <lesson>]` | `factory-decisions` | what keeps coming back across the stories · write it as records · an issue text for the maintainers |
+| `factory.sh follow [--story <id>] [--once]` | *(the page, the cockpit)* | what the running stage reads, edits and runs, as it happens — whoever started it |
 | `factory.sh rules [--stage <s>] [--kind <k>] [--story <id>] [--format md\|json] [--check]` | *(the page, the cockpit)* | every rule the gate checks, the runner decides and a stage is told, by id, in each kind's flow and track — where an outcome sends the story, how often each rule refused in the project's journals, and with `--story` which rules its last gate runs reported and how the story ran along its track; generated from where each rule is written, `--check` holds the rulebook itself. The page's rules tab reads it three ways — a stage, the checks against the stages, a story's run — and opens every rule in a drawer |
 | `factory.sh up [--serve] [--port <n>]` · `down [--now]` | *(the page, the cockpit)* | the factory as a process of its own, until `down` · `--serve` the page too |
 | `factory.sh serve [--port <n>] [--open] [--fixture <name>]` | *(the page)* | the factory in a browser on this machine alone, every press a request · `--fixture all-states\|empty` against canned views, writing nothing |
@@ -484,6 +516,10 @@ or what judges it:
   as folders to read, under a deny rule for every editing tool (`Edit(//<path>/**)`), in the checkout and in a
   worktree alike; Codex, which reads everywhere, is given only the folders it writes. A change a stage makes
   under `.agents/factory/` anyway is not hidden as the pipeline's own: the next gate refuses it (`pipeline`).
+- **What judges it.** The stack profile always, and whatever the profile's `guarded:` globs name — the commit
+  hook's folder, the architecture suite's rule selection, its test classes. A stage changes one of them only where
+  the plan announces it under `## Guarded changes`, with a reason (`GATE-GUARDED`); every other guarded path is
+  denied to the tool's edits, and a change nobody announced is refused (`GATE-PIPELINE`).
 - **The hash.** `gate.installed` records a SHA-256 over the installed files. The runner compares it when a run
   starts — a pipeline that is not the installed one starts nothing — and again before every gate it runs; a
   stage that rewrote the gate stops the run there (exit 7, `pipeline-changed` in the journal, the stop file
@@ -493,6 +529,18 @@ or what judges it:
   that answered its own question or set its story's `status:` stops the run (exit 7), and the story stays
   stopped — the gate refuses it (`owned`) — until a person looked and runs `factory-cli.py --owned-confirm
   <story>`. `by:` stays free text: the digest is the proof, not the name.
+
+**Story text from outside.** A story names where its text came from: `source: person` (the default), `tracker` or
+`import` — `/factory-backlog` writes the last two for a story pasted from a tracker or imported. A story whose text
+did not come from a person runs every stage untrusted: offline, without web tools, and without any environment
+variable whose name holds `TOKEN`, `SECRET`, `KEY` or `PASSWORD`. Only the tool's own sign-in stays, or it could
+not start.
+
+**A contradiction is a stop, not a fix.** Where the story, the plan and the tests cannot all hold, a stage ends
+with a question and a `contradiction:` line, and never edits a test or the plan to make them fit. The runner
+counts such stops apart from failures. A refusal that repeats the one before — same stage, same failed checks,
+same failing tests — gets one fresh start from the story and the gate's report; refused the same way again, the
+run stops for a person.
 
 ## How to see what a story cost
 
@@ -575,6 +623,38 @@ only read.
 Claude Code and Codex report their usage; OpenCode's is unknown until its output format is
 checked against a real run. The numbers are the tool's, read from its machine-readable output or
 its session log — neither is a documented interface, and what cannot be read stays unknown.
+
+## How strong the tests are, how the acceptances went
+
+Three measures, read from files the factory writes anyway; none of them is a gate:
+
+- **Test strength.** With `mutation:` in the profile, a mutation run follows the judge over the production files
+  the story changed — `{classes}` their JVM class names, `{files}` their paths. Setup proposes PIT
+  (`./gradlew pitest -PtargetClasses={classes}`) or Stryker (`dotnet stryker --mutate {files}`) where the project
+  has them. The score goes to the journal and the story view; without the key it is skipped and named.
+- **Acceptances.** How long each waited for a person, how the last one came out, how many were corrections —
+  `status --usage` per epic, the story view per story.
+- **Rework.** How many of a story's production files another story changed again within fourteen days.
+
+## What keeps coming back: lessons
+
+The same question in three stories, the same judge finding, the same correction at acceptance — the factory
+counts what repeats across the stories and, at a threshold, turns it into a **lesson**: a record under
+`product/decisions/` with its evidence and the places its correction could go — the description, the glossary, a
+rule, a profile check, a criterion, or the maintainers — the recommended one first, `not-now` and `never` last.
+
+```
+bash .agents/factory/factory.sh lessons            # the candidates and their evidence
+bash .agents/factory/factory.sh lessons --write    # write them as records now, instead of when the backlog idles
+bash .agents/factory/factory.sh lessons --issue <lesson>   # an anonymised issue text for the maintainers
+```
+
+A lesson waits in decide beside questions and acceptances — in `/factory-decisions`, on the page, in the cockpit.
+Whoever the profile names in `lessons:` answers it, the **loop keeper**; unnamed, whoever answers the decisions.
+The skill that owns the chosen place writes the correction; the factory writes none of it. A lesson that is the
+factory's own becomes an issue text under `.dca-factory/issues/` that a person sends — nothing leaves the machine
+by itself. Questions are counted by the `tag:` every decision record carries (`scope`, `behaviour`, `domain-term`,
+`failure`, `test-level`, …).
 
 ## What it reads outside the project, and what it keeps
 
@@ -893,6 +973,13 @@ an update, or the checkout moved. `factory.sh update` relinks into the newest pi
 **The gate says a command was "skipped and named".** The profile does not declare it. Deliberate: a
 gate that fails on something nobody configured gets switched off, and then nothing is checked at
 all.
+
+## Licence
+
+PolyForm Shield 1.0.0 — see [LICENSE.md](LICENSE.md). Use the factory for any purpose, commercially too, except to
+provide a product that competes with it. What it produces in your project is yours, and the pipeline copy it
+installs may be committed and shared with it; [NOTICE.md](NOTICE.md) says what is whose. Versions up to 0.171.4
+were published under MIT and stay under it.
 
 ## Author
 

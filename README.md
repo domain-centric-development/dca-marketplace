@@ -110,6 +110,18 @@ Details, skill by skill: **[dca-core/README.md](plugins/dca-core/README.md)**.
 With `acceptance: pages` in the profile, a story with something to see waits for a human's look
 before it is delivered; a correction goes into the same story, which runs again.
 
+The commands above run in an agent session. The same factory runs without one, and all four ways read and
+write the same files — start a story in one, answer its question in another:
+
+| From | Start with |
+|---|---|
+| an agent session | `/factory-run` — the stages in your session, with the conversation |
+| a terminal or CI | `bash .agents/factory/factory.sh run --tool claude` — one process per stage, unattended |
+| a browser | `bash .agents/factory/factory.sh up --serve` — the factory in the background, steered from a page on 127.0.0.1: wish, release, answer, accept, stop |
+| the cockpit | `/factory-cockpit` — the cycle in a Claude Code pane, what waits in a band above the prompt |
+
+`factory.sh down` ends a factory started with `up`, after its running stage.
+
 The pipeline needs three things from your project: a **project description** under `product/`, a
 **stack profile** (`dca-factory.profile.yaml` — your build and test commands, detected
 from presets) and the gate script next to it. `/factory-setup` sees to all three; underneath it runs

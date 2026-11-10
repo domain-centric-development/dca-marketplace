@@ -130,3 +130,8 @@ the surface's own renderer there; a story's diff opens in the highlighter's diff
 
 Function hooks are an early-access surface of Claude Code and may change between releases; this plugin keeps its
 own version so it can follow them without touching the factory. Tests: `claude plugin test plugins/dca-factory-cockpit`.
+
+## Licence
+
+PolyForm Shield 1.0.0, like the factory it draws — see [LICENSE.md](LICENSE.md) and [NOTICE.md](NOTICE.md).
+Versions up to 0.43.1 were published under MIT and stay under it.
