@@ -79,6 +79,8 @@ from ..delivery.application.checkout.mark_listening import MarkListeningUseCase
 from ..delivery.application.status.list_findings import ListFindingsUseCase
 from ..delivery.application.lessons.show_lessons import ShowLessonsUseCase
 from ..delivery.application.lessons.write_lessons import WriteLessonsUseCase
+from ..delivery.application.lessons.write_issue import WriteIssueUseCase
+from ..delivery.adapter.outgoing.files.lesson_issue_files import LessonIssueFiles
 from ..delivery.application.shared.lesson_records import LessonProposals
 from ..delivery.adapter.outgoing.files.lesson_record_files import LessonRecordFiles
 from ..delivery.adapter.outgoing.files.lesson_signal_files import LessonSignalFiles
@@ -274,6 +276,10 @@ def show_lessons(cwd: str, epics: str) -> ShowLessonsUseCase:
 
 def write_lessons(cwd: str) -> WriteLessonsUseCase:
     return WriteLessonsUseCase(LessonSignalFiles(cwd), LessonRecordFiles(cwd))
+
+
+def write_issue(cwd: str) -> WriteIssueUseCase:
+    return WriteIssueUseCase(LessonIssueFiles(cwd))
 
 
 def lesson_proposals(cwd: str) -> LessonProposals:

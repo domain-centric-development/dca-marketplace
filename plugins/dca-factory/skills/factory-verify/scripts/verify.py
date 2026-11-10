@@ -7041,6 +7041,26 @@ def run_groups(args):
                              and "written: product/tech.md" in linked and "product/tech.md" in brief
                              and line in read_or_empty(os.path.join(root, "product/tech.md")),
                              (waiting[-400:], linked[-400:], "product/tech.md" in brief)))
+    # what is the factory's goes up: an anonymised issue text a person sends — no project content, no path
+    for root in throwaway():
+        lesson_project(root, 3)
+        cli_text(root, "--lessons", "--write")
+        refused = subprocess.run([sys.executable, args.cli, "--lessons", "--issue", "lesson-question-widgets-test-level"],
+                                 cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        answer(os.path.join(root, record), "e")
+        issued = cli_text(root, "--lessons", "--issue", "lesson-question-widgets-test-level")
+        kept = [os.path.join(root, ".dca-factory", "issues", n)
+                for n in sorted(os.listdir(os.path.join(root, ".dca-factory", "issues")))] \
+            if os.path.isdir(os.path.join(root, ".dca-factory", "issues")) else []
+        text = read_or_empty(kept[0]) if kept else ""
+        leaks = [w for w in ("widgets", "STORY-", "product/", "archived", root) if w in text or w in os.path.basename(
+            kept[0] if kept else "")]
+        expectations.append(("lessons: a lesson answered `factory` becomes an issue text with no project path or "
+                             "content in it — the tag, the count and the pipeline only; an unanswered one writes none",
+                             refused.returncode == 1 and len(kept) == 1 and not leaks
+                             and "question tag: `test-level`" in text and "target: factory" in text
+                             and "stories: 3" in text and "send it to the maintainers yourself" in issued,
+                             (refused.returncode, kept, leaks, text[:300])))
     for name, ok, detail in drain(expectations):
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")
         note_result(name, ok, detail)

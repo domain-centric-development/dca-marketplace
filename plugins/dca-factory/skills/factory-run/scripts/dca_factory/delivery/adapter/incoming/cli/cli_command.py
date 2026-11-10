@@ -12,6 +12,7 @@ what they say.
     factory-cli.py --list-decisions [--story <id>]      the decision inbox, one line per record
     factory-cli.py --lessons [--format text|json]       what repeats across the stories: the lesson candidates
     factory-cli.py --lessons --write                    each candidate nobody was asked yet, as a lesson record in decide
+    factory-cli.py --lessons --issue <lesson>           the anonymised issue text of a lesson that goes up; a person sends it
     factory-cli.py --discover-list [--format text|md|json]  every discovery topic, its proposals and which are epics
     factory-cli.py --schedule                           every story's state and the next one to run
     factory-cli.py --story <id> --start | --kind        where a run begins | `story`, `journey` or `adopt`
@@ -75,6 +76,8 @@ from ....application.shared.usage_ledger import Spent
 from ....application.status.list_findings import ListFindingsQuery
 from ....application.lessons.show_lessons import ShowLessonsQuery
 from ....application.lessons.write_lessons import WriteLessonsCommand
+from ....application.lessons.write_issue import IssueWritten, WriteIssueCommand
+from ....domain.model.decision_record import RecordId
 from ....domain.model.moment import Moment
 from ....application.delivery.show_brief import ShowBriefQuery
 from ....application.delivery.show_story_kind import ShowStoryKindQuery
@@ -606,6 +609,9 @@ def main(argv: typing.Sequence[str]) -> int:
     parser.add_argument("--lines", type=int, default=30, help="with --follow --once: how many lines (0: all)")
     parser.add_argument("--lessons", action="store_true",
                         help="the lesson candidates: what repeats across the stories at its threshold, with its evidence")
+    parser.add_argument("--issue", metavar="LESSON",
+                        help="with --lessons: the anonymised issue text of a lesson answered factory, rule-library or "
+                             "knowledge-catalog, under the factory's folder — a person sends it, nothing leaves by itself")
     parser.add_argument("--write", action="store_true",
                         help="with --lessons: write each candidate nobody was asked yet as an open lesson record")
     parser.add_argument("--list-decisions", action="store_true",
@@ -818,6 +824,15 @@ def main(argv: typing.Sequence[str]) -> int:
                       args.request)
     if args.list_decisions:
         return list_decisions(cwd, args.story, args.format, args.color)
+    if args.lessons and args.issue:
+        issued = root.wiring.write_issue(cwd).execute(WriteIssueCommand(RecordId(args.issue)))
+        if not isinstance(issued, IssueWritten):
+            print(f"factory: {issued.why}", file=sys.stderr)
+            return 1
+        print(issued.text)
+        print(f"factory: the issue text is {issued.path} — it names no project, no story and no file; send it to the "
+              "maintainers yourself, the factory sends nothing")
+        return 0
     if args.lessons and args.write:
         written = root.wiring.write_lessons(cwd).execute(WriteLessonsCommand(Moment(time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))))["written"]
         for one in written:

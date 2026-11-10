@@ -38,8 +38,9 @@
 #   factory.sh requests [--format text|json] [--drop <id>] [--retry <id>]   the requests and their state
 #   factory.sh status [--all] [--story <id>] [--epic <id>] [--usage] [--refusals] [--brief]   what runs, what waits, what comes next; --all: every story and the cost; --refusals: form against substance
 #   factory.sh decisions [--story <id>]      the decision inbox
-#   factory.sh lessons [--write] [--format json]   what repeats across the stories: the lesson candidates; --write
-#                                            asks each one nobody was asked yet as a lesson record in decide
+#   factory.sh lessons [--write] [--issue <lesson>] [--format json]   what repeats across the stories: the lesson
+#                                            candidates; --write asks each one nobody was asked yet as a lesson record
+#                                            in decide; --issue writes the anonymised text of one that goes up
 #   factory.sh spec-delta <story> [--format json]  what holds before and after the story
 #   factory.sh spec [--context <c>] [--format md|json]   what holds: each context with its domain model, features,
 #                                            rules and criteria, and the open stories that would change them

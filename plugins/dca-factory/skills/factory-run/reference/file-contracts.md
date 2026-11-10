@@ -484,6 +484,39 @@ story back. `never` stops the same candidate for good; `not now` lets it back un
 (`<id>-2`) once its evidence holds more stories than `stories:`; a place is written by the skill that owns it, never
 by the factory.
 
+### An issue text for the maintainers — `.dca-factory/issues/<target>-<signal>-<digest>.md`
+
+A lesson answered `factory` (the pipeline got it wrong), `rule-library` (the method's rule suite could catch it) or
+`knowledge-catalog` (the method's knowledge should have said it) is the maintainers' correction, not the project's.
+`factory.sh lessons --issue <lesson>` writes its text (`MaintainerIssue` in the package) and prints it; a person sends
+it — nothing leaves the machine by itself. A receiving repository's agent can work it off without the project:
+
+```markdown
+# <the pipeline | the rule suite | the knowledge catalog>: the same <signal> in <n> stories
+
+target: factory | rule-library | knowledge-catalog
+signal: question | finding | correction | assumption | term
+stories: <n>
+pipeline: dca-factory <version>, contract <n>
+
+## What happened
+<the kind of signal and how often, in general words>
+
+## Shape
+- <only the pipeline's own words: a question tag from its list, a default review perspective, a rule id of the
+  method or the pipeline (`DCA-…`, `GATE-…`, `STAGE-…`, `RUN-…`), a domain or reason code>
+
+## Proposed
+<a stage rule or gate check | a rule with its cases | a catalog node — or the reason it cannot be one>
+
+## About this text
+<how it was made and that the sender decides what example to share>
+```
+
+It names no project, no story, no file path outside the pipeline and no word of the project's language: a context, a
+term, an assumption, a perspective or a rule id of the project's own is left out, never paraphrased. The file name
+carries a digest of the lesson's id, not its key.
+
 ## Requests — `.dca-factory/requests/<stamp>-<kind>.md`
 
 What a person asks the factory to do from a page, a terminal or a view: front matter (`kind`, what it is about,

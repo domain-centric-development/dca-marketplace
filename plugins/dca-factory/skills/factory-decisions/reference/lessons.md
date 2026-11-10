@@ -44,8 +44,12 @@ written: <the file the owning skill wrote, relative to the project>
   written. The next story's brief carries it like any other part of the project: the plan reads the description and
   the glossary, the gate runs the profile's checks and the rule suite.
 - **`factory`, `rule-library`, `knowledge-catalog`** — the correction is the maintainers', not the project's: nothing
-  in the project changes. Write the answer block; a person tells the maintainers. Nothing leaves the machine by
-  itself, and you send nothing.
+  in the project changes. Write the answer block, then run `python3 .agents/factory/factory-cli.py --lessons --issue
+  <record id>` (`factory.sh lessons --issue <record id>`): it writes the anonymised issue text under
+  `.dca-factory/issues/` and prints it. Show it to the person as it is; they send it to the maintainers of the
+  pipeline, the rule suite or the knowledge. Nothing leaves the machine by itself, and you send nothing. Name the file
+  in `written:`. The text's shape is a contract (`factory-run/reference/file-contracts.md`, *An issue text for the
+  maintainers*).
 
 ## Do not
 
