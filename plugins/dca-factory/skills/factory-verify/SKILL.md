@@ -97,6 +97,15 @@ should refuse and that the runner is shaped as specified — never that a *stage
 which needs a model, a real project and a real story. That is mode 1's question, and the honest
 sequence is: check the machinery when it changed, observe the next real run either way.
 
+### The judge measured — a seeded-defect bench
+
+Whether the judge finds what it should is a bench's question, never a fixture's: on a neutral bench project, each
+story is built, one known defect the tests do not catch is planted before its judge runs, and one clean story is the
+control. `scripts/judge_bench.py plant <defects.json> <story>` applies a story's planted patch;
+`scripts/judge_bench.py score <defects.json> <project> [--json]` reads every judge's confirmed findings and says the
+**recall** (planted defects found as `major` or `blocker`, by their file or their words) and the **false alarms**
+(`major` or `blocker` findings on the control). Its header holds the set's shape. A person starts the bench.
+
 ## What a report says
 
 ```markdown
