@@ -144,6 +144,7 @@ nothing rewrites it. A line without `seq=` takes its position in the file.
 | `rounds-reset` | `-` | `by=--from` | the runner, on `run --from` |
 | `fresh` | the stage a round restarts fresh at | `rule=RUN-ROUNDS-3` | the runner, on a refusal that repeats the one before |
 | `stop` | the stage whose fresh restart was refused as before | `rule=RUN-ROUNDS-4` | the runner |
+| `contradiction` | the stage that stopped because the story, the plan and the tests cannot all hold | `decision=<id>,…` | the runner, when the stage's `## needs-human` carries a `contradiction:` line |
 | `pipeline-changed` | the stage before whose gate the installed pipeline differed | — | the runner |
 | `owned-confirmed` | the parts a person confirmed, comma-separated | — | `--owned-confirm` |
 | `part` | a stage a shared process carried | `process=<window>`, `stream=<file>`, `seconds=`, `input=`, `cache_read=`, `cache_write=`, `output=`; `cost=` — the process's cost split by the parts' weight, an estimate — where the stream reports one | the runner after the process's `usage` line; `freeze_all` for a stream a stopped runner left |

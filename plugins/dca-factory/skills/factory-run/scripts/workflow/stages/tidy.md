@@ -53,6 +53,7 @@ freedom is that it may not change what the code *does*.
 <!-- rule: STAGE-TIDY-6 -->
 <!-- rule: STAGE-TIDY-7 -->
 <!-- rule: STAGE-TIDY-8 -->
+<!-- rule: STAGE-TIDY-9 -->
 
 ## Who carries this stage
 
@@ -75,6 +76,10 @@ done — it creates the file with every changed file as a row, or adds the missi
 
 ## Left alone
 - <what you saw and did not change>: <why — outside the footprint, or a design question>
+
+## needs-human                    (only when the specification contradicts itself — otherwise leave it out)
+decision: <story>-<nn>
+contradiction: <what cannot all hold>
 ```
 
 The gate's outcome is not recorded here: its report is the evidence, and a stage edits no hand-over

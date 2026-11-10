@@ -51,6 +51,7 @@ Output: the production code, plus `.dca-factory/runs/<story>/build.md`.
 <!-- rule: STAGE-BUILD-6 -->
 <!-- rule: STAGE-BUILD-7 -->
 <!-- rule: STAGE-BUILD-8 -->
+<!-- rule: STAGE-BUILD-9 -->
 
 ## Ask, do not recall
 
@@ -83,6 +84,10 @@ fill in the why)
 ## Deviations from the plan
 - <element>: <what differed and why>        (omit when there were none — "the plan held" is one word,
                                              not a restatement of its design notes)
+
+## needs-human                    (only when the specification contradicts itself — otherwise leave it out)
+decision: <story>-<nn>
+contradiction: <the criterion, the plan line and the test that cannot all hold>
 ```
 
 That is the whole file. The criteria are not restated here — the judge re-checks each one against the

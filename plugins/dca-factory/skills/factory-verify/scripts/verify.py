@@ -2614,6 +2614,28 @@ exit 0
               code == 0 and story_delivered(root, "STORY-2"),
               f"exit {code}; {output.strip().splitlines()[-2:]}")
 
+    # WP-190 F: a build stage that finds the specification contradicting itself stops with needs-human, and the run
+    # journals the stop as a contradiction — counted apart from a failure
+    for root in throwaway():
+        env = backlog_fixture(root)
+        stand_in = open(os.path.join(root, "stand-in.sh"), encoding="utf-8").read().replace(
+            "  build) printf '## Changed\\n\\n## Files\\n' > \"$d/build.md\" ;;",
+            "  build) mkdir -p product/epics/sample/STORY-2/decisions; printf -- '---\\nid: STORY-2-01\\nstory: "
+            "STORY-2\\nstage: build\\n---\\n\\n# Which holds?\\n\\n## Question\\nThe test and the "
+            "criterion disagree.\\n' > product/epics/sample/STORY-2/decisions/01.md; printf '## Changed\\n\\n"
+            "## needs-human\\ndecision: STORY-2-01\\ncontradiction: the criterion shows three, its test "
+            "expects two\\n' > \"$d/build.md\" ;;")
+        with open(os.path.join(root, "stand-in.sh"), "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(stand_in)
+        code, output = run_runner(runner, root, "run", "--story", "STORY-2", "--separate-stages", env=env)
+        journal = read_or_empty(os.path.join(root, ".dca-factory", "evidence", "STORY-2", "journal.tsv"))
+        check("runner: a build stage that finds the specification contradicting itself stops for a person, journaled "
+              "as a contradiction",
+              code == 3 and "\tcontradiction\tbuild\tdecision=STORY-2-01" in journal
+              and "contradicting itself: the criterion shows three" in output
+              and "STORY-2 tidy" not in invocations(root),
+              f"exit {code}; {output.strip().splitlines()[-4:]}; {invocations(root)}")
+
     # nine invocations per story: the six stages and the three reviewers before the judge — started at once, so
     # their order in the log is not the run's to decide; `norm` sorts each run of reviewer entries
     six = ["plan", "test", "build", "tidy", "review:clean-code", "review:ddd", "review:hexagonal", "judge", "document"]

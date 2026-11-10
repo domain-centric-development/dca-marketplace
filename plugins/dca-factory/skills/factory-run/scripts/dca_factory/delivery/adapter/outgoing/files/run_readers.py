@@ -12,6 +12,7 @@ from .decision_record_files import decisions_store, needs_human_ids, record_path
 from .story_layout import find_story
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter, read_text
 from .run_marks import verdict_in
+from .....sharedkernel.adapter.outgoing.markdown.sections import section_of
 
 
 def verdict_of_story(runs: str, story_id: str) -> str:
@@ -39,6 +40,18 @@ def needs_human_lines(path: str, story_id: typing.Optional[str] = None) -> typin
                 stage = ""
         lines.append(f"{decision_id}\t{stage or '-'}\t{shown(record) if record else '-'}")
     return lines
+
+
+def contradiction_in(path: str) -> typing.Optional[str]:
+    """What the hand-over's needs-human section says cannot all hold (`contradiction: …`) — None where it names no
+    contradiction, or has no such section."""
+    if not os.path.isfile(path):
+        return None
+    for line in section_of(read_text(path), "needs-human") or []:
+        text = line.strip()
+        if text.lower().startswith("contradiction:"):
+            return text.split(":", 1)[1].strip() or "named, not said"
+    return None
 
 
 def open_decision_files(cwd: str, story_id: str) -> typing.List[str]:

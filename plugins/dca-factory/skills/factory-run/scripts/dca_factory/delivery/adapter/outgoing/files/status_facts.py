@@ -467,4 +467,5 @@ def story_signals(runs: str, story_id: str, records: typing.Sequence[typing.Any]
                 findings=findings if judge else None, domain=domain if judge else None,
                 corrections=corrections,
                 fresh=sum(1 for e in events if e["kind"] == "fresh"),
-                repeated=sum(1 for e in events if e["kind"] == "stop" and e["fields"].get("rule") == "RUN-ROUNDS-4"))
+                repeated=sum(1 for e in events if e["kind"] == "stop" and e["fields"].get("rule") == "RUN-ROUNDS-4"),
+                contradictions=sum(1 for e in events if e["kind"] == "contradiction"))

@@ -68,6 +68,8 @@ def signals_line(totals: Entry) -> str:
     if totals.get("corrections"):
         parts.append("corrections " + " · ".join(f"{n} {c.replace('domain-', '', 1)}"
                                                  for c, n in sorted(totals["corrections"].items())))
+    if totals.get("contradictions"):
+        parts.append(f"contradictions {totals['contradictions']}")
     if totals.get("fresh") or totals.get("repeated"):
         parts.append(f"fresh restarts {totals.get('fresh') or 0} · stops by repetition {totals.get('repeated') or 0}")
     return " · ".join(parts)
@@ -83,7 +85,7 @@ def signal_totals(rows: typing.Sequence[Entry], perspectives: typing.Optional[ty
     knows, a finding under any other name — free text a judge wrote before the gate held it — counts as `other`."""
     total: Entry = dict(stories=len(rows), measured=0, not_measured=0, without_test=0, open=0, named=0,
                         **{v: 0 for v in RULE_VERDICTS},
-                        asked=0, answered=0, assumptions_open=0, assumptions_answered=0, plan_open=0, fresh=0, repeated=0,
+                        asked=0, answered=0, assumptions_open=0, assumptions_answered=0, plan_open=0, fresh=0, repeated=0, contradictions=0,
                         findings={}, domain={}, corrections={})
     for row in rows:
         signals = row.get("signals") or {}
@@ -98,7 +100,8 @@ def signal_totals(rows: typing.Sequence[Entry], perspectives: typing.Optional[ty
             for verdict, n in signals["rules"].items():
                 total[verdict] = total.get(verdict, 0) + n
                 total["named"] += n
-        for key in ("asked", "answered", "assumptions_open", "assumptions_answered", "plan_open", "fresh", "repeated"):
+        for key in ("asked", "answered", "assumptions_open", "assumptions_answered", "plan_open", "fresh", "repeated",
+                    "contradictions"):
             total[key] += signals.get(key) or 0
         for key in ("findings", "domain", "corrections"):
             for name, n in (signals.get(key) or {}).items():

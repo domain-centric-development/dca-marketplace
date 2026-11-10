@@ -65,7 +65,7 @@ from ....domain.service.stage_brief import Brief, written
 from ..files.brief_files import brief_dir, EVERY_STAGE, write_brief, write_every_stage, write_told_everywhere
 from ..files.request_files import default_by, REQUEST_JOURNAL, requests_dir
 from ....application.requests.list_requests import target_text
-from ..files.run_readers import needs_human_lines, open_decision_files, verdict_of_story
+from ..files.run_readers import contradiction_in, needs_human_lines, open_decision_files, verdict_of_story
 from ....application.requests.request_queue import RequestQueue
 from ....application.requests.work_request import RequestWorked
 from ....application.shared.requests import RequestFacts
@@ -563,6 +563,11 @@ class Run(ProfileSource):
         self.profile()
         rows = [line.split("\t") for line in needs_human_lines(artefact, story) or [] if line.strip()]
         ids = [row[0] for row in rows]
+        said = contradiction_in(artefact)
+        if said is not None:
+            # a specification that contradicts itself is counted apart from a failure (WP-190 F)
+            self.journal_line(story, f"{utc()}\tcontradiction\t{stage}" + (f"\tdecision={','.join(ids)}" if ids else ""))
+            err(f"factory:   the stage found the specification contradicting itself: {said}")
         if not ids:
             err("factory:   the section names no 'decision: <id>' — the stage has to write the question as")
             err("factory:   <story>/decisions/<nn>.md in the story's folder; the next gate refuses a question nobody was asked.")

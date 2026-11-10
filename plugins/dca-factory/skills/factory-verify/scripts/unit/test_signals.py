@@ -55,8 +55,9 @@ class Signals(unittest.TestCase):
         self.assertEqual(status_facts.story_signals(self.runs, "S-1", [], "")["fresh"], 0)
         journal.journal_append(self.runs, "S-1", "fresh", "build", "rule=RUN-ROUNDS-3")
         journal.journal_append(self.runs, "S-1", "stop", "build", "rule=RUN-ROUNDS-4")
+        journal.journal_append(self.runs, "S-1", "contradiction", "build", "decision=S-1-01")
         signals = status_facts.story_signals(self.runs, "S-1", [], "")
-        self.assertEqual((signals["fresh"], signals["repeated"]), (1, 1))
+        self.assertEqual((signals["fresh"], signals["repeated"], signals["contradictions"]), (1, 1, 1))
 
     def test_each_rules_verdict_is_counted_from_the_last_group_the_test_gate_wrote(self):
         self.assertIsNone(status_facts.story_signals(self.runs, "S-1", [], "")["rules"])
