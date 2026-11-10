@@ -10,7 +10,7 @@ import support  # noqa: F401 — puts the package on the path
 from support import project
 from dca_factory.delivery.application.requests.check_request import CheckRequestCommand
 from dca_factory.delivery.application.shared.requests import KIND, RequestRefused
-from dca_factory.delivery.domain.model.reach import Network, Reach
+from dca_factory.delivery.domain.model.reach import VariableName, Network, Reach
 from dca_factory.infrastructure import delivery as wiring
 from dca_factory.delivery.adapter.outgoing.process.runner_process import Run
 from dca_factory.delivery.adapter.outgoing.tools.agents import TOOL, isolation_args, permission_block, tool_command
@@ -119,6 +119,15 @@ class WhatARunReaches(unittest.TestCase):
         self.assertEqual((True, False, False), (offline.offline, offline.researches, offline.builds))
         self.assertTrue(Reach.request(Network.RESEARCH).researches)
         self.assertTrue(Reach.request(Network.OPEN).offline)          # a request never gets a stage's open network
+
+    def test_a_stage_of_a_story_from_outside_builds_offline_without_the_web_and_without_a_secret(self):
+        untrusted = Reach.untrusted_stage()
+        self.assertEqual((True, False, True), (untrusted.offline, untrusted.researches, untrusted.builds))
+        self.assertFalse(untrusted.keeps(VariableName("GITHUB_TOKEN")))
+        self.assertFalse(untrusted.keeps(VariableName("db_password")))
+        self.assertFalse(untrusted.keeps(VariableName("AWS_SECRET_ACCESS_KEY")))
+        self.assertTrue(untrusted.keeps(VariableName("PATH")))
+        self.assertTrue(Reach.stage().keeps(VariableName("GITHUB_TOKEN")))
 
     def test_a_requests_kind_says_its_reach(self):
         self.assertEqual(Reach.request(Network.RESEARCH), KIND["discover"].reach)

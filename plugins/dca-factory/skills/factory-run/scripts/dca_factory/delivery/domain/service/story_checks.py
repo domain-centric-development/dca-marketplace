@@ -6,7 +6,7 @@ from __future__ import annotations
 from ....building_blocks import DomainService
 from ..gateway.stage_evidence import StageEvidence
 from ..model.stage import StoryKind
-from ..model.story import ReleaseState, Story
+from ..model.story import StorySource, ReleaseState, Story
 from ..model.backlog_facts import OPEN_ROW
 from ..model.profile_facts import ContractNumber
 from ..model.story_state import MAX_ROUNDS
@@ -33,8 +33,15 @@ class StoryChecks(DomainService):
         if not story.content.context.value:
             return (STORY.fail(Said(f"{evidence.place_of(story.id).value}: front matter has no `context:` — a story names the bounded "
                                     f"context it changes")),)
+        if story.content.source is None:
+            return (STORY.fail(Said(f"{evidence.place_of(story.id).value}: `source:` names none of "
+                                    f"{', '.join(s.value for s in StorySource)} — where the story's text came from "
+                                    f"decides what its stages may reach")),)
+        source = story.content.source
+        reach = "" if source is StorySource.PERSON else \
+            f"; its text came from a {source.value}: every stage runs offline, without the web and without a secret"
         return (STORY.ok(Said(f"{story.id.value} in context {story.content.context.value} with {len(story.content.criteria)} "
-                              f"criterion(s)")),)
+                              f"criterion(s){reach}")),)
 
     @staticmethod
     def status(story: Story, evidence: StageEvidence) -> Findings:

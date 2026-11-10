@@ -77,7 +77,7 @@ your file. The rule in full: in what every stage is told.
 ## The plan file
 
 ```markdown
-# Plan — <story id>: <title>
+# Plan — <story id>: <title> · source: <the story's `source:` — person where it names none>
 
 ## Context
 <bounded context, and why this story belongs to it — two lines>

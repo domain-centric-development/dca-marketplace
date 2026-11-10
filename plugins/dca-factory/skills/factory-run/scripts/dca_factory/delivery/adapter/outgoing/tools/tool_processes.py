@@ -19,6 +19,7 @@ from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_text
 from .....sharedkernel.adapter.outgoing.profile.profile_files import place
 from .agents import TOOL, tool_command
+from ....domain.model.reach import Reach, VariableName
 from .streams import stream_limit, usage_lines
 from .tool_choice import seconds_of, ToolChoice
 from ....application.shared.run_stop import SIGNAL_EXITS, Stopped  # noqa: F401 — raised by the processes, caught by the runner
@@ -88,6 +89,8 @@ class ToolHost(typing.Protocol):
     def protected_dirs(self) -> typing.List[str]: ...
 
     def guarded_walls(self, story: typing.Optional[str]) -> typing.List[str]: ...
+
+    def stage_reach(self, story: typing.Optional[str]) -> Reach: ...
 
     def skill_reach(self) -> typing.List[str]: ...
 
@@ -169,7 +172,13 @@ class ToolProcesses:
         host, choice = self._host, self._choice
         flags, _note = choice.model_choice(tool, stage)
         command = os.environ.get("FACTORY_TOOL_CMD")
-        env = dict(os.environ, FACTORY_WORKER=host.worker, FACTORY_STAGE=stage or "", FACTORY_STORY=story or "",
+        # a stage's reach follows its story: one whose text came from outside runs offline, without the web and
+        # without a secret in its environment (WP-190 E); a request's is the choice's
+        allowed = host.stage_reach(story) if choice.reach.builds and hasattr(host, "stage_reach") else choice.reach
+        own = TOOL[tool].credentials if tool in TOOL else ()
+        env = {name: value for name, value in os.environ.items()
+               if name in own or allowed.keeps(VariableName(name))}
+        env.update(FACTORY_WORKER=host.worker, FACTORY_STAGE=stage or "", FACTORY_STORY=story or "",
                    FACTORY_REQUEST=host.request_in_flight)
         if command:
             env.update(FACTORY_PROMPT=prompt, FACTORY_RUNS=host.runs, FACTORY_MODEL=choice.model_key(tool, stage))
@@ -188,7 +197,7 @@ class ToolProcesses:
                                        writable=host.add_dirs, readable=[*host.read_dirs, *reach],
                                        protected=[*host.protected_dirs(), *reach], allowed=choice.allowed_commands(),
                                        effort=level,
-                                       offline=choice.reach.offline, web=choice.reach.researches,
+                                       offline=allowed.offline, web=allowed.researches,
                                        guarded=host.guarded_walls(story) if hasattr(host, "guarded_walls") else [])
         env.update(variables)
         return self.tool_process(spawnable(argv + [prompt]), env, raw, stdin=subprocess.DEVNULL, stage=stage)

@@ -194,6 +194,16 @@ class NothingToProve(DomainException):
         self.story = story
 
 
+class StorySource(enum.Enum):
+    """Where a story's text came from (`source:`): a person wrote it — the default where a story names none —, or it
+    was pasted from a tracker or imported. A story a person did not write runs every stage offline, without the web
+    and without a variable that names a secret: its text may carry instructions nobody here wrote."""
+
+    PERSON = "person"
+    TRACKER = "tracker"
+    IMPORT = "import"
+
+
 class StoryContent(Value):
     """What a story says, read-only: its context, its criteria and what each observes, the happy paths, what it
     depends on, closes and publishes, the feature it changes, the status as written — the part of the aggregate the
@@ -213,6 +223,8 @@ class StoryContent(Value):
     changed_expectations: Count = Count(0)
     #: the feature of its context it changes, as its `feature:` names it — "" where it names none
     feature: Detail = Detail("")
+    #: where its text came from — None for a `source:` that names none of the known places
+    source: typing.Optional[StorySource] = StorySource.PERSON
 
 
 class StoryReleased(DomainEvent):

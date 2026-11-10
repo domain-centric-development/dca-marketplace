@@ -368,14 +368,19 @@ def invariants_skeleton(runs: str, story_id: str) -> None:
     print(f"factory: {runs}/{story_id}/tests.md — {len(rows)} invariant row(s) under `## Invariants`; fill in each test")
 
 
-PLAN_SKELETON = ("# Plan — {story}\n\n## Context\n\n## Changes\n| Element | Kind | Location | New or changed | Evidence |\n"
+PLAN_SKELETON = ("# Plan — {story} · source: {source}\n\n## Context\n\n## Changes\n| Element | Kind | Location | New or changed | Evidence |\n"
                  "| --- | --- | --- | --- | --- |\n\n## Acceptance criteria\n{rows}\n\n## Spec delta\n{delta}\n\n## Invariants\n\n## Files\n\n## Glossary proposals\n\n"
                  "## Open assumptions\n")
 
 
 #: A task's plan (WP-106): what changes in the code and where — no criteria, no levels, no spec delta.
-TASK_PLAN_SKELETON = ("# Plan — {story}\n\n## Context\n\n## Changes\n| Element | Kind | Location | New or changed | Evidence |\n"
+TASK_PLAN_SKELETON = ("# Plan — {story} · source: {source}\n\n## Context\n\n## Changes\n| Element | Kind | Location | New or changed | Evidence |\n"
                       "| --- | --- | --- | --- | --- |\n\n## Invariants\n\n## Files\n\n## Open assumptions\n")
+
+
+def source_word(story_path: str) -> str:
+    """The story's `source:` as its plan's first line names it — `person` where the story names none."""
+    return str(read_front_matter(story_path)[0].get("source") or "person").strip().lower() or "person"
 
 
 def plan_skeleton(runs: str, story_id: str, cwd: str = ".") -> int:
@@ -396,7 +401,7 @@ def plan_skeleton(runs: str, story_id: str, cwd: str = ".") -> int:
     if story_kind(read_front_matter(story_path)[0]) == "task":
         os.makedirs(folder, exist_ok=True)
         with open(target, "w", encoding="utf-8") as handle:
-            handle.write(TASK_PLAN_SKELETON.format(story=story_id))
+            handle.write(TASK_PLAN_SKELETON.format(story=story_id, source=source_word(story_path)))
         print(f"factory: {runs}/{story_id}/plan.md — a task's skeleton: no criteria, no spec delta")
         return 0
     rows = "\n".join(f"- {key}  →  level: " for key, _text in criteria)
@@ -413,7 +418,7 @@ def plan_skeleton(runs: str, story_id: str, cwd: str = ".") -> int:
         delta = "\n".join([line for line in (delta,) if line] + placement_lines(story, held, feature, features))
     os.makedirs(folder, exist_ok=True)
     with open(target, "w", encoding="utf-8") as handle:
-        handle.write(PLAN_SKELETON.format(story=story_id, rows=rows, delta=delta))
+        handle.write(PLAN_SKELETON.format(story=story_id, rows=rows, delta=delta, source=source_word(story_path)))
     print(f"factory: {runs}/{story_id}/plan.md — the skeleton with {len(criteria)} criterion key(s) under `## Acceptance criteria`")
     return 0
 

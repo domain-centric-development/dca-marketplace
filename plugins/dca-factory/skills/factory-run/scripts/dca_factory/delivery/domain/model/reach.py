@@ -55,6 +55,18 @@ SECRET_FOLDERS = tuple(HomeFolder(word) for word in (
     ".pypirc", ".m2/settings.xml", ".gradle/gradle.properties", ".config/gh", ".config/gcloud", "Library/Keychains"))
 
 
+class VariableName(Value):
+    """The name of a variable in a run's environment."""
+
+    value: str
+
+
+#: What a variable's name says it holds when a run must not have it: a run of a story whose text came from outside
+#: (a tracker, an import) gets no variable whose name contains one of these words — its text may carry instructions
+#: nobody here wrote.
+SECRET_WORDS = ("TOKEN", "SECRET", "KEY", "PASSWORD")
+
+
 class Network(enum.Enum):
     """What of the network a run has."""
 
@@ -65,6 +77,7 @@ class Network(enum.Enum):
 
 class RunKind(enum.Enum):
     STAGE = "stage"
+    UNTRUSTED_STAGE = "untrusted-stage"   # a stage of a story whose text a person did not write (WP-190 E)
     REQUEST = "request"
 
 
@@ -79,6 +92,12 @@ class Reach(Value):
         return Reach(RunKind.STAGE, Network.OPEN)
 
     @staticmethod
+    def untrusted_stage() -> "Reach":
+        """A stage of a story whose text came from a tracker or an import: it builds as a stage does, but offline —
+        no grant overrides it —, without the web, and without a variable that names a secret."""
+        return Reach(RunKind.UNTRUSTED_STAGE, Network.NONE)
+
+    @staticmethod
     def request(network: Network) -> "Reach":
         """A request's run: offline, or researching the web — never the open network of a stage."""
         return Reach(RunKind.REQUEST, Network.RESEARCH if network is Network.RESEARCH else Network.NONE)
@@ -86,20 +105,26 @@ class Reach(Value):
     @property
     def builds(self) -> bool:
         """Whether its shell runs the project's own commands — a build runs whatever its script says."""
-        return self.kind is RunKind.STAGE
+        return self.kind is not RunKind.REQUEST
 
     @property
     def shell_heads(self) -> typing.Tuple[ShellHead, ...]:
-        return STAGE_SHELL_HEADS if self.kind is RunKind.STAGE else REQUEST_SHELL_HEADS
+        return STAGE_SHELL_HEADS if self.builds else REQUEST_SHELL_HEADS
 
     @property
     def cli_flags(self) -> typing.Optional[typing.Tuple[ShellHead, ...]]:
         """The cli flags it may call — None: the whole cli, as a stage has it."""
-        return None if self.kind is RunKind.STAGE else REQUEST_CLI_FLAGS
+        return None if self.builds else REQUEST_CLI_FLAGS
 
     @property
     def verbs(self) -> typing.Tuple[ShellHead, ...]:
-        return () if self.kind is RunKind.STAGE else REQUEST_VERBS
+        return () if self.builds else REQUEST_VERBS
+
+    def keeps(self, variable: VariableName) -> bool:
+        """Whether the run is started with <variable>: an untrusted stage gets none whose name says it holds a
+        secret; every other run all of them."""
+        return self.kind is not RunKind.UNTRUSTED_STAGE \
+            or not any(word in variable.value.upper() for word in SECRET_WORDS)
 
     @property
     def offline(self) -> bool:

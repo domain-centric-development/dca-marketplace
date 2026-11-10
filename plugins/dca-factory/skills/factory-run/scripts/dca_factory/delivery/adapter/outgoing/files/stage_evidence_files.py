@@ -46,7 +46,7 @@ from ....domain.model.test_facts import (
     AssertionAt, AssertionFact, ChangedTest, ClauseRow, KeptTests, MappedTest, PlannedTestChange, RedProof, Rename,
     RenamedTest, SpecDelta, SpecTests, SymbolName, TestChange, TestDiff, TestEdit, TestSource)
 from ....domain.gateway.stage_evidence import StageEvidence
-from ....domain.model.story import StoryContent, StoryId
+from ....domain.model.story import StoryContent, StoryId, StorySource
 from ....domain.model.story_state import Detail, HandOverText, Rounds, StatusWord
 from ....domain.service.backlog_checks import EPIC_FIELDS, normal_name
 from .brief_files import given_digest, named_digest
@@ -218,7 +218,13 @@ def story_content(front: Front, body: str, criteria: typing.Sequence[typing.Tupl
               for key, clauses in scenario_clauses(body).items()),
         Count(sum(1 for line in section_of(body, "changed expectations") or []
                   if line.strip().startswith(("-", "*")) and human_line(line.strip()[1:].strip()))),
-        Detail(str(front.get("feature") or "").strip()))
+        Detail(str(front.get("feature") or "").strip()), source_of(front))
+
+
+def source_of(front: Front) -> typing.Optional[StorySource]:
+    """Where the story's text came from — a person's where it names none; None for a word nobody knows."""
+    word = str(front.get("source") or "").strip().lower() or StorySource.PERSON.value
+    return next((s for s in StorySource if s.value == word), None)
 
 
 def spec_front(story: Story) -> typing.Dict[str, typing.Any]:

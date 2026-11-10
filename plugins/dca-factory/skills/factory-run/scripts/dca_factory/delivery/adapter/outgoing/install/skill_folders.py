@@ -71,7 +71,10 @@ def link(source: str, path: str) -> bool:
 def copy_tree(source: str, target: str) -> bool:
     """A skill's folder, without the bytecode a run left in it (`cp -R`, links kept as links)."""
     try:
-        shutil.copytree(source, target, symlinks=True, copy_function=shutil.copy)
+        # bytecode left out while copying, not only after: a process importing the source beside the copy may write
+        # or replace a .pyc under it at that moment, and the copy would fail on a file that changed under it
+        shutil.copytree(source, target, symlinks=True, copy_function=shutil.copy,
+                        ignore=shutil.ignore_patterns("__pycache__"))
     except (OSError, shutil.Error):
         return False
     for top, dirs, _files in os.walk(target):

@@ -47,6 +47,8 @@ class Tool(typing.NamedTuple):
     plugins: bool = False     #: it loads the method skills from its plugins, so its skill folder holds the pipeline's
                               #: alone; a tool without plugins finds only its folder, which then holds them all
     plugin_home: str = ""     #: where it keeps the plugins it loads, from the home — read by a run, never edited
+    credentials: typing.Tuple[str, ...] = ()  #: the variables it signs in with — kept for a run that gets no other
+                              #: secret (a story whose text came from outside), or the tool could not start
 
 
 def codex_profile() -> typing.Tuple[str, ...]:
@@ -72,7 +74,8 @@ TOOLS = (
                     ("--settings", '{"permissions":{"blockReadsOutsideWorkingDirectories":true}}')),
          usage="claude-json", skills=".claude/skills", model_flag="--model", args_env="FACTORY_CLAUDE_ARGS",
          add_dirs="all", deny=True, allow_list=True, effort=("--effort", "{level}"), default_model="opus",
-         plugins=True, plugin_home=".claude/plugins"),
+         plugins=True, plugin_home=".claude/plugins",
+         credentials=("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN")),
     # The user's config.toml (MCP servers, profiles, a model) stays out; the login does not. stdin is closed by the
     # runner: `codex exec` also reads a prompt from stdin, and an unattended run has none.
     Tool("codex", ("codex", "exec", "--json", *codex_profile()),
@@ -80,14 +83,16 @@ TOOLS = (
          usage="codex-jsonl", skills=".codex/skills", model_flag="-m", args_env="FACTORY_CODEX_ARGS",
          add_dirs="writable", effort=("-c", 'model_reasoning_effort="{level}"'),
          online=("-c", "permissions.factory.network.enabled=true"),
-         offline=("-c", "permissions.factory.network.enabled=false")),
+         offline=("-c", "permissions.factory.network.enabled=false"),
+         credentials=("OPENAI_API_KEY", "CODEX_API_KEY")),
     # `opencode run` otherwise attaches to a background service started with another configuration: the permission
     # block, the isolation and the model would be that process's. A config folder of its own keeps the person's
     # opencode.json, plugins and MCP servers out; the login lives in the data folder and stays (probed 2.0.20).
     Tool("opencode", ("opencode", "run", "--standalone", "--format", "json"),
          help=("opencode", "run", "--help"), isolation=(), isolation_env=(("OPENCODE_CONFIG_DIR", "{empty}"),),
          usage="opencode-json", skills=".opencode/skills", model_flag="-m", args_env="FACTORY_OPENCODE_ARGS",
-         add_dirs="permission", permission_env="OPENCODE_CONFIG_CONTENT"),
+         add_dirs="permission", permission_env="OPENCODE_CONFIG_CONTENT",
+         credentials=("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY")),
 )
 
 

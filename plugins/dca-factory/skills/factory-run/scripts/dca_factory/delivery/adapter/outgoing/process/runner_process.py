@@ -61,6 +61,9 @@ from ..tools.tool_processes import err, exit_field, flush, ToolProcesses, utc
 from ....application.shared.run_stop import Stopped
 from ....domain.model.stage import StageText, Window
 from ....domain.model.story_words import Place
+from ....domain.model.reach import Reach
+from ....domain.model.story import StorySource
+from ..files.stage_evidence_files import source_of
 from ....domain.service.stage_brief import Brief, written
 from ..files.brief_files import brief_dir, EVERY_STAGE, write_brief, write_every_stage, write_told_everywhere
 from ..files.request_files import default_by, REQUEST_JOURNAL, requests_dir
@@ -547,6 +550,18 @@ class Run(ProfileSource):
             return is_delivered(read_front_matter(find_story(place("epics"), story))[0])
         except GateError:
             return False
+
+    def stage_reach(self, story: typing.Optional[str]) -> Reach:
+        """What a stage of <story> may reach: a stage's, or — for a story whose text did not come from a person
+        (`source:`) — an untrusted stage's: offline, no web, no secret in its environment."""
+        if not story:
+            return Reach.stage()
+        self.profile()
+        try:
+            source = source_of(read_front_matter(find_story(place("epics"), story))[0])
+        except GateError:
+            return Reach.stage()
+        return Reach.stage() if source is StorySource.PERSON else Reach.untrusted_stage()
 
     def kind_of(self, story: str) -> str:
         """`story`, `journey`, `adopt` or `task` — `story` for one that cannot be read."""

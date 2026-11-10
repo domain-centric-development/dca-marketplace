@@ -2614,6 +2614,29 @@ exit 0
               code == 0 and story_delivered(root, "STORY-2"),
               f"exit {code}; {output.strip().splitlines()[-2:]}")
 
+    # WP-190 E: a story whose text came from a tracker runs its stages without a secret in their environment — the
+    # tool's own sign-in kept —, a person's story with everything
+    for origin, wanted in (("tracker", "absent"), ("person", "present")):
+        for root in throwaway():
+            env = backlog_fixture(root)
+            path = os.path.join(root, "product", "epics", "sample", "STORY-2", "story.md")
+            text = open(path, encoding="utf-8").read()
+            with open(path, "w", encoding="utf-8", newline="\n") as handle:
+                handle.write(text.replace("\nid: STORY-2\n", f"\nid: STORY-2\nsource: {origin}\n", 1))
+            stand_in = open(os.path.join(root, "stand-in.sh"), encoding="utf-8").read().replace(
+                'echo "$FACTORY_STORY $FACTORY_STAGE" >> invocations.log',
+                'echo "$FACTORY_STORY $FACTORY_STAGE" >> invocations.log; '
+                'if [ -n "${SHOP_API_TOKEN:-}" ]; then t=present; else t=absent; fi; '
+                'echo "$t ${ANTHROPIC_API_KEY:-none}" >> env.log')
+            with open(os.path.join(root, "stand-in.sh"), "w", encoding="utf-8", newline="\n") as handle:
+                handle.write(stand_in)
+            code, output = run_runner(runner, root, "run", "--story", "STORY-2", "--max-stages", "1",
+                                      env={**env, "SHOP_API_TOKEN": "s3cret", "ANTHROPIC_API_KEY": "kept"})
+            seen = read_or_empty(os.path.join(root, "env.log")).split()
+            check(f"runner: a story whose source is {origin} runs its stage with the secret {wanted}, the tool's "
+                  f"own sign-in kept",
+                  seen[:2] == [wanted, "kept"], f"exit {code}; env.log {seen}; {output.strip().splitlines()[-2:]}")
+
     # WP-190 F: a build stage that finds the specification contradicting itself stops with needs-human, and the run
     # journals the stop as a contradiction — counted apart from a failure
     for root in throwaway():
@@ -5397,6 +5420,13 @@ def run_groups(args):
          dict(epic=EPIC.replace("domain_contact: the-expert\n", ""))),
         (Case("plan: a draft story is refused", "plan", 1, must_fail=("approved",)),
          dict(story=STORY.replace("status: approved", "status: draft"))),
+        # WP-190 E: where a story's text came from decides what its stages may reach
+        (Case("plan: a story from a tracker passes, its reach named", "plan", 0, must_pass=("story",),
+              text=("its text came from a tracker: every stage runs offline",)),
+         dict(story=STORY.replace("status: approved", "status: approved\nsource: tracker"))),
+        (Case("plan: a `source:` that names no known place is refused", "plan", 1, must_fail=("story",),
+              text=("`source:` names none of person, tracker, import",)),
+         dict(story=STORY.replace("status: approved", "status: approved\nsource: email"))),
         (Case("plan: a story without status is skipped, not refused", "plan", 0,
               must_skip=("approved",)),
          dict(story=STORY.replace("status: approved\n", ""))),
