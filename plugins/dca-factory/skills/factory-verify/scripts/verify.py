@@ -206,7 +206,7 @@ def package_text(beside, modules=MODULES):
 def dotted_modules(package):
     """Every module of the package as its import name, the modules at the package's top last — in their
     order, so a name they import from a context is theirs in a namespace that merges them."""
-    names = [m[:-3].replace("/", ".") for m in package_modules(package)]
+    names = [m[:-3].replace("/", ".") for m in package_modules(package) if m.endswith(".py")]
     names = [n[: -len(".__init__")] for n in names if n.endswith(".__init__")] + \
         [n for n in names if not n.endswith("__init__") and n not in MODULES and n != "fonts"]
     return [f"{PACKAGE}.{n}" for n in names] + [f"{PACKAGE}.{n}" for n in MODULES]

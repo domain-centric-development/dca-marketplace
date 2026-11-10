@@ -1,6 +1,7 @@
 ---
 name: factory-update
 description: Brings this project's copy of the delivery pipeline — gate, runner, commit hook and, where the project keeps them, its skill copies — up to the newest pipeline installed on this machine, for the tools the project already uses, keeping links as links and copies as copies. Use when the factory reports that the project was installed from an older pipeline, after the plugin or marketplace was updated, or on "/factory-update". It commits nothing and never rewrites the stack profile.
+license: PolyForm-Shield-1.0.0 — complete terms in LICENSE.md, what is yours in NOTICE.md
 ---
 
 # Update the project's pipeline

@@ -1,6 +1,7 @@
 ---
 name: factory-run
 description: Runs one backlog story through the delivery pipeline — plan, test, build, tidy, judge, document — with a deterministic story gate between the stages, and several stories in dependency order. Use when the user asks to deliver, implement or run a story or ticket end to end ("run story X", "deliver US-3", "/factory-run"), to work through the backlog ("run the backlog", "deliver everything that is ready", "/factory-run" without a story), to deliver a wish in prose ("/factory-run show the newest products on the homepage" — it becomes a backlog story first), or to keep a session working on the backlog as it fills; a project without a pipeline goes to /factory-setup first. Reads the backlog, the stack profile and the hand-over files — no project knowledge of its own.
+license: PolyForm-Shield-1.0.0 — complete terms in LICENSE.md, what is yours in NOTICE.md
 ---
 
 # Run one story

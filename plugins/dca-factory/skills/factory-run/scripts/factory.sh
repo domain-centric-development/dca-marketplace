@@ -83,6 +83,8 @@
 # once; a process start is what a run pays most for under Git Bash. The one thing it says itself is what no Python can
 # say: that there is none, or none beside it.
 
+# Required Notice: Copyright (c) 2026 Christoph Bloemer — PolyForm Shield 1.0.0, see LICENSE.md (https://polyformproject.org/licenses/shield/1.0.0)
+
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

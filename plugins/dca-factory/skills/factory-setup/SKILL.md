@@ -1,6 +1,7 @@
 ---
 name: factory-setup
 description: Sets up the delivery pipeline in a project and does only what is missing — the project description (through the project's description skill), a git repository, the runner, gate and commit hook, and the stack-profile lines for what the project's code has gained. Idempotent, in any order relative to the code — before the first line of code, after it, or in an existing project. Use when a project has no factory yet, when the backlog skill says the project description is missing, after a browser runner or a formatter was added, or on "/factory-setup". Writes no story and no code, and never updates an installed pipeline (that is /factory-update).
+license: PolyForm-Shield-1.0.0 — complete terms in LICENSE.md, what is yours in NOTICE.md
 ---
 
 # Set up the factory

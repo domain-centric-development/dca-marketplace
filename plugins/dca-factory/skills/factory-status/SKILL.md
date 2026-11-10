@@ -1,6 +1,7 @@
 ---
 name: factory-status
 description: Shows where the delivery pipeline stands in this project — which stage is running, which decisions wait for a human, what comes next and the totals, short; every story's state and what the stories cost in tokens, one story or one epic on request — read from the project's files alone. Use when someone asks how a run is going, what the factory is doing, what is waiting, how far the backlog is, what a story cost, or on "/factory-status". Works from any session in the project, beside a running pipeline; it changes nothing and starts nothing.
+license: PolyForm-Shield-1.0.0 — complete terms in LICENSE.md, what is yours in NOTICE.md
 ---
 
 # Show where the pipeline stands

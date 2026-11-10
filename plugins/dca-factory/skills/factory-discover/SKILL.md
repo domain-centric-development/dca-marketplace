@@ -1,6 +1,7 @@
 ---
 name: factory-discover
 description: Finds out, with the person who owns the product, which problem is worth solving and how anyone will know it got better — from a problem or a wished deliverable to a discovery report with cited sources (web, the project's files, interviews and tickets handed over, kept as anonymised excerpts) and proposed epics, each with its outcome event. Use before the backlog, when someone brings a problem, a goal, an OKR's key result or a deliverable and the epics it implies are not clear yet, or on "/factory-discover <topic>". Writes no epic until the person releases one, and never a story, a plan or code.
+license: PolyForm-Shield-1.0.0 — complete terms in LICENSE.md, what is yours in NOTICE.md
 ---
 
 # Discover what is worth building

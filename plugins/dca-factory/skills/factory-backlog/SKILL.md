@@ -1,6 +1,7 @@
 ---
 name: factory-backlog
 description: Writes and checks the backlog a delivery run reads — an epic with its outcome event, or one story small enough for a single run, in the markdown-with-front-matter contract. Use when a story or an epic is to be added, split or repaired, when the plan gate refused a story as incomplete, or on "/factory-backlog". Never invents an intent, a goal, a metric or a domain contact.
+license: PolyForm-Shield-1.0.0 — complete terms in LICENSE.md, what is yours in NOTICE.md
 ---
 
 # Write one backlog item

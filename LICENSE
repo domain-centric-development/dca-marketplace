@@ -1,3 +1,6 @@
+This licence covers the repository except `plugins/dca-factory/` and `plugins/dca-factory-cockpit/`,
+which are licensed under the PolyForm Shield License 1.0.0 (`LICENSE.md` in each of them).
+
 MIT License
 
 Copyright (c) 2026 Christoph Bloemer and contributors

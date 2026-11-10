@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Required Notice: Copyright (c) 2026 Christoph Bloemer — PolyForm Shield 1.0.0, see LICENSE.md (https://polyformproject.org/licenses/shield/1.0.0)
 # The enforcement boundary. Tool hooks and deny rules do not port between agent tools —
 # but every tool commits through git, so this is where the guard belongs. A tool-specific
 # hook stays a fast feedback loop; it is never the boundary. A hook can be bypassed

@@ -206,7 +206,18 @@ since 2025.*
 
 ## Licence
 
-MIT — see [LICENSE](LICENSE).
+Two licences, one per kind of plugin:
 
-Contributions are accepted under the MIT licence, and the copyright holder may additionally publish
-them under other licences (for example a documentation licence for prose).
+| Plugins | Licence |
+|---|---|
+| `dca-core`, `dca-craft` — the method and the craft | MIT — see [LICENSE](LICENSE) |
+| `dca-factory`, `dca-factory-cockpit` — the delivery pipeline | PolyForm Shield 1.0.0 — see [LICENSE.md](plugins/dca-factory/LICENSE.md) |
+
+The factory may be used for any purpose, commercially too, except to provide a product that competes
+with it. What it produces in a project — code, tests, specifications, stories — belongs to the
+project, and the pipeline copy it installs may be committed with it; [NOTICE.md](plugins/dca-factory/NOTICE.md)
+says what is whose. dca-factory up to 0.171.4 and dca-factory-cockpit up to 0.43.1 were published
+under MIT and stay under it.
+
+Contributions are accepted under the licence of the plugin they change, and the copyright holder may
+additionally publish them under other licences.

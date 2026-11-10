@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Required Notice: Copyright (c) 2026 Christoph Bloemer — PolyForm Shield 1.0.0, see LICENSE.md (https://polyformproject.org/licenses/shield/1.0.0)
 """Observe one real run and report the facts about whatever did not hold.
 
 Rides along a story that was actually delivered — it changes nothing and judges no code. What it

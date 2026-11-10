@@ -1,6 +1,7 @@
 ---
 name: factory-verify
 description: Observes one real story that was just delivered and reports the facts about whatever did not hold — the stages' claims against the repository, the gate and the run journal. Use after a run to see whether it really did what it says, before trusting the pipeline in a new project, or on "/factory-verify <story>". Its second mode, the pipeline's own machinery against throwaway fixtures ("/factory-verify --fixtures"), is for whoever changes a stage, a gate check or the runner.
+license: PolyForm-Shield-1.0.0 — complete terms in LICENSE.md, what is yours in NOTICE.md
 ---
 
 # Verify the factory
