@@ -11,7 +11,7 @@ update to offer, never a reason to refuse, and only the installer can see it —
 files.
 """
 
-CONTRACT = 29
+CONTRACT = 30
 
 
-VERSION = "0.159.0"
+VERSION = "0.160.0"

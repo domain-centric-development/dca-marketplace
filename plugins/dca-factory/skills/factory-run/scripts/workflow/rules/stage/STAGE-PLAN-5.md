@@ -1,6 +1,7 @@
 ---
 id: STAGE-PLAN-5
 part: told
+why: a plan named elements without the declared suffix, so the build had to rename what the suite refused
 stages:
 - plan
 section: Do

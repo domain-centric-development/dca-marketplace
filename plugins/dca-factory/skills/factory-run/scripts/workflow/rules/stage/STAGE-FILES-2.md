@@ -1,6 +1,7 @@
 ---
 id: STAGE-FILES-2
 part: told
+why: hand-overs were placed by file times, which a merge or two events in one second could misorder
 section: The journal — `.dca-factory/evidence/<story>/journal.tsv`
 retired: describes a file's form for every reader, not what a stage does — it stays reference text in factory-run/reference/file-contracts.md
 ---

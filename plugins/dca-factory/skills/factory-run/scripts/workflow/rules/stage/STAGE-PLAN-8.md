@@ -1,6 +1,7 @@
 ---
 id: STAGE-PLAN-8
 part: told
+why: without a level per scenario the test stage guessed where each criterion is tested
 stages:
 - plan
 section: Do

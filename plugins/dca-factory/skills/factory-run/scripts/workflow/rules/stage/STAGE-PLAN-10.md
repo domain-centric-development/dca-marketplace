@@ -1,6 +1,7 @@
 ---
 id: STAGE-PLAN-10
 part: told
+why: stages silently invented domain words, and one word could name two different operations
 stages:
 - plan
 section: Do

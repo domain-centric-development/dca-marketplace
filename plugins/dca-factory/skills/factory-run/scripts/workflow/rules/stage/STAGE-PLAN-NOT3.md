@@ -1,6 +1,7 @@
 ---
 id: STAGE-PLAN-NOT3
 part: told
+why: a plan added an incoming adapter by precedent that no criterion named
 stages:
 - plan
 section: Do not

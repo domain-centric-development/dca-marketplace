@@ -1,6 +1,7 @@
 ---
 id: STAGE-JUDGE-ADOPT
 part: told
+why: an adopted story could pass on tests that run its scenario without asserting its outcome
 stages:
 - judge
 kinds:

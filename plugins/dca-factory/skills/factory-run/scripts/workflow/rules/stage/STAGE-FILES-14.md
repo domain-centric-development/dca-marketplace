@@ -1,6 +1,7 @@
 ---
 id: STAGE-FILES-14
 part: told
+why: a declared test command that ran no case counted as green, and every commit waited for suites that need a running system
 section: The change policy — `required:` in the stack profile
 retired: describes a file's form for every reader, not what a stage does — it stays reference text in factory-run/reference/file-contracts.md
 ---

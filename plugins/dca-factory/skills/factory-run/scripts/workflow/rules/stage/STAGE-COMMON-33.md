@@ -1,6 +1,7 @@
 ---
 id: STAGE-COMMON-33
 part: told
+why: stages ran the whole suite before the gate ran the same commands, paying twice for one answer
 section: The gate is your test run
 order: 33
 ---

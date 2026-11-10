@@ -1,6 +1,7 @@
 ---
 id: STAGE-COMMON-6
 part: told
+why: a stage changed code in the main working copy instead of its own worktree
 section: A session the runner started
 order: 6
 ---

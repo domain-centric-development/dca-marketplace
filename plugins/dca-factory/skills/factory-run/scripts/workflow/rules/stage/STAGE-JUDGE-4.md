@@ -1,6 +1,7 @@
 ---
 id: STAGE-JUDGE-4
 part: told
+why: findings the rule suite already enforces were reported again, counting one defect twice
 stages:
 - judge
 section: Do

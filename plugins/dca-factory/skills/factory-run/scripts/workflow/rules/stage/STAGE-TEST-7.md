@@ -1,6 +1,7 @@
 ---
 id: STAGE-TEST-7
 part: told
+why: a test red on a missing class or a harness timeout counted as a red proof that proved nothing
 stages:
 - test
 section: Do

@@ -1,6 +1,7 @@
 ---
 id: STAGE-FILES-13
 part: told
+why: a stage could quietly change what an older test expected and turn a contradiction green
 section: Tests that existed before the story — `.dca-factory/evidence/<story>/.tests-baseline`
 retired: describes a file's form for every reader, not what a stage does — it stays reference text in factory-run/reference/file-contracts.md
 ---

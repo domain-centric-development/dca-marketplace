@@ -126,8 +126,9 @@ class RuleFiles(WorkflowRuleRepository):
         retired = front.get("retired")
         if str(front.get("part") or "") == RulePart.TOLD.value:
             section, see, order = front.get("section"), front.get("see"), str(front.get("order") or "")
+            why = str(front.get("why") or "").strip()
             return WorkflowRule.restore(
-                rule_id, RulePart.TOLD, RuleText(""), RuleText(""), (), (),
+                rule_id, RulePart.TOLD, RuleText(""), RuleText(why), (), (),
                 [StageName(s) for s in listed(front.get("stages"))], [StoryKind(k) for k in listed(front.get("kinds"))],
                 RuleText(str(retired)) if retired else None, self._written(path), RuleText(told_of(body, rule_id)),
                 RuleText(str(section)) if section else None, Written(str(see)) if see else None,
@@ -180,8 +181,11 @@ def restart_of(path: str, front: typing.Mapping[str, typing.Any]) -> typing.Opti
 
 
 def told_text(rule: WorkflowRule) -> str:
-    """A told rule's file: where it holds in the front matter, its words — as the stage reads them — in the body."""
+    """A told rule's file: why it exists and where it holds in the front matter, its words — as the stage reads them —
+    in the body."""
     lines = ["---", f"id: {rule.id.value}", f"part: {rule.part.value}"]
+    if rule.why.value:
+        lines.append(f"why: {written_value(rule.why.value)}")
     for key, values in (("stages", [s.value for s in rule.stages]), ("kinds", [k.value for k in rule.kinds])):
         if values:
             lines += [f"{key}:"] + [f"- {v}" for v in values]

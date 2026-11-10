@@ -1,6 +1,7 @@
 ---
 id: STAGE-PLAN-2
 part: told
+why: a story needing a new context or relationship was planned in passing, a structural decision nobody made
 stages:
 - plan
 section: Do

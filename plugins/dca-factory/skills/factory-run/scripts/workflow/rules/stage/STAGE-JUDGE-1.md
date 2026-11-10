@@ -1,6 +1,7 @@
 ---
 id: STAGE-JUDGE-1
 part: told
+why: a judge that reviewed again in its own context put back the bias the separate reviews took out
 stages:
 - judge
 section: Do

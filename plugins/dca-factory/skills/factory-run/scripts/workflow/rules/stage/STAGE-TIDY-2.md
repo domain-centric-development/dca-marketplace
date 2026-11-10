@@ -1,6 +1,7 @@
 ---
 id: STAGE-TIDY-2
 part: told
+why: a tidy move on a test could weaken what it asserts or let it pass without the code
 stages:
 - tidy
 section: Do

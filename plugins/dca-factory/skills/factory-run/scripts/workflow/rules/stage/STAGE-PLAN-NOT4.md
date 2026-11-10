@@ -1,6 +1,7 @@
 ---
 id: STAGE-PLAN-NOT4
 part: told
+why: renumbered criterion keys break the join the later stages and the gate make on them
 stages:
 - plan
 section: Do not

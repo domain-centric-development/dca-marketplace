@@ -1,6 +1,7 @@
 ---
 id: STAGE-DOCUMENT-1
 part: told
+why: the code gained domain names the glossary never defined, so the language drifted from the code
 stages:
 - document
 section: Do

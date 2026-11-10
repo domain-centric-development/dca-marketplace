@@ -1,6 +1,7 @@
 ---
 id: STAGE-TIDY-NOT1
 part: told
+why: a tidy-up could weaken or delete a test while every gate stayed green
 stages:
 - tidy
 section: Do not

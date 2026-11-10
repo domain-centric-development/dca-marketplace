@@ -1,6 +1,7 @@
 ---
 id: STAGE-PLAN-8A
 part: told
+why: domain types gained guards no plan named and no unit test covered
 stages:
 - plan
 section: Do

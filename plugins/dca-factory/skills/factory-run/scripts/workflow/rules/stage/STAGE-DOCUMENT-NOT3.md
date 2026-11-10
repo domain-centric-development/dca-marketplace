@@ -1,6 +1,7 @@
 ---
 id: STAGE-DOCUMENT-NOT3
 part: told
+why: documents described what a story changed instead of what is true now
 stages:
 - document
 section: Do not

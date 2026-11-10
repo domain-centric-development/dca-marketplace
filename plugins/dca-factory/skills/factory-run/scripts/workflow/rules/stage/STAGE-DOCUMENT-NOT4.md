@@ -1,6 +1,7 @@
 ---
 id: STAGE-DOCUMENT-NOT4
 part: told
+why: glossary terms the code does not use, or renames done in passing, split the language from the code
 stages:
 - document
 section: Do not

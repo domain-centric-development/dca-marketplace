@@ -1,6 +1,7 @@
 ---
 id: STAGE-INTEGRATE-NOT1
 part: told
+why: taking the story's side of a test file whole dropped the main line's cases
 stages:
 - integrate
 section: Do not

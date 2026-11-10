@@ -1,6 +1,7 @@
 ---
 id: STAGE-BACKLOG-5
 part: told
+why: a change no actor sees had to pose as a story with criteria and a red test it could never have
 section: Task
 retired: describes a file's form for every reader, not what a stage does — it stays reference text in factory-run/reference/backlog-contract.md
 ---

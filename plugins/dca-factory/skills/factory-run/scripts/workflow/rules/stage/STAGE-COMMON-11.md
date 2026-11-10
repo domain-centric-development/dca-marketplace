@@ -1,6 +1,7 @@
 ---
 id: STAGE-COMMON-11
 part: told
+why: plans retyped every criterion, a long hand-over that said nothing the story did not
 section: One session, several stages
 order: 11
 ---

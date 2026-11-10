@@ -1,6 +1,7 @@
 ---
 id: STAGE-JUDGE-NOT2
 part: told
+why: a finding the rule suite already blocks was reported again, double-counting one defect
 stages:
 - judge
 section: Do not

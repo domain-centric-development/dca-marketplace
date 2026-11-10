@@ -268,6 +268,8 @@ PROFILE_KEYS = frozenset((
     "model",
     # what judges a stage beside the profile itself — the globs a stage may change only where its plan announces it
     "guarded",
+    # the told-rule groups every brief leaves out — a bench's ablation switch, `<stage>:<section>, …`
+    "ablate",
 ))
 
 #: Key families: `<prefix><name>`, with an open list of names — a test command (`test.integration`), what a

@@ -1,6 +1,7 @@
 ---
 id: STAGE-FILES-1
 part: told
+why: stages reconstructed what a story changed themselves and got it wrong
 section: What changed — `.dca-factory/evidence/<story>/changed-<stage>.txt`, `changed.txt`, `story.diff`
 retired: describes a file's form for every reader, not what a stage does — it stays reference text in factory-run/reference/file-contracts.md
 ---

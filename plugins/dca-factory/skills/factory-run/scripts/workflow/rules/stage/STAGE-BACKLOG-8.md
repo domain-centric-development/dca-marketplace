@@ -1,6 +1,7 @@
 ---
 id: STAGE-BACKLOG-8
 part: told
+why: what holds today was scattered across stories, so nobody could read current behaviour without replaying them
 section: The living spec
 retired: describes a file's form for every reader, not what a stage does — it stays reference text in factory-run/reference/backlog-contract.md
 ---

@@ -27,7 +27,8 @@ def told(published: typing.Mapping[str, typing.Any]) -> Rule:
     where = " — ".join(w for w in (stages, published["section"]) if w)
     return Rule(
         RuleId(published["id"]), Part.INSTRUCTION, tuple(StageName(s) for s in published["stages"]),
-        tuple(KindName(k) for k in published["kinds"]), Words(where), (), Words(""), Words(plain(published["told"])),
+        tuple(KindName(k) for k in published["kinds"]), Words(where), (), Words(published.get("why", "")),
+        Words(plain(published["told"])),
         (), Source(published["source"]), RuleState.RETIRED if published["retired"] else RuleState.ACTIVE,
         Source(published["placed"]), restart=restart_of(published))
 

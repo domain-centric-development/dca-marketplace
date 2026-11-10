@@ -1,6 +1,7 @@
 ---
 id: STAGE-BUILD-NOT1
 part: told
+why: a test that could never pass because of its own locator stopped the story for a human decision nobody needed
 stages:
 - build
 section: Do not

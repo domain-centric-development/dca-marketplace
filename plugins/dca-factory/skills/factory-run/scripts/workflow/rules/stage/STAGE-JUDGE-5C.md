@@ -1,6 +1,7 @@
 ---
 id: STAGE-JUDGE-5C
 part: told
+why: a gap the project had before the story either blocked it or vanished instead of landing in the findings
 stages:
 - judge
 section: Do

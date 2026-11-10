@@ -1,6 +1,7 @@
 ---
 id: STAGE-DOCUMENT-NOT2
 part: told
+why: a document restating the story is a second copy of facts that live elsewhere and drift
 stages:
 - document
 section: Do not

@@ -49,6 +49,9 @@ def main(argv: typing.Sequence[str]) -> int:
             print(f"rules: {problem}", file=sys.stderr)
         if not view["skills"]:
             print("rules: no skills folder found — the instructed rules were not read", file=sys.stderr)
+        if view.get("unexplained"):
+            print(f"rules: information — {len(view['unexplained'])} told rule(s) say `why: unknown`, a bet nobody can "
+                  f"name the failure of: {', '.join(view['unexplained'])}")
         print(f"rules: {len(view['rules'])} rule(s), {len(view['problems'])} problem(s)")
         return 1 if view["problems"] or not view["skills"] else 0
     sys.stdout.write(render(view, args.format))

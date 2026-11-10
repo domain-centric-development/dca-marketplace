@@ -1,6 +1,7 @@
 ---
 id: STAGE-TEST-2E
 part: told
+why: assertions that could never fail, inside a condition or on an unused mechanism, passed whatever the code did
 stages:
 - test
 section: Do

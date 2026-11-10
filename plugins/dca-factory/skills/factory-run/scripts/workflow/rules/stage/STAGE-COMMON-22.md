@@ -1,6 +1,7 @@
 ---
 id: STAGE-COMMON-22
 part: told
+why: every requested change went to the build, which may not touch tests, so a too weak test stopped the story for a human
 section: A repeat round
 order: 22
 ---

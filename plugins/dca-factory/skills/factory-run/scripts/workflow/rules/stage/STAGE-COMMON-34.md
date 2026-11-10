@@ -1,6 +1,7 @@
 ---
 id: STAGE-COMMON-34
 part: told
+why: unattended stages lost turns on commands the runner refused, scripts fed on stdin above all
 section: The shell a stage has
 order: 34
 ---

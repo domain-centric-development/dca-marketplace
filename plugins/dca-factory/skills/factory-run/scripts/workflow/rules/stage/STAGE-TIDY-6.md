@@ -1,6 +1,7 @@
 ---
 id: STAGE-TIDY-6
 part: told
+why: a tidy stage turned into a rewrite nobody planned or approved
 stages:
 - tidy
 section: Do

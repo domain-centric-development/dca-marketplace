@@ -1,6 +1,7 @@
 ---
 id: STAGE-TEST-2
 part: told
+why: a test stage added a dependency or a runner to make its planned shape possible, a stack decision no story owns
 stages:
 - test
 section: Do

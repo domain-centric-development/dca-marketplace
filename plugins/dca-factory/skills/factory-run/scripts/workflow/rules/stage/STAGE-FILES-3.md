@@ -1,6 +1,7 @@
 ---
 id: STAGE-FILES-3
 part: told
+why: a stage could write the marks and records that prove its own work
 section: One owner per place — the story carries its state, the run folder is protocol
 retired: describes a file's form for every reader, not what a stage does — it stays reference text in factory-run/reference/file-contracts.md
 ---

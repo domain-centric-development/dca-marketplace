@@ -1,6 +1,7 @@
 ---
 id: STAGE-COMMON-21
 part: told
+why: after the main line merged into a story its red proofs no longer matched the tests, and a stale proof became a question
 section: A repeat round
 order: 21
 ---

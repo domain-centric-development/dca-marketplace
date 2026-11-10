@@ -1,6 +1,7 @@
 ---
 id: STAGE-COMMON-31
 part: told
+why: options written in a free form offered no choices to pick in the views
 section: A question is a decision record
 order: 31
 ---

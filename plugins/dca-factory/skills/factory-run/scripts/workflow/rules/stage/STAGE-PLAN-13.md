@@ -1,6 +1,7 @@
 ---
 id: STAGE-PLAN-13
 part: told
+why: a stage could make its own gate green by changing what judges it, such as the profile or the rule selection
 stages:
 - plan
 section: Do

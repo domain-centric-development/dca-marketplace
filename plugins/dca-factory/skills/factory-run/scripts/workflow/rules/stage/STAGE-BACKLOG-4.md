@@ -1,6 +1,7 @@
 ---
 id: STAGE-BACKLOG-4
 part: told
+why: delivered stories each passed alone while the walk through all their steps to the outcome had no guard
 section: Journey item
 retired: describes a file's form for every reader, not what a stage does — it stays reference text in factory-run/reference/backlog-contract.md
 ---

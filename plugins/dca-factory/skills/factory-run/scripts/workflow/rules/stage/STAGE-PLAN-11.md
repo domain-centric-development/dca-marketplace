@@ -1,6 +1,7 @@
 ---
 id: STAGE-PLAN-11
 part: told
+why: plan decisions stood without the file or symbol they rested on, guesses that read like facts
 stages:
 - plan
 section: Do

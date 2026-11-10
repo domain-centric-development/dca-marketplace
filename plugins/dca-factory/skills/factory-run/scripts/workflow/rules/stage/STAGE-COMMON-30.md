@@ -1,6 +1,7 @@
 ---
 id: STAGE-COMMON-30
 part: told
+why: a stage question lived only in its transcript, so no other session found it and its answer had no place to land
 section: A question is a decision record
 order: 30
 ---

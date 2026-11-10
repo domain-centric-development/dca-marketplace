@@ -1,6 +1,7 @@
 ---
 id: STAGE-TIDY-5
 part: told
+why: a tidy move shifted a type across a layer, a design change no plan approved
 stages:
 - tidy
 section: Do

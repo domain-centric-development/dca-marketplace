@@ -1,6 +1,7 @@
 ---
 id: STAGE-PLAN-8B
 part: told
+why: the epic's outcome event was published under a synonym and no stage noticed
 stages:
 - plan
 section: Do

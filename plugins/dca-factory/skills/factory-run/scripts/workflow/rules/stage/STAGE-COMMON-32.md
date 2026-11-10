@@ -1,6 +1,7 @@
 ---
 id: STAGE-COMMON-32
 part: told
+why: an answered question was not visibly applied, so nobody could tell whether the stage had followed it
 section: A question is a decision record
 order: 32
 ---

@@ -1,6 +1,7 @@
 ---
 id: STAGE-JUDGE-5B
 part: told
+why: a planned removal or change left undone was ranked minor and the story passed without it
 stages:
 - judge
 section: Do

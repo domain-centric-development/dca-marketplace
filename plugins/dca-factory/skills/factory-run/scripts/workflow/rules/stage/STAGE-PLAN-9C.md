@@ -1,6 +1,7 @@
 ---
 id: STAGE-PLAN-9C
 part: told
+why: old wordings, remaining callers and second copies outside the story's files were left behind for the judge to find
 stages:
 - plan
 section: Do

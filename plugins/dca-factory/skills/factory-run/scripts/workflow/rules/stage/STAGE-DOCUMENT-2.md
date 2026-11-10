@@ -1,6 +1,7 @@
 ---
 id: STAGE-DOCUMENT-2
 part: told
+why: a story changed how contexts relate while the designed map kept describing the old relationships
 stages:
 - document
 section: Do

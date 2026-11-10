@@ -1,6 +1,7 @@
 ---
 id: STAGE-JUDGE-TASK
 part: told
+why: a change declared invisible could alter behaviour and pass without the red test a story needs
 stages:
 - judge
 kinds:

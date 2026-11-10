@@ -1,6 +1,7 @@
 ---
 id: STAGE-TEST-NOT3
 part: told
+why: a stage changed what an older test expected and turned a contradiction green unnoticed
 stages:
 - test
 section: Do not

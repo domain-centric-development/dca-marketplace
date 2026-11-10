@@ -1,6 +1,7 @@
 ---
 id: STAGE-TEST-2A
 part: told
+why: an adapter test stubbed a refusal the use case never raises, proving a page for a case that cannot happen
 stages:
 - test
 section: Do

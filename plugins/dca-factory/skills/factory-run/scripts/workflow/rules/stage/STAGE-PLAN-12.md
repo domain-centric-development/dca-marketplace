@@ -1,6 +1,7 @@
 ---
 id: STAGE-PLAN-12
 part: told
+why: long plans are read by every later stage and the judge, so every extra sentence cost several times
 stages:
 - plan
 section: Do

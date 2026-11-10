@@ -1,6 +1,7 @@
 ---
 id: STAGE-FILES-5
 part: told
+why: stories running side by side in one working copy would change each other's code
 section: A story's worktree — `.dca-factory/worktrees/<story>/`
 retired: describes a file's form for every reader, not what a stage does — it stays reference text in factory-run/reference/file-contracts.md
 ---

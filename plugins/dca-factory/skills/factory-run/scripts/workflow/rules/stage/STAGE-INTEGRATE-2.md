@@ -1,6 +1,7 @@
 ---
 id: STAGE-INTEGRATE-2
 part: told
+why: a resolution that took one side dropped what another delivered and accepted story had built
 stages:
 - integrate
 section: Do

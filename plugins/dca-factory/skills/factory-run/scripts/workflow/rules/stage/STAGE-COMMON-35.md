@@ -1,6 +1,7 @@
 ---
 id: STAGE-COMMON-35
 part: told
+why: compound commands, loops and absolute paths were refused one by one in unattended runs, each a lost turn
 section: The shell a stage has
 order: 35
 ---

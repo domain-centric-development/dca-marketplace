@@ -1,6 +1,7 @@
 ---
 id: STAGE-FILES-15
 part: told
+why: unknown
 section: Scenario contract — for `--parity`
 retired: describes a file's form for every reader, not what a stage does — it stays reference text in factory-run/reference/file-contracts.md
 ---

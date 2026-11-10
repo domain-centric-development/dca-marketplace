@@ -1,6 +1,7 @@
 ---
 id: STAGE-BACKLOG-7
 part: told
+why: work built outside the pipeline either looked undelivered or counted as delivered without any check
 section: Delivered by hand
 retired: describes a file's form for every reader, not what a stage does — it stays reference text in factory-run/reference/backlog-contract.md
 ---

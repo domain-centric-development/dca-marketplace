@@ -1,6 +1,7 @@
 ---
 id: STAGE-TEST-5
 part: told
+why: a criterion key in a test name is a second link that drifts when the story is renumbered
 stages:
 - test
 section: Do

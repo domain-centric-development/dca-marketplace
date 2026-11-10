@@ -352,6 +352,9 @@ class Rulebook(Value):
             if unknown:
                 found.append(Problem(Words(f"{rule.id.value} names no stage {', '.join(unknown)} — "
                                            f"{rule.source.value}")))
+            if rule.part is Part.INSTRUCTION and rule.enforcement is Enforcement.INSTRUCTED and not rule.reason.value:
+                found.append(Problem(Words(f"{rule.id.value} says no `why:` — the failure it answers, in general "
+                                           f"words, or `why: unknown` — {rule.source.value}")))
             if rule.part is not Part.INSTRUCTION and not rule.title.value:
                 found.append(Problem(Words(f"{rule.id.value} has no `title:` — a person reads a rule by its name, "
                                            f"a short statement of what holds — {rule.source.value}")))
@@ -374,6 +377,11 @@ class Rulebook(Value):
         return tuple(found)
 
 
+    def unexplained(self) -> typing.Tuple[Rule, ...]:
+        """The active told rules whose `why:` is `unknown` — a bet nobody can name the failure of; information, never a
+        problem."""
+        return tuple(r for r in self.active() if r.part is Part.INSTRUCTION and r.reason.value.strip().lower() == UNKNOWN)
+
     def drifted(self, marked: typing.Tuple[Rule, ...]) -> typing.Iterator[Problem]:
         """A skill that still carries a told rule's marker: the words stand in the rule's file, placed by its stage's
         frame — a copy in a skill drifts from them."""
@@ -381,6 +389,9 @@ class Rulebook(Value):
             yield Problem(Words(f"{mark.id.value} is marked in {mark.source.value} — a told rule's words stand in "
                                 f"its file and its stage's frame, never in a skill"))
 
+
+#: The `why:` of a told rule nobody can name the failure of.
+UNKNOWN = "unknown"
 
 #: The places a rule may name beside the stage table: the commit hook and CI, a discovery's report.
 OUTSIDE_PLACES = ("commit", "discover")

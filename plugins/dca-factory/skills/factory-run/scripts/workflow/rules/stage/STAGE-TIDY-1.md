@@ -1,6 +1,7 @@
 ---
 id: STAGE-TIDY-1
 part: told
+why: a tidy-up reached into code outside the story and buried its change among unrelated edits
 stages:
 - tidy
 section: Do

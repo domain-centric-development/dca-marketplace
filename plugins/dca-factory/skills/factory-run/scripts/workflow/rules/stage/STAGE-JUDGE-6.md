@@ -1,6 +1,7 @@
 ---
 id: STAGE-JUDGE-6
 part: told
+why: a criterion counted as met on a green test whose assertion could never fail
 stages:
 - judge
 section: Do

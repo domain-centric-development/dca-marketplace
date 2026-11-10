@@ -1,6 +1,7 @@
 ---
 id: STAGE-BACKLOG-9
 part: told
+why: an existing backlog and its tests would otherwise have to be migrated or renamed before the first story could run
 section: Brownfield
 retired: describes a file's form for every reader, not what a stage does — it stays reference text in factory-run/reference/backlog-contract.md
 ---

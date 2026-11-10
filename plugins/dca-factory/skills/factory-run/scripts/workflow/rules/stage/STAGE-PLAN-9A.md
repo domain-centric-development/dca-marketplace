@@ -1,6 +1,7 @@
 ---
 id: STAGE-PLAN-9A
 part: told
+why: a scenario that already held on today's code got a test that could never be red, and the test gate refused it
 stages:
 - plan
 section: Do

@@ -1,6 +1,7 @@
 ---
 id: STAGE-COMMON-19
 part: told
+why: a story sent back by a later gate was reworked beyond what that gate reported
 section: A repeat round
 order: 19
 ---

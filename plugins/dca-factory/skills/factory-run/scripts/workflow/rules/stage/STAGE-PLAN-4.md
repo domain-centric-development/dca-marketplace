@@ -1,6 +1,7 @@
 ---
 id: STAGE-PLAN-4
 part: told
+why: a plan invented an endpoint no criterion asked for, bringing an authorisation decision nobody reviewed
 stages:
 - plan
 section: Do

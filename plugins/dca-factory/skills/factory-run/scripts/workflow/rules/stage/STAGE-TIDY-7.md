@@ -1,6 +1,7 @@
 ---
 id: STAGE-TIDY-7
 part: told
+why: stages ran the whole suite before the gate ran the same commands, paying twice for one answer
 stages:
 - tidy
 section: Do

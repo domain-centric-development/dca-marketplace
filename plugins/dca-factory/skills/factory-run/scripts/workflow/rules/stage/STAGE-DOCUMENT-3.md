@@ -1,6 +1,7 @@
 ---
 id: STAGE-DOCUMENT-3
 part: told
+why: an addition to a decision record named a mechanism a later record had already replaced
 stages:
 - document
 section: Do

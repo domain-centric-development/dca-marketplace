@@ -1,6 +1,7 @@
 ---
 id: STAGE-BUILD-5
 part: told
+why: a stage ran the whole suite before the gate ran the same commands, paying twice for one answer
 stages:
 - build
 section: Do

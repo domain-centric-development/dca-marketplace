@@ -80,6 +80,21 @@ class Restart(Value):
     when: RuleText
 
 
+class RuleGroup(Value):
+    """A group of told rules: one section of one stage's brief — of what every stage is told where no stage is named.
+    A bench removes one group at a time to see whether the model still needs it."""
+
+    stage: typing.Optional[StageName]
+    section: RuleText
+
+    def covers(self, rule: WorkflowRule) -> bool:
+        """Whether <rule> is a told rule of this group."""
+        if rule.part is not RulePart.TOLD or rule.section is None \
+                or rule.section.value.strip().lower() != self.section.value.strip().lower():
+            return False
+        return self.stage in rule.stages if self.stage is not None else not rule.stages
+
+
 class WorkflowRule(AggregateRoot[RuleId]):
     # A root without a transition, like the workflow: a rule file is changed by a person, the factory reads it whole
     # and holds its outcomes to the workflow's targets — one rule, one unit, through its repository.

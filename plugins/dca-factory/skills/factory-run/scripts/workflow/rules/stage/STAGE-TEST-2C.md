@@ -1,6 +1,7 @@
 ---
 id: STAGE-TEST-2C
 part: told
+why: two implementations of one story named the same end-user test differently, each stage inventing a title
 stages:
 - test
 section: Do

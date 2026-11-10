@@ -1,6 +1,7 @@
 ---
 id: STAGE-TEST-4
 part: told
+why: tests copied helpers and setup that already existed, a second convention beside the project's own
 stages:
 - test
 section: Do

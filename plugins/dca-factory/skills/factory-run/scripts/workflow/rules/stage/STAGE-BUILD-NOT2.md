@@ -1,6 +1,7 @@
 ---
 id: STAGE-BUILD-NOT2
 part: told
+why: an expectation that cannot hold is a question about the story, and settling it in the build hides that question
 stages:
 - build
 section: Do not

@@ -1,6 +1,7 @@
 ---
 id: STAGE-TEST-8
 part: told
+why: a passing spike or scratch test trips no gate, so nothing else removes it
 stages:
 - test
 section: Do

@@ -1,6 +1,7 @@
 ---
 id: STAGE-PLAN-3
 part: told
+why: plans brought in elements the technical description excludes, such as a second persistence or a client framework
 stages:
 - plan
 section: Do

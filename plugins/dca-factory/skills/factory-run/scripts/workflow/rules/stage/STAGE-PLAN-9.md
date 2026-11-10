@@ -1,6 +1,7 @@
 ---
 id: STAGE-PLAN-9
 part: told
+why: a story changed agreed behaviour without saying so, and older tests were quietly rewritten
 stages:
 - plan
 section: Do

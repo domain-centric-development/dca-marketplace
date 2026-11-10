@@ -1,6 +1,7 @@
 ---
 id: STAGE-COMMON-27
 part: told
+why: a project without a knowledge skill must not fail for its absence
 section: Ask, do not recall — but only a source the project named
 order: 27
 ---

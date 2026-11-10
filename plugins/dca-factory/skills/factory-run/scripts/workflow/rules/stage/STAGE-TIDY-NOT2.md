@@ -1,6 +1,7 @@
 ---
 id: STAGE-TIDY-NOT2
 part: told
+why: a tidy-up renamed a domain term that the story's words and the glossary define
 stages:
 - tidy
 section: Do not

@@ -1,6 +1,7 @@
 ---
 id: STAGE-COMMON-25
 part: told
+why: stages decided pattern questions from recollection, uncited and unverifiable
 section: Ask, do not recall — but only a source the project named
 order: 25
 ---

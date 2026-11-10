@@ -1,6 +1,7 @@
 ---
 id: STAGE-PLAN-9B
 part: told
+why: delivery could not update the spec without knowing which criteria a story adds, keeps, changes or moves
 stages:
 - plan
 section: Do

@@ -1,6 +1,7 @@
 ---
 id: STAGE-FILES-9
 part: told
+why: a stage that could not finish would stop without a file, leaving the run nothing to read
 section: Escalation
 see: factory-run/reference/file-contracts.md
 order: 1

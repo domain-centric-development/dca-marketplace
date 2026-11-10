@@ -1,6 +1,7 @@
 ---
 id: STAGE-TEST-ROUND
 part: told
+why: a too weak test sent to the build could not be fixed there, and a strengthened green test needed a break to show it bites
 stages:
 - test
 section: A round sent back to this stage

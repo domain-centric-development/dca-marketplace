@@ -1,6 +1,7 @@
 ---
 id: STAGE-BUILD-6
 part: told
+why: a repeat round refactored elsewhere instead of fixing only what the gate or the judge confirmed
 stages:
 - build
 section: Do

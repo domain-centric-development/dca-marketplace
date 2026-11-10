@@ -1,6 +1,7 @@
 ---
 id: STAGE-TIDY-4
 part: told
+why: synonyms the glossary says to avoid and stale doc comments survived in the story's own code
 stages:
 - tidy
 section: Do

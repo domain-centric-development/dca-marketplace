@@ -1,6 +1,7 @@
 ---
 id: STAGE-BUILD-1A
 part: told
+why: reviews kept finding refusal messages shown apart from their field, unreachable for assistive technology
 stages:
 - build
 section: Do

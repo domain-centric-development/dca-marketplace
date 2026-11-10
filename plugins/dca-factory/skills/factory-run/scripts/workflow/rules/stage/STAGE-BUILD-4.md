@@ -1,6 +1,7 @@
 ---
 id: STAGE-BUILD-4
 part: told
+why: refusals mixed throwing and returning in one context, or were caught by a base type that also swallowed port failures
 stages:
 - build
 section: Do

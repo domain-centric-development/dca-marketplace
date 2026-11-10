@@ -1,6 +1,7 @@
 ---
 id: STAGE-TIDY-NOT3
 part: told
+why: a repository-wide formatter run buried the story's change in noise and made the judge's diff unreadable
 stages:
 - tidy
 section: Do not

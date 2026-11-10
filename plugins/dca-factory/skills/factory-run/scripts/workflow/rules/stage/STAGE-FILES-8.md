@@ -1,6 +1,7 @@
 ---
 id: STAGE-FILES-8
 part: told
+why: a test that flaked across stories belonged to none of them and had no place to be tracked
 section: Project findings — `product/findings/<name>.md`, beside the epics
 retired: describes a file's form for every reader, not what a stage does — it stays reference text in factory-run/reference/file-contracts.md
 ---

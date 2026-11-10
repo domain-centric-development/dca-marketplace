@@ -9,6 +9,7 @@ from ....building_blocks import UseCase
 from ...domain.model.jump import RuleId
 from ...domain.model.stack_profile import SkillName
 from ...domain.model.stage import StageName, StageText, Trait
+from ...domain.model.workflow_rule import RuleGroup, RuleText
 from ...domain.model.story import StoryId
 from ...domain.service.stage_brief import Brief, Carrier, CarrierRole, StageBrief
 from ....sharedkernel.application.profile_source import ProfileSource
@@ -36,9 +37,22 @@ class ShowBriefUseCase(ShowBriefInputPort):
 
     def execute(self, query: ShowBriefQuery) -> Brief:
         kind = self._stories.get(query.story).kind
-        return StageBrief(workflow()).of(query.stage, kind, list(RULES.values()),
+        groups = self._ablated()
+        rules = [rule for rule in RULES.values() if not any(group.covers(rule) for group in groups)]
+        return StageBrief(workflow()).of(query.stage, kind, rules,
                                           [RuleId(r) for r in judging(query.stage.value, kind)],
                                           self._carriers(query.stage))
+
+    def _ablated(self) -> typing.List[RuleGroup]:
+        """The told-rule groups the profile's `ablate:` leaves out of every brief — `<stage>:<section>`, `every:<section>`
+        for what every stage is told, separated by commas: a bench's switch, to see whether a model still needs them."""
+        found = []
+        for entry in str(self._profile.profile().get("ablate") or "").split(","):
+            stage, _, section = entry.strip().partition(":")
+            if stage and section:
+                found.append(RuleGroup(None if stage.strip() == "every" else StageName(stage.strip()),
+                                       RuleText(section.strip())))
+        return found
 
     def _carriers(self, stage: StageName) -> typing.List[Carrier]:
         """The skills the profile names for the stage: its craft, the guard and the frontend craft where it writes

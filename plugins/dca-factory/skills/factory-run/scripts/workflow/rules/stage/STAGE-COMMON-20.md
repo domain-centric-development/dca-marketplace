@@ -1,6 +1,7 @@
 ---
 id: STAGE-COMMON-20
 part: told
+why: a test whose own code could not pass had no stage allowed to repair it, so a human was asked
 section: A repeat round
 order: 20
 ---

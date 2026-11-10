@@ -1,6 +1,7 @@
 ---
 id: STAGE-DOCUMENT-4
 part: told
+why: documents cited shorthand paths that could not be opened and read like typos
 stages:
 - document
 section: Do

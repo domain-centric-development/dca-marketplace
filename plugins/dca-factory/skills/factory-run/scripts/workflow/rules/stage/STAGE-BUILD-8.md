@@ -1,6 +1,7 @@
 ---
 id: STAGE-BUILD-8
 part: told
+why: a change meant to alter nothing visible has no test of its own, so a changed older test would hide a changed behaviour
 stages:
 - build
 section: Do

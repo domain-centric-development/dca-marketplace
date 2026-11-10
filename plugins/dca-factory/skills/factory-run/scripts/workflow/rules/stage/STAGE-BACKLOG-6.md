@@ -1,6 +1,7 @@
 ---
 id: STAGE-BACKLOG-6
 part: told
+why: behaviour the code already had could not enter the backlog without being built again or taken on trust
 section: Adopted story
 retired: describes a file's form for every reader, not what a stage does — it stays reference text in factory-run/reference/backlog-contract.md
 ---

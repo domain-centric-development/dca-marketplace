@@ -1,6 +1,7 @@
 ---
 id: STAGE-INTEGRATE-3
 part: told
+why: a merge resolution dropped test cases another story had added on the main line
 stages:
 - integrate
 section: Do

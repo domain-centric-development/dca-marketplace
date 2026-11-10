@@ -1,6 +1,7 @@
 ---
 id: STAGE-TEST-3
 part: told
+why: a domain type's rules had no test of their own, so a guard could go missing unnoticed
 stages:
 - test
 section: Do

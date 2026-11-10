@@ -1,6 +1,7 @@
 ---
 id: STAGE-INTEGRATE-5
 part: told
+why: a resolution step chased failing tests across files, the build stage's work and not a merge's
 stages:
 - integrate
 section: Do

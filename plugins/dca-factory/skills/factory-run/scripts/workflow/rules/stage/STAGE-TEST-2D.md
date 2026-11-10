@@ -1,6 +1,7 @@
 ---
 id: STAGE-TEST-2D
 part: told
+why: tests started from state other tests left, swallowed refusals in their setup, or asserted on a page's whole text
 stages:
 - test
 section: Do

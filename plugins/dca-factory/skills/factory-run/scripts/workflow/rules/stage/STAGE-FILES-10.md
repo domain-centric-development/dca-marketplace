@@ -1,6 +1,7 @@
 ---
 id: STAGE-FILES-10
 part: told
+why: a question lived only in a transcript, so its answer had no place to land and another session could not find it
 section: Decision records — `<story>/decisions/<nn>.md`, in the story's folder
 see: factory-run/reference/file-contracts.md
 order: 2

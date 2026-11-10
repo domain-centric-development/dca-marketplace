@@ -1,6 +1,7 @@
 ---
 id: STAGE-INTEGRATE-4
 part: told
+why: a conflict marker left in a file would reach the merged commit
 stages:
 - integrate
 section: Do

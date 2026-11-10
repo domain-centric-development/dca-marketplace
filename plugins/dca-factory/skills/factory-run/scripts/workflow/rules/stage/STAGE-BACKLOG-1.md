@@ -1,6 +1,7 @@
 ---
 id: STAGE-BACKLOG-1
 part: told
+why: without fixed headings the gate cannot read the description, and a stage editing it would overwrite what people decided
 section: Project description
 retired: describes a file's form for every reader, not what a stage does — it stays reference text in factory-run/reference/backlog-contract.md
 ---

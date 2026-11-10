@@ -1,6 +1,7 @@
 ---
 id: STAGE-FILES-11
 part: told
+why: unknown
 section: Project decision records — `product/decisions/<name>.md`, beside the epics
 retired: describes a file's form for every reader, not what a stage does — it stays reference text in factory-run/reference/file-contracts.md
 ---

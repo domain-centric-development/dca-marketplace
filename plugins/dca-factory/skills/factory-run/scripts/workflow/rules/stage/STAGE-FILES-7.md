@@ -1,6 +1,7 @@
 ---
 id: STAGE-FILES-7
 part: told
+why: the judge's minor findings vanished once a story was delivered
 section: Findings — `<story>/findings.md`, in the story's folder
 retired: describes a file's form for every reader, not what a stage does — it stays reference text in factory-run/reference/file-contracts.md
 ---

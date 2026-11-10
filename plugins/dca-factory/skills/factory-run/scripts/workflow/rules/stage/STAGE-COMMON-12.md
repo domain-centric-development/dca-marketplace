@@ -1,6 +1,7 @@
 ---
 id: STAGE-COMMON-12
 part: told
+why: stages wrote the changed-files list by hand and it disagreed with what the tree had changed
 section: One session, several stages
 order: 12
 ---

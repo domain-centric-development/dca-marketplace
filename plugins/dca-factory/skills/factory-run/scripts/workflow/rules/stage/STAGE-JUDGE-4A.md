@@ -1,6 +1,7 @@
 ---
 id: STAGE-JUDGE-4A
 part: told
+why: a judge cited an experimental rule the project never opted in to as binding
 stages:
 - judge
 section: Do

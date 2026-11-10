@@ -1,6 +1,7 @@
 ---
 id: STAGE-FILES-6
 part: told
+why: a judge that reviewed in its own context confirmed its own findings and kept its own bias
 section: Review files — `.dca-factory/runs/<story>/reviews/<perspective>.md`
 retired: describes a file's form for every reader, not what a stage does — it stays reference text in factory-run/reference/file-contracts.md
 ---

@@ -1,6 +1,7 @@
 ---
 id: STAGE-FILES-12
 part: told
+why: unknown
 section: Requests — `.dca-factory/requests/<stamp>-<kind>.md`
 retired: describes a file's form for every reader, not what a stage does — it stays reference text in factory-run/reference/file-contracts.md
 ---

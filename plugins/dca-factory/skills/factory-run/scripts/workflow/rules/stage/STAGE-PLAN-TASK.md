@@ -1,6 +1,7 @@
 ---
 id: STAGE-PLAN-TASK
 part: told
+why: a change meant to touch no behaviour could alter an answer or a stored value without becoming a story
 stages:
 - plan
 kinds:

@@ -1,6 +1,7 @@
 ---
 id: STAGE-PLAN-ADOPT
 part: told
+why: an adoption could claim behaviour the code does not show, or change code where nothing was to be built
 stages:
 - plan
 kinds:

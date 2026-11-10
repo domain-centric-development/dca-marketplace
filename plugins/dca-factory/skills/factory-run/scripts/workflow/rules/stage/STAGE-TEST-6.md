@@ -1,6 +1,7 @@
 ---
 id: STAGE-TEST-6
 part: told
+why: a stub returning an empty answer made a test green before any code existed
 stages:
 - test
 section: Do

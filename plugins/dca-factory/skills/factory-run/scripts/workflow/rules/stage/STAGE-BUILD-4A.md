@@ -1,6 +1,7 @@
 ---
 id: STAGE-BUILD-4A
 part: told
+why: comments in touched files kept describing the one case or the mechanism the change had replaced
 stages:
 - build
 section: Do

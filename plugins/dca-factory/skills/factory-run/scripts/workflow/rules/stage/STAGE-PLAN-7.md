@@ -1,6 +1,7 @@
 ---
 id: STAGE-PLAN-7
 part: told
+why: a detail the story specified but no criterion carried was covered by no test and built by no stage
 stages:
 - plan
 section: Do

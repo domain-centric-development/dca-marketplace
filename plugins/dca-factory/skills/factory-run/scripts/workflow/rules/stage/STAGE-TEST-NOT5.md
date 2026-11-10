@@ -1,6 +1,7 @@
 ---
 id: STAGE-TEST-NOT5
 part: told
+why: a dependency or runner change made inside a story is a stack decision nobody reviewed
 stages:
 - test
 section: Do not

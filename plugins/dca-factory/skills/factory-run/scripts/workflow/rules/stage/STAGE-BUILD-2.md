@@ -1,6 +1,7 @@
 ---
 id: STAGE-BUILD-2
 part: told
+why: the build added guards and elements the plan never named, code no test asked for and no plan accounted for
 stages:
 - build
 section: Do

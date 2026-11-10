@@ -1,6 +1,7 @@
 ---
 id: STAGE-BACKLOG-10
 part: told
+why: a project without a backlog would look broken and fail before its first story was written
 section: Empty means green
 retired: describes a file's form for every reader, not what a stage does — it stays reference text in factory-run/reference/backlog-contract.md
 ---

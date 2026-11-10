@@ -1,6 +1,7 @@
 ---
 id: STAGE-DOCUMENT-0
 part: told
+why: a feature folder appeared in the spec without a glossary term saying what it groups
 stages:
 - document
 section: Do

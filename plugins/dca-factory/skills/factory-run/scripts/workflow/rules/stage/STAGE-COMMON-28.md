@@ -1,6 +1,7 @@
 ---
 id: STAGE-COMMON-28
 part: told
+why: a stage skipped its work because the carrier it was told to use did not exist in this tool
 section: Who carries a stage
 order: 28
 ---

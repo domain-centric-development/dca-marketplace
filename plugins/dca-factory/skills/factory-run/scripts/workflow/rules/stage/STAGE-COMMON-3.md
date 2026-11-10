@@ -1,6 +1,7 @@
 ---
 id: STAGE-COMMON-3
 part: told
+why: a stage able to write the evidence folder could forge the proof the gate reads
 section: A session the runner started
 order: 3
 ---

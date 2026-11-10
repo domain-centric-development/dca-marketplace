@@ -139,6 +139,7 @@ class ShowRulebookUseCase(ShowRulebookInputPort):
             refusals=refusals_model(journals.refusals(book.active())),
             outside=[r.id.value for r in book.outside() if r in chosen],
             problems=[p.said.value for p in book.problems(self._instructed.citations(), self._instructed.rules())],
+            unexplained=[r.id.value for r in book.unexplained()],
             story=self._story(book, query.story, journals, tracks) if query.story else None,
         )
 

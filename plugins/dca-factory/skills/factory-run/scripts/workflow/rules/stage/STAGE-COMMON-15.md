@@ -1,6 +1,7 @@
 ---
 id: STAGE-COMMON-15
 part: told
+why: a test broken by its own helper stopped the story for a human, though it could be repaired without changing what it asserts
 section: One session, several stages
 order: 15
 ---

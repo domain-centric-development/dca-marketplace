@@ -1,6 +1,7 @@
 ---
 id: STAGE-TEST-ADOPT
 part: told
+why: a test written for an adoption could pass whatever the code did unless a break showed it turn red
 stages:
 - test
 kinds:
