@@ -36,6 +36,10 @@ request — your name, your GitHub name, the date and the version of the agreeme
 your own. The file states what the row means. It is the record of your agreement and travels with
 the repository, so one row is enough for all your later pull requests.
 
+A signed commit for that row is welcome and not required. The easiest way to one is to add the row
+in GitHub's web editor, which signs the commit for you. A pull request that adds a row is merged
+with a merge commit, so your commit stays as you made it.
+
 Two things the agreement asks you to check before you do:
 
 - **Your employer.** If you write in your working time, as part of your job or on your employer's
