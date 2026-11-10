@@ -636,6 +636,10 @@ Three measures, read from files the factory writes anyway; none of them is a gat
   `status --usage` per epic, the story view per story.
 - **Rework.** How many of a story's production files another story changed again within fourteen days.
 
+The page shows all of them: summed in the Quality card of the delivered tab, beside the questions, findings and
+lessons; per story in its Measures card. The terminal states them in `status --usage` and `status --story <id>`, the
+cockpit in a story's signals.
+
 ## What keeps coming back: lessons
 
 The same question in three stories, the same judge finding, the same correction at acceptance — the factory

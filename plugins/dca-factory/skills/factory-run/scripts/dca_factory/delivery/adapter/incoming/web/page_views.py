@@ -488,25 +488,37 @@ const sum = o => Object.values(o || {}).reduce((n, v) => n + v, 0);
 const domainWords = o => Object.entries(o || {}).sort((a, b) => b[1] - a[1]).map(([c, n]) => `${n} ${c.replace(/^domain-/, "")}`).join(" · ");
 function qualityCard(q, lessons) {
   if (!q || !q.stories) return "";
-  const domain = sum(q.domain), corrected = sum(q.corrections);
-  const tiles = [
-    [`${q.answered}/${q.asked}`, "questions answered", "a stage asked, a person answered", false],
-    [`${q.assumptions_answered}`, "assumptions answered", `${q.assumptions_open} still open`, !!q.assumptions_open],
-    [`${q.plan_open}`, "left open by plans", "what a plan named and did not decide", false],
-    [`${domain}`, "domain findings", domain ? domainWords(q.domain) : "none confirmed", !!domain],
-    [`${corrected}`, "corrections at acceptance", corrected ? domainWords(q.corrections) : "none", !!corrected],
-  ].map(([n, label, said, bad]) => ui.tile(n, label, {said, bad})).join("");
+  const domain = sum(q.domain), corrected = sum(q.corrections), l = lessons || {};
+  const asked = q.asked_acceptance || 0, measured = q.mutation_measured || 0, plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+  // grouped by where in the cycle a figure comes from; red only where a person has something to do (WP-206)
+  const groups = [
+    {head: "plan & questions", rows: [
+      {figure: `${q.answered}/${q.asked}`, label: "questions answered", title: "a stage asked, a person answered"},
+      {figure: `${q.assumptions_answered}`, label: "assumptions answered", note: q.assumptions_open ? `${q.assumptions_open} open` : "", alert: !!q.assumptions_open,
+        title: "what a stage assumed and wrote down for a person to confirm"},
+      {figure: `${q.plan_open}`, label: "left open by plans", title: "what a plan named and did not decide"},
+      {figure: `${l.waiting || 0}`, label: "lessons waiting", note: l.who ? `for ${l.who}` : "", alert: !!l.waiting,
+        title: `what repeats across the stories — a question of the same tag, a finding of the same rule, a correction of the same code — answered in decide by the ${l.role || "loop keeper"}; ${l.answered || 0} answered`}]},
+    {head: "judge", rows: [
+      {figure: `${domain}`, label: "domain findings", note: domain ? domainWords(q.domain) : "", title: "what the judge confirmed against the domain"},
+      {figure: q.named ? `${q.killed}/${q.named}` : "–", label: "rules caught", note: q.survived ? `${q.survived} survived` : "", alert: !!q.survived,
+        title: `rules a deliberately broken implementation was tried against — killed ${q.killed} · red ${q.red} · survived ${q.survived} · no-break ${q["no-break"]} — ${q.measured} of ${q.stories} stories measured`},
+      {figure: `${q.contradictions || 0}`, label: "contradictions", alert: !!q.contradictions, title: "stops on a specification that contradicts itself, counted apart from failures"}]},
+    {head: "acceptance", rows: [
+      {figure: asked ? `${q.accepted}/${asked}` : "–", label: "accepted", note: asked && q.waited ? `waited ${took(q.waited)}` : asked ? "" : "none asked yet",
+        title: "stories a person was asked to accept, and how long they waited for the answer"},
+      {figure: `${corrected}`, label: corrected === 1 ? "correction" : "corrections", note: corrected ? domainWords(q.corrections) : "", title: "what a person corrected at acceptance"},
+      {figure: `${q.rework || 0}`, label: "files reworked", title: "production files another story changed again within 14 days of delivery"}]},
+    {head: "tests", rows: [
+      {figure: measured ? `${q.mutation_median} %` : "–", label: "test strength",
+        note: measured ? `median of ${measured}${q.mutation_skipped ? ` · ${q.mutation_skipped} skipped` : ""}` : q.mutation_skipped ? `${q.mutation_skipped} skipped` : "not measured",
+        title: "mutants killed by the story's tests, after the judge — needs mutation: in the profile"},
+      {figure: `${(q.fresh || 0) + (q.repeated || 0)}`, label: "restarts", note: q.repeated ? `${plural(q.repeated, "stop")} by repetition` : "", alert: !!q.repeated,
+        title: `${q.fresh || 0} fresh after a repeated refusal · ${q.repeated || 0} stopped by repetition`}]},
+  ];
   const found = Object.entries(q.findings || {}).sort((a, b) => b[1] - a[1]), most = found.length ? found[0][1] : 1;
-  // the rules a broken implementation was tried against: one tile, the count by kind on hover
-  const counted = `killed ${q.killed} · red ${q.red} · survived ${q.survived} · no-break ${q["no-break"]} — of ${q.stories} stories: ${q.measured} measured, ${q.not_measured} tested before rules were recorded, ${q.without_test || 0} without a test stage, ${q.open || 0} not delivered`;
-  const ruleTile = ui.tile(q.named ? `${q.killed}/${q.named}` : "–", "rules caught when broken", {said: `${q.measured} of ${q.stories} stories measured`, bad: !!q.survived, title: counted});
-  // the step from these signals to a place for their correction: what repeats becomes a lesson in decide (WP-185)
-  const l = lessons || {};
-  const lessonTile = ui.tile(`${l.waiting || 0}`, `lessons for the ${l.role || "loop keeper"}`,
-    {said: `${l.answered || 0} answered — what these figures repeat across stories, counted; answered in decide by ${l.who || ""}`, bad: !!l.waiting,
-     title: "a question of the same tag, a finding of the same rule, a correction of the same code, an assumption answered the same way, a term flagged — in several stories"});
   return ui.card("Quality", "what the stages asked, what the judge confirmed, what a person corrected — counted over every story, never rated",
-    ui.tiles(tiles + ruleTile + lessonTile, {many: true})
+    ui.stats(groups)
     + (found.length ? ui.part("Findings the judge confirmed, by perspective", ui.bars(found.map(([name, n]) => [name, n, Math.round(100 * n / most)]))) : ""));
 }
 // the same figures in one line, for an epic
@@ -517,8 +529,27 @@ function qualityLine(q) {
     ["assumptions", `${q.assumptions_answered}${q.assumptions_open ? ` · ${q.assumptions_open} open` : ""}`, !!q.assumptions_open],
     ["left open by plans", `${q.plan_open}`],
     found.length ? ["findings", found.map(([n, c]) => `${esc(n)} ${c}`).join(" · ")] : null,
-    ["domain", domain ? esc(domainWords(q.domain)) : "0", !!domain],
-    q.named ? ["rules caught when broken", `${q.killed}/${q.named}`, !!q.survived] : null]);
+    ["domain", domain ? esc(domainWords(q.domain)) : "0"],
+    q.named ? ["rules caught when broken", `${q.killed}/${q.named}`, !!q.survived] : null,
+    ...measureFigures(q).filter(f => f[4]).map(([label, n, , bad]) => [label, esc(n), bad])]);
+}
+// the measures of WP-190 over several stories, each [label, figure, said, bad, present] — present where the stories
+// have it to show; the tiles show every one, an epic's line only those present (WP-206)
+function measureFigures(q) {
+  const asked = q.asked_acceptance || 0, measured = q.mutation_measured || 0, restarts = (q.fresh || 0) + (q.repeated || 0);
+  const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+  return [
+    ["acceptances accepted", asked ? `${q.accepted}/${asked}` : "–",
+      asked ? `${plural(q.corrections_at_acceptance, "correction")} · waited ${took(q.waited || 0)}` : "none asked yet",
+      false, !!asked],
+    ["files reworked", `${q.rework || 0}`, "changed again within 14 days", false, !!q.rework],
+    ["test strength", measured ? `${q.mutation_median} %` : "–",
+      measured ? `median of ${measured}${q.mutation_skipped ? ` · ${q.mutation_skipped} skipped` : ""}`
+        : q.mutation_skipped ? `${q.mutation_skipped} skipped` : "no mutation: in the profile",
+      false, !!measured],
+    ["contradictions", `${q.contradictions || 0}`, "a spec that contradicts itself", !!q.contradictions, !!q.contradictions],
+    ["restarts", `${restarts}`, `${q.fresh || 0} fresh · ${q.repeated || 0} stopped`, !!q.repeated, !!restarts],
+  ];
 }
 
 function delivered(st) {
@@ -873,9 +904,11 @@ function storyPage(st, id) {
   // what the judge found in it: the rows still open, each to the backlog or done, and what each perspective found in all
   const found = Object.entries(((v.signals || {}).findings) || {}).map(([who, n]) => `${who} ${n}`).join(" · ");
   const open = (st.findings || []).filter(f => f.story === id);
-  const findings = open.length || found ? ui.card("Findings", found ? `found: ${found}` : "", open.length
+  const measures = storyMeasures(v.signals || {});
+  const findings = (measures ? ui.card("Measures", "how it was accepted, reworked and tested — measures, never a gate", measures) : "")
+    + (open.length || found ? ui.card("Findings", found ? `found: ${found}` : "", open.length
       ? ui.list(open.map(f => findingRow(f, f.perspective)))
-      : ui.empty("None open — each was fixed, or set done or won't fix.")) : "";
+      : ui.empty("None open — each was fixed, or set done or won't fix.")) : "");
   return back + head + buttons
     + ui.card("Pipeline", (v.models || []).length ? `run by ${(v.models || []).join(", ")}` : "", totals + (track.length ? ui.track(track) : ui.empty("Not run yet.")))
     // what its stages took a picture of — a browser test's screenshot, the judge's look — beneath its pipeline (WP-184)
@@ -886,6 +919,18 @@ function storyPage(st, id) {
     // its output, while followed, stands above its words in the content's column, never across the page
     + ui.split({main: (S.follow && S.follow.kind === "story" && S.follow.id === id ? ui.card("Output", `<span id="follow-title" data-own></span>`, ui.terminal()) : "")
         + ui.card("", "", text || ui.empty("The story has no words yet.")), side: words + findings + time + passCard});
+}
+// one story's measures (WP-190) as the terminal's story view states them, '' where it has none (WP-206)
+function storyMeasures(g) {
+  const a = g.acceptance, said = g.mutation, plain = said === "skipped" || said === "no score";
+  const items = [
+    a ? ["acceptance", esc(`${a.outcome}${a.waited ? `, waited ${took(a.waited)}` : ""} · ${a.corrections} correction${a.corrections === 1 ? "" : "s"}`)] : null,
+    g.rework ? ["reworked", esc(`${g.rework} file${g.rework === 1 ? "" : "s"} within 14 days`)] : null,
+    said != null ? ["test strength", esc(plain ? `${said} — not measured` : `${said} % of the mutants killed`)] : null,
+    g.contradictions ? ["contradictions", esc(`${g.contradictions}`), true] : null,
+    g.fresh || g.repeated ? ["restarts", esc(`${g.fresh || 0} fresh · ${g.repeated || 0} by repetition`), !!g.repeated] : null,
+  ].filter(Boolean);
+  return items.length ? ui.figures(items) : "";
 }
 function storyParts(v, id, scope) {
   const row = v.row || {};
@@ -1028,6 +1073,8 @@ function components() {
         body: ui.options([{advised: true, pick: ui.btn("a", {primary: true}), text: "the existing one"}, {pick: ui.btn("b"), text: "a new one"}])})
         + ui.record({accept: true, about: "acceptance · a-1", text: "Look at the lending page.", body: ui.actions(ui.btn("accept", {primary: true}))})],
       ["tiles", ui.tiles([1, 2, 3, 4, 5].map(n => ui.tile(`${n}`, `figure ${n}`)).join(""), {many: true})],
+      ["stats", ui.stats([{head: "plan & questions", rows: [{figure: "3/4", label: "questions answered"}, {figure: "5", label: "assumptions answered", note: "1 open", alert: true}]},
+        {head: "tests", rows: [{figure: "76.5 %", label: "test strength", note: "median of 2", title: "mutants killed"}]}])],
       ["days", ui.days([{day: "2026-10-15", rows: [{at: "10:12", story: sample.story, title: sample.title, epic: sample.epic, event: "BookLent", seconds: "14 min", cost: "$3.10"}]}])],
       ["domain · kernel", ui.domain(ui.domainNode("Domain model", "") + ui.facts([{kind: "aggregate", terms: [{name: "Loan"}]}])) + ui.kernel([{kind: "values", terms: [{name: "Money", shared: true}]}])],
       ["proposals", ui.proposals([{goal: "one goal", id: "p-1", epic: "lending"}, {goal: "another goal", id: "p-2", actions: ui.btn("make it an epic")}])],

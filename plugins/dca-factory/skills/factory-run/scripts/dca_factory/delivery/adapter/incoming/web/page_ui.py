@@ -198,6 +198,9 @@ ui.toast = (text, isError) => `<div class="${mods("toast", [isError && "error"])
 ui.legend = items => `<ul class="legend">${items.map(([state, label]) => `<li class="legend__item"><i class="legend__key" data-state="${esc(state)}"></i>${esc(label)}</li>`).join("")}</ul>`;
 ui.strip = (states, title) => `<span class="strip" role="img" aria-label="${esc(title)}" title="${esc(title)}">${states.map(s => `<i class="strip__seg" data-state="${esc(s)}"></i>`).join("")}</span>`;
 ui.said = (keyword, html, o = {}) => `<p class="said"${o.state ? ` data-state="${esc(o.state)}"` : ""}>${keyword || o.icon ? `<span class="said__kw">${o.icon ? ui.icon(o.icon) + " " : ""}${esc(keyword)}</span> ` : ""}${html}${o.goes ? ` <span class="said__goes">${esc(o.goes)}</span>` : ""}</p>`;
+// figures by theme: a group per heading, each row a figure and what it counts — the explanation on hover, never in
+// the way; a row that asks a person to act takes `alert` (WP-206)
+ui.stats = groups => `<div class="stats">${groups.filter(g => g && g.rows.length).map(g => `<section class="stats__group"><h4 class="stats__head">${ui.caption(g.head)}</h4>${g.rows.map(r => `<div class="${mods("stats__row", [r.alert && "alert"])}"${r.title ? ` title="${esc(r.title)}"` : ""}>${ui.num(r.figure, "", {alert: r.alert})}<span class="stats__label">${esc(r.label)}${r.note ? `<span class="stats__note">${esc(r.note)}</span>` : ""}</span></div>`).join("")}</section>`).join("")}</div>`;
 ui.figures = items => `<div class="figures">${items.filter(Boolean).map(([label, value, bad]) => `<span class="figures__item">${esc(label)} <b class="${mods("figures__value", [bad && "alert"])}">${value}</b></span>`).join("")}</div>`;
 ui.bars = rows => `<div class="bars">${rows.map(([label, n, percent]) => `<span class="bars__label">${esc(label)}</span>${ui.meter(percent)}<span class="bars__n">${esc(n)}</span>`).join("")}</div>`;
 ui.toolbar = inner => `<div class="toolbar">${inner}</div>`;

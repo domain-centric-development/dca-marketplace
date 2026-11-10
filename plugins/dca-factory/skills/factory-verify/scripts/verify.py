@@ -58,6 +58,12 @@ def can_symlink():
         return os.path.islink(os.path.join(probe, "b"))
 
 
+def real_path(path):
+    """Where a link leads, joined with `/` on every platform, so a case can look for a folder in it — Windows's
+    `realpath` answers with `\\`."""
+    return os.path.realpath(path).replace(os.sep, "/")
+
+
 def tmpdir():
     """A throwaway project directory. `ignore_cleanup_errors`: a fixture that ran `git init` leaves
     read-only objects behind, and on Windows removing those raises — which is nothing about the
@@ -4530,7 +4536,7 @@ def verify_setup(runner, verbose=False):
                 newer = version("9.1.0", "0.7.0")
                 code, output = run_runner(project_runner(root), root, "update", "--from", newer, env={"HOME": home})
                 skills = os.path.join(root, f".{tool}", "skills")
-                where = {n: os.path.realpath(os.path.join(skills, n)) for n in ("factory-run", "e2e-testing")}
+                where = {n: real_path(os.path.join(skills, n)) for n in ("factory-run", "e2e-testing")}
                 check(f"update: {tool}'s links into an older cache version follow the newer one, the carrier's too",
                       code == 0 and "/9.1.0/" in where["factory-run"] and "/0.7.0/" in where["e2e-testing"]
                       and "kept the project's own" not in output, f"exit {code}; {where}")
@@ -4552,7 +4558,7 @@ def verify_setup(runner, verbose=False):
                                       shell_path(os.path.join(cache, "dca-factory", "9.1.0", "skills")), env={"HOME": home})
             run_skill = os.path.join(skills, "factory-run", "SKILL.md")
             check("update: a tool whose skill links are broken is updated, not skipped",
-                  code == 0 and os.path.isfile(run_skill) and "/9.1.0/" in os.path.realpath(run_skill),
+                  code == 0 and os.path.isfile(run_skill) and "/9.1.0/" in real_path(run_skill),
                   f"exit {code}; {os.path.realpath(run_skill)}; {output.strip()[-300:]}")
     # the install's list names its entries in both modes; the mode follows the source; a project's own
     # skill with a pipeline name survives setup and update; .gitignore carries one line per link
@@ -4615,7 +4621,7 @@ def verify_setup(runner, verbose=False):
                   f"exit {code}; {manifest_of(root)[:3]}; {output.strip()[-200:]}")
             code, output = run_runner(project_runner(root), root, "update", "--from", cached, "--link", env={"HOME": home})
             check("update: a link into a checkout follows to a cache when named, and the report warns about the cache",
-                  code == 0 and "/9.0.0/" in os.path.realpath(plan) and "plugin cache" in output
+                  code == 0 and "/9.0.0/" in real_path(plan) and "plugin cache" in output
                   and "kept the project's own" not in output, f"exit {code}; {os.path.realpath(plan)}; {output.strip()[-300:]}")
             code, output = run_runner(project_runner(root), root, "update", "--from", cached, "--copy", env={"HOME": home})
             check("update: --copy switches back to copies and drops the ignore lines",

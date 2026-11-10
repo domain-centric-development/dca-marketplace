@@ -56,6 +56,21 @@ class ReworkTest(unittest.TestCase):
         self.assertEqual([r["signals"].get("rework") for r in rows], [1, 0, 0])
         self.assertEqual(signal_totals(rows)["rework"], 1)
 
+    def test_test_strength_summed_measured_skipped_and_absent_apart(self):
+        rows = [dict(story="S-1", signals=dict(mutation="82")), dict(story="S-2", signals=dict(mutation="72.73")),
+                dict(story="S-3", signals=dict(mutation="60")), dict(story="S-4", signals=dict(mutation="skipped")),
+                dict(story="S-5", signals=dict(mutation="no score")), dict(story="S-6", signals={})]
+        totals = signal_totals(rows)
+        self.assertEqual((totals["mutation_measured"], totals["mutation_skipped"], totals["mutation_median"]),
+                         (3, 2, 72.7))
+        self.assertIn("mutation median 72.7 % (3 measured)", totals["line"])
+
+    def test_no_measure_is_no_median_never_zero(self):
+        totals = signal_totals([dict(story="S-1", signals=dict(mutation="skipped")), dict(story="S-2", signals={})])
+        self.assertEqual((totals["mutation_measured"], totals["mutation_skipped"], totals["mutation_median"]),
+                         (0, 1, None))
+        self.assertNotIn("mutation", totals["line"])
+
     def test_the_usage_view_lists_per_epic_the_stories_with_figures(self):
         model = dict(epics=[dict(epic="e", rows=[
             dict(story="S-1", signals=dict(acceptance=dict(waited=3600, outcome="accepted", corrections=0), rework=2)),

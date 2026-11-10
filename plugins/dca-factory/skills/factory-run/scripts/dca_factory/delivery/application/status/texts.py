@@ -73,11 +73,32 @@ def signals_line(totals: Entry) -> str:
                      f"{totals['corrections_at_acceptance']} correction(s) · waited {took_text(totals['waited'])}")
     if totals.get("rework"):
         parts.append(f"rework {totals['rework']} file(s)")
+    if totals.get("mutation_measured"):
+        parts.append(f"mutation median {totals['mutation_median']:g} % ({totals['mutation_measured']} measured)")
     if totals.get("contradictions"):
         parts.append(f"contradictions {totals['contradictions']}")
     if totals.get("fresh") or totals.get("repeated"):
         parts.append(f"fresh restarts {totals.get('fresh') or 0} · stops by repetition {totals.get('repeated') or 0}")
     return " · ".join(parts)
+
+
+def mutation_score(said: typing.Any) -> typing.Optional[float]:
+    """WP-206: a story's mutation measure as a number — the score as the runner journaled it (`82`, `72.73`); None for
+    `skipped`, `no score` or anything else that states no score."""
+    try:
+        return float(str(said).strip())
+    except ValueError:
+        return None
+
+
+def median(values: typing.Sequence[float]) -> typing.Optional[float]:
+    """The middle of <values>, the mean of the two middle ones for an even count, to one decimal; None for none."""
+    ordered = sorted(values)
+    if not ordered:
+        return None
+    middle = len(ordered) // 2
+    found = ordered[middle] if len(ordered) % 2 else (ordered[middle - 1] + ordered[middle]) / 2
+    return round(found, 1)
 
 
 #: How long after a story's delivery another story's change of its production files counts as rework.
@@ -116,7 +137,9 @@ def signal_totals(rows: typing.Sequence[Entry], perspectives: typing.Optional[ty
                         **{v: 0 for v in RULE_VERDICTS},
                         asked=0, answered=0, assumptions_open=0, assumptions_answered=0, plan_open=0, fresh=0, repeated=0, contradictions=0,
                         asked_acceptance=0, accepted=0, corrections_at_acceptance=0, waited=0, rework=0,
+                        mutation_measured=0, mutation_skipped=0, mutation_median=None,
                         findings={}, domain={}, corrections={})
+    scores: typing.List[float] = []
     for row in rows:
         signals = row.get("signals") or {}
         if signals.get("rules") is None and not row.get("done", True):
@@ -140,11 +163,20 @@ def signal_totals(rows: typing.Sequence[Entry], perspectives: typing.Optional[ty
             total["corrections_at_acceptance"] += accepted["corrections"]
             total["waited"] += accepted["waited"] or 0
         total["rework"] += signals.get("rework") or 0
+        said = signals.get("mutation")
+        if said is not None:
+            score = mutation_score(said)
+            if score is None:
+                total["mutation_skipped"] += 1
+            else:
+                scores.append(score)
         for key in ("findings", "domain", "corrections"):
             for name, n in (signals.get(key) or {}).items():
                 if key == "findings" and perspectives is not None and name not in perspectives:
                     name = "other"
                 total[key][name] = total[key].get(name, 0) + n
+    total["mutation_measured"] = len(scores)
+    total["mutation_median"] = median(scores)
     named = total["named"]
     total["kill_rate"] = round(total["killed"] / named, 2) if named else None
     total["guarded_rate"] = round((total["red"] + total["killed"]) / named, 2) if named else None

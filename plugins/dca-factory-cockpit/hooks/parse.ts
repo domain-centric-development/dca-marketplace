@@ -392,6 +392,12 @@ export function signalFields(signals: {
   findings: Record<string, number> | null
   domain: Record<string, number> | null
   corrections: Record<string, number>
+  acceptance?: { waited: number | null; outcome: string; corrections: number } | null
+  rework?: number
+  mutation?: string | null
+  contradictions?: number
+  fresh?: number
+  repeated?: number
 }): { label: string; text: string }[] {
   const counted = (map: Record<string, number>, strip = '') =>
     Object.entries(map)
@@ -415,5 +421,22 @@ export function signalFields(signals: {
             : counted(signals.findings) + (signals.domain && Object.keys(signals.domain).length > 0 ? ` · domain ${counted(signals.domain, 'domain-')}` : ''),
     },
     { label: 'corrections', text: Object.keys(signals.corrections).length === 0 ? 'none' : counted(signals.corrections, 'domain-') },
+    // the measures of WP-190, as the page's story view and the terminal state them — only where the story has one (WP-206)
+    ...measureFields(signals),
   ]
+}
+
+function measureFields(signals: Parameters<typeof signalFields>[0]): { label: string; text: string }[] {
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
+  const accepted = signals.acceptance
+  const said = signals.mutation
+  return [
+    accepted
+      ? { label: 'acceptance', text: `${accepted.outcome}${accepted.waited ? `, waited ${duration(accepted.waited)}` : ''} · ${plural(accepted.corrections, 'correction')}` }
+      : null,
+    signals.rework ? { label: 'reworked', text: `${plural(signals.rework, 'file')} within 14 days` } : null,
+    said != null ? { label: 'test strength', text: said === 'skipped' || said === 'no score' ? `${said} — not measured` : `${said} % of the mutants killed` } : null,
+    signals.contradictions ? { label: 'contradictions', text: String(signals.contradictions) } : null,
+    signals.fresh || signals.repeated ? { label: 'restarts', text: `${signals.fresh ?? 0} fresh · ${signals.repeated ?? 0} by repetition` } : null,
+  ].filter((field): field is { label: string; text: string } => field !== null)
 }

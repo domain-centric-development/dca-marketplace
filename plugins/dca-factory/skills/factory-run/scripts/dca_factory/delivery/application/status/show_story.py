@@ -130,7 +130,7 @@ class ShowStoryUseCase(ShowStoryInputPort):
                     **story_situation(row, data, overview, text["sections"], now),
                     context=str(front.get("context", "")).strip(), criteria=text["criteria"],
                     accepted_by=accepted_by, passes=passes, stages=stages, decisions=decisions, models=models,
-                    not_applied=not_applied, signals=facts.story_signals(story_id, records, body),
+                    not_applied=not_applied, signals=with_story_rework(facts.story_signals(story_id, records, body), row),
                     priced=told["priced"] > 0, waiting=[w for w in overview["waiting"] if w["story"] == story_id],
                     next=overview["next"], actions=actions)
 
@@ -213,3 +213,10 @@ def situation_of_story(row: Model, story: Model, overview: Model, sections: typi
         place = queue.index(row["story"])
         line += " · next in line" if place == 0 else f" · {place + 1}. in line"
     return dict(situation=line, view="pipeline" if started else "story")
+
+
+def with_story_rework(signals: typing.Dict[str, typing.Any], row: typing.Mapping[str, typing.Any]) -> typing.Dict[str, typing.Any]:
+    """WP-206: a story's signals with its rework, which only the overview can count — another story's change of its
+    files within the fortnight after its delivery — taken from its row there."""
+    rework = (row.get("signals") or {}).get("rework")
+    return dict(signals, rework=rework) if rework else signals

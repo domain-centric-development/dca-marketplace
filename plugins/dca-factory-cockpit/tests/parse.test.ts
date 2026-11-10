@@ -132,6 +132,21 @@ test('a story\'s signals read as the gates recorded them: not recorded and not m
   expect(some.map(field => field.text)).toEqual(['1 asked, 1 answered', '1 open, 0 answered', '2', '3 named — 2 killed · 1 survived', '1 clean-code · 1 ddd · domain 1 concept', '1 term'])
 })
 
+test('a story\'s measures follow its signals where it has them, as the page and the terminal state them', () => {
+  const base = { asked: 0, answered: 0, assumptions_open: 0, assumptions_answered: 0, plan_open: null, rules: null, findings: null, domain: null, corrections: {} }
+  const measured = signalFields({ ...base, acceptance: { waited: 3000, outcome: 'correction', corrections: 1 }, rework: 2, mutation: '71',
+    contradictions: 1, fresh: 1, repeated: 0 })
+  expect(measured.slice(6)).toEqual([
+    { label: 'acceptance', text: 'correction, waited 50 min · 1 correction' },
+    { label: 'reworked', text: '2 files within 14 days' },
+    { label: 'test strength', text: '71 % of the mutants killed' },
+    { label: 'contradictions', text: '1' },
+    { label: 'restarts', text: '1 fresh · 0 by repetition' },
+  ])
+  expect(signalFields({ ...base, mutation: 'skipped' }).slice(6)).toEqual([{ label: 'test strength', text: 'skipped — not measured' }])
+  expect(signalFields({ ...base, acceptance: null, rework: 0, mutation: null })).toHaveLength(6)
+})
+
 test('the printed status carries the project\'s figures when the factory gives them', () => {
   const base = { project: 'shop', delivered: 1, total: 2, tokens: 0, waiting: [], running: [], next: { text: 'run it' } }
   expect(glanceText({ ...base, signals: { line: 'kill rate 0.10 · guarded 0.90 (10 rules named)' } } as never, '2026-10-23T10:00:00Z')).toContain('- signals: kill rate 0.10')

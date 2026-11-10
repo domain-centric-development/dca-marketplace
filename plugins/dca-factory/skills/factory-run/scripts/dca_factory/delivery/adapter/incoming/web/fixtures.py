@@ -62,7 +62,10 @@ ROWS = [
 SIGNALS = dict(stories=6, answered=3, asked=4, assumptions_answered=5, assumptions_open=1, plan_open=2,
                domain={"domain-model": 2, "domain-language": 1}, corrections={"domain-model": 1},
                findings={"ddd": 4, "hexagonal": 2, "clean-code": 1}, killed=9, red=11, survived=1, **{"no-break": 1},
-               named=12, measured=5, not_measured=1, without_test=0, open=3)
+               named=12, measured=5, not_measured=1, without_test=0, open=3,
+               # the measures of WP-190, drawn since WP-206
+               asked_acceptance=3, accepted=2, corrections_at_acceptance=1, waited=5400, rework=2,
+               mutation_measured=2, mutation_skipped=1, mutation_median=76.5, contradictions=1, fresh=1, repeated=0)
 
 WISH_ENTRY = _action("wish", "wish", primary=True, creates=True, open_="words", text="What should exist? Your words.",
                      draft="wish")
@@ -213,6 +216,8 @@ def _spec_all():
 
 def _story_all():
     return dict(epic="lending", title="A reader returns a book", row=ROWS[2], context="lending",
+                signals=dict(acceptance=dict(waited=3000, outcome="correction", corrections=1), rework=1, mutation="71",
+                             contradictions=1, fresh=1, repeated=0, findings={"ddd": 1}),
                 path="product/epics/lending/a-reader-returns-a-book/story.md",
                 actions=[_action("change this", "change", open_="words", text="what should change", draft="change:return")],
                 sections=[dict(heading="Intent", text="A reader brings a book back and **owes nothing** more."),
