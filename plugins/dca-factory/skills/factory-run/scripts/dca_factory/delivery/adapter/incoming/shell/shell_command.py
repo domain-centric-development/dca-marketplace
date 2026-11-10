@@ -236,6 +236,8 @@ PASSED_ON: typing.Dict[str, typing.Callable[[typing.List[str]], int]] = {
     "status": status,
     "backlog": backlog,
     "decisions": lambda args: read_command(["--list-decisions", *args]),
+    # What repeats across the stories (WP-185): the lesson candidates with their evidence.
+    "lessons": lambda args: read_command(["--lessons", *args]),
     # What holds (WP-173): each context with its domain model, its features, rules and criteria.
     "spec": lambda args: read_command(["--spec", *args]),
     # The rulebook (WP-166): generated from where each rule is written.

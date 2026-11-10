@@ -77,6 +77,8 @@ from ..delivery.application.checkout.take_checkout import TakeCheckoutUseCase
 from ..delivery.application.checkout.give_checkout_back import GiveCheckoutBackUseCase
 from ..delivery.application.checkout.mark_listening import MarkListeningUseCase
 from ..delivery.application.status.list_findings import ListFindingsUseCase
+from ..delivery.application.lessons.show_lessons import ShowLessonsUseCase
+from ..delivery.adapter.outgoing.files.lesson_signal_files import LessonSignalFiles
 from ..delivery.application.status.follow_output import FollowOutputUseCase
 from ..delivery.application.status.follow_factory_log import FollowFactoryLogUseCase
 from ..delivery.adapter.outgoing.files.factory_log_file import FactoryLogFile
@@ -261,6 +263,10 @@ def follow_factory_log(cwd: str) -> FollowFactoryLogUseCase:
 
 def list_findings(cwd: str, epics: str, runs: str) -> ListFindingsUseCase:
     return ListFindingsUseCase(status_facts(cwd, epics, runs))
+
+
+def show_lessons(cwd: str, epics: str) -> ShowLessonsUseCase:
+    return ShowLessonsUseCase(LessonSignalFiles(cwd, epics))
 
 
 def open_work_window(cwd: str, runs: str) -> OpenWorkWindowUseCase:

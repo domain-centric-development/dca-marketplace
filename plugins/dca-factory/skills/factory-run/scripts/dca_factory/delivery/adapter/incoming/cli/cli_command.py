@@ -10,6 +10,7 @@ what they say.
     factory-cli.py --status --brief [--session-start]   two lines for a session's start
     factory-cli.py --help-view [--format text|md|json]  the factory explained, with this project's place in it
     factory-cli.py --list-decisions [--story <id>]      the decision inbox, one line per record
+    factory-cli.py --lessons [--format text|json]       what repeats across the stories: the lesson candidates
     factory-cli.py --discover-list [--format text|md|json]  every discovery topic, its proposals and which are epics
     factory-cli.py --schedule                           every story's state and the next one to run
     factory-cli.py --story <id> --start | --kind        where a run begins | `story`, `journey` or `adopt`
@@ -71,6 +72,7 @@ from ....application.status.show_journal_story import ShowJournalStoryQuery
 from ....application.cost.show_spent import ShowSpentQuery
 from ....application.shared.usage_ledger import Spent
 from ....application.status.list_findings import ListFindingsQuery
+from ....application.lessons.show_lessons import ShowLessonsQuery
 from ....application.delivery.show_brief import ShowBriefQuery
 from ....application.delivery.show_story_kind import ShowStoryKindQuery
 from .brief_view import brief_model, markdown as brief_markdown
@@ -599,6 +601,8 @@ def main(argv: typing.Sequence[str]) -> int:
                         help="let the story journals into git: the .gitignore line that ignores the pipeline's folder "
                              "becomes lines that keep everything but the journals out (`factory.sh setup`/`update`)")
     parser.add_argument("--lines", type=int, default=30, help="with --follow --once: how many lines (0: all)")
+    parser.add_argument("--lessons", action="store_true",
+                        help="the lesson candidates: what repeats across the stories at its threshold, with its evidence")
     parser.add_argument("--list-decisions", action="store_true",
                         help="print the decision inbox (all stories, or --story's) and exit")
     parser.add_argument("--claim", metavar="OWNER", help="take the checkout for one worker (exit 3: held by another)")
@@ -809,6 +813,8 @@ def main(argv: typing.Sequence[str]) -> int:
                       args.request)
     if args.list_decisions:
         return list_decisions(cwd, args.story, args.format, args.color)
+    if args.lessons:
+        return lessons(root.wiring.show_lessons(cwd, args.epics).execute(ShowLessonsQuery()), args.format)
     if args.discover_list:
         return discovery_list(cwd, args.epics, args.format, args.color)
     if args.stage_brief:
@@ -913,3 +919,20 @@ def main(argv: typing.Sequence[str]) -> int:
     if args.usage:
         return usage_report(args.runs, args.story, args.total, cwd, args.epics, args.format)
     parser.error("nothing asked — --status, --schedule, --usage, --list-decisions, … (a stage's gate is story-gate.py's)")
+
+
+def lessons(model: typing.Dict[str, typing.Any], form: str) -> int:
+    """The lesson candidates: one block per candidate — its kind, key and stories, the evidence, the places offered."""
+    if form == "json":
+        print(json.dumps(model, ensure_ascii=False, indent=2))
+        return 0
+    counted = ", ".join(f"{n} {kind}" for kind, n in model["signals"].items())
+    limits = ", ".join(f"{kind} {n}" for kind, n in model["thresholds"].items())
+    print(f"factory: signals counted — {counted}; a candidate from its kind's count of stories — {limits}")
+    for c in model["candidates"]:
+        print(f"\n{c['id']}\t{c['kind']}\t{c['key']}\t{c['stories']} stories")
+        print("  evidence: " + ", ".join(e["source"] for e in c["evidence"]))
+        print("  places: " + ", ".join(p["place"] + (" (recommended)" if p["place"] == c["recommended"] else "")
+                                       for p in c["places"]))
+    print(f"\nfactory: {len(model['candidates'])} lesson candidate(s) not yet asked")
+    return 0
