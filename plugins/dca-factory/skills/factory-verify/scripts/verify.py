@@ -7061,6 +7061,24 @@ def run_groups(args):
                              and "question tag: `test-level`" in text and "target: factory" in text
                              and "stories: 3" in text and "send it to the maintainers yourself" in issued,
                              (refused.returncode, kept, leaks, text[:300])))
+    # someone has the role: `lessons:` names the loop keeper, the status and the help call the role by that name
+    for root in throwaway():
+        lesson_project(root, 3)
+        cli_text(root, "--lessons", "--write")
+        unnamed = " ".join(cli_text(root, "--status").split())
+        with open(os.path.join(root, "dca-factory.profile.yaml"), "a", encoding="utf-8") as handle:
+            handle.write("lessons: the-lead\n")
+        status = " ".join(cli_text(root, "--status").split())
+        helped = " ".join(cli_text(root, "--help-view").split())
+        gate = subprocess.run([sys.executable, args.gate, "--story", "STORY-1", "--stage", "plan"], cwd=root,
+                              capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
+        expectations.append(("lessons: the loop keeper — `lessons:` in the profile, else whoever answers the "
+                             "decisions — is named by the status and the help, and the gate reads the key as known",
+                             "1 lesson for the loop keeper (whoever answers the decisions)" in unnamed
+                             and "1 lesson for the loop keeper (the-lead)" in status
+                             and "The loop keeper (the-lead;" in helped
+                             and "`lessons:` is no key the pipeline reads" not in gate,
+                             (unnamed[-300:], status[-300:], helped[:200])))
     for name, ok, detail in drain(expectations):
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")
         note_result(name, ok, detail)

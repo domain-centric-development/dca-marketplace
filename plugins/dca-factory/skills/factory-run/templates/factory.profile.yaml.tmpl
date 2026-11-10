@@ -151,6 +151,9 @@
 #              project with a browser. The document gate then writes an acceptance record instead of
 #              delivering; "accepted" delivers, a correction goes into the same story, which runs
 #              again from plan. /factory-setup writes `pages` where the product has web pages
+# lessons      who answers the lessons — the loop keeper: the person who decides where a correction that keeps
+#              coming back belongs (the description, the glossary, a rule, a check, or the maintainers). A lesson
+#              waits in decide beside the stories and holds none back. Unnamed: whoever answers the decisions
 # run          how a person starts the application to look at it (`./gradlew bootRun`,
 #              `dotnet run --project src/App.Web`) — named in the acceptance record
 # stages       `shared` (default) or `separate`: how the runner starts the stages. `shared` runs plan,
@@ -211,6 +214,7 @@ formatFix: {{FORMAT_FIX_COMMAND}}
 #required: compile test architecture
 #checks.backlog: test
 #acceptance: pages
+#lessons: <who answers the lessons — a name or a role>
 #stages: separate
 #parallel: 2
 #stageTimeout: 45m

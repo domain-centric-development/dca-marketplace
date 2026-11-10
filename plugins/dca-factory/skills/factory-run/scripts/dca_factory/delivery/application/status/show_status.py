@@ -23,6 +23,13 @@ from ...domain.model.decision_record import DecisionState
 
 Model = typing.Dict[str, typing.Any]
 
+#: The role that answers the lessons, by one name everywhere (WP-185): the help, the status, the page.
+LOOP_ROLE = dict(role="loop keeper",
+                 does="decides where a correction that keeps coming back belongs — the description, the glossary, a "
+                      "rule, a check, or the maintainers; the skill that owns the place writes it")
+#: Who has the role where the profile's `lessons:` names nobody.
+LOOP_DEFAULT = "whoever answers the decisions"
+
 #: Where a story stands on the backlog's lanes, by its state as the schedule reads it: a draft waits for its release,
 #: a released one for its run, a started one is on its way — running, stopped, asking, waiting for a look —, a
 #: delivered one is done, a superseded one was dropped for another. A state not named here is released and waits.
@@ -88,12 +95,18 @@ class ShowStatusUseCase(ShowStatusInputPort):
                                     record=self._open_record(story_id, story) if mark != "stopped" else ""))
                 if mark == "stopped" and stage:            # where it stands: the stage it goes on from
                     waiting[-1]["course"] = self._course(story_id, story, stage, "", windows, at="stopped")
+        counted = dict(waiting=0, answered=0)
         for name, front, _body, state, error, path in facts.decision_files():
             story_id = str(front.get("story", "")).strip() if not error else ""
             if story_id in stories:
                 continue                                  # its story's row already says so
+            lesson = not error and str(front.get("kind", "")).strip().lower() == "lesson"
+            if lesson:
+                counted["waiting" if DecisionState(state).waits else "answered"] += 1
             if error or DecisionState(state).waits:
-                waiting.append(dict(mark="question", story=story_id or name, what="an open question",
+                waiting.append(dict(mark="question", story=story_id or name,
+                                    what=f"a lesson for the {LOOP_ROLE['role']} — where a correction that keeps coming "
+                                         "back belongs" if lesson else "an open question",
                                     record=facts.shown(path), draft=False,
                                     place=place_of(str(front.get("request", "")).strip()) if not error else "decide",
                                     action=self._action(skill="/factory-decisions",
@@ -231,7 +244,8 @@ class ShowStatusUseCase(ShowStatusInputPort):
         totals = dict(tokens=sum(r["tokens"] for r in rows), measured=sum(r["measured"] for r in rows),
                       seconds=sum(r["seconds"] for r in rows), cost=sum(r["cost"] or 0 for r in rows),
                       priced=any(r["priced"] for r in rows))
-        return dict(project=facts.project_name(), waiting=waiting, running=running, epics=epics,
+        lessons = dict(LOOP_ROLE, who=str(profile.get("lessons", "")).strip() or LOOP_DEFAULT, **counted)
+        return dict(project=facts.project_name(), waiting=waiting, lessons=lessons, running=running, epics=epics,
                     worker=worker, ended=gone, requests=requests, findings=findings, claims=self._foreign_claims(),
                     holder=(facts.claim() or {}).get("owner"), listening=facts.listener(),
                     dangling=facts.dangling_skill_links(), findings_name=facts.findings_name(),

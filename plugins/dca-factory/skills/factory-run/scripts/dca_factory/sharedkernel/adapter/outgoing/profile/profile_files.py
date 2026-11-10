@@ -255,6 +255,8 @@ PROFILE_KEYS = frozenset((
     "filterFlag", "filterFormat", "filterJoin", "testReport", "testEvidence",
     # what the project has, and what must hold
     "required", "checks.backlog", "browser", "screenshots", "integration", "http.stub", "adopt.breakProof", "acceptance", "run",
+    # who answers the lessons — the loop keeper (WP-185); unnamed, whoever answers the decisions
+    "lessons",
     # whether only a released story is delivered — a draft, or a story without `status:`, never (WP-192)
     "release",
     # where things are (DEFAULTS), the generated map and the glossary; `backlog` is the older layout's, named by

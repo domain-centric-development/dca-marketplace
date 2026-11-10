@@ -35,6 +35,17 @@ NOW_WORDS = {"done": "done", "next": "you are here", "look": "waits for your loo
              "running": "running"}
 
 
+def lessons_note(model: typing.Mapping[str, typing.Any]) -> str:
+    """The loop that is the team's, and who has its role — by the one name the help, the status and the page use."""
+    lessons = model.get("lessons") or {}
+    if not lessons:
+        return ""
+    return (f"The team's loop: what keeps coming back — the same question, finding, correction, assumption or term, "
+            f"counted across the stories — waits in decide as a lesson. The {lessons['role']} ({lessons['who']}; "
+            f"`lessons:` in the profile) {lessons['does']}; what is the factory's goes up as an issue text a person "
+            f"sends.")
+
+
 def shell_form(command: typing.Optional[str]) -> str:
     return f"{SHELL_NAME} {command}" if command else ""
 
@@ -47,6 +58,8 @@ def render_help_text(model: typing.Mapping[str, typing.Any], colour: bool = Fals
     out += table_text(["step", "part", "now", "agent", "shell", "what it is"], rows,
                       marks=[f["mark"] if f["mark"] != "none" else None for f in model["flow"]], colour=colour, painted=3)
     out += ["", "    " + dim(LOOP_NOTE, colour)]
+    if lessons_note(model):
+        out += ["", "    " + dim(lessons_note(model), colour)]
     out += section("Commands", colour)
     out += table_text(["to see", "agent", "shell", "what it shows"],
                       [[c["name"], c["skill"], shell_form(c["shell"]) or "— needs an agent session", c["what"]]
@@ -71,7 +84,7 @@ def render_help_md(model: typing.Mapping[str, typing.Any]) -> str:
                       f"`{f['skill']}`",
                       f"`{shell_form(f['shell'])}`" if f["shell"] else "— needs an agent session", commands(f["what"], False, md=True)]
                      for f in model["flow"]])
-    out += ["", LOOP_NOTE, "", "**Commands**", ""]
+    out += ["", LOOP_NOTE] + (["", lessons_note(model)] if lessons_note(model) else []) + ["", "**Commands**", ""]
     out += table_md(["to see", "agent", "shell", "what it shows"],
                     [[c["name"], f"`{c['skill']}`", f"`{shell_form(c['shell'])}`" if c["shell"] else "— needs an agent session",
                       c["what"]] for c in model["commands"]],

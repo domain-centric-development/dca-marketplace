@@ -94,6 +94,10 @@ def short_model(model: typing.Mapping[str, typing.Any]) -> typing.Dict[str, typi
         totals.append(f"{took_text(model['seconds'])} worked")
     if model.get("findings"):
         totals.append(f"{len(model['findings'])} open finding" + ("s" if len(model["findings"]) != 1 else ""))
+    lessons = model.get("lessons") or {}
+    if lessons.get("waiting"):
+        totals.append(f"{lessons['waiting']} lesson" + ("s" if lessons["waiting"] != 1 else "")
+                      + f" for the {lessons['role']} ({lessons['who']})")
     return dict(running=model["running"], waiting=[w for w in model["waiting"] if not w.get("draft")],
                 drafts=[w["story"] for w in model["waiting"] if w.get("draft")],
                 queue=[by_id[i] for i in shown_ids if i in by_id], rest=" · ".join(rest), totals=" · ".join(totals))

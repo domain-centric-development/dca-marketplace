@@ -23,7 +23,10 @@ start nothing.
    come from the project's files. Do not retell it, translate it, shorten it or add a summary; nothing comes
    after its Next line.
 3. **Answer a follow-up from the view.** Asked what a step, a command or a mark means, answer from the row
-   that names it, and point to the skill in its agent column.
+   that names it, and point to the skill in its agent column. Asked how the factory learns, answer from the view's
+   note on the team's loop: what keeps coming back is counted and waits in decide as a lesson, the **loop keeper**
+   — the role named by `lessons:` in the profile, else whoever answers the decisions — decides where its correction
+   goes, and the skill that owns that place writes it. Call the role by that one name.
 
 ## Do not
 

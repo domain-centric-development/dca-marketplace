@@ -59,7 +59,10 @@ HELP_COMMANDS = (
     ("the backlog", "the epics and stories, their state, the next one", "/factory-backlog", "backlog"),
     ("check the backlog", "the plan gate's checks over every open story, writing nothing", "/factory-backlog",
      "backlog --check"),
-    ("the inbox", "the open questions and acceptances, and how to answer them", "/factory-decisions", "decisions"),
+    ("the inbox", "the open questions, acceptances and lessons, and how to answer them", "/factory-decisions",
+     "decisions"),
+    ("the lessons", "what repeats across the stories, counted — the candidates and their evidence", "/factory-decisions",
+     "lessons"),
     ("give up a claim", "with `claim_remote:` — a story's claim on the remote taken back (another's with --force)", "",
      "release <story>"),
     ("deliver again", "with `claim_remote:` — a published story whose merge request lost the race, merged again",
@@ -142,7 +145,8 @@ class ShowHelpUseCase(ShowHelpInputPort):
             dict(step="run", part="cycle", what="plan → test → build → tidy → judge → document, a gate between the stages",
                  skill="/factory-run [<story>]", shell="run [--story <story>]"),
             dict(step="decide", part="cycle", what="a question a stage may not decide alone, or a result to look at: "
-                                                   "accepted delivers it, a correction goes back into the story",
+                                                   "accepted delivers it, a correction goes back into the story; "
+                                                   "a lesson — what keeps coming back — waits beside them",
                  skill="/factory-decisions", shell="decisions"),
             dict(step="delivered", part="cycle", what="what is delivered — stories, epics and their outcome events; an "
                                                       "epic without a journey test shows as unguarded",
@@ -185,6 +189,7 @@ class ShowHelpUseCase(ShowHelpInputPort):
                   "the page in your colours and with your logo — from the plugin's theme.example.css; committed; "
                   "serve --fixture all-states shows it in every state")]
         return dict(project=status_view["project"],
+                    lessons=status_view["lessons"],
                     flow=flow, parts=[dict(p) for p in PARTS],
                     commands=[dict(zip(("name", "what", "skill", "shell"), c)) for c in HELP_COMMANDS],
                     marks=[dict(mark=m, meaning=t) for m, t in HELP_MARKS],
