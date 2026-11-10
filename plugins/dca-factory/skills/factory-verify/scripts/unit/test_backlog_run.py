@@ -130,6 +130,7 @@ class Worker:
         self.exits = exits or {}
         self.ran = []
         self.cap = cap
+        self.switched_off = False
 
     # BacklogCheckout
     def prune(self):
@@ -143,6 +144,9 @@ class Worker:
 
     def stop_place(self):
         return "stop"
+
+    def backlog_off(self):
+        self.switched_off = True
 
     def claims(self):
         return ""
@@ -234,13 +238,14 @@ class OneAtATime(unittest.TestCase):
         self.assertEqual(store.requests, [])
         self.assertEqual(store.journaled[-1], ("request-end", "run", "r1", "exit=0"))
 
-    def test_a_stop_request_ends_the_run_before_the_next_story(self):
+    def test_a_stop_request_ends_the_run_before_the_next_story_and_turns_the_backlog_off(self):
         schedule = Schedule("A-1")
         worker = Worker(schedule)
         store = Store({"id": "r1", "kind": "stop", "state": "queued"})
         use_case, _lines = backlog(schedule, worker, store)
         self.assertEqual(use_case.execute(RunBacklogCommand(1)), 0)
         self.assertEqual(worker.ran, [])
+        self.assertTrue(worker.switched_off)
 
 
 class Child:

@@ -40,6 +40,10 @@ class BacklogCheckout(OutputPort, typing.Protocol):
         """Whether `up` has the backlog on: the worker then takes the backlog's stories, not only what is asked."""
         ...
 
+    def backlog_off(self) -> None:
+        """The backlog off, as `down` leaves it: a later start — the page's included — works only what is asked."""
+        ...
+
     def page_open(self) -> bool:
         """Whether the factory's page runs: a person's requests are worked while it does."""
         ...

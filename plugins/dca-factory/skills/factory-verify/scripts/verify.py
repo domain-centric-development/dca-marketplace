@@ -11387,11 +11387,17 @@ def verify_requests(runner, verbose=False):
     for root in throwaway():
         log, env = fixture(root, status="draft")
         run_runner(runner, root, "request", "stop", env=env)
+        switch = os.path.join(root, ".dca-factory", "backlog")
+        os.makedirs(os.path.dirname(switch), exist_ok=True)
+        with open(switch, "w", encoding="utf-8") as handle:
+            handle.write("on by a person\n")
         started = time.time()
-        code, out = run_runner(runner, root, "run", "--watch", "--stay", "--interval", "30", "--tool", "stand-in", env=env)
-        check("requests: a stop request ends a watching factory at once, and is gone",
-              code == 0 and time.time() - started < 20 and "stops the factory" in out and not requests_of(root),
-              f"exit {code}; {out.strip()[-200:]}")
+        code, out = run_runner(runner, root, "run", "--watch", "--stay", "--lane", "--interval", "30", "--tool", "stand-in",
+                               env=env)
+        check("requests: a stop request ends a watching factory at once, is gone, and turns the backlog off — a later "
+              "start, the page's included, works only what is asked",
+              code == 0 and time.time() - started < 20 and "stops the factory" in out and not requests_of(root)
+              and not os.path.isfile(switch), f"exit {code}; backlog {os.path.isfile(switch)}; {out.strip()[-200:]}")
 
     # several stories at once: a request takes a slot of its own, before any story
     for root in throwaway():

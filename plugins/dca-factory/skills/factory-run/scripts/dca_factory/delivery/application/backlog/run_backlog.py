@@ -80,6 +80,7 @@ class RunBacklogUseCase(RunBacklogInputPort):
             # a person's requests go before the next story: a stop, what a skill works, a story to run now
             if not command.dry:
                 if self._queue.take_stop():
+                    self._checkout.backlog_off()          # a stop ends the factory: no later start runs the backlog
                     return 0
                 self._worker.work(())
                 asked = self._take_run(())
@@ -160,6 +161,7 @@ class RunBacklogUseCase(RunBacklogInputPort):
                     self._lines.out(f"factory: {stop} exists — no further story starts; the running ones finish.")
                     stopping = "stop"
             if stopping is None and self._queue.take_stop():
+                self._checkout.backlog_off()
                 stopping = "stop"
             for request_id, (child, request) in list(asked.items()):
                 code = child.ended()

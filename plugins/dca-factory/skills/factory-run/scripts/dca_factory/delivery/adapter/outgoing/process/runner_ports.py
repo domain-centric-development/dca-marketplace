@@ -11,6 +11,7 @@ from ..pipeline.stage_rows import stage_of
 from ....application.shared.run_outcome import GateOutcome, MergeOutcome, RunOutcome
 from .outcomes import gate_outcome_of, maybe_outcome_of, merge_outcome_of, outcome_of
 
+import contextlib
 import os
 import time
 import typing
@@ -418,6 +419,11 @@ class RunnerBacklog(BacklogSchedule, BacklogCheckout, BacklogWorker):
     def backlog_on(self) -> bool:
         self._run.backlog_seen = os.path.isfile(self._run.backlog_file)
         return self._run.backlog_seen
+
+    def backlog_off(self) -> None:
+        with contextlib.suppress(OSError):
+            os.remove(self._run.backlog_file)
+        self._run.backlog_seen = False
 
     def page_open(self) -> bool:
         return running_page(self._run.home) is not None

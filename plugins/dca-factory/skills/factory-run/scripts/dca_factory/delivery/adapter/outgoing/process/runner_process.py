@@ -1289,6 +1289,8 @@ class Run(ProfileSource):
         if self.options.child:
             return
         if self.queue().take_stop():
+            with contextlib.suppress(OSError):         # a stop ends the factory: no later start runs the backlog
+                os.remove(self.backlog_file)
             self.pending = 0
             self.checkpoint()
         self.work_requests(tool, busy=(story,))
