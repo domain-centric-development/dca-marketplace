@@ -17,7 +17,7 @@ from ..shared.description_store import DescriptionStore
 from ..shared.status_facts import StatusFacts
 from ..shared.actions import Action, entry_actions, make_action, offered, RUNNER
 from .now_columns import now_columns, places_of
-from .texts import claim_age, figures, newest_first, parse_time, signal_totals, stamp_text, took_text, worker_text
+from .texts import claim_age, figures, newest_first, parse_time, signal_totals, stamp_text, took_text, with_rework, worker_text
 from ...domain.model.story_state import ENDED_WORDS
 from ...domain.model.decision_record import DecisionState
 
@@ -117,6 +117,7 @@ class ShowStatusUseCase(ShowStatusInputPort):
                 entry["activity"] = facts.activity((held or {}).get("owner", ""), started, now,
                                                    story_id).split(": ", 1)[-1]
             running.append(entry)
+        with_rework(rows)
         known = {name for name, _carrier in facts.perspectives(profile)}
         epics: typing.List[Model] = []
         for row in rows:

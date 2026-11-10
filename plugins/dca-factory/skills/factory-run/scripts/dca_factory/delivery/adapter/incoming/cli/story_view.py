@@ -148,6 +148,11 @@ def story_header(model: typing.Mapping[str, typing.Any]) -> typing.Tuple[str, ty
     if signals.get("fresh") or signals.get("repeated"):
         facts.append(("Rounds", f"{signals.get('fresh') or 0} fresh restart(s) after a repeated refusal · "
                                 f"{signals.get('repeated') or 0} stop(s) by repetition"))
+    accepted = signals.get("acceptance")
+    if accepted:
+        waited = f", waited {took_text(accepted['waited'])}" if accepted.get("waited") else ""
+        facts.append(("Acceptance", f"{accepted['outcome']}{waited} · {accepted['corrections']} correction(s)"
+                      + (f" · rework {signals['rework']} file(s) within 14 days" if signals.get("rework") else "")))
     if signals.get("contradictions"):
         facts.append(("Contradictions", f"{signals['contradictions']} stop(s) on a specification that contradicts "
                                         f"itself — counted apart from failures"))

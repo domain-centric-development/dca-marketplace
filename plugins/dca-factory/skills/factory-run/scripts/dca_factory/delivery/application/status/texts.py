@@ -68,11 +68,40 @@ def signals_line(totals: Entry) -> str:
     if totals.get("corrections"):
         parts.append("corrections " + " · ".join(f"{n} {c.replace('domain-', '', 1)}"
                                                  for c, n in sorted(totals["corrections"].items())))
+    if totals.get("asked_acceptance"):
+        parts.append(f"acceptance {totals['accepted']}/{totals['asked_acceptance']} accepted · "
+                     f"{totals['corrections_at_acceptance']} correction(s) · waited {took_text(totals['waited'])}")
+    if totals.get("rework"):
+        parts.append(f"rework {totals['rework']} file(s)")
     if totals.get("contradictions"):
         parts.append(f"contradictions {totals['contradictions']}")
     if totals.get("fresh") or totals.get("repeated"):
         parts.append(f"fresh restarts {totals.get('fresh') or 0} · stops by repetition {totals.get('repeated') or 0}")
     return " · ".join(parts)
+
+
+#: How long after a story's delivery another story's change of its production files counts as rework.
+REWORK_DAYS = 14
+
+
+def with_rework(rows: typing.Sequence[Entry]) -> None:
+    """WP-190 D: each delivered story's rework — how many of its production files another story delivered within
+    REWORK_DAYS after it changed again —, into its signals. Read from the story records alone; review time a person
+    spent is not in any file and is not counted."""
+    def moment(value: typing.Any) -> typing.Optional[datetime.datetime]:
+        return value if isinstance(value, datetime.datetime) else parse_time(value)
+    delivered = [(r, moment(r.get("delivered")), set((r.get("signals") or {}).get("production") or ()))
+                 for r in rows]
+    for row, at, files in delivered:
+        signals = row.get("signals")
+        if signals is None or at is None or not files:
+            continue
+        until = at + datetime.timedelta(days=REWORK_DAYS)
+        again: typing.Set[str] = set()
+        for other, when, theirs in delivered:
+            if other is not row and when is not None and at < when <= until:
+                again |= files & theirs
+        signals["rework"] = len(again)
 
 
 def signal_totals(rows: typing.Sequence[Entry], perspectives: typing.Optional[typing.AbstractSet[str]] = None) -> Entry:
@@ -86,6 +115,7 @@ def signal_totals(rows: typing.Sequence[Entry], perspectives: typing.Optional[ty
     total: Entry = dict(stories=len(rows), measured=0, not_measured=0, without_test=0, open=0, named=0,
                         **{v: 0 for v in RULE_VERDICTS},
                         asked=0, answered=0, assumptions_open=0, assumptions_answered=0, plan_open=0, fresh=0, repeated=0, contradictions=0,
+                        asked_acceptance=0, accepted=0, corrections_at_acceptance=0, waited=0, rework=0,
                         findings={}, domain={}, corrections={})
     for row in rows:
         signals = row.get("signals") or {}
@@ -103,6 +133,13 @@ def signal_totals(rows: typing.Sequence[Entry], perspectives: typing.Optional[ty
         for key in ("asked", "answered", "assumptions_open", "assumptions_answered", "plan_open", "fresh", "repeated",
                     "contradictions"):
             total[key] += signals.get(key) or 0
+        accepted = signals.get("acceptance")
+        if accepted:
+            total["asked_acceptance"] += 1
+            total["accepted"] += accepted["outcome"] == "accepted"
+            total["corrections_at_acceptance"] += accepted["corrections"]
+            total["waited"] += accepted["waited"] or 0
+        total["rework"] += signals.get("rework") or 0
         for key in ("findings", "domain", "corrections"):
             for name, n in (signals.get(key) or {}).items():
                 if key == "findings" and perspectives is not None and name not in perspectives:

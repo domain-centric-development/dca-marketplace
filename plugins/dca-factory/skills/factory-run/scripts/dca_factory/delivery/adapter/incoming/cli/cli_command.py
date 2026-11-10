@@ -60,7 +60,7 @@ from ....application.status.show_status import ShowStatusQuery
 from ....application.status.show_story import ShowStoryQuery, UnknownStory
 from ....application.status.show_epic import ShowEpicQuery, UnknownEpic
 from ....application.status.show_help import ShowHelpQuery
-from ....application.status.texts import stamp_text
+from ....application.status.texts import stamp_text, took_text
 from ....application.decisions.list_decisions import ListDecisionsQuery
 from ....application.requests.list_requests import ListRequestsQuery
 from ....application.requests.pending_requests import PendingRequestsQuery
@@ -265,7 +265,34 @@ def usage_report(runs: str, story_filter: typing.Optional[str] = None, total_onl
     headers, rows, kinds, right = token_rows(model)
     caption = "Tokens" + ("" if model["priced"] or not model["measured"] else " — no price in a session log")
     print("\n".join(section(caption, colour) + table_text(headers, rows, right, total=True, colour=colour) + [""]))
+    accepted = acceptance_rows(model)
+    if accepted:
+        print("\n".join(section("Acceptance — waited, outcome, rework within 14 days", colour)
+                        + table_text(["epic / story", "waited", "outcome", "corrections", "rework"], accepted,
+                                     {1, 3, 4}, colour=colour) + [""]))
     return 0
+
+
+def acceptance_rows(model: typing.Mapping[str, typing.Any]) -> typing.List[typing.List[str]]:
+    """WP-190 D: per epic, each story a person was asked to accept or that another story reworked — how long the
+    acceptance waited, how it came out, how many corrections, how many of its files another story changed again within
+    14 days; empty where no story has any of it."""
+    rows: typing.List[typing.List[str]] = []
+    for epic in (e for e in model["epics"] if e["rows"]):
+        own = []
+        for row in epic["rows"]:
+            signals = row.get("signals") or {}
+            accepted = signals.get("acceptance")
+            if not accepted and not signals.get("rework"):
+                continue
+            own.append(["  ↳ " + row["story"],
+                        took_text(accepted["waited"]) if accepted and accepted["waited"] is not None else "—",
+                        accepted["outcome"] if accepted else "—", str(accepted["corrections"]) if accepted else "—",
+                        str(signals.get("rework") or 0)])
+        if own:
+            rows.append([epic["epic"] or "(no epic)", "", "", "", ""])
+            rows += own
+    return rows
 
 
 def status_model(cwd: str, epics: str, runs: str, live: bool = False) -> Model:

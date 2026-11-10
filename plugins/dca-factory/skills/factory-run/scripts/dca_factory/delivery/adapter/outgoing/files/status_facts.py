@@ -35,6 +35,7 @@ from ....domain.model.correction import REASON_CODES
 from .....sharedkernel.adapter.outgoing.markdown.sections import section_of
 from .signals import latest_signal
 from .journal_files import journal_events
+from .delivery_files import CODE_FILE, TEST_DIR, TEST_FILE
 from ....application.shared.front import is_acceptance
 from ....application.shared.status_facts import StatusFacts
 from ....domain.model.decision_record import DecisionState
@@ -468,4 +469,44 @@ def story_signals(runs: str, story_id: str, records: typing.Sequence[typing.Any]
                 corrections=corrections,
                 fresh=sum(1 for e in events if e["kind"] == "fresh"),
                 repeated=sum(1 for e in events if e["kind"] == "stop" and e["fields"].get("rule") == "RUN-ROUNDS-4"),
-                contradictions=sum(1 for e in events if e["kind"] == "contradiction"))
+                contradictions=sum(1 for e in events if e["kind"] == "contradiction"),
+                acceptance=acceptance_figures(records), production=changed_production(runs, story_id))
+
+
+def acceptance_figures(records: typing.Sequence[typing.Any]) -> typing.Optional[typing.Dict[str, typing.Any]]:
+    """WP-190 D: how a story's acceptances went — the seconds from asking to the answer, summed over its answered
+    acceptances (None while none is answered), the last outcome (`accepted`, `correction`, or `open` while one waits)
+    and how many were corrections. None for a story nobody was asked to accept."""
+    asked = [(front, state, answer) for _p, front, _b, state, answer in records if is_acceptance(front)]
+    if not asked:
+        return None
+    waited, corrections, outcome = None, 0, "open"
+    for front, state, answer in asked:
+        if not DecisionState(state).answered:
+            outcome = "open"
+            continue
+        start, end = parse_time(front.get("asked")), parse_time(answer.get("at"))
+        if start and end and end >= start:
+            waited = (waited or 0) + int((end - start).total_seconds())
+        if correction_code(answer.get("answer")) is not None:
+            corrections += 1
+            outcome = "correction"
+        else:
+            outcome = "accepted"
+    return dict(waited=waited, outcome=outcome, corrections=corrections)
+
+
+def changed_production(runs: str, story_id: str) -> typing.List[str]:
+    """The production files the story changed — its story-level record, tests and the pipeline's own files left out:
+    what another story's change of the same files within a while counts as rework."""
+    path = os.path.join(evidence_dir(runs, story_id), "changed.txt")
+    if not os.path.isfile(path):
+        return []
+    found = []
+    for line in read_text(path).splitlines():
+        rel = line.split("\t", 1)[-1].strip() if "\t" in line else ""
+        segments = rel.split("/")
+        if rel and CODE_FILE.search(segments[-1]) and not TEST_FILE.search(segments[-1]) \
+                and not any(TEST_DIR.search(segment) for segment in segments[:-1]):
+            found.append(rel)
+    return found
