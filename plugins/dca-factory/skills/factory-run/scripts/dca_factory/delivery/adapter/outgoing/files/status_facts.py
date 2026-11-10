@@ -465,4 +465,6 @@ def story_signals(runs: str, story_id: str, records: typing.Sequence[typing.Any]
                 plan_open=int(plan[0].get("open", 0)) if plan else None,
                 rules=rules if rules_group else None,
                 findings=findings if judge else None, domain=domain if judge else None,
-                corrections=corrections)
+                corrections=corrections,
+                fresh=sum(1 for e in events if e["kind"] == "fresh"),
+                repeated=sum(1 for e in events if e["kind"] == "stop" and e["fields"].get("rule") == "RUN-ROUNDS-4"))

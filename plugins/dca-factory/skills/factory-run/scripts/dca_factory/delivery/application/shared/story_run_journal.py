@@ -7,6 +7,7 @@ import typing
 
 from ....building_blocks import Store
 from ...domain.model.jump import Jumped, Restarted
+from ...domain.model.refusal_history import RefusalHistory
 from ...domain.model.stage import StageName, StoryKind
 from ...domain.model.story_state import GateReport, Judged, Rounds
 
@@ -91,4 +92,23 @@ class StoryRunJournal(Store, typing.Protocol):
 
     def restarted(self, story: str, restart: Restarted) -> None:
         """The run starts the story anew at a stage: kept in its journal as the runner decided it."""
+        ...
+
+    def refusal_history(self, story: str) -> RefusalHistory:
+        """The refusals of the story's gates the runner met and its fresh restarts, since its rounds were last
+        counted from nought."""
+        ...
+
+    def record_round(self, story: str, stage: StageName) -> None:
+        """The refused round in the story's round record (`rounds.md`): the stage, its failed checks and tests, the
+        files it changed, the one line its hand-over gives — written by the runner, never by a stage."""
+        ...
+
+    def restart_fresh(self, story: str, stage: StageName) -> None:
+        """The next round at <stage> starts fresh: kept in the journal, the stage's earlier hand-over set aside, and
+        the stage told to work from the story, the plan, the gate's report and the round record alone."""
+        ...
+
+    def stopped_by_repetition(self, story: str, stage: StageName) -> None:
+        """The fresh restart at <stage> was refused as the attempt before it: the stop kept in the journal."""
         ...

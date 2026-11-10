@@ -11,7 +11,7 @@ from ...domain.model.stage import Stage, StageName, StoryKind, Trait
 from ...domain.model.story import Story
 from ...domain.model.profile_facts import ContractNumber
 from ...domain.model.story_words import Place, ScenarioKey, Selector, SELECTOR_FORM
-from ...domain.model.suite_run import CommandKey, Expectation, Requirement
+from ...domain.model.suite_run import CommandKey, Expectation, Requirement, TestOutcome
 from ...domain.model.test_facts import MappedTest
 from ...domain.model.story_state import Detail
 from ...domain.model.verdict import CheckName, Finding, FindingState, Findings, Said
@@ -70,6 +70,12 @@ def test_state(result: Verdict, runs: StageRuns, profile: typing.Mapping[str, ty
             # The earlier proof stands for the version it was taken against; losing it would make the next run treat
             # this test as one never seen red, which no break can repair.
             kept[item.selector.value] = runs.digests(story).get(item.selector.value)
+    failed = [m for state, c, m in result.entries if state == FindingState.FAIL.value and c.startswith("tests-")]
+    for outcome in test_run.items:
+        selector = outcome.selector.value if isinstance(outcome, TestOutcome) else ""
+        if selector and selector not in result.failing_tests \
+                and any(m.startswith(selector + " ") or m.startswith(selector + ":") for m in failed):
+            result.failing_tests.append(selector)
     if not test_run.has_command:
         return whole_runs
     if expected == "red":

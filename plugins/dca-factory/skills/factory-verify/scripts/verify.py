@@ -1394,6 +1394,31 @@ def verify_runner(runner, verbose=False):
               and "sent it back to stage build" in shared[0],
               [l[:200] for l in output.splitlines() if "Carry out" in l][:1])
 
+    # WP-190: a round that repeats the last refusal restarts fresh — from the story, the plan, the gate's report and the
+    # round record, never from the earlier attempt's account; in a stage of its own and in the shared builder alike
+    for root in throwaway():
+        build_project(root, extra_sources=((".dca-factory/runs/STORY-1/.gate-build.txt", "gate:fail tests-green\n"),
+                                           (".dca-factory/evidence/STORY-1/.fresh", "build\n")))
+        copy_scripts(runner, root)
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--from", "build", "--tool", "claude",
+                                  "--dry-run")
+        build_prompt = [l for l in output.splitlines() if "would run" in l and "Carry out the build stage" in l]
+        tidy_prompt = [l for l in output.splitlines() if "would run" in l and "Carry out the tidy stage" in l]
+        check("runner: a fresh restart is told the story, the plan, the gate's report and the round record — not that "
+              "the gate refused it before; the stage after it is told nothing of it",
+              bool(build_prompt) and "fresh restart of the build stage" in build_prompt[0]
+              and ".gate-build.txt" in build_prompt[0] and "rounds.md" in build_prompt[0]
+              and "The gate refused this stage before" not in build_prompt[0]
+              and bool(tidy_prompt) and "fresh restart" not in tidy_prompt[0],
+              [l[:300] for l in output.splitlines() if "would run" in l][:2])
+        code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--from", "build", "--tool", "claude",
+                                  "--dry-run", "--shared-builder")
+        shared = [l for l in output.splitlines() if "would run" in l and "Carry out these stages" in l]
+        check("runner: the shared builder starts fresh the same way — a new process, no earlier refusal named",
+              bool(shared) and "fresh restart of the build stage" in shared[0]
+              and "The gate refused stage build before" not in shared[0],
+              [l[:300] for l in output.splitlines() if "Carry out" in l][:1])
+
     # 1a'. shared stages are the default; the profile's `stages: separate` or --separate-stages start one process each
     for root in throwaway():
         build_project(root)
@@ -2698,9 +2723,16 @@ exit 0
         with open(os.path.join(root, "stand-in.sh"), "w", encoding="utf-8", newline="\n") as handle:
             handle.write(stand_in)
         code, output = run_runner(runner, root, "run", "--story", "STORY-2", "--tool", "stand-in", env=env)
-        check("runner: a gate that refuses three rounds stops the story",
-              code == 1 and invocations(root).count("STORY-2 test") == 3 and "three rounds did not converge" in output,
-              f"exit {code}, invocations {invocations(root)}")
+        # the same refusal each time (WP-190): the second round starts fresh, the fresh restart refused as before stops
+        # the story for a person, the round record naming each round
+        evidence = os.path.join(root, ".dca-factory", "evidence", "STORY-2")
+        journal = read_or_empty(os.path.join(evidence, "journal.tsv"))
+        record = read_or_empty(os.path.join(evidence, "rounds.md"))
+        check("runner: a gate that refuses the same way again restarts the stage fresh once, then stops the story",
+              code == 1 and invocations(root).count("STORY-2 test") == 3 and "(RUN-ROUNDS-3)" in output
+              and "RUN-ROUNDS-4" in output and "needs-human" in output and "\tfresh\ttest\t" in journal
+              and record.count("- round ") == 3 and os.path.isdir(os.path.join(evidence, "attempts")),
+              f"exit {code}, invocations {invocations(root)}; {record[-300:]}")
 
     # 1k. a repeat judge round sees the previous verdict
     for root in throwaway():
@@ -6537,6 +6569,14 @@ def run_groups(args):
          dict(green=both_green, ledger=both_green[:1])),
         (Case("build: a red test is refused", "build", 1, must_fail=("tests-green",)),
          dict(ledger=both_green)),
+        # WP-190: a refused gate's journal line names its failing tests beside its checks, so a repeated refusal is
+        # told from another after the reports are pruned
+        (Case("build: a refused gate journals its failing tests (`tests=`) beside its checks", "build", 1,
+              must_fail=("tests-green",)),
+         dict(green=both_green[:1], ledger=both_green, after=lambda root: [] if re.search(
+             r"\tgate\tbuild\texit=1\tfail=[^\t]*tests-green[^\t]*\t.*tests=com\.example\.WidgetUnitTest#showsNothingWhenEmpty",
+             read_or_empty(os.path.join(root, ".dca-factory/evidence/STORY-1/journal.tsv"))) else
+             [read_or_empty(os.path.join(root, ".dca-factory/evidence/STORY-1/journal.tsv"))[-400:]])),
         # --- the tidy gate ------------------------------------------------
         (Case("tidy: the build gate's checks, run again", "tidy", 0,
               must_pass=("tests-green", "architecture")),

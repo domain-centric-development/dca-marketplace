@@ -15,6 +15,10 @@ from .journal_files import journal_append
 from .run_marks import backlog_digest, step_open
 
 
+#: How many failing tests a refused gate's journal line names at most.
+FAILING_TESTS_KEPT = 20
+
+
 def close_record(run: typing.Any) -> None:
     """A delivery's last events, journaled before its commit: the gate's passing verdict and the end of the runner's
     integrate step it runs in, where that step is open. The commit then holds the story's record whole — a delivered
@@ -26,7 +30,8 @@ def close_record(run: typing.Any) -> None:
 
 
 def gate_fields(result: Verdict, args: typing.Any, code: int) -> typing.List[str]:
-    """A gate run's event fields: `exit=<code> fail=<checks> by=<who>` — the runner's (`by=runner`, the one that
+    """A gate run's event fields: `exit=<code> fail=<checks> by=<who>`, a refusal's failing tests (`tests=`, at most
+    twenty) — the runner's (`by=runner`, the one that
     signs suites), a stage's own under a runner (`by=<stage>`), a session's (`by=session`)."""
     failed = sorted({check for state, check, _ in result.entries if state == "fail"})
     by = "runner" if args.record_suites else (os.environ.get("FACTORY_STAGE") or "stage") \
@@ -34,6 +39,8 @@ def gate_fields(result: Verdict, args: typing.Any, code: int) -> typing.List[str
     fields = [f"exit={code}"] + ([f"fail={','.join(failed)}"] if failed else []) + [f"by={by}"]
     if result.flaky:
         fields.append(f"flaky={','.join(dict.fromkeys(result.flaky))}")
+    if failed and result.failing_tests:
+        fields.append(f"tests={','.join(list(dict.fromkeys(result.failing_tests))[:FAILING_TESTS_KEPT])}")
     return fields
 
 

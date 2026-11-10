@@ -19,6 +19,8 @@ from dca_factory.delivery.adapter.outgoing.process.outcomes import (
 from dca_factory.delivery.application.delivery.integrate_story import IntegrateStoryCommand, IntegrateStoryUseCase
 from dca_factory.delivery.domain.model.route import Around, Move
 from dca_factory.delivery.domain.model.story_state import Judged, Refusal
+from dca_factory.delivery.domain.model.refusal_history import FreshRestart, GateRefusal, RefusalHistory
+from dca_factory.delivery.domain.model.story_words import Selector
 from dca_factory.delivery.application.delivery.pipeline_workflow import workflow
 
 
@@ -244,9 +246,12 @@ class Lines:
 class Stages:
     """A story whose stages all write their files; the gates refuse as told, the judge says what it is told."""
 
-    def __init__(self, refusals=(), verdicts=("pass",), kind=StoryKind.STORY, reports=None):
+    def __init__(self, refusals=(), verdicts=("pass",), kind=StoryKind.STORY, reports=None, changing=False):
         self.refusals = list(refusals)          # the stages whose gate refuses, once each, in order
         self.reports = reports or {}            # what a refusal's report says, per stage
+        self.changing = changing                # every refusal names another failing test
+        self.history = []                       # the refusals and fresh restarts, as the journal keeps them
+        self.recorded = []                      # the rounds written into the round record
         self.verdicts = list(verdicts)
         self._kind = kind
         self.ran, self.rounds = [], 0
@@ -274,8 +279,24 @@ class Stages:
         self.ran.append(f"gate {stage}")
         if self.refusals and self.refusals[0] == stage:
             self.refusals.pop(0)
+            checks = self.report(story, stage).refused_checks()
+            tests = frozenset((Selector(f"T#t{len(self.history)}"),)) if self.changing else frozenset()
+            self.history.append(GateRefusal(StageName(stage), frozenset(checks), tests))
             return 1
         return 0
+
+    def refusal_history(self, story):
+        return RefusalHistory(tuple(self.history))
+
+    def record_round(self, story, stage):
+        self.recorded.append(stage.value)
+
+    def stopped_by_repetition(self, story, stage):
+        self.lines.append(f"stop {stage.value}")
+
+    def restart_fresh(self, story, stage):
+        self.history.append(FreshRestart(stage))
+        self.lines.append(f"fresh {stage.value}")
 
     quiet_gate = gate
 
@@ -394,10 +415,33 @@ class Run(unittest.TestCase):
         self.assertIn("factory: gate 'build' refused (GATE-OWNED) — the rule stops the run. needs-human.", said)
 
     def test_three_refusals_do_not_converge(self):
-        stages = Stages(refusals=("tidy", "tidy", "tidy"))
+        stages = Stages(refusals=("tidy", "tidy", "tidy"), changing=True)
         code, said = run(stages, "tidy")
         self.assertEqual((code, stages.rounds), (1, 3))
         self.assertIn("factory: gate 'tidy' refused in round 3 — three rounds did not converge. needs-human.", said)
+        self.assertEqual(stages.recorded, ["tidy", "tidy", "tidy"])
+        self.assertNotIn("fresh tidy", stages.lines)
+
+    def test_a_refusal_that_repeats_the_one_before_restarts_fresh(self):
+        stages = Stages(refusals=("tidy", "tidy"))
+        code, said = run(stages, "tidy")
+        self.assertEqual((code, stages.rounds), (0, 2))
+        self.assertEqual(stages.lines, ["jump tidy>tidy GATE-TESTS-RED", "fresh tidy", "jump tidy>tidy GATE-TESTS-RED"])
+        self.assertTrue(any("as the round before (RUN-ROUNDS-3)" in line and "afresh" in line for line in said))
+
+    def test_a_fresh_restart_refused_as_before_stops_for_a_person(self):
+        stages = Stages(refusals=("tidy", "tidy", "tidy"))
+        code, said = run(stages, "tidy")
+        self.assertEqual((code, stages.rounds), (1, 2))
+        self.assertTrue(any("RUN-ROUNDS-4" in line and "needs-human" in line for line in said))
+        self.assertEqual(stages.recorded, ["tidy", "tidy", "tidy"])
+        self.assertEqual(stages.lines[-1], "stop tidy")
+
+    def test_an_unequal_second_refusal_runs_an_ordinary_round(self):
+        stages = Stages(refusals=("tidy", "tidy"), changing=True)
+        code, _said = run(stages, "tidy")
+        self.assertEqual((code, stages.rounds), (0, 2))
+        self.assertNotIn("fresh tidy", stages.lines)
 
     def test_changes_requested_go_back_to_the_build_stage(self):
         stages = Stages(verdicts=("changes-requested", "pass"))

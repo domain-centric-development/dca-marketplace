@@ -68,6 +68,9 @@ about to run, and the fix belongs to the stage that produced the artefact, not t
    round: `gate:fail environment` — a profile command whose program the gate's shell did not find,
    which no stage can fix; stop and name it — and none at all when a person restarts the story with
    `--from`, which starts a new count (the runner keeps the old one under `.dca-factory/evidence/<story>/`).
+   A refusal that repeats the one before (the same stage, failed checks and failing tests) gets its round
+   started fresh — the story, the plan, the gate's report and `rounds.md`, never the earlier hand-over or
+   conversation; refused the same way again, stop and escalate.
 7. **the tidy stage** (its brief: `factory.sh brief <story> tidy`) → `.dca-factory/runs/<story>/tidy.md`: the refactor half of red–green–refactor,
    inside this story's footprint, with every test green and no test changed. A stage that changes
    nothing and says why is finished, not skipped.

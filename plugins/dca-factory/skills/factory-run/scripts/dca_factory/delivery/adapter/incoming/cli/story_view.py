@@ -145,6 +145,9 @@ def story_header(model: typing.Mapping[str, typing.Any]) -> typing.Tuple[str, ty
         facts.append(("Findings", ", ".join(f"{n} {p}" for p, n in sorted(signals["findings"].items()))
                       + (" · domain " + ", ".join(f"{n} {c[7:]}" for c, n in sorted(signals["domain"].items()))
                          if signals.get("domain") else "")))
+    if signals.get("fresh") or signals.get("repeated"):
+        facts.append(("Rounds", f"{signals.get('fresh') or 0} fresh restart(s) after a repeated refusal · "
+                                f"{signals.get('repeated') or 0} stop(s) by repetition"))
     if signals.get("corrections"):
         facts.append(("Corrections", ", ".join(f"{n} {code}" for code, n in sorted(signals["corrections"].items()))))
     return title, facts

@@ -31,6 +31,8 @@ from ....domain.model.jump import Jumped, Restarted
 from ....domain.model.stage import StageName, StoryKind
 from ....domain.model.story_state import GateReport, Judged, Rounds
 from ..files.run_marks import judged_of
+from ..files.round_files import mark_fresh, record_round, refusal_history as journal_refusals
+from ....domain.model.refusal_history import RefusalHistory
 from ..files.decision_record_files import request_records
 from ....application.shared.requests import KIND, Kind, RequestFacts
 from ....application.shared.backlog_worker import Child
@@ -299,6 +301,22 @@ class RunnerStages(StoryRunJournal, StageSteps):
     def restarted(self, story: str, restart: Restarted) -> None:
         self._run.journal_line(story, f"{utc()}\trestart\t{restart.stage.value}\trule={restart.rule.value}\t"
                                       f"reason={restart.reason.value}")
+
+    def refusal_history(self, story: str) -> RefusalHistory:
+        self._run.profile()
+        return journal_refusals(place("runs"), story)
+
+    def record_round(self, story: str, stage: StageName) -> None:
+        self._run.profile()
+        record_round(place("runs"), story, stage.value, self._run.artefact(story, stage.value))
+
+    def restart_fresh(self, story: str, stage: StageName) -> None:
+        self._run.profile()
+        self._run.journal_line(story, f"{utc()}\tfresh\t{stage.value}\trule=RUN-ROUNDS-3")
+        mark_fresh(place("runs"), story, stage.value, self._run.artefact(story, stage.value))
+
+    def stopped_by_repetition(self, story: str, stage: StageName) -> None:
+        self._run.journal_line(story, f"{utc()}\tstop\t{stage.value}\trule=RUN-ROUNDS-4")
 
 
 class RunnerIntegration(StoryIntegration):

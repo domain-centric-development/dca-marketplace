@@ -432,6 +432,18 @@ may change, and the acceptance shows them first.
 runner walls off for a stage — every glob, an opened one file by file without the announced paths (`walled`); the
 guarded paths a story changed and the ones of them nobody announced (`GuardedFacts.touched`, `unannounced`)
 
+### Refusal history (RefusalHistory) · Gate refusal (GateRefusal) · Fresh restart (FreshRestart) · Repetition
+
+**Definition:** A story's refused gates as the runner met them, with the fresh restarts between them, since its rounds
+were last counted from nought. A refusal repeats the one before when the stage, the failed checks and the failing
+tests are the same — the report's text is never compared. A repeat starts the next round fresh; a repeat after the
+fresh restart stops the run for a person.
+
+**Type:** Value Object
+
+**Operations:** whether one refusal repeats another (`GateRefusal.repeats`), the last refusal against the one before
+(`RefusalHistory.repetition`: new, repeated, repeated after a fresh restart)
+
 ---
 
 ## Concepts

@@ -108,6 +108,14 @@ profile command's program missing on the gate's PATH) counts no round. A person'
 --story <id> --from <stage>` starts a new count: the runner moves the file to
 `.dca-factory/evidence/<story>/rounds.<UTC time>` and writes a `rounds-reset` line into the journal.
 
+A refusal that repeats the one before — the same stage, the same failed checks (`fail=`), the same failing tests
+(`tests=`), read from the journal's `by=runner` gate lines since the last `rounds-reset` — starts its round fresh
+(`RUN-ROUNDS-3`): the runner journals `fresh`, sets the stage's earlier hand-over aside under
+`.dca-factory/evidence/<story>/attempts/`, and the stage's prompt names the story, the plan, the gate's report and the
+round record instead of the earlier attempt. Refused the same way again, the run stops for a person (`RUN-ROUNDS-4`,
+a `stop` line). The round record `.dca-factory/evidence/<story>/rounds.md` is the runner's: one line per refused
+round — the stage, the failed checks and tests, the files the stage changed, the first line of prose of its hand-over.
+
 A mapped test is run with the profile command that **covers the file it was found in** — the
 end-user tests and the unit tests usually live in different projects or source sets, and a selector
 run against the wrong one matches nothing. When no declared command covers that path, the gate says
@@ -129,11 +137,13 @@ nothing rewrites it. A line without `seq=` takes its position in the file.
 | `step-start` · `step-end` | the runner's own step: `integrate` (merge, gate, fast-forward), `merge` (a resumed story brought onto the main line), `format` (`formatFix:` over a resolution) | `by=runner` at the start, `exit=0` or `stopped` at the end | the runner — read as running where no stage runs; no stage's figures count it. A delivery ends the integrate step itself, with its `gate` line, before its commit: the delivery commit holds the story's whole record |
 | `window-start` · `window-end` | the work outside a stage (`backlog`, `decisions`) | `tool=` at the start; `request=<id>` where a request's process opened it | `--window-start`, `--window-end` |
 | `usage` | the stage or the window | `tool=`, then `model=`, `input=`, `cache_read=`, `cache_write=`, `output=`, `cost=` where the tool reports a price and `seconds=` for a runner invocation — or `unknown`; in a session `window=<start>/<end>` with `session=<tool>:<id>` until the log is read, then a second line with the numbers and the same `window=`; a window a request opened carries `request=<id>` and its even share of the request process's priced usage | the runner, the stage and window marks |
-| `gate` | the stage the gate ran for | `exit=<n>`; `fail=<check>,…` on a refusal; `by=runner`, `by=<stage>` (a stage's own run under the runner) or `by=session`; the plan gate's refusal adds `backlog=<digest>` of the story and its epic; `flaky=<test>,…` names the tests outside the story that a whole suite ran red and a run of their own green (WP-113) | the gate, on every run over a story |
+| `gate` | the stage the gate ran for | `exit=<n>`; `fail=<check>,…` on a refusal, and `tests=<selector>,…` (at most twenty) where a refused test check names its failing tests; `by=runner`, `by=<stage>` (a stage's own run under the runner) or `by=session`; the plan gate's refusal adds `backlog=<digest>` of the story and its epic; `flaky=<test>,…` names the tests outside the story that a whole suite ran red and a run of their own green (WP-113) | the gate, on every run over a story |
 | `wrote` | a hand-over: `plan.md`, `tests.md`, `build.md`, `tidy.md`, `judge.md`, `document.md` | `sha=<digest>` of its content, `sha=gone` once it is removed; `same=1` for a file of the window's stages that a window run to its end left as it was | the gate, at a window's start and end and at every gate run, for each file whose content differs from its last `wrote` |
 | `outdated` | `document.md` | `by=integrate` | the runner, when the integrate gate refuses |
 | `questioned` | `backlog` | `digest=<story digest>`, `request=<id>` | the runner, for each draft a wish or a next-stories request wrote: its question pass ran on the story as it stands — a release of it then needs no skill |
 | `rounds-reset` | `-` | `by=--from` | the runner, on `run --from` |
+| `fresh` | the stage a round restarts fresh at | `rule=RUN-ROUNDS-3` | the runner, on a refusal that repeats the one before |
+| `stop` | the stage whose fresh restart was refused as before | `rule=RUN-ROUNDS-4` | the runner |
 | `pipeline-changed` | the stage before whose gate the installed pipeline differed | — | the runner |
 | `owned-confirmed` | the parts a person confirmed, comma-separated | — | `--owned-confirm` |
 | `part` | a stage a shared process carried | `process=<window>`, `stream=<file>`, `seconds=`, `input=`, `cache_read=`, `cache_write=`, `output=`; `cost=` — the process's cost split by the parts' weight, an estimate — where the stream reports one | the runner after the process's `usage` line; `freeze_all` for a stream a stopped runner left |

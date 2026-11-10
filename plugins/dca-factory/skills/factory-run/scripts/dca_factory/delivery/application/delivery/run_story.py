@@ -10,6 +10,7 @@ import typing
 from ....building_blocks import UseCase
 from ...domain.model.jump import Jumped, Next, RestartReason, Restarted, RuleId, Target
 from ...domain.model.stage import Role, StageName, StoryKind, Trait, Window
+from ...domain.model.refusal_history import Repetition
 from ...domain.model.route import Around, Move
 from ...domain.model.story_state import Judged, Rounds
 from ..shared.run_lines import RunLines
@@ -371,22 +372,38 @@ class RunStoryUseCase(RunStoryInputPort):
     @decides(
         "RUN-ROUNDS-1",
         "RUN-ROUNDS-2",
+        "RUN-ROUNDS-3",
+        "RUN-ROUNDS-4",
     )
     def _refused(self, story: str, kind: StoryKind, stage: StageName, what: str) -> Ended:
         """A gate refused: no round where the machine is the cause; else the rules that failed say where the story
         goes (`workflow().after_refusal`) — a rule that stops ends the run, else a round from the stage they name, the
-        refused one or the earlier one the story's state resumes at, while the rounds converge."""
+        refused one or the earlier one the story's state resumes at, while the rounds converge. A refusal that repeats
+        the one before starts its round fresh (RUN-ROUNDS-3); repeated again after that, the run stops for a person
+        (RUN-ROUNDS-4)."""
         if self._environment(story, stage.value):
             return RunOutcome.FAILED
+        self._journal.record_round(story, stage)
         failed = self._journal.report(story, stage.value).refused_checks()
         went = workflow().after_refusal(kind, stage, self._journal.resumes(story),
                                         refusing(stage.value, [name.value for name in failed]), RuleId("RUN-ROUNDS-1"))
         if went.stage is None:
             self._lines.err(f"factory: {what} ({went.rule.value}) — the rule stops the run. needs-human.")
             return RunOutcome.FAILED
+        repetition = self._journal.refusal_history(story).repetition()
+        if repetition is Repetition.REPEATED_AFTER_FRESH:
+            self._journal.stopped_by_repetition(story, stage)
+            self._lines.err(f"factory: {what} (RUN-ROUNDS-4) — the fresh restart was refused as the attempt before it; "
+                            f"the round record names each round. needs-human.")
+            return RunOutcome.FAILED
         rounds = self._round(story, what)
         if rounds is None:
             return RunOutcome.FAILED
+        if repetition is Repetition.REPEATED and went.stage is not None:
+            self._journal.restart_fresh(story, went.stage)
+            return self._went(story, stage, went, f"factory: {what} as the round before (RUN-ROUNDS-3) — round "
+                                                  f"{rounds.value} runs stage '{{stage}}' afresh: the story, the plan, "
+                                                  f"the gate's report and the round record, not the earlier attempt.")
         return self._went(story, stage, went, f"factory: {what} ({went.rule.value}) — round {rounds.value} runs stage '{{stage}}' "
                                 "again with the gate's report.")
 

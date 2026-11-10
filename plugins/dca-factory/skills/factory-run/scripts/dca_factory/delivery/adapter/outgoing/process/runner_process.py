@@ -53,6 +53,7 @@ from ....application.profile.profile_rules import first_word, perspectives_of
 from ..tools.agents import TOOL, TOOLS
 from .gate_process import GateProcess, hashing
 from ..files.guarded_files import announced_changes, guarded_set, present_files
+from ..files.round_files import clear_fresh, fresh_stage, ROUNDS_RECORD
 from ..files.pipeline_digest import GATE_FILES, PIPELINE_FILES, STAMP, pipeline_digest
 from ..files.snapshots import Edge
 from ..tools.tool_choice import ToolChoice
@@ -686,7 +687,29 @@ class Run(ProfileSource):
         return (f"Carry out the {stage} stage of the delivery pipeline for backlog story {story}. Its brief: {own}; "
                 f"what every stage is told: {every} — read both whole, then work by them.")
 
+    def fresh_sentence(self, story: str, stages: typing.Sequence[str], dry: bool) -> typing.Optional[str]:
+        """What a fresh restart (RUN-ROUNDS-3) is told in place of the earlier attempt's account: where it works from.
+        None where no fresh restart waits for one of <stages>; the mark goes once a real run took it."""
+        self.profile()
+        fresh = fresh_stage(place("runs"), story)
+        if fresh is None or fresh not in stages:
+            return None
+        if not dry:
+            clear_fresh(place("runs"), story)
+        report = f"{self.runs}/{story}/.gate-{fresh}.txt"
+        plan = f"{self.runs}/{story}/{self.stage_file(stage_of(Role.PLANS))}"
+        return (f" This is a fresh restart of the {fresh} stage: the round before was refused exactly as the one before "
+                f"it. Work from the story, the plan ({plan}), the gate's report ({report}) and the round record "
+                f"({self.evidence(story)}/{ROUNDS_RECORD}) alone — the earlier attempt's hand-over is set aside and its "
+                f"account is not yours to continue. The working tree is as that attempt left it; the round record "
+                f"names what it changed, and part of it may be right.")
+
     def prompt_for(self, stage: str, story: str, dry: bool = False) -> str:
+        fresh = self.fresh_sentence(story, [stage], dry)
+        if fresh is not None:
+            guard = self.guard_sentence() if stage in stage_named() and stage_named()[stage].guarded else ""
+            return (f"{self.opening(stage, story, dry)}{self.worktree_sentence()} "
+                    f"{self.where_things_are(self.tool_in_flight, story)}{guard}{fresh}")
         repeat = ""
         if os.path.isfile(f"{self.runs}/{story}/.gate-{stage}.txt"):
             repeat = f" The gate refused this stage before: {self.runs}/{story}/.gate-{stage}.txt."
@@ -803,15 +826,19 @@ class Run(ProfileSource):
                   f"`{self.py} {self.cli_rel()} --files-skeleton {story} <stage>`, "
                   f"`{self.py} {self.cli_rel()} --plan-skeleton {story}`. {self.where_things_are(tool, story)}")
         prompt += self.guard_sentence()
-        if self.back_to(story, stage_of(Role.BUILDS)) == stage_of(Role.TESTS):
+        fresh = self.fresh_sentence(story, stages, dry)
+        if fresh is not None:
+            prompt += fresh
+        elif self.back_to(story, stage_of(Role.BUILDS)) == stage_of(Role.TESTS):
             prompt += f" The build stage sent the story back: {self.runs}/{story}/build.md."
         if stage_of(Role.TESTS) in stages:
             prompt += self.red_stale_sentence(story)
-        for earlier in stages:
+        for earlier in stages if fresh is None else ():
             if os.path.isfile(f"{self.runs}/{story}/.gate-{earlier}.txt"):
                 prompt += f" The gate refused stage {earlier} before: {self.runs}/{story}/.gate-{earlier}.txt."
-        prompt += self.later_refusals(story, stages[-1], f"stage {start}")
-        if os.path.isfile(f"{self.runs}/{story}/judge.md") and self.verdict_of(story) == "changes-requested":
+        prompt += self.later_refusals(story, stages[-1], f"stage {start}") if fresh is None else ""
+        if fresh is None and os.path.isfile(f"{self.runs}/{story}/judge.md") \
+                and self.verdict_of(story) == "changes-requested":
             prompt += f" The judge asked for changes: {self.runs}/{story}/judge.md."
         print(f"── stage {'+'.join(stages)}  (tool: {tool}, one shared context)")
         if dry:

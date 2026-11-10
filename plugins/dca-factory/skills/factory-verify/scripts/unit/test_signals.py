@@ -51,6 +51,13 @@ class Signals(unittest.TestCase):
         self.assertEqual((signals["assumptions_open"], signals["assumptions_answered"], signals["plan_open"]), (1, 2, 1))
         self.assertEqual(signals["corrections"], {})
 
+    def test_fresh_restarts_and_stops_by_repetition_are_counted_from_the_journal(self):
+        self.assertEqual(status_facts.story_signals(self.runs, "S-1", [], "")["fresh"], 0)
+        journal.journal_append(self.runs, "S-1", "fresh", "build", "rule=RUN-ROUNDS-3")
+        journal.journal_append(self.runs, "S-1", "stop", "build", "rule=RUN-ROUNDS-4")
+        signals = status_facts.story_signals(self.runs, "S-1", [], "")
+        self.assertEqual((signals["fresh"], signals["repeated"]), (1, 1))
+
     def test_each_rules_verdict_is_counted_from_the_last_group_the_test_gate_wrote(self):
         self.assertIsNone(status_facts.story_signals(self.runs, "S-1", [], "")["rules"])
         journal_signals.journal_signal(self.runs, "S-1", "rules", [("rule", "x.TitleTest#a", dict(element="Title", rules="1", verdict="unchecked"))])
