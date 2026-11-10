@@ -27,7 +27,7 @@ const ICONS = {
   wait: '<path d="M8 6.5v7M12 6.5v7"/>', ask: '<path d="M7.6 7.6a2.5 2.5 0 1 1 3.4 2.3c-.7.3-1 .8-1 1.5v.6M10 14.4v.1"/>'};
 const S = {tab: "now", menu: null, help: null, status: null, decisions: null, discover: null, requests: null, follow: null, followOn: "", autoFollow: "", factoryLogOff: false, followSource: null,
            followLines: [], drawer: null, opener: null, drafts: {}, handed: {}, fold: new Map(),
-           rules: null, rulesFor: null, ruleView: "stage", ruleKind: "story", ruleStage: null, ruleStory: "", ruleOpen: "", kindFor: "",
+           rules: null, rulesFor: null, rulesOf: null, ruleView: "stage", ruleKind: "story", ruleStage: null, ruleStory: "", ruleOpen: "",
            partText: {}, meta: {},
            part: "", detail: "", storyFrom: "", record: "", topicPick: "", storyView: {}, changing: ""};
 const stored = key => { try { return localStorage.getItem(key) || ""; } catch (e) { return ""; } };
@@ -46,7 +46,6 @@ function readHash() {
     if (kind) S.ruleKind = kind;
     S.ruleStage = stage === undefined || stage === "-" ? null : stage === "all" ? "" : stage;
     S.ruleStory = story || "";
-    S.kindFor = S.ruleStory;
   }
   S.part = tab === "describe" && sub ? decodeURIComponent(sub) : "";
   S.detail = ["backlog", "run"].includes(tab) && sub ? decodeURIComponent(sub) : "";
@@ -318,7 +317,7 @@ document.addEventListener("click", async event => {
   if (target.dataset.ruleOpen) return openRule(target.dataset.ruleOpen, target);
   if (target.dataset.ruleStory) { CALLS.closeRule(); rulesGo({ruleStory: target.dataset.ruleStory, ruleView: "run"}); return loadRules(); }
   if (target.dataset.ruleView) return rulesGo({ruleView: target.dataset.ruleView});
-  if (target.dataset.ruleKind) return rulesGo({ruleKind: target.dataset.ruleKind});
+  if (target.dataset.ruleKind) return target.disabled ? undefined : rulesGo({ruleKind: target.dataset.ruleKind});
   // a second press on the picked tile picks nothing: every way quiet, the groups beneath
   if (target.dataset.ruleStage) return rulesGo({ruleStage: target.dataset.trackStage && target.getAttribute("aria-pressed") === "true" ? "" : target.dataset.ruleStage});
   if (target.dataset.record) { S.record = target.dataset.record; return render(); }

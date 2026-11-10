@@ -124,7 +124,9 @@ code { font-family: var(--mono); font-size: .78em; background: var(--code); padd
 .switch { display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius-control); overflow: hidden; background: var(--panel); }
 .switch__opt { font: 500 var(--text-sm) var(--display); color: var(--ink); background: none; border: 0; padding: var(--space-1) var(--space-3); cursor: pointer; white-space: nowrap; }
 .switch__opt + .switch__opt { border-inline-start: 1px solid var(--line); }
-.switch__opt:hover { color: var(--brand-text); }
+.switch__opt:hover:not(:disabled) { color: var(--brand-text); }
+.switch__opt:disabled:not([aria-pressed="true"]) { opacity: .45; cursor: default; }
+.switch__opt:disabled { cursor: default; }
 .switch__opt[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
 .switch__n { font: 400 var(--text-xs) var(--mono); margin-inline-start: var(--space-1); opacity: .7; }
 .switch--bar { background: none; border-color: var(--bar-faint); border-radius: var(--radius-control); }

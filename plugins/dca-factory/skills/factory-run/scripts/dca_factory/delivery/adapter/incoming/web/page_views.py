@@ -542,11 +542,21 @@ function delivered(st) {
 // Three renderings of one read model (`factory.sh rules --format json`): the track of the picked kind with its ways back
 // (derived by the factory from the rules), the stage's rules, and what the project's journals say. Where the page
 // stands — the view, the kind, the stage, the story — is in its address: `#rules/<view>/<kind>/<stage|all>[/<story>]`.
+// The read is the story's own: until it is in, the view says it reads instead of showing the one before, and an
+// answer for a story no longer picked is dropped. A story read before shows at once and is read again behind it.
+const RULE_READS = new Map();
 async function loadRules() {
   const want = S.ruleStory || "";
   if (S.rules && S.rulesFor === want) return;
   S.rulesFor = want;
-  if (await load("rules", "/api/view/rules" + (want ? `?id=${encodeURIComponent(want)}` : ""))) render();
+  if (RULE_READS.has(want)) [S.rules, S.rulesOf] = [RULE_READS.get(want), want];
+  try {
+    const read = await api("/api/view/rules" + (want ? `?id=${encodeURIComponent(want)}` : ""));
+    RULE_READS.set(want, read);
+    if (S.rulesFor !== want) return;
+    [S.rules, S.rulesOf] = [read, want];
+    render();
+  } catch (e) { banner(`rules: ${e.message}`); }
 }
 const RULE_VIEWS = [["stage", "stage"], ["matrix", "checks × stages"], ["run", "run"]];
 // a rule read as sentences: its title, why, when, and each outcome after its keyword, where it sends the story
@@ -567,7 +577,11 @@ const ruleTitle = r => r.title ? sentence(r.title).replace(/\.$/, "") : r.text ?
 function rulesContext(st) {
   const v = S.rules, rules = Object.fromEntries((v.rules || []).map(r => [r.id, r])), kinds = Object.keys(v.flow || {});
   const story = v.story && v.story.id === S.ruleStory ? v.story : null, run = story ? story.run : null;
-  if (run && S.kindFor !== story.id) { S.kindFor = story.id; if (kinds.includes(run.kind)) S.ruleKind = run.kind; }
+  // a story picked is seen as the kind it ran as, whatever the address said; the address follows
+  if (run && kinds.includes(run.kind) && S.ruleKind !== run.kind) {
+    S.ruleKind = run.kind;
+    if (S.tab === "rules") history.replaceState(null, "", rulesHash());
+  }
   const kind = kinds.includes(S.ruleKind) ? S.ruleKind : kinds[0];
   const flow = (v.flow || {})[kind] || {steps: [], every_gate: [], graph: {anywhere: []}, track: {tiles: [], ways: []}};
   const track = flow.track || {tiles: [], ways: []}, route = track.tiles.map(t => t.stage);
@@ -743,10 +757,13 @@ function rulesTab(st) {
   const titles = Object.fromEntries((st.rows || []).map(r => [r.story, r.title]));
   const stories = ((c.v.refusals || {}).stories || []);
   const head = ui.toolbar(ui.switch(RULE_VIEWS.map(([id, label]) => ({label, pressed: id === S.ruleView, attrs: {"data-rule-view": id}})), {label: "the view"})
-    + ui.labelled("kind", ui.switch(c.kinds.map(k => ({label: k, pressed: k === c.kind, attrs: {"data-rule-kind": k}})), {label: "which kind of story"}))
+    // a story picked ran as one kind: the switch shows it and holds; without a story, any kind is picked
+    + ui.labelled("kind", ui.switch(c.kinds.map(k => ({label: k, pressed: k === c.kind, attrs: {"data-rule-kind": k},
+        disabled: !!c.run, title: c.run ? `${c.story.id} ran as ${c.run.kind}` : ""})), {label: "which kind of story"}))
     + ui.formRow({id: "rule-story", label: "a story", quiet: true, inline: true, attrs: {"data-rule-pick": ""},
         options: [{value: "", label: "no story"}, ...stories.map(id => ({value: id, label: titles[id] ? `${id} — ${titles[id]}` : id, selected: id === S.ruleStory}))]}));
   const view = {stage: stageView, matrix: matrixView, run: runView}[S.ruleView] || stageView;
+  if (S.rulesOf !== (S.ruleStory || "")) return head + ui.card("", "", ui.empty(S.ruleStory ? `Reading ${S.ruleStory}…` : "Reading the rules…"));
   return head + view(c)
     + ((c.v.problems || []).length ? ui.card("Problems", "the rulebook itself", `<ul>${c.v.problems.map(p => `<li>${esc(p)}</li>`).join("")}</ul>`) : "");
 }

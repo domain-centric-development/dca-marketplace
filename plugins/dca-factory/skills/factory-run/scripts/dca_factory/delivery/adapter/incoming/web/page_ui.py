@@ -110,7 +110,7 @@ ui.btn = (label, o = {}) => `<button type="button" class="${mods("btn", [o.prima
 ui.link = (label, o = {}) => `<button type="button" class="${mods("link", [o.title && "title", o.to && "to", o.way && "way",
   o.plain && "plain", o.quiet && "quiet", o.compact && "compact", o.ink && "ink"])}"${attrs(o.attrs)}>${o.html ? label : esc(label)}</button>`;
 ui.switch = (items, o = {}) => `<span class="${mods("switch", [o.bar && "bar"])}" role="group"${o.label ? ` aria-label="${esc(o.label)}"` : ""}>${items.map(i =>
-  `<button type="button" class="switch__opt" aria-pressed="${!!i.pressed}"${attrs(i.attrs)}>${esc(i.label)}${i.n != null ? `<span class="switch__n">${esc(i.n)}</span>` : ""}</button>`).join("")}</span>`;
+  `<button type="button" class="switch__opt" aria-pressed="${!!i.pressed}"${i.disabled ? " disabled" : ""}${i.title ? ` title="${esc(i.title)}"` : ""}${attrs(i.attrs)}>${esc(i.label)}${i.n != null ? `<span class="switch__n">${esc(i.n)}</span>` : ""}</button>`).join("")}</span>`;
 ui.select = o => `<select class="select" id="${esc(o.id)}"${attrs(o.attrs)}>${(o.options || []).map(p =>
   `<option value="${esc(p.value)}"${p.selected ? " selected" : ""}>${esc(p.label == null ? p.value : p.label)}</option>`).join("")}</select>`;
 ui.field = o => o.type === "file"
