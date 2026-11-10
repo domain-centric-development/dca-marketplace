@@ -9,6 +9,7 @@ import typing
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import GateError, read_front_matter
 from ....domain.model.decision_record import DecisionRecord
 from .criteria_files import criteria_of
+from .guarded_files import announced_changes, diff_sections
 from .decision_record_files import ACCEPTANCE_KIND, DecisionRecordFiles, decisions_store
 from .story_layout import find_story, story_digest
 from .test_files import read_mapping
@@ -44,11 +45,13 @@ class AcceptanceRecordFiles(DecisionRecordFiles):
         lines = [f"- {key}: {text}" + (f" — `{', '.join(mapping[key])}`" if mapping.get(key) else "")
                  for key, text in criteria_of(story_path, body, front)]
         os.makedirs(store, exist_ok=True)
+        guarded = self._guarded(story_id)
         with open(path, "w", encoding="utf-8") as handle:
             handle.write(
                 f"---\nid: {rid}\nstory: {story_id}\nstage: {stage}\nkind: {ACCEPTANCE_KIND}\n"
                 f"asked: {asked}\ndigest: {story_digest(story_path)}\n---\n\n"
                 f"# Accept {story_id}?\n\n## Question\n"
+                + guarded +
                 f"Every gate passed. Look at what the story delivers before it counts as delivered:\n\n"
                 + "\n".join(lines) + "\n\n"
                 + (f"Start the application with `{run}`.\n\n" if run else
@@ -57,3 +60,17 @@ class AcceptanceRecordFiles(DecisionRecordFiles):
                   "- accepted: the story is delivered.\n"
                   "- a correction: what should be different, written into the story (criteria and an "
                   "`answered:` line naming this record); the story runs again from plan.\n")
+
+    def _guarded(self, story_id: str) -> str:
+        """The guarded changes the plan announced, each with its reason and its diff — first in the question, so a
+        person sees that the story changed what judges it before anything else. Empty where it announced none."""
+        announced = announced_changes(self._runs, story_id) or ()
+        if not announced:
+            return ""
+        diffs = diff_sections(self._runs, story_id, [c.path.value for c in announced])
+        parts = ["**This story changed what judges it** — the guarded changes its plan announced:\n"]
+        for change in announced:
+            diff = diffs.get(change.path.value, "")
+            parts.append(f"- `{change.path.value}` — {change.reason.value or 'no reason given'}\n"
+                         + (f"\n```diff\n{diff.rstrip()}\n```\n" if diff else "  (the story diff holds no change of it)\n"))
+        return "\n".join(parts) + "\n"

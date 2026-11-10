@@ -180,7 +180,8 @@ def unprobed_flags(tool: Tool) -> typing.Optional[typing.Tuple[typing.List[str],
 
 
 def permission_block(allowed: str, protected: typing.Iterable[str], linked: typing.Iterable[str],
-                     cwd: typing.Optional[str] = None, home: typing.Optional[str] = None, web: bool = False) -> str:
+                     cwd: typing.Optional[str] = None, home: typing.Optional[str] = None, web: bool = False,
+                     guarded: typing.Iterable[str] = ()) -> str:
     """OpenCode's permission block: the same shell as Claude's allow-list; every edit allowed but under the protected
     folders, which its edit rules match relative to the project (an absolute pattern matches nothing there — probed
     2.0.20); the linked folders as external ones it may use, and the protected ones among them refused there."""
@@ -201,6 +202,11 @@ def permission_block(allowed: str, protected: typing.Iterable[str], linked: typi
             # named as the folder was given, with `/`: on Windows abspath puts a drive and `\` on a `/home/…` path
             named = folder if folder.startswith("/") else absolute.replace(os.sep, "/")
             external[named.rstrip("/") + "/**"] = "deny"                # the main checkout's, named by its path
+    # what judges a stage — a file or a glob, as the profile's `guarded:` names it — matched the same way
+    for path in (g for g in guarded if g):
+        inside = os.path.relpath(path, home) if os.path.isabs(path) else path
+        if not inside.startswith(".."):
+            edit[inside.replace(os.sep, "/")] = "deny"
     web_tools = "allow" if web else "deny"
     return json.dumps({"permission": {"bash": bash, "edit": edit, "external_directory": external,
                                       "webfetch": web_tools, "websearch": web_tools}})
@@ -209,17 +215,18 @@ def permission_block(allowed: str, protected: typing.Iterable[str], linked: typi
 def tool_command(tool: Tool, model: str = "", writable: typing.Sequence[str] = (), readable: typing.Sequence[str] = (),
                  protected: typing.Sequence[str] = (), allowed: str = "",
                  effort: str = "", offline: bool = False,
-                 web: bool = False) -> typing.Tuple[typing.Dict[str, str], typing.List[str]]:
+                 web: bool = False, guarded: typing.Sequence[str] = ()) -> typing.Tuple[typing.Dict[str, str], typing.List[str]]:
     """What starts one stage with this tool: the variables it is started with and its arguments, the prompt not
     among them — the caller appends it. `offline`: a request's run, which gets no network; `web`: one that researches
-    the web, a discovery's, which gets the tools for it (WP-184)."""
+    the web, a discovery's, which gets the tools for it (WP-184); `guarded`: the files and globs that judge a stage,
+    absolute, refused to every editing tool as the protected folders are."""
     # a variable the person set is theirs and wins — a config folder that carries their local providers, say
     env = {name: value.replace("{empty}", empty_folder()) for name, value in tool.isolation_env
            if os.environ.get("FACTORY_ISOLATION", "on") != "off" and not os.environ.get(name)}
     if tool.permission_env:
         block = os.environ.get(tool.permission_env, "")
         if not block and os.environ.get("FACTORY_OPENCODE_PERMISSIONS", "on") != "off":
-            block = permission_block(allowed, protected, [*writable, *readable], web=web)
+            block = permission_block(allowed, protected, [*writable, *readable], web=web, guarded=guarded)
         env[tool.permission_env] = block
     argv = list(tool.command) + list(tool.offline if offline else tool.online)
     if tool.allow_list:
@@ -227,8 +234,9 @@ def tool_command(tool: Tool, model: str = "", writable: typing.Sequence[str] = (
     if tool.add_dirs in ("all", "writable"):
         for folder in [*writable, *(readable if tool.add_dirs == "all" else ())]:
             argv += ["--add-dir", folder]
-    if tool.deny and protected:
-        argv += ["--disallowedTools", ",".join(f"Edit(//{d.lstrip('/')}/**)" for d in protected)]
+    if tool.deny and (protected or guarded):
+        argv += ["--disallowedTools", ",".join([*(f"Edit(//{d.lstrip('/')}/**)" for d in protected),
+                                                *(f"Edit(//{g.lstrip('/')})" for g in guarded)])]
     argv += isolation_args(tool, web)
     if model:
         argv += [tool.model_flag, model]
@@ -239,10 +247,11 @@ def tool_command(tool: Tool, model: str = "", writable: typing.Sequence[str] = (
 
 
 def tool_invocation(tool: Tool, model: str = "", writable: typing.Sequence[str] = (),
-                    readable: typing.Sequence[str] = (), protected: typing.Sequence[str] = (), allowed: str = "") -> str:
+                    readable: typing.Sequence[str] = (), protected: typing.Sequence[str] = (), allowed: str = "",
+                    guarded: typing.Sequence[str] = ()) -> str:
     """The same command line as shell words for a caller to `eval`, with the prompt left as `"$prompt"` — the
     caller's variable, never text quoted here."""
-    env, argv = tool_command(tool, model, writable, readable, protected, allowed)
+    env, argv = tool_command(tool, model, writable, readable, protected, allowed, guarded=guarded)
     words = [f"{name}={shlex.quote(value)}" for name, value in env.items()] + [shlex.quote(w) for w in argv]
     return " ".join(words + ['"$prompt"'])
 

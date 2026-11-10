@@ -24,6 +24,7 @@ from ....domain.model.acceptance import AcceptanceMode, FlakyFinding, Viewing
 from ..stack.commands import command_for
 from ..stack.suite_runs import test_files
 from ..claims.remote_claims import PUBLISHED
+from .guarded_files import announced_changes
 from ..git.integration import integration_target
 from ..git.repository import git, git_identity
 from ..spec.story_spec_files import moved_tests, story_spec
@@ -101,8 +102,7 @@ def acceptance_applies(cwd: str, runs: str, story_id: str, profile: Front) -> bo
         with contextlib.suppress(GateError):
             located = locate_tests(cwd, read_mapping(runs, story_id)[1])[0]
             end_user = any(command_for(profile, path)[0] == "e2eTest" for path in located.values())
-    return mode.asks(Viewing(browser,
-                             end_user))
+    return mode.asks(Viewing(browser, end_user, bool(announced_changes(runs, story_id))))
 
 
 def record_flaky_findings(result: typing.Any, story_path: str, story_id: str, front: Front, runs: str) -> None:

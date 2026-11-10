@@ -87,6 +87,8 @@ class ToolHost(typing.Protocol):
 
     def protected_dirs(self) -> typing.List[str]: ...
 
+    def guarded_walls(self, story: typing.Optional[str]) -> typing.List[str]: ...
+
     def skill_reach(self) -> typing.List[str]: ...
 
     def journal_line(self, story: typing.Optional[str], line: str) -> None: ...
@@ -186,7 +188,8 @@ class ToolProcesses:
                                        writable=host.add_dirs, readable=[*host.read_dirs, *reach],
                                        protected=[*host.protected_dirs(), *reach], allowed=choice.allowed_commands(),
                                        effort=level,
-                                       offline=choice.reach.offline, web=choice.reach.researches)
+                                       offline=choice.reach.offline, web=choice.reach.researches,
+                                       guarded=host.guarded_walls(story) if hasattr(host, "guarded_walls") else [])
         env.update(variables)
         return self.tool_process(spawnable(argv + [prompt]), env, raw, stdin=subprocess.DEVNULL, stage=stage)
 

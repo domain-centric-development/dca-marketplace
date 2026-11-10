@@ -266,6 +266,8 @@ PROFILE_KEYS = frozenset((
     "evidence.keepDays",
     # `model` alone is refused by the model check, which names the right form
     "model",
+    # what judges a stage beside the profile itself — the globs a stage may change only where its plan announces it
+    "guarded",
 ))
 
 #: Key families: `<prefix><name>`, with an open list of names — a test command (`test.integration`), what a

@@ -52,6 +52,7 @@ from ..git.integration import integration_target, lost_text
 from ....application.profile.profile_rules import first_word, perspectives_of
 from ..tools.agents import TOOL, TOOLS
 from .gate_process import GateProcess, hashing
+from ..files.guarded_files import announced_changes, guarded_set, present_files
 from ..files.pipeline_digest import GATE_FILES, PIPELINE_FILES, STAMP, pipeline_digest
 from ..files.snapshots import Edge
 from ..tools.tool_choice import ToolChoice
@@ -468,6 +469,21 @@ class Run(ProfileSource):
     def protected_dirs(self) -> typing.List[str]:
         dirs = [".agents/factory", self.evidence_rel(), *TOOL_SKILL_DIRS, ".agents/skills"]
         return [d if os.path.isabs(d) or re.match(r"^[A-Za-z]:", d) else f"{self.home}/{d}" for d in dirs]
+
+    def guarded_walls(self, story: typing.Optional[str]) -> typing.List[str]:
+        """What judges a stage of <story>, absolute, for the tool to refuse every edit to: the stack profile — the
+        main checkout's and the copy where the stage works — and the profile's `guarded:` globs where the stage
+        works, but for the paths the story's plan announces under `## Guarded changes`."""
+        guarded = guarded_set(self.profile())
+        announced = (announced_changes(self.runs, story) or ()) if story else ()
+        here = os.getcwd()
+        walls: typing.List[str] = []
+        for wall in guarded.walled(announced, present_files(here, guarded.opened(announced))):
+            if wall.value == PROFILE_FILE:
+                walls += [f"{self.home}/{PROFILE_FILE}", f"{here}/{PROFILE_FILE}"]
+            else:
+                walls.append(f"{here}/{wall.value}")
+        return list(dict.fromkeys(w.replace(os.sep, "/") for w in walls))
 
     def skill_reach(self) -> typing.List[str]:
         """Where the skills a run reads really are (WP-184): a linked skill folder's target and the plugins the tool

@@ -172,6 +172,13 @@
 #              stops it; FACTORY_STAGE_TIMEOUT overrides the line for one run
 # evidence.keepDays  days a delivered story's raw tool streams (`*.out`), tree snapshots and suite record stay beside its
 #              journal (default 7); the journal, the gate reports and story.diff stay for good
+# guarded      what decides whether a gate is green beside this profile (always guarded), as globs from the
+#              project root, blank-separated: the commit hook's folder, the architecture suite's rule-selection
+#              file and its test classes — `.githooks/** src/test-architecture/**`. A stage may change a guarded
+#              path only where its plan announces it under `## Guarded changes`, with the reason; the runner
+#              denies the tools every other edit there, the gate refuses a change nobody announced, and the
+#              acceptance shows an announced change's diff first. `factory.sh setup --check` proposes it from
+#              what it finds
 # reviews      perspectives the judge stage covers *in addition to* its built-in ones
 # review.<p>   the reviewer that should carry one perspective. A review *skill* works in every
 #              tool; a review *agent* only in a tool that has agents — where it is missing, the
@@ -180,7 +187,7 @@
 # Which gate file contract this profile is written for. The gate refuses a run when the number is
 # higher than the gate it is asked to run against — the project would be relying on keys that copy
 # of the script does not know, and a key ignored in silence is a check that has quietly gone.
-contract: 28
+contract: 29
 
 release: required
 compile: {{COMPILE_COMMAND}}

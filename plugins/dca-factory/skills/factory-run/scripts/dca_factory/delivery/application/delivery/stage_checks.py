@@ -14,6 +14,7 @@ from ...domain.model.test_facts import MappedTest, TestTable
 from ...domain.model.story import StoryId
 from ...domain.model.verdict import CheckName, Said
 from ...domain.service.adopt_checks import AdoptChecks
+from ...domain.service.guard_checks import GuardChecks
 from ...domain.service.kept_checks import KeptChecks
 from ...domain.service.decision_checks import Applying, DecisionChecks
 from ...domain.service.integration_checks import IntegrationChecks
@@ -108,6 +109,12 @@ def _rounds(run: Run) -> None:
 @check("pipeline", stages=after_plan, rule="GATE-PIPELINE")
 def _pipeline(run: Run) -> None:
     run.result.take(DeliveryChecks.pipeline_untouched(run.story, run.evidence))
+    run.result.take(GuardChecks.untouched(run.story, run.evidence))
+
+
+@check("guarded", stages=("plan",), rule="GATE-GUARDED")
+def _guarded(run: Run) -> None:
+    run.result.take(GuardChecks.announced(run.story, run.evidence))
 
 
 @check("owned", rule="GATE-OWNED")

@@ -419,6 +419,19 @@ how each tool is told is the adapters'.
 
 **Operations:** a stage's (`stage`), a request's (`request`)
 
+### Guarded set (GuardedSet) · Guarded pattern (GuardedPattern) · Guarded change (GuardedChange)
+
+**Definition:** What decides whether a gate is green, kept out of the judged stage's reach: the stack profile (always)
+and the globs of the profile's `guarded:` — the commit hook, the architecture suite's rule selection and test classes.
+A guarded change is one path of it a plan announces under `## Guarded changes`, with its reason; only those a stage
+may change, and the acceptance shows them first.
+
+**Type:** Value Object
+
+**Operations:** whether a path is guarded (`covers`), the globs that cover an announced path (`opened`), what the
+runner walls off for a stage — every glob, an opened one file by file without the announced paths (`walled`); the
+guarded paths a story changed and the ones of them nobody announced (`GuardedFacts.touched`, `unannounced`)
+
 ---
 
 ## Concepts

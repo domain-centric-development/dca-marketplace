@@ -16,11 +16,17 @@ ACCEPTANCE = CheckName("acceptance")
 
 
 class Viewing(Value):
-    """What a person could look at in the story: whether the project runs a browser, and whether one of its criteria
-    is shown by a test the end-user command runs."""
+    """What a person could look at in the story: whether the project runs a browser, whether one of its criteria
+    is shown by a test the end-user command runs, and whether its plan announced a change to what judges it."""
 
     _has_browser: bool
     _has_end_user_test: bool
+    _changes_what_judges: bool = False
+
+    @property
+    def changes_what_judges(self) -> bool:
+        """Whether the story's plan announced a guarded change — the stack profile, the rule selection, the hook."""
+        return self._changes_what_judges
 
     @property
     def has_browser(self) -> bool:
@@ -47,7 +53,9 @@ class AcceptanceMode(enum.Enum):
 
     def asks(self, viewing: Viewing) -> bool:
         """Whether this story waits for a person before it is delivered. `pages`: it shows a page — something to look
-        at."""
+        at. A story that changed what judges it waits in every mode: its acceptance shows that change first."""
+        if viewing.changes_what_judges:
+            return True
         if self is AcceptanceMode.NONE:
             return False
         return self is AcceptanceMode.ALL or viewing.shows_a_page()

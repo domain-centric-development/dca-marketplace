@@ -17,7 +17,8 @@ dca.rules.sets = {{ruleSets}}
 {{#if noLayeredModuleYet}}
 # DCA-STR-012: no context has a domain/application/adapter layer yet, so every layer-selecting
 # rule passes without looking at anything. Remove this entry once the first aggregate or use case
-# exists (/dca-new does that for you).
+# exists (/dca-new does that for you). Where a delivery pipeline guards this file, the plan of the
+# story that removes it announces the removal as a guarded change, with this reason.
 dca.rules.warn              = DCA-STR-012
 {{else}}
 #dca.rules.warn              = DCA-TAC-009

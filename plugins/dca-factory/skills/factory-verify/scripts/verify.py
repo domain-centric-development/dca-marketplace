@@ -979,6 +979,25 @@ def flaky_status(args, root):
     return problems
 
 
+#: The `guarded:` a fresh install proposes where the fixture holds more than the hook folder the installer makes.
+PRESET_GUARDED = {"pytest-dca-ruff": ".githooks/** pyproject.toml"}
+
+#: A build that added an `ignore` line to the rule selection of the architecture suite, listed in its hand-over.
+GUARDED_CHANGE = (
+    ("src/test-architecture/resources/dca-archunit.properties", "dca.rule.DCA-HEX-014.ignore = .*Page.*\n"),
+    (".dca-factory/evidence/STORY-1/changed-build.txt",
+     "added\tsrc/main/Thing.java\nmodified\tsrc/test-architecture/resources/dca-archunit.properties\n"),
+    (".dca-factory/evidence/STORY-1/changed.txt",
+     "added\tsrc/main/Thing.java\nmodified\tsrc/test-architecture/resources/dca-archunit.properties\n"),
+    (".dca-factory/runs/STORY-1/build.md", "## Files\n\n- `src/main/Thing.java` — new\n"
+     "- `src/test-architecture/resources/dca-archunit.properties` — the exception\n"),
+)
+
+#: A plan that announces that change, with its reason.
+GUARDED_PLAN = ("# Plan\n\n## Guarded changes\n- `src/test-architecture/resources/dca-archunit.properties` — the "
+                "page's GET reads no use case; the rule's exception is recorded in the plan\n")
+
+
 class Case:
     """One expectation about the gate: which checks must pass, fail or be skipped."""
 
@@ -3808,6 +3827,9 @@ def verify_setup(runner, verbose=False):
             # the template's own policy lines, as it writes them into every new profile
             wanted += re.findall(r"^release: \S+$", template, re.M)
             wanted += [l.replace("{py}", python or "python3") for l in PRESET_GOLDEN[name]]
+            # what judges a stage beside the profile (WP-190): the hook folder the installer made, and what the
+            # fixture holds of the architecture suite's selection
+            wanted += ["guarded: " + PRESET_GUARDED.get(name, ".githooks/**")]
             check(f"presets: the {name} fixture gets the profile the installer wrote before the presets",
                   code == 0 and lines == wanted, f"exit {code}; got {lines}; want {wanted}")
 
@@ -6412,6 +6434,37 @@ def run_groups(args):
               "added\tsrc/main/Thing.java\nmodified\t.agents/factory/story-gate.py\n"),
              (".dca-factory/runs/STORY-1/build.md", "## Changed\n\n## Files\n\n- `src/main/Thing.java` — new\n"
                                         "- `.agents/factory/story-gate.py` — a faster gate\n")))),
+        # WP-190: what judges a stage — the profile and the `guarded:` globs — changes only where the plan announces it
+        (Case("guarded: a stage that adds an ignore line to a guarded rule-selection file is refused, named",
+              "build", 1, must_fail=("pipeline",),
+              text=("changed what judges it: src/test-architecture/resources/dca-archunit.properties",)),
+         dict(green=both_green, ledger=both_green, profile=PROFILE + "guarded: src/test-architecture/** .githooks/**\n",
+              extra_sources=GUARDED_CHANGE)),
+        (Case("guarded: the same change announced in the plan's `## Guarded changes` passes, named", "build", 0,
+              must_pass=("pipeline",), text=("guarded change(s) the plan announced",)),
+         dict(green=both_green, ledger=both_green, profile=PROFILE + "guarded: src/test-architecture/** .githooks/**\n",
+              extra_sources=GUARDED_CHANGE + ((".dca-factory/runs/STORY-1/plan.md", GUARDED_PLAN),))),
+        (Case("guarded: a stage that changed the stack profile's `test:` is refused — the profile is always guarded",
+              "build", 1, must_fail=("pipeline",), text=("changed what judges it: dca-factory.profile.yaml",)),
+         dict(green=both_green, ledger=both_green, extra_sources=(
+             (".dca-factory/evidence/STORY-1/changed-build.txt", "modified\tdca-factory.profile.yaml\n"),
+             (".dca-factory/evidence/STORY-1/changed.txt", "modified\tdca-factory.profile.yaml\n"),
+             (".dca-factory/runs/STORY-1/build.md", "## Files\n\n- `dca-factory.profile.yaml` — a faster test\n")))),
+        (Case("guarded: a guarded change a stage put back — in its record, no longer in the story's — passes",
+              "build", 0, must_pass=("pipeline",), absent=("changed what judges it",)),
+         dict(green=both_green, ledger=both_green, profile=PROFILE + "guarded: src/test-architecture/**\n",
+              extra_sources=GUARDED_CHANGE[:2] + (
+                  (".dca-factory/evidence/STORY-1/changed.txt", "added\tsrc/main/Thing.java\n"),)
+              + GUARDED_CHANGE[3:])),
+        (Case("guarded: the plan gate refuses a guarded change without a reason, and a path that is not guarded",
+              "plan", 1, must_fail=("guarded",), text=("src/main/Thing.java, which the guarded set",
+                                                       "without a reason")),
+         dict(profile=PROFILE + "guarded: src/test-architecture/**\n", extra_sources=(
+             (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Guarded changes\n"
+              "- `src/test-architecture/resources/dca-archunit.properties`\n- `src/main/Thing.java` — a reason\n"),))),
+        (Case("guarded: the plan gate passes a guarded change with its reason", "plan", 0, must_pass=("guarded",)),
+         dict(profile=PROFILE + "guarded: src/test-architecture/**\n",
+              extra_sources=((".dca-factory/runs/STORY-1/plan.md", GUARDED_PLAN),))),
         (Case("build: a hand-over without a Files section is refused", "build", 1,
               must_fail=("files-listed",), text=("has no `## Files` section",)),
          dict(green=both_green, ledger=both_green, extra_sources=(
@@ -8969,6 +9022,27 @@ def run_groups(args):
         given = gate_run(root, "--story", "STORY-1", "--stage", "document")
         expectations.append(("acceptance: pages — a project without a browser delivers without asking",
                              given.returncode == 0 and delivered(root), given.stdout.strip()[-200:]))
+
+    # WP-190: a story whose plan announced a guarded change waits for a person whatever `acceptance:` says, and its
+    # record shows that change's diff before anything else
+    for root in throwaway():
+        accept_fixture(root, "guarded: config/**\n", extra=(
+            (".dca-factory/evidence/STORY-1/story.diff",
+             "diff --git a/src/main/App.java b/src/main/App.java\n--- a/src/main/App.java\n+++ b/src/main/App.java\n"
+             "@@ -1 +1 @@\n-a\n+b\n"
+             "diff --git a/config/rules.properties b/config/rules.properties\n--- a/config/rules.properties\n"
+             "+++ b/config/rules.properties\n@@ -1,2 +1 @@\n dca.rules.sets = all\n-dca.rules.warn = DCA-STR-012\n"),))
+        with open(os.path.join(root, ".dca-factory/runs/STORY-1/plan.md"), "a", encoding="utf-8") as h:
+            h.write("\n## Guarded changes\n- `config/rules.properties` — the scaffold entry goes: the first module "
+                    "exists\n")
+        asked = gate_run(root, "--story", "STORY-1", "--stage", "document")
+        text = open(record(root, 1), encoding="utf-8").read() if os.path.isfile(record(root, 1)) else ""
+        expectations.append(("acceptance: a story that changed what judges it waits without `acceptance:`, the guarded "
+                             "diff first in its record",
+                             asked.returncode == 3 and not delivered(root)
+                             and "-dca.rules.warn = DCA-STR-012" in text and "src/main/App.java" not in text
+                             and text.find("config/rules.properties") < text.find("Every gate passed"),
+                             f"exit {asked.returncode}; {text[:600]}"))
 
     for root in throwaway():
         accept_fixture(root, "acceptance: pages\nbrowser: playwright\ne2eTest: ./gradlew test-pages\n",

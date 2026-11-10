@@ -16,6 +16,7 @@ from ..model.backlog_facts import DecidedRecord, DecisionsFacts, EpicFacts, Outc
 from ..model.brief_facts import BriefFacts, OwnedFacts, RoundsRecord
 from ..model.delivery_facts import (
     DocumentFacts, Integration, MainTests, PipelineFacts, ReviewFacts, StageChanges, StoryCommit, StoryPass)
+from ..model.guarded import GuardedFacts
 from ..model.design_facts import ContextMapFacts, InvariantFacts, PortName
 from ..model.plan_facts import HandOverName, HandOverSize, PlanAdoption, PlanLevels, PlannedFile
 from ..model.profile_facts import GateRelease, InstructionFile, ModelKey, ProfileText, UnknownKey
@@ -193,6 +194,10 @@ class StageEvidence(DomainGateway, typing.Protocol):
         ...
 
     def pipeline(self, story: StoryId) -> PipelineFacts:
+        ...
+
+    def guarded(self, story: StoryId) -> GuardedFacts:
+        """The guarded set, the plan's announced guarded changes and the paths the story's stages changed."""
         ...
 
     def integration(self, story: StoryId) -> Integration:

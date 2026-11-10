@@ -83,6 +83,8 @@ from .run_marks import last_ended, stage_open, window_open
 from .snapshots import git_tree, listed_files, snapshot_reason, tree_changes
 from ..git.checkout import Checkouts
 from .story_layout import file_digest
+from .guarded_files import announced_changes, guarded_set, story_changed
+from ....domain.model.guarded import GuardedFacts
 from .design_files import (
     adapter_shapes, asserts_at, locate_selector, MOCK_MARKERS, mocked_ports, PLAN_FILE_LINE, plan_domain_elements,
     plan_invariants, read_clause_rows, read_invariant_rows, scenario_actions, scenario_clauses)
@@ -831,6 +833,11 @@ class StageEvidenceFiles(StageEvidence):
         touched = sorted({line.split("\t", 1)[1] for record in records for line in read_text(record).splitlines()
                           if "\t" in line and line.split("\t", 1)[1].startswith(PIPELINE_DIR)})
         return PipelineFacts(Place(PIPELINE_DIR), tuple(Place(t) for t in touched))
+
+    def guarded(self, story: StoryId) -> GuardedFacts:
+        changed = story_changed(self._cwd, self._runs, story.value, self._checkouts)
+        return GuardedFacts(guarded_set(self._profile), announced_changes(self._runs, story.value),
+                            tuple(Place(p) for p in changed) if changed is not None else None)
 
     def integration(self, story: StoryId) -> Integration:
         cwd, runs, story_id = self._cwd, self._runs, story.value

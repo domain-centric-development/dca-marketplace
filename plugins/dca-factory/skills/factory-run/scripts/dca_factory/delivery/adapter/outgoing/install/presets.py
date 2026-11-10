@@ -60,7 +60,19 @@ SWITCHES = {
     "format": "the build and tidy gates run it",
     "formatFix": "the test, build and tidy stages correct formatting with it",
     "browser": "the plan takes browser tests for a page",
+    "guarded": "a stage changes these only where its plan announces it; the acceptance shows the diff",
 }
+#: What decides whether a gate is green, beside the profile itself — proposed as `guarded:`. The commit hook's
+#: folders; the architecture suite's rule-selection files — by name, or a project file that carries the suite's
+#: section —; and the test classes that run the suite, by what each language's base or entry looks like.
+HOOK_FOLDERS = (".githooks", ".husky")
+RULE_SELECTION = "**/dca-archunit.properties"
+RULE_SECTIONS = (("pyproject.toml", re.compile(r"^\[tool\.dca\]", re.M)),)
+SUITE_SOURCES = (".java", ".kt", ".cs", ".py", ".rs")
+SUITE_ENTRY = re.compile(r"\bextends\s+DcaArchitectureTest\b|:\s*DcaArchitectureTest\b|\barchitecture_tests\(|"
+                         r"\bdca_tests!\s*\(")
+#: How deep the walk for the suite's test classes goes — a Java package path is deeper than a preset looks.
+SUITE_DEPTH = 12
 #: Files that make a browser surface: templates, stylesheets, component files.
 SURFACE = ("**/*.css **/*.scss **/*.sass **/*.less **/*.html **/*.pug **/*.jade **/*.cshtml **/*.razor **/*.jsx "
            "**/*.tsx **/*.vue **/*.svelte **/*.erb **/*.twig **/*.hbs **/*.njk **/*.jinja **/*.j2")
@@ -122,6 +134,30 @@ class Detection:
                     pass
             return hits
         raise PresetError(f"factory: unknown detection `{key}` — a preset has detect.exists and detect.contains only")
+
+    def guarded(self) -> str:
+        """What decides whether a gate is green, found in this project: the commit hook's folder, the rule-selection
+        files and the test classes that run the architecture suite — as globs from the root, the hook's folder
+        whole. Empty where the project has none of them: the profile itself is guarded without a key."""
+        found = [f"{folder}/**" for folder in HOOK_FOLDERS if os.path.isdir(folder)]
+        found += self.matches(RULE_SELECTION)
+        for name, section in RULE_SECTIONS:
+            if os.path.isfile(name) and section.search(read(name, "ignore")):
+                found.append(name)
+        for root, dirs, names in os.walk("."):
+            depth = 0 if root == "." else root.count(os.sep)
+            dirs[:] = sorted(d for d in dirs if d not in PRUNED and depth < SUITE_DEPTH)
+            rel = "" if root == "." else root[2:].replace(os.sep, "/") + "/"
+            for name in sorted(names):
+                if not name.endswith(SUITE_SOURCES):
+                    continue
+                try:
+                    if os.path.getsize(os.path.join(root, name)) < 500_000 \
+                            and SUITE_ENTRY.search(read(os.path.join(root, name), "ignore")):
+                        found.append(rel + name)
+                except OSError:
+                    pass
+        return " ".join(dict.fromkeys(found))
 
     def frontend_default(self, values: Values) -> bool:
         """Whether the frontend craft is the project's: it has a browser surface — a browser runner or the files of a
@@ -199,6 +235,9 @@ class Detection:
             found = re.search(r"^building_blocks_api:[^`\n]*`([^`\n]+)`", read(conventions), re.M)
             if found:
                 values["knowledge.read"] = found.group(1)
+        guarded = self.guarded()
+        if guarded:
+            values["guarded"] = guarded
         # What the method's configuration already gives — the architecture command — is not proposed for the
         # factory's profile: it reads it from there, and a copy would be a second truth.
         if os.path.isfile("dca.profile.yaml"):
