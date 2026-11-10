@@ -31,7 +31,10 @@ holder the right to publish it under the licence above and under other terms bes
 ones included. That is what keeps the project able to offer the factory on other terms without
 asking every contributor again.
 
-To agree, write the sentence at the end of `CLA.md` as a comment in your pull request.
+You agree by adding a row for yourself to [CONTRIBUTORS.md](CONTRIBUTORS.md) in your first pull
+request — your name, your GitHub name, the date and the version of the agreement, in a commit of
+your own. The file states what the row means. It is the record of your agreement and travels with
+the repository, so one row is enough for all your later pull requests.
 
 Two things the agreement asks you to check before you do:
 

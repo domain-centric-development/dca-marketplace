@@ -66,10 +66,12 @@ in force.
 
 ## How you agree
 
-Write this sentence as a comment in your first pull request:
+Add a row with your name, your GitHub name, the date and the version of this agreement to
+`CONTRIBUTORS.md`, in a commit of your own in your first pull request. That file carries the
+statement your row makes:
 
-> I have read the Contributor Licence Agreement (CLA.md, version 1.0) and agree to it for this and
-> all my future contributions to this repository.
+> I have read the Contributor Licence Agreement (`CLA.md`) in the version named in my row and agree
+> to it for this and all my future contributions to this repository.
 
-A pull request is merged only once that comment is there. A new version of this agreement applies
-to you only after you have agreed to it in the same way.
+A pull request is merged only once your row is there. A new version of this agreement applies to
+you only after you have added a row for it in the same way.
