@@ -13,6 +13,8 @@ from ..shared.story_repository import StoryRepository
 from ..shared.actions import Action, make_action, NamesStory, offered
 from ..status.texts import parse_time
 from ...domain.model.decision_record import DecisionState
+from ...domain.model.lesson import LessonPlace, Owner
+from ...domain.model.story_words import Detail
 
 Model = typing.Dict[str, typing.Any]
 
@@ -63,6 +65,8 @@ class ListDecisionsUseCase(ListDecisionsInputPort):
                 continue
             state, answer = facts["state"], facts["answer"]
             given = f" → {answer.get('answer')} ({answer.get('by')})" if DecisionState(state).answered else ""
+            if facts["kind"] == "lesson" and DecisionState(state).answered:
+                given += lesson_written(facts["options"], answer)
             record: Model = dict(rank=RANKS[state], id=facts["id"], state=state, kind=facts["kind"],
                                  story=facts["story"], stage=facts["stage"], asked=parse_time(facts["asked"]),
                                  text=facts["title"] + given, options=facts["options"],
@@ -78,6 +82,24 @@ class ListDecisionsUseCase(ListDecisionsInputPort):
                           shell=f"write the answer into {waiting[0]['path']} under `## Answer`") if waiting else None
         return dict(project=self._inbox.project_name(), story=query.story, records=records, waiting=len(waiting),
                     store=self._inbox.where(), how=how)
+
+
+#: Who writes a lesson's place, as the inbox names them.
+OWNER_WORDS = {Owner.DESCRIBE: "the description skill", Owner.GLOSSARY: "the glossary skill",
+               Owner.METHOD: "the method's skills", Owner.SETUP: "/factory-setup", Owner.BACKLOG: "/factory-backlog",
+               Owner.MAINTAINERS: "an issue text a person sends"}
+
+
+def lesson_written(options: typing.Sequence[Facts], answer: typing.Mapping[str, str]) -> str:
+    """What an answered lesson left: the file its owning skill wrote (`written:`), or whom it still waits for — the
+    record links what was written; the factory writes none of it."""
+    given = str(answer.get("answer", "")).strip().lower()
+    line = next((o["text"] for o in options if o["key"].lower() == given), given)
+    place = LessonPlace.named(Detail(line))
+    if place is None or place.owner is Owner.NOBODY:
+        return ""
+    written = str(answer.get("written", "")).strip()
+    return f" — written: {written}" if written else f" — {place.value}, not written yet: waits for {OWNER_WORDS[place.owner]}"
 
 
 def record_actions(record: Facts, names_story: NamesStory) -> typing.List[Action]:

@@ -7021,6 +7021,26 @@ def run_groups(args):
                              same.get("candidates") == [] and "lesson-question-widgets-test-level-2" in grown
                              and os.path.isfile(os.path.join(root, "product/decisions/lesson-question-widgets-test-level-2.md")),
                              (same, grown)))
+    # the place is written by the skill that owns it — here the line the description skill would write — and the
+    # record links it; the next story's brief sends the plan to that description
+    for root in throwaway():
+        lesson_project(root, 3)
+        cli_text(root, "--lessons", "--write")
+        with open(os.path.join(root, record), "a", encoding="utf-8") as handle:
+            handle.write("\n## Answer\nanswer: a\nby: the-lead\nat: 2026-11-10T10:00:00Z\n")
+        waiting = cli_text(root, "--list-decisions")
+        line = "- Every story names its test level in the criterion: a browser test for the happy path alone."
+        write_file(root, "product/tech.md", read_or_empty(os.path.join(root, "product/tech.md")) + "\n" + line + "\n")
+        with open(os.path.join(root, record), "a", encoding="utf-8") as handle:
+            handle.write("written: product/tech.md\n")
+        linked = cli_text(root, "--list-decisions")
+        brief = cli_text(root, "--stage-brief", "STORY-9", "plan")
+        expectations.append(("lessons: a place is written by the skill that owns it — the inbox says whom an answered "
+                             "lesson waits for, then links what was written, and the next story's plan brief reads it",
+                             "description, not written yet: waits for the description skill" in " ".join(waiting.split())
+                             and "written: product/tech.md" in linked and "product/tech.md" in brief
+                             and line in read_or_empty(os.path.join(root, "product/tech.md")),
+                             (waiting[-400:], linked[-400:], "product/tech.md" in brief)))
     for name, ok, detail in drain(expectations):
         print(f"  {'ok   ' if ok else 'FAIL '} {name}")
         note_result(name, ok, detail)

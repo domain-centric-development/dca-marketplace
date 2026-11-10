@@ -1,6 +1,6 @@
 ---
 name: factory-decisions
-description: The decision inbox of a delivery run, questions and acceptances alike — lists the questions stages could not answer and the delivered stories that wait for a human's look, explains one from its record and the story it blocks, and writes the human's answer into the record on their explicit confirmation (an acceptance delivers the story, a correction goes back into it); for a structural question (a new bounded context, a new relationship, a surface an actor lacks) it also brings the designed context map and the product description in line. Use when a run stopped with needs-human, when someone asks what is waiting on them, to answer a question from a second session, or on "/factory-decisions". Answers nothing itself and implements nothing.
+description: The decision inbox of a delivery run, questions, acceptances and lessons alike — lists the questions stages could not answer, the delivered stories that wait for a human's look and the lessons (what repeats across the stories, and where its correction belongs), explains one from its record and the story it blocks, and writes the human's answer into the record on their explicit confirmation (an acceptance delivers the story, a correction goes back into it); for a structural question (a new bounded context, a new relationship, a surface an actor lacks) it also brings the designed context map and the product description in line. Use when a run stopped with needs-human, when someone asks what is waiting on them, to answer a question from a second session, or on "/factory-decisions". Answers nothing itself and implements nothing.
 ---
 
 # Read, explain and record a decision
@@ -156,6 +156,17 @@ without a session. You may run `factory.sh` for everything that starts no tool �
 `backlog`, `status`, `decisions`, `update`, `verify`, `check` — but never `run`: it starts a tool
 process per stage (`claude -p` and the like) on top of this session, and the runner refuses it
 inside one anyway.
+
+## A lesson
+
+A record with `kind: lesson` lies among the project's own records (`product/decisions/lesson-…`): the factory counted
+the same deviation in several stories and asks where its correction belongs. No story waits for it. Explain it from
+its `## Evidence`; the answer is a place, `not now` or `never`, the person's as always. A place is written by **the
+skill that owns it** — the description skill for the description, the glossary skill for the glossary, the method's
+skills for a project rule or node, `/factory-setup` for a profile check, `/factory-backlog` for a criterion — run with
+the lesson's evidence; you write none of it yourself. The answer block then carries `written: <file>` so the record
+links what was written. The table of places and owners, and what goes up to the maintainers:
+`reference/lessons.md`, beside this file.
 
 ## Run for a request
 
