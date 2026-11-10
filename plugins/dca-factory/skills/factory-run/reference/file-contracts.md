@@ -144,6 +144,7 @@ nothing rewrites it. A line without `seq=` takes its position in the file.
 | `rounds-reset` | `-` | `by=--from` | the runner, on `run --from` |
 | `fresh` | the stage a round restarts fresh at | `rule=RUN-ROUNDS-3` | the runner, on a refusal that repeats the one before |
 | `stop` | the stage whose fresh restart was refused as before | `rule=RUN-ROUNDS-4` | the runner |
+| `mutation` | `-` | `exit=<n>` and `score=<percent>` where the tool's output states one; `skipped=no-key` (the profile names no `mutation:`) or `skipped=no-files` (the story changed no production file) | the runner, after the judge passed the story — a measure, never a refusal |
 | `contradiction` | the stage that stopped because the story, the plan and the tests cannot all hold | `decision=<id>,…` | the runner, when the stage's `## needs-human` carries a `contradiction:` line |
 | `pipeline-changed` | the stage before whose gate the installed pipeline differed | — | the runner |
 | `owned-confirmed` | the parts a person confirmed, comma-separated | — | `--owned-confirm` |

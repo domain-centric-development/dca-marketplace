@@ -2637,6 +2637,20 @@ exit 0
                   f"own sign-in kept",
                   seen[:2] == [wanted, "kept"], f"exit {code}; env.log {seen}; {output.strip().splitlines()[-2:]}")
 
+    # WP-190 A: after the judge's pass the tests' strength is measured where the profile names `mutation:` — skipped
+    # and named without it, and never a refusal either way
+    for line, wanted in (("", "skipped=no-key"), ("mutation: echo 'Killed 3 (75%)'; exit 1\n", "skipped=no-files")):
+        for root in throwaway():
+            env = backlog_fixture(root)
+            with open(os.path.join(root, "dca-factory.profile.yaml"), "a", encoding="utf-8") as handle:
+                handle.write(line)
+            code, output = run_runner(runner, root, "run", "--story", "STORY-2", env=env)
+            journal = read_or_empty(os.path.join(root, ".dca-factory", "evidence", "STORY-2", "journal.tsv"))
+            check(f"runner: the judge's pass is followed by the mutation measure, {wanted.split('=')[1]} — skipped, "
+                  f"named, and the story delivered all the same",
+                  code == 0 and f"\tmutation\t-\t{wanted}" in journal and "mutation — skipped" in output
+                  and story_delivered(root, "STORY-2"), f"exit {code}; {output.strip().splitlines()[-3:]}")
+
     # WP-190 F: a build stage that finds the specification contradicting itself stops with needs-human, and the run
     # journals the stop as a contradiction — counted apart from a failure
     for root in throwaway():

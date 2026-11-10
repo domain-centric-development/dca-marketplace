@@ -270,6 +270,8 @@ PROFILE_KEYS = frozenset((
     "guarded",
     # the told-rule groups every brief leaves out — a bench's ablation switch, `<stage>:<section>, …`
     "ablate",
+    # how strong a story's tests are, measured after the judge — informational, never a gate
+    "mutation",
 ))
 
 #: Key families: `<prefix><name>`, with an open list of names — a test command (`test.integration`), what a

@@ -1,0 +1,4 @@
+kind: mutation
+order: 10
+detect.contains: **/*.gradle **/*.gradle.kts :: info\.solidsoft\.pitest
+mutation: ./gradlew pitest -PtargetClasses={classes}

@@ -179,6 +179,12 @@
 #              denies the tools every other edit there, the gate refuses a change nobody announced, and the
 #              acceptance shows an announced change's diff first. `factory.sh setup --check` proposes it from
 #              what it finds
+# mutation     measures how strong a story's tests are, after its judge passed it: the command runs over the
+#              production files the story changed — `{classes}` their JVM class names, `{files}` their paths —
+#              and its score (PIT's `Killed n (x%)`, Stryker's `mutation score is x %`) goes to the journal and
+#              the status. Informational, never a gate. `./gradlew pitest -PtargetClasses={classes}` (the build
+#              hands the property to `pitest { targetClasses }`), `dotnet stryker --mutate {files}`. Without it
+#              the measure is skipped and named
 # ablate       a bench's switch, never a project's: the told-rule groups every stage brief leaves out, comma-
 #              separated — `<stage>:<section>` (`plan:Do not`), `every:<section>` for what every stage is told.
 #              A group whose removal changes neither verdict, rounds, review counts nor cost beyond the bench's
@@ -191,7 +197,7 @@
 # Which gate file contract this profile is written for. The gate refuses a run when the number is
 # higher than the gate it is asked to run against — the project would be relying on keys that copy
 # of the script does not know, and a key ignored in silence is a check that has quietly gone.
-contract: 31
+contract: 32
 
 release: required
 compile: {{COMPILE_COMMAND}}

@@ -252,6 +252,9 @@ class RunnerStages(StoryRunJournal, StageSteps):
         self._run.tool_in_flight = tool
         return tool
 
+    def measure_mutation(self, story: str) -> None:
+        self._run.measure_mutation(story)
+
     def builder(self, story: str, stages: typing.Sequence[str], start: str, dry: bool) -> RunOutcome:
         return outcome_of(self._run.builder_window(story, self._tool, stages, start, dry))
 

@@ -470,7 +470,18 @@ def story_signals(runs: str, story_id: str, records: typing.Sequence[typing.Any]
                 fresh=sum(1 for e in events if e["kind"] == "fresh"),
                 repeated=sum(1 for e in events if e["kind"] == "stop" and e["fields"].get("rule") == "RUN-ROUNDS-4"),
                 contradictions=sum(1 for e in events if e["kind"] == "contradiction"),
-                acceptance=acceptance_figures(records), production=changed_production(runs, story_id))
+                acceptance=acceptance_figures(records), production=changed_production(runs, story_id),
+                mutation=mutation_of(events))
+
+
+def mutation_of(events: typing.Sequence[typing.Any]) -> typing.Optional[str]:
+    """WP-190 A: the last mutation measure the runner journaled — the score as written, `skipped` where it was
+    skipped, `no score` where the tool stated none; None where none ran."""
+    found = [e for e in events if e["kind"] == "mutation"]
+    if not found:
+        return None
+    fields = found[-1]["fields"]
+    return fields.get("score") or ("skipped" if fields.get("skipped") else "no score")
 
 
 def acceptance_figures(records: typing.Sequence[typing.Any]) -> typing.Optional[typing.Dict[str, typing.Any]]:

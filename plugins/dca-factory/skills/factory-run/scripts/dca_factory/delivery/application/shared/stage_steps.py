@@ -54,3 +54,8 @@ class StageSteps(OutputPort, typing.Protocol):
         """The story integrated into the main line — the integration's own use case behind this port —: how it ends,
         or None where the gate refused it there and the build stage runs again."""
         ...
+
+    def measure_mutation(self, story: str) -> None:
+        """After the judge passed the story: the profile's `mutation:` over the production files it changed, its score
+        journaled — informational, never a refusal; skipped and named without the key."""
+        ...

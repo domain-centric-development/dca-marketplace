@@ -318,6 +318,8 @@ class RunStoryUseCase(RunStoryInputPort):
         judge = self._journal.artefact(story, role_of(Role.JUDGES).value)
         if judged is Judged.PASS:
             self._lines.out("factory: judge verdict 'pass'.")
+            # how strong the story's tests are, read after the judge — a measure, never a gate (WP-190 A)
+            self._steps.measure_mutation(story)
             return None
         if judged is Judged.AGAIN:
             rounds = self._round(story, "judge verdict 'changes-requested'")

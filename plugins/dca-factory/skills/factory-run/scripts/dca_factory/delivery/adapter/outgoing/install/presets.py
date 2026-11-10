@@ -39,7 +39,7 @@ CARRIERS = (
     ("carrier.frontend", "frontend", "frontend"),
 )
 #: The order presets apply in; a later kind's value replaces an earlier one's, an empty value takes it back.
-KINDS = ("stack", "browser", "format", "governance", "stub", "integration", "unit")
+KINDS = ("stack", "browser", "format", "governance", "stub", "integration", "unit", "mutation")
 #: Folders no detection looks into: build output, dependencies, tool state. Bounded in depth as well, so a detection
 #: never walks a whole disk from a mistaken directory.
 PRUNED = {".git", ".gradle", ".idea", ".vs", "build", "bin", "obj", "target", "dist", "out",
@@ -61,6 +61,7 @@ SWITCHES = {
     "formatFix": "the test, build and tidy stages correct formatting with it",
     "browser": "the plan takes browser tests for a page",
     "guarded": "a stage changes these only where its plan announces it; the acceptance shows the diff",
+    "mutation": "after the judge, the story's tests are measured by the mutants they kill — informational",
 }
 #: What decides whether a gate is green, beside the profile itself — proposed as `guarded:`. The commit hook's
 #: folders; the architecture suite's rule-selection files — by name, or a project file that carries the suite's

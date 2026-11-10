@@ -64,6 +64,8 @@ from ....domain.model.story_words import Place
 from ....domain.model.reach import Reach
 from ....domain.model.story import StorySource
 from ..files.stage_evidence_files import source_of
+from ..files.status_facts import changed_production
+from ..stack.mutation_runs import mutation_command, run_mutation, score_of
 from ....domain.service.stage_brief import Brief, written
 from ..files.brief_files import brief_dir, EVERY_STAGE, write_brief, write_every_stage, write_told_everywhere
 from ..files.request_files import default_by, REQUEST_JOURNAL, requests_dir
@@ -550,6 +552,26 @@ class Run(ProfileSource):
             return is_delivered(read_front_matter(find_story(place("epics"), story))[0])
         except GateError:
             return False
+
+    def measure_mutation(self, story: str) -> None:
+        """After the judge passed <story>: the profile's `mutation:` over the production files it changed, its score
+        journaled (`mutation` with `score=`) and said — informational, never a refusal. Without the key, or without a
+        changed production file, skipped and named."""
+        profile = self.profile()
+        command = str(profile.get("mutation") or "").strip()
+        files = changed_production(place("runs"), story)
+        if not command or not files:
+            why = "the profile names no `mutation:`" if not command else "the story changed no production file"
+            print(f"factory: mutation — skipped: {why}; the tests' strength is not measured.")
+            self.journal_line(story, f"{utc()}\tmutation\t-\tskipped={'no-key' if not command else 'no-files'}")
+            return
+        run = mutation_command(command, files)
+        print(f"── mutation  (informational — {len(files)} production file(s))")
+        code, output = run_mutation(run, os.getcwd(), self.timeout)
+        score = score_of(output)
+        said = f"{score} % of the mutants killed" if score is not None else "no score in its output"
+        print(f"factory: mutation — {said} (exit {code}); a measure to read, never a gate.")
+        self.journal_line(story, f"{utc()}\tmutation\t-\texit={code}" + (f"\tscore={score}" if score is not None else ""))
 
     def stage_reach(self, story: typing.Optional[str]) -> Reach:
         """What a stage of <story> may reach: a stage's, or — for a story whose text did not come from a person

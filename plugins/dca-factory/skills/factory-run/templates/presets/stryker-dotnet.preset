@@ -1,0 +1,4 @@
+kind: mutation
+order: 20
+detect.contains: .config/dotnet-tools.json :: dotnet-stryker
+mutation: dotnet stryker --mutate {files}

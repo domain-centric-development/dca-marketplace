@@ -252,6 +252,7 @@ class Stages:
         self.changing = changing                # every refusal names another failing test
         self.history = []                       # the refusals and fresh restarts, as the journal keeps them
         self.recorded = []                      # the rounds written into the round record
+        self.measured = []                      # the stories measured by their mutants after the judge
         self.verdicts = list(verdicts)
         self._kind = kind
         self.ran, self.rounds = [], 0
@@ -290,6 +291,9 @@ class Stages:
 
     def record_round(self, story, stage):
         self.recorded.append(stage.value)
+
+    def measure_mutation(self, story):
+        self.measured.append(story)
 
     def stopped_by_repetition(self, story, stage):
         self.lines.append(f"stop {stage.value}")
@@ -385,6 +389,7 @@ class Run(unittest.TestCase):
         self.assertEqual(stages.ran, ["gate plan", "plan", "test", "gate test", "build", "gate build", "tidy",
                                       "gate tidy", "judge", "document", "gate document"])
         self.assertIn("factory: story S-1 ran through plan,test,build,tidy,judge,document.", said)
+        self.assertEqual(stages.measured, ["S-1"])              # after the judge's pass, never a gate
 
     def test_a_refused_gate_runs_its_stage_again_as_one_more_pass(self):
         stages = Stages(refusals=("build",))
@@ -452,6 +457,7 @@ class Run(unittest.TestCase):
                       "stage.", said)
         # the way back is kept in the journal as the runner took it — a reader never guesses it (WP-194)
         self.assertEqual(["jump judge>build RUN-VERDICT-1"], stages.lines)
+        self.assertEqual(stages.measured, ["S-1"])              # once, after the pass — not after changes-requested
 
     def test_a_story_conflict_stops_for_a_person(self):
         code, said = run(Stages(verdicts=("story-conflict",)), "judge")
