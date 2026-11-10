@@ -136,7 +136,37 @@ def changed_tests_in_plan(runs: str, story_id: str) -> typing.Dict[str, str]:
 HASH_COMMENTS = (".py", ".rb", ".ex", ".exs")
 
 
-BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.S)
+def without_comments(text: str) -> str:
+    """A C-like source without its `//` and `/* … */` comments, read as the compiler reads it: a `//` or `/*` inside
+    a string — an XPath `"//*[@id='x']"`, a URL — is text, not a comment. A comment's line ends stay, so every line
+    keeps its place. Strings: double- and single-quoted with their escapes, Java's and C#'s triple-quoted text blocks,
+    JavaScript's backtick templates."""
+    out: typing.List[str] = []
+    i, n = 0, len(text)
+    while i < n:
+        if text.startswith('"""', i):
+            end = text.find('"""', i + 3)
+            end = n if end < 0 else end + 3
+            out.append(text[i:end])
+            i = end
+        elif text[i] in "\"'`":
+            quote, j = text[i], i + 1
+            while j < n and text[j] != quote and not (text[j] == "\n" and quote != "`"):
+                j += 2 if text[j] == "\\" else 1
+            out.append(text[i:j + 1])
+            i = j + 1
+        elif text.startswith("//", i):
+            end = text.find("\n", i)
+            i = n if end < 0 else end
+        elif text.startswith("/*", i):
+            end = text.find("*/", i + 2)
+            end = n if end < 0 else end + 2
+            out.append("\n" * text.count("\n", i, end))
+            i = end
+        else:
+            out.append(text[i])
+            i += 1
+    return "".join(out)
 
 
 TRIPLE_QUOTED = re.compile(r'""".*?"""|\'\'\'.*?\'\'\'', re.S)
@@ -157,8 +187,7 @@ def meaningful_lines(text: str, path: str) -> typing.List[str]:
         text = TRIPLE_QUOTED.sub("", text)
         lines = [re.sub(r"(^|\s)#.*$", "", line) for line in text.splitlines()]
     else:
-        text = DISABLED_BLOCK.sub("", BLOCK_COMMENT.sub("", text))
-        lines = [re.sub(r"(^|\s)//.*$", "", line) for line in text.splitlines()]
+        lines = DISABLED_BLOCK.sub("", without_comments(text)).splitlines()
     return [line.rstrip() for line in lines if line.strip()]
 
 

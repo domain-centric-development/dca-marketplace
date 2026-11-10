@@ -11,7 +11,7 @@ from ...domain.model.stage import Stage, StageName, StoryKind, Trait
 from ...domain.model.story import Story
 from ...domain.model.profile_facts import ContractNumber
 from ...domain.model.story_words import Place, ScenarioKey, Selector, SELECTOR_FORM
-from ...domain.model.suite_run import CommandKey, Expectation, Requirement, TestOutcome
+from ...domain.model.suite_run import CommandKey, Expectation, Requirement, RunState, TestOutcome
 from ...domain.model.test_facts import MappedTest
 from ...domain.model.story_state import Detail
 from ...domain.model.verdict import CheckName, Finding, FindingState, Findings, Said
@@ -79,6 +79,13 @@ def test_state(result: Verdict, runs: StageRuns, profile: typing.Mapping[str, ty
     if not test_run.has_command:
         return whole_runs
     if expected == "red":
+        # A test this run could not judge — not compiled, not in a report, skipped — says nothing about its red: an
+        # earlier entry stays, or a run that broke on something else would leave it as one never seen red.
+        earlier = runs.digests(story)
+        for outcome in test_run.items:
+            if isinstance(outcome, TestOutcome) and outcome.state not in (RunState.PASSED, RunState.FAILED) \
+                    and outcome.selector.value in earlier and outcome.selector.value not in now_red:
+                kept.setdefault(outcome.selector.value, earlier[outcome.selector.value])
         runs.write_ledger(story, now_red, located, kept)
     elif ledger.present and red_proof is not None:
         tests = tuple(MappedTest(ScenarioKey(""), Selector(selector), Place(path), None, None)
