@@ -219,5 +219,6 @@ project, and the pipeline copy it installs may be committed with it; [NOTICE.md]
 says what is whose. dca-factory up to 0.171.4 and dca-factory-cockpit up to 0.43.1 were published
 under MIT and stay under it.
 
-Contributions are accepted under the licence of the plugin they change, and the copyright holder may
-additionally publish them under other licences.
+Contributions are accepted under the licence of the plugin they change and under the
+[Contributor Licence Agreement](CLA.md), which lets the copyright holder additionally publish them
+under other terms; [CONTRIBUTING.md](CONTRIBUTING.md) says how.
