@@ -6944,6 +6944,91 @@ def run_groups(args):
                 inbox_failures.append(name)
     failures += [(name, [], "") for name in inbox_failures]
 
+    # --- lessons (WP-185): the same kind of question in several stories becomes a record in decide; a person's
+    # `never` stops it for good, `not now` lets it back on more evidence. Counted, never guessed.
+    print()
+    lesson_failures = []
+    expectations = []
+
+    def tagged(n, tag="test-level"):
+        return (f"STORY-{n}-01", DECISION.replace("STORY-1", f"STORY-{n}").replace("tag: scope", f"tag: {tag}"))
+
+    def lesson_project(root, count):
+        build_project(root, **with_decisions(
+            *[tagged(n) for n in range(1, count + 1)], tagged(9, "scope"),
+            extra_sources=tuple((f"product/epics/sample/STORY-{n}/story.md", story(f"STORY-{n}"))
+                                for n in list(range(2, count + 1)) + [9])))
+
+    def cli_json(root, *argv):
+        done = subprocess.run([sys.executable, args.cli, *argv, "--format", "json"], cwd=root, capture_output=True,
+                              text=True, encoding="utf-8", errors="replace")
+        return json.loads(done.stdout or "{}")
+
+    def cli_text(root, *argv):
+        return subprocess.run([sys.executable, args.cli, *argv], cwd=root, capture_output=True, text=True,
+                              encoding="utf-8", errors="replace").stdout
+
+    def answer(path, given):
+        with open(path, "a", encoding="utf-8") as handle:
+            handle.write(f"\n## Answer\nanswer: {given}\nby: the-lead\nat: 2026-11-10T10:00:00Z\n")
+
+    record = "product/decisions/lesson-question-widgets-test-level.md"
+    for root in throwaway():
+        lesson_project(root, 2)
+        below = cli_json(root, "--lessons")
+        expectations.append(("lessons: two stories asking the same kind of question are below the threshold — nothing",
+                             below.get("candidates") == [] and below.get("signals", {}).get("question") == 3, below))
+    for root in throwaway():
+        lesson_project(root, 3)
+        at = cli_json(root, "--lessons")
+        found = at.get("candidates") or [{}]
+        expectations.append(("lessons: the third story asking the same kind of question is one candidate with its "
+                             "evidence, the description recommended",
+                             len(at.get("candidates", [])) == 1 and found[0].get("key") == "widgets/test-level"
+                             and [e["source"] for e in found[0]["evidence"]] == ["STORY-1-01", "STORY-2-01", "STORY-3-01"]
+                             and found[0].get("recommended") == "description", at))
+        written = cli_text(root, "--lessons", "--write")
+        again = cli_text(root, "--lessons", "--write")
+        inbox = cli_json(root, "--list-decisions")
+        lesson = next((r for r in inbox.get("records", []) if r["id"] == "lesson-question-widgets-test-level"), {})
+        text = read_or_empty(os.path.join(root, record))
+        expectations.append(("lessons: written once as an open record of the project's own, a lesson in decide, "
+                             "offering the places with their skills, `not-now` and `never`",
+                             "1 lesson record(s) written" in written and "0 lesson record(s) written" in again
+                             and lesson.get("kind") == "lesson" and lesson.get("state") == "open"
+                             and not lesson.get("story") and "`/dca-describe`" in text
+                             and "- f: not-now" in text and "- g: never" in text and "kind: lesson" in text,
+                             (written, again, lesson.get("kind"), text[:400])))
+        answer(os.path.join(root, record), "g")
+        build_project(root, **with_decisions(*[tagged(n) for n in range(1, 6)],
+                                             extra_sources=tuple((f"product/epics/sample/STORY-{n}/story.md",
+                                                                  story(f"STORY-{n}")) for n in range(2, 6))))
+        after = cli_json(root, "--lessons")
+        rewritten = cli_text(root, "--lessons", "--write")
+        expectations.append(("lessons: `never` stops the same candidate, even on more evidence",
+                             after.get("candidates") == [] and "0 lesson record(s) written" in rewritten,
+                             (after, rewritten)))
+    for root in throwaway():
+        lesson_project(root, 3)
+        cli_text(root, "--lessons", "--write")
+        answer(os.path.join(root, record), "f")
+        same = cli_json(root, "--lessons")
+        build_project(root, **with_decisions(*[tagged(n) for n in range(1, 5)],
+                                             extra_sources=tuple((f"product/epics/sample/STORY-{n}/story.md",
+                                                                  story(f"STORY-{n}")) for n in range(2, 5))))
+        grown = cli_text(root, "--lessons", "--write")
+        expectations.append(("lessons: `not now` waits for more evidence, then asks again under the next free id",
+                             same.get("candidates") == [] and "lesson-question-widgets-test-level-2" in grown
+                             and os.path.isfile(os.path.join(root, "product/decisions/lesson-question-widgets-test-level-2.md")),
+                             (same, grown)))
+    for name, ok, detail in drain(expectations):
+        print(f"  {'ok   ' if ok else 'FAIL '} {name}")
+        note_result(name, ok, detail)
+        if not ok:
+            print(f"          {detail}")
+            lesson_failures.append(name)
+    failures += [(name, [], "") for name in lesson_failures]
+
     # --- the change check: the same checks outside a story, and the commit checks what it commits
     print()
     change_failures = []
@@ -9920,7 +10005,7 @@ def run_groups(args):
                          not hits, ", ".join(hits[:5])))
     # the skills call only the runner's verbs, which mirror them (WP-62 item 11)
     verbs = {"setup", "backlog", "run", "status", "decisions", "discover", "follow", "help", "update", "verify", "check",
-             "up", "down", "serve", "request", "requests", "rules", "brief"}
+             "up", "down", "serve", "request", "requests", "rules", "brief", "lessons"}
     called = []
     for folder, _, names in os.walk(skills_root):
         for name in names:

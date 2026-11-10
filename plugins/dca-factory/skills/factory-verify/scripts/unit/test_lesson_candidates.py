@@ -92,3 +92,35 @@ class LessonSignalReadingTest(unittest.TestCase):
         self.assertEqual([("finding", "hexagonal/domain-term"), ("term", "entry")],
                          [(s.kind.value, s.key.value) for s in found])
         self.assertEqual("s-1#2", found[0].evidence.source.value)
+
+
+class LessonRecordTest(unittest.TestCase):
+    """A lesson is a decision record of its own kind: the factory writes `not now` and `never` from a press; a place
+    goes through the decisions skill, which has the owning skill write it. Its answer changes no story."""
+
+    def lesson(self):
+        from dca_factory.delivery.domain.model.decision_record import (
+            ANSWER_FIELDS, Asker, DecisionRecord, DecisionState, OptionKey, OptionLine, RecordContent, RecordId,
+            RecordKind)
+        lines = [("a", "description — a statement"), ("f", "not-now — asked again"), ("g", "never — not again")]
+        return DecisionRecord.restore(
+            RecordId("lesson-question-x"), RecordKind.LESSON, Asker.STAGE, DecisionState.OPEN,
+            [OptionKey(k) for k, _ in lines],
+            content=RecordContent(Detail("The same kind of question in 3 stories"), None, Detail(""), Detail(""),
+                                  ANSWER_FIELDS, tuple(OptionLine(OptionKey(k), Detail(t)) for k, t in lines)))
+
+    def test_not_now_and_never_settle_alone_a_place_needs_its_skill(self):
+        from dca_factory.delivery.domain.model.decision_record import OptionKey
+        record = self.lesson()
+        self.assertTrue(record.settles_alone(OptionKey("g")))
+        self.assertTrue(record.settles_alone(OptionKey("f")))
+        self.assertFalse(record.settles_alone(OptionKey("a")))
+
+    def test_an_answered_lesson_backs_no_change_of_a_story_and_says_so_in_its_event(self):
+        from dca_factory.delivery.domain.model.decision_record import LessonAnswered, OptionKey
+        from dca_factory.delivery.domain.model.moment import Moment
+        from dca_factory.delivery.domain.model.person import Person
+        record = self.lesson()
+        record.choose(OptionKey("g"), Person("the-lead"), Moment("2026-11-10T10:00:00Z"))
+        self.assertFalse(record.backs_change())
+        self.assertEqual([LessonAnswered], [type(e) for e in record.domain_events()])

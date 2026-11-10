@@ -10,6 +10,8 @@ from ....building_blocks import UseCase
 from ..requests.request_queue import RequestQueue, RunAsked
 from ..shared.backlog_schedule import BacklogSchedule, ScheduleRead
 from ..shared.backlog_worker import BacklogCheckout, BacklogWorker, Child
+from ..shared.lesson_records import LessonProposals
+from ...domain.model.moment import Moment
 from ..shared.requests import RequestFacts, stories_of
 from ..shared.run_lines import RunLines
 from ..delivery.pipeline_rules import decides
@@ -38,7 +40,10 @@ class RunBacklogUseCase(RunBacklogInputPort):
     stop concerns the whole run."""
 
     def __init__(self, schedule: BacklogSchedule, checkout: BacklogCheckout, worker: BacklogWorker,
-                 queue: RequestQueue, lines: RunLines) -> None:
+                 queue: RequestQueue, lines: RunLines, lessons: typing.Optional[LessonProposals] = None,
+                 now: typing.Optional[typing.Callable[[], str]] = None) -> None:
+        self._lessons = lessons
+        self._now = now
         self._schedule = schedule
         self._checkout = checkout
         self._worker = worker
@@ -269,7 +274,16 @@ class RunBacklogUseCase(RunBacklogInputPort):
         self._lines.err("factory: the schedule could not be read.")
         return 1
 
+    def _propose_lessons(self) -> None:
+        """What repeats across the stories becomes a lesson in decide, beside the stories — none waits for it."""
+        if self._lessons is None or self._now is None:
+            return
+        for rid, kind, where in self._lessons.propose(Moment(self._now())):
+            self._lines.out(f"factory: a lesson waits in decide — the same {kind.value} in several stories ({where}); "
+                            f"/factory-decisions {rid}")
+
     def _nothing_more(self, schedule: ScheduleRead, watch: bool) -> None:
+        self._propose_lessons()
         self._lines.out(schedule.text)
         self._lines.out("factory: nothing more can run"
                         + (", and nothing waits on an answer that would change that" if watch else "") + ".")
@@ -277,6 +291,7 @@ class RunBacklogUseCase(RunBacklogInputPort):
     def _waiting_note(self, schedule: ScheduleRead, previous: str, interval: int) -> str:
         """Waiting is reading files, never asking an agent: an unchanged schedule is said once."""
         if schedule.text != previous:
+            self._propose_lessons()
             self._lines.out(schedule.text)
             what = "an answer" if schedule.waits else "a released story or a request"
             self._lines.out(f"factory: waiting for {what} — the schedule is read again every {interval}s; "

@@ -7,7 +7,7 @@ import os
 import re
 import typing
 
-from .decision_record_files import decision_files, decision_state, project_decision_files, record_of
+from .decision_record_files import decision_files, decision_state, is_lesson, project_decision_files, record_of
 from .findings_files import findings_path, findings_rows
 from .status_facts import correction_code
 from .story_layout import story_files, story_id_of
@@ -29,11 +29,6 @@ RULE_ID = re.compile(r"\b[A-Z]{2,}(?:-[A-Z]{2,})+-\d+[A-Z]?\b")
 DOMAIN_CODE = re.compile(r"^\s*`?(domain-(?:concept|boundary|invariant|term))`?\s*:", re.I)
 #: The first word in back ticks — the term a `domain-term` finding flags.
 TERM = re.compile(r"`([^`]{1,40})`")
-
-#: A lesson record's own front matter: `kind: lesson`, the candidate's `lesson:` kind and `key:`, `stories:` counted
-#: when it was asked.
-LESSON_KIND = "lesson"
-
 
 def finding_signals(story: StoryId, row: typing.Tuple[str, ...]) -> typing.List[Signal]:
     """A finding row's signals: the finding under its perspective and the rule it names — else its domain code —,
@@ -65,10 +60,6 @@ def assumption_signals(story: StoryId, body: str) -> typing.List[Signal]:
                 found.append(Signal(LessonKind.ASSUMPTION, SignalKey(said),
                                     Evidence(story, Detail(f"{story.value} assumptions"))))
     return found
-
-
-def lesson_front(front: typing.Mapping[str, typing.Any]) -> bool:
-    return str(front.get("kind", "")).strip().lower() == LESSON_KIND
 
 
 class LessonSignalFiles(LessonSignals):
@@ -110,7 +101,7 @@ class LessonSignalFiles(LessonSignals):
     def decided(self) -> typing.Sequence[Decided]:
         found = []
         for name, front, body, state, error, _path in project_decision_files(self._cwd):
-            if error or not lesson_front(front):
+            if error or not is_lesson(front):
                 continue
             try:
                 kind = LessonKind(str(front.get("lesson", "")).strip().lower())

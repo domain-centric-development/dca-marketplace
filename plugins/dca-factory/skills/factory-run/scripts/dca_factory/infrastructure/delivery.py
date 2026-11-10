@@ -78,6 +78,9 @@ from ..delivery.application.checkout.give_checkout_back import GiveCheckoutBackU
 from ..delivery.application.checkout.mark_listening import MarkListeningUseCase
 from ..delivery.application.status.list_findings import ListFindingsUseCase
 from ..delivery.application.lessons.show_lessons import ShowLessonsUseCase
+from ..delivery.application.lessons.write_lessons import WriteLessonsUseCase
+from ..delivery.application.shared.lesson_records import LessonProposals
+from ..delivery.adapter.outgoing.files.lesson_record_files import LessonRecordFiles
 from ..delivery.adapter.outgoing.files.lesson_signal_files import LessonSignalFiles
 from ..delivery.application.status.follow_output import FollowOutputUseCase
 from ..delivery.application.status.follow_factory_log import FollowFactoryLogUseCase
@@ -267,6 +270,14 @@ def list_findings(cwd: str, epics: str, runs: str) -> ListFindingsUseCase:
 
 def show_lessons(cwd: str, epics: str) -> ShowLessonsUseCase:
     return ShowLessonsUseCase(LessonSignalFiles(cwd, epics))
+
+
+def write_lessons(cwd: str) -> WriteLessonsUseCase:
+    return WriteLessonsUseCase(LessonSignalFiles(cwd), LessonRecordFiles(cwd))
+
+
+def lesson_proposals(cwd: str) -> LessonProposals:
+    return LessonProposals(LessonSignalFiles(cwd), LessonRecordFiles(cwd))
 
 
 def open_work_window(cwd: str, runs: str) -> OpenWorkWindowUseCase:

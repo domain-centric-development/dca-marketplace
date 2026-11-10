@@ -6,7 +6,7 @@ import dataclasses
 import typing
 
 from ....building_blocks import DomainEventPublisher, TransactionBoundary, UseCase
-from ...domain.model.decision_record import Asker, NotOpen, OptionKey, OptionNotOffered, RecordId
+from ...domain.model.decision_record import NotOpen, OptionKey, OptionNotOffered, RecordId
 from ...domain.model.moment import Moment
 from ...domain.model.person import Person
 from ..shared.decision_record_repository import DecisionRecordRepository
@@ -35,8 +35,9 @@ class AnswerQuestionInputPort(UseCase[AnswerQuestionCommand, AnswerQuestionResul
 
 class AnswerQuestionUseCase(AnswerQuestionInputPort):
     """An option named for a request's own question (`request:` in the record), open and offering that option, is
-    written as the answer; the request that asked runs again and applies it. A stage's question goes through the
-    decisions skill, which weighs what an answer changes — a test, the designed map."""
+    written as the answer; the request that asked runs again and applies it. So is a lesson's `not now` or `never`,
+    which writes nothing else. A stage's question goes through the decisions skill, which weighs what an answer
+    changes — a test, the designed map —, and so does a lesson's place, which the skill owning it writes."""
 
     def __init__(self, records: DecisionRecordRepository, events: DomainEventPublisher,
                  transactions: TransactionBoundary) -> None:
@@ -46,8 +47,9 @@ class AnswerQuestionUseCase(AnswerQuestionInputPort):
 
     def execute(self, command: AnswerQuestionCommand) -> AnswerQuestionResult:
         record = self._records.get(command.record)
-        if record.asker is not Asker.REQUEST:
-            return NeedsSkill("a stage's question — the decisions skill weighs what its answer changes")
+        if not record.settles_alone(command.option):
+            return NeedsSkill("a stage's question or a lesson's place — the decisions skill weighs what its answer "
+                              "changes and has the owning skill write it")
         try:
             record.choose(command.option, command.by, command.at)
         except (NotOpen, OptionNotOffered) as refused:

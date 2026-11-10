@@ -440,7 +440,8 @@ class DecisionInboxFiles(DecisionInbox):
             acceptance = is_acceptance(front)
             options = [] if acceptance else decision_options(body)
             found.append(dict(name=name, error=None, path=shown(path), id=str(front.get("id", name)).strip(),
-                              state=state, kind="acceptance" if acceptance else "question",
+                              state=state, kind="acceptance" if acceptance else "lesson" if is_lesson(front)
+                              else "question",
                               story=str(front.get("story", "")).strip(), stage=str(front.get("stage", "?")).strip(),
                               asked=str(front.get("asked", "")), request=str(front.get("request", "")).strip(),
                               title=(body.strip().splitlines() or ["(no title)"])[0].lstrip("# ").strip(),
@@ -469,13 +470,22 @@ class RequestRecordFiles(RequestRecords):
         mark_questioned(self._cwd, place("runs"), paths, request)
 
 
+#: A lesson record names its kind in its front matter: `kind: lesson` (WP-185).
+LESSON_KIND = "lesson"
+
+
+def is_lesson(front: Front) -> bool:
+    """A lesson record: `kind: lesson` — the project's own, beside the epics, holding no story back."""
+    return str(front.get("kind", "")).strip().lower() == LESSON_KIND
+
+
 def record_of(name: str, front: Front, body: str, state: str, answer: typing.Mapping[str, typing.Any]) -> DecisionRecord:
     """The record in a file named <name>, read off its front matter, its body, its state and its `## Answer`."""
     story = str(front.get("story", "")).strip()
     stage = str(front.get("stage", "")).strip() if DecisionState(state).waits else resume_stage(front, answer)
     return DecisionRecord.restore(
         RecordId(str(front.get("id", name)).strip()),
-        RecordKind.ACCEPTANCE if is_acceptance(front) else RecordKind.QUESTION,
+        RecordKind.ACCEPTANCE if is_acceptance(front) else RecordKind.LESSON if is_lesson(front) else RecordKind.QUESTION,
         Asker.REQUEST if str(front.get("request", "")).strip() else Asker.STAGE,
         DecisionState(state),
         [OptionKey(option["key"]) for option in decision_options(body)],

@@ -15,6 +15,7 @@ from ..delivery.application.requests.work_request import RequestWorked
 from ..delivery.application.shared.requests import KIND, RequestFacts
 from ..delivery.adapter.incoming.runner.usage import book_request_usage
 from ..delivery.adapter.outgoing.process.console_lines import ConsoleLines
+from ..delivery.adapter.outgoing.files.request_files import stamp_utc
 from ..delivery.application.backlog.run_backlog import RunBacklogCommand, RunBacklogUseCase
 # the rules a refused gate routes by: the modules of checks register them, as in the gate's composition root
 from ..delivery.application.delivery import pass_actions, process_checks, stage_checks  # noqa: F401
@@ -67,7 +68,8 @@ class RunnerCases:
 
     def run_backlog(self, run: Run, tool: str, slots: int, watch: bool, interval: int, dry: bool) -> int:
         backlog = RunnerBacklog(run, tool)
-        return RunBacklogUseCase(backlog, backlog, backlog, self.queue(run), ConsoleLines()).execute(
+        return RunBacklogUseCase(backlog, backlog, backlog, self.queue(run), ConsoleLines(),
+                                 delivery.lesson_proposals(run.home), stamp_utc).execute(
             RunBacklogCommand(slots, watch, interval, dry, run.keep_going, run.stay, run.lane))
 
     def queue(self, run: Run) -> RequestQueue:

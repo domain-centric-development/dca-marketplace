@@ -11,6 +11,7 @@ what they say.
     factory-cli.py --help-view [--format text|md|json]  the factory explained, with this project's place in it
     factory-cli.py --list-decisions [--story <id>]      the decision inbox, one line per record
     factory-cli.py --lessons [--format text|json]       what repeats across the stories: the lesson candidates
+    factory-cli.py --lessons --write                    each candidate nobody was asked yet, as a lesson record in decide
     factory-cli.py --discover-list [--format text|md|json]  every discovery topic, its proposals and which are epics
     factory-cli.py --schedule                           every story's state and the next one to run
     factory-cli.py --story <id> --start | --kind        where a run begins | `story`, `journey` or `adopt`
@@ -73,6 +74,8 @@ from ....application.cost.show_spent import ShowSpentQuery
 from ....application.shared.usage_ledger import Spent
 from ....application.status.list_findings import ListFindingsQuery
 from ....application.lessons.show_lessons import ShowLessonsQuery
+from ....application.lessons.write_lessons import WriteLessonsCommand
+from ....domain.model.moment import Moment
 from ....application.delivery.show_brief import ShowBriefQuery
 from ....application.delivery.show_story_kind import ShowStoryKindQuery
 from .brief_view import brief_model, markdown as brief_markdown
@@ -603,6 +606,8 @@ def main(argv: typing.Sequence[str]) -> int:
     parser.add_argument("--lines", type=int, default=30, help="with --follow --once: how many lines (0: all)")
     parser.add_argument("--lessons", action="store_true",
                         help="the lesson candidates: what repeats across the stories at its threshold, with its evidence")
+    parser.add_argument("--write", action="store_true",
+                        help="with --lessons: write each candidate nobody was asked yet as an open lesson record")
     parser.add_argument("--list-decisions", action="store_true",
                         help="print the decision inbox (all stories, or --story's) and exit")
     parser.add_argument("--claim", metavar="OWNER", help="take the checkout for one worker (exit 3: held by another)")
@@ -813,6 +818,13 @@ def main(argv: typing.Sequence[str]) -> int:
                       args.request)
     if args.list_decisions:
         return list_decisions(cwd, args.story, args.format, args.color)
+    if args.lessons and args.write:
+        written = root.wiring.write_lessons(cwd).execute(WriteLessonsCommand(Moment(time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))))["written"]
+        for one in written:
+            print(f"{one['id']}\t{one['kind']}\t{one['path']}")
+        print(f"factory: {len(written)} lesson record(s) written — they wait in decide beside the stories; none holds "
+              "a story back")
+        return 0
     if args.lessons:
         return lessons(root.wiring.show_lessons(cwd, args.epics).execute(ShowLessonsQuery()), args.format)
     if args.discover_list:

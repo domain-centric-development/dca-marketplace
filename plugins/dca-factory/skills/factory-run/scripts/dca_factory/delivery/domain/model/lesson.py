@@ -106,8 +106,8 @@ SAYS: typing.Mapping[LessonPlace, Detail] = {
     LessonPlace.RULE_LIBRARY: Detail("the method's rule suite could catch this — an issue text for its maintainers"),
     LessonPlace.KNOWLEDGE_CATALOG: Detail("the method's knowledge should have said this — an issue text for its "
                                           "maintainers"),
-    LessonPlace.NOT_NOW: Detail("not now — asked again once the evidence has grown"),
-    LessonPlace.NEVER: Detail("never — the same candidate does not come back"),
+    LessonPlace.NOT_NOW: Detail("asked again once the evidence has grown"),
+    LessonPlace.NEVER: Detail("the same candidate does not come back"),
 }
 
 #: The places a candidate offers by kind, the recommended one first; `not-now` and `never` close every list.

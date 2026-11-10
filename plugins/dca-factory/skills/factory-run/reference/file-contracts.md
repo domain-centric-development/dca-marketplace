@@ -470,6 +470,20 @@ record lives in its story's folder. Committed with the backlog: a commit of thes
 A record beside a story may carry `request:` as well — a skill run for a request asked about that story; it blocks
 the story like any open record and is stamped applied by the request's next run.
 
+### A lesson — `product/decisions/lesson-<kind>-<key>.md`
+
+What repeats across the stories, counted and never guessed: a stage's question of the same `tag:` in the same context
+in three stories, a judge's finding under the same perspective and rule id (else domain code) in three, the same coded
+correction at acceptance, the same answered assumption or the same flagged term in two (`lesson.py`, `THRESHOLDS`).
+`factory.sh lessons` shows the candidates; the backlog run writes each one nobody was asked yet when nothing more can
+run or the schedule changes while it waits (`factory.sh lessons --write` by hand). Front matter `kind: lesson`,
+`lesson:` (question, finding, correction, assumption, term), `key:`, `stories:` (counted when asked) and `asked:`;
+`## Evidence` names the stories and the records, finding rows or lines; `## Options` the places, the recommended one
+first, each with the skill that writes it, then `not-now` and `never`. It is answered like any record and holds no
+story back. `never` stops the same candidate for good; `not now` lets it back under the next free id
+(`<id>-2`) once its evidence holds more stories than `stories:`; a place is written by the skill that owns it, never
+by the factory.
+
 ## Requests — `.dca-factory/requests/<stamp>-<kind>.md`
 
 What a person asks the factory to do from a page, a terminal or a view: front matter (`kind`, what it is about,

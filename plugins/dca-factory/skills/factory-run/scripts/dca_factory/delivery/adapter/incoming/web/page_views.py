@@ -433,9 +433,11 @@ function recordCard(r, o = {}) {
     + words.map(a => ui.part(accept ? "or correct it" : options.length ? "or in your words" : "your answer", act(a))).join("")
     + (first ? "" : full)
     + ui.id(`${r.story ? `${ui.story(r.story, r.story)} · ` : ""}${esc(r.path)}`, {block: true, html: true});
-  return ui.record({accept, about: o.about || `${accept ? "acceptance" : "question"} · ${r.id}${r.story ? ` · ${r.stage}` : ""}`, text: inline(r.text), body});
+  return ui.record({accept, about: o.about || `${recordKind(r)} · ${r.id}${r.story ? ` · ${r.stage}` : ""}`, text: inline(r.text), body});
 }
 
+// a record's kind in words: an acceptance, a question, or a lesson — what repeats across the stories (WP-185)
+const recordKind = r => r.kind === "acceptance" ? "acceptance" : r.kind === "lesson" ? "lesson" : "question";
 const plain = text => String(text || "").replace(/[`*_]/g, "");
 function decide(st) {
   const records = ((S.decisions || {}).records || []).filter(r => (r.actions || []).length && (r.place || "decide") === "decide");
@@ -464,9 +466,11 @@ function decide(st) {
     const on = records.find(r => r.id === S.record) || records[0];
     const items = records.map(r => ({mark: r.kind === "acceptance" ? "look" : "question", on: r.id === on.id,
       press: {label: plain(r.text), attrs: {"data-record": r.id}},
-      what: ui.id(`${r.kind === "acceptance" ? "acceptance" : "question"} · ${r.id}${r.story ? ` · ${r.story} · ${r.stage}` : ""}`, {block: true})}));
+      what: ui.id(`${recordKind(r)} · ${r.id}${r.story ? ` · ${r.story} · ${r.stage}` : ""}`, {block: true})}));
+    const lessons = records.filter(r => r.kind === "lesson").length;
     return ui.master({label: "the record", bare: true, detail: recordCard(on),
-      list: ui.card("Questions and results", `${records.length} to answer or to accept — open one`, ui.list(items)) + also});
+      list: ui.card(lessons ? "Questions, results and lessons" : "Questions and results",
+        `${records.length} to answer or to accept — open one` + (lessons ? `; ${lessons} lesson${lessons === 1 ? "" : "s"} — where a repeated correction belongs, holding no story back` : ""), ui.list(items)) + also});
   }
   return records.length ? ui.split({main: records.map(recordCard).join(""), side: also}) : also;
 }

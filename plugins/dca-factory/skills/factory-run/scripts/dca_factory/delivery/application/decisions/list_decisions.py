@@ -93,7 +93,8 @@ def record_actions(record: Facts, names_story: NamesStory) -> typing.List[Action
                         label="correct"))
     return offered(*[dict(make_action(names_story, text=o["text"], skill=f"{head}: answer {o['key']}", label=o["key"],
                                       primary=o["key"] == record["recommended"]),
-                          note="the stage's recommendation" if o["key"] == record["recommended"] else "")
+                          note=(("the factory's count recommends it" if record["kind"] == "lesson"
+                                 else "the stage's recommendation") if o["key"] == record["recommended"] else ""))
                      for o in record["options"]],
                    make_action(names_story, text="Your answer, in your words", skill=f"{head}: answer",
                                label="answer"))
