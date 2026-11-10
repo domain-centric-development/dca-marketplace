@@ -62,7 +62,8 @@ function curveSvg(curve, width = CURVE.w) {
 // the highest level where its span overlaps no other line's; two lines that only meet at one tile share one. A line
 // meets its tile in the middle when it is that tile's only one; several spread round the middle, the tile's outgoing
 // lines left (the deeper further right), its incoming ones right (the deeper further left), so none crosses another.
-const TRACK = {level: 16, first: 6, spread: 14, rise: 4, label: 11};
+// A named way sits its words above its own line: the levels then stand wider apart, so no word touches the line above.
+const TRACK = {level: 16, labelled: 26, first: 6, spread: 17, rise: 4, label: 11, above: 6};
 function drawWays(track) {
   const wrap = track.querySelector(".rule-track__wrap"), svg = track.querySelector(".rule-track__ways");
   if (!wrap || !svg) return;
@@ -74,12 +75,12 @@ function drawWays(track) {
   ways = ways.filter(w => order.includes(w.source) && order.includes(w.target))
     .map(w => Object.assign({}, w, {lo: order.indexOf(w.target), hi: order.indexOf(w.source)}))
     .sort((a, b) => (a.hi - a.lo) - (b.hi - b.lo));
-  const levels = [];
+  const levels = [], step = ways.some(w => w.solid && w.label) ? TRACK.labelled : TRACK.level;
   ways.forEach(w => {
     let k = 0;
     while ((levels[k] || []).some(([a, b]) => Math.max(a, w.lo) < Math.min(b, w.hi))) k++;
     (levels[k] = levels[k] || []).push([w.lo, w.hi]);
-    w.depth = TRACK.first + (k + 1) * TRACK.level;
+    w.depth = TRACK.first + (k + 1) * step;
   });
   const ends = {};
   ways.forEach(w => { (ends[w.source] = ends[w.source] || []).push({w, out: true}); (ends[w.target] = ends[w.target] || []).push({w, out: false}); });
@@ -95,10 +96,10 @@ function drawWays(track) {
     const y = a.bottom + 2, d = `M${w.x1} ${y} V ${y + w.depth} H ${w.x2} V ${y + TRACK.rise}`, cost = w.round ? "round" : "free";
     out += `<path class="${mods("rule-track__way", [cost, w.solid ? "solid" : "quiet"])}" d="${d}" marker-end="url(#rule-track-head-${cost})"/>`
       + `<path class="rule-track__hit" d="${d}"><title>${esc(w.title || "")}</title></path>`;
-    if (w.solid && w.label) out += `<text class="${mods("rule-track__label", [cost])}" x="${w.x2 + TRACK.label}" y="${y + w.depth - 5}">${esc(w.label)}</text>`;
+    if (w.solid && w.label) out += `<text class="${mods("rule-track__label", [cost])}" x="${w.x2 + TRACK.label}" y="${y + w.depth - TRACK.above}">${esc(w.label)}</text>`;
   });
   svg.innerHTML = out;
-  wrap.style.setProperty("--band", `${ways.length ? 14 + levels.length * TRACK.level : 8}px`);
+  wrap.style.setProperty("--band", `${ways.length ? 14 + levels.length * step : 8}px`);
 }
 
 // --- primitives
