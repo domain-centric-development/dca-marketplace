@@ -44,15 +44,17 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 
 def can_symlink():
-    """Whether `ln -s` in the runner's shell makes a symlink — asked the way the installer asks it,
-    not through `os.symlink`: on Windows an administrator's Python can link while MSYS's `ln -s`
+    """Whether a link made here is a link — asked the way the installer asks it, through `os.symlink`
+    in Python, not through `ln -s`: on Windows an administrator's Python can link while MSYS's `ln -s`
     still copies, and the two answers would send the install and these cases different ways.
-    Where the shell cannot link, `setup` copies, and the link cases here have no subject."""
+    Where Python cannot link, `setup` copies, and the link cases here have no subject."""
     with tempfile.TemporaryDirectory() as probe:
         with open(os.path.join(probe, "a"), "w", encoding="utf-8") as handle:
             handle.write("")
-        subprocess.run([BASH, "-c", f'ln -s "{shell_path(probe)}/a" "{shell_path(probe)}/b"'],
-                       capture_output=True)
+        try:
+            os.symlink(os.path.join(probe, "a"), os.path.join(probe, "b"))
+        except OSError:
+            return False
         return os.path.islink(os.path.join(probe, "b"))
 
 
@@ -1509,6 +1511,8 @@ def verify_runner(runner, verbose=False):
         for name in ("claude", "codex"):
             write_file(root, f"bin/{name}", "#!/bin/sh\nexit 0\n")
             os.chmod(os.path.join(root, "bin", name), 0o755)
+            if os.name == "nt":       # the runner looks a tool up the way Windows does: by a name with an extension
+                write_file(root, f"bin/{name}.cmd", "@exit /b 0\n")
         path = os.path.join(root, "bin") + os.pathsep + os.environ.get("PATH", "")
         quiet_env = {k: v for k, v in os.environ.items() if k != "FACTORY_TOOL_EXPLICIT"}
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--dry-run", "--shared-builder",
@@ -2616,7 +2620,8 @@ exit 0
               f"exit {code}; {output.strip().splitlines()[-2:]}")
 
     # WP-190 E: a story whose text came from a tracker runs its stages without a secret in their environment — the
-    # tool's own sign-in kept —, a person's story with everything
+    # tool's own sign-in kept —, a person's story with everything. The tool is named: its sign-in is what is kept,
+    # and a machine without any tool on the PATH must not decide the case
     for origin, wanted in (("tracker", "absent"), ("person", "present")):
         for root in throwaway():
             env = backlog_fixture(root)
@@ -2631,7 +2636,7 @@ exit 0
                 'echo "$t ${ANTHROPIC_API_KEY:-none}" >> env.log')
             with open(os.path.join(root, "stand-in.sh"), "w", encoding="utf-8", newline="\n") as handle:
                 handle.write(stand_in)
-            code, output = run_runner(runner, root, "run", "--story", "STORY-2", "--max-stages", "1",
+            code, output = run_runner(runner, root, "run", "--story", "STORY-2", "--max-stages", "1", "--tool", "claude",
                                       env={**env, "SHOP_API_TOKEN": "s3cret", "ANTHROPIC_API_KEY": "kept"})
             seen = read_or_empty(os.path.join(root, "env.log")).split()
             check(f"runner: a story whose source is {origin} runs its stage with the secret {wanted}, the tool's "
@@ -3665,7 +3670,7 @@ exit 0
                   f"{target} → {os.path.realpath(link) if os.path.exists(link) else 'missing'}")
         else:
             # No symlinks for this account: the install copies and says so, rather than failing
-            # on a `ln -s` that this shell cannot honour.
+            # on a link this machine cannot make.
             check("install: without symlinks the skills are copied, and the install says why",
                   os.path.isdir(os.path.join(target, "factory-run")) and not os.path.islink(target)
                   and "copied" in output,

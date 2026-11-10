@@ -9,6 +9,8 @@ import re
 import subprocess
 import typing
 
+from .commands import posix_shell
+
 #: Where a JVM class's qualified name starts in its path.
 JVM_ROOTS = re.compile(r"(?:^|/)(?:java|kotlin|scala|groovy)/(.+)\.(?:java|kt|scala|groovy)$")
 
@@ -43,9 +45,12 @@ def mutation_command(command: str, files: typing.Sequence[str]) -> str:
 
 
 def run_mutation(command: str, cwd: str, timeout: typing.Optional[int]) -> typing.Tuple[int, str]:
-    """The command through a shell, its exit and its output — a timeout is exit 124 and what it printed so far."""
+    """The command through the shell every profile command runs in — Git's bash on Windows, the system shell
+    elsewhere —, its exit and its output; a timeout is exit 124 and what it printed so far."""
+    bash = posix_shell()
+    argv: typing.Union[str, typing.List[str]] = [bash, "-c", command] if bash else command
     try:
-        done = subprocess.run(command, shell=True, cwd=cwd, capture_output=True, text=True, encoding="utf-8",
+        done = subprocess.run(argv, shell=not bash, cwd=cwd, capture_output=True, text=True, encoding="utf-8",
                               errors="replace", timeout=timeout or None)
         return done.returncode, done.stdout + done.stderr
     except subprocess.TimeoutExpired as expired:

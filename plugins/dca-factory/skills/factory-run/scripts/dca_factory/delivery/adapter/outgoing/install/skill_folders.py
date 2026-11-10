@@ -544,7 +544,7 @@ def prune_renamed_copies(source: str, tool_dirs: typing.Sequence[str]) -> None:
         if not os.path.isdir(target) or os.path.islink(target):
             continue
         for old, new, plugin in RENAMED_SKILLS:
-            copy = os.path.join(target, old)
+            copy = f"{target}/{old}"      # joined with `/`, as every other line of the install names a path
             # A link under the old name whose folder is gone points at nothing: the rename moved the folder, and the
             # new name is linked by the install. A link that still resolves is the project's own choice.
             if os.path.islink(copy) and not os.path.exists(copy):
