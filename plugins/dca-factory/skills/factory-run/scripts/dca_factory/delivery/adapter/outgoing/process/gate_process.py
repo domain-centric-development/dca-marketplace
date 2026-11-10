@@ -176,5 +176,7 @@ class _Both(io.TextIOBase):
         return len(text)
 
     def flush(self) -> None:
-        self._kept.flush()
+        # the tee is collected after the report's `with` closed it; then only the terminal is left to flush
+        if not self._kept.closed:
+            self._kept.flush()
         self._shown.flush()
