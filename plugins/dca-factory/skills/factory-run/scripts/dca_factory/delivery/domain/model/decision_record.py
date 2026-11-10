@@ -9,6 +9,7 @@ import typing
 from ....building_blocks import AggregateRoot, DomainEvent, DomainException, Id, Value
 from .moment import Moment
 from .person import Person
+from .question_tag import QuestionTag
 from .stage import StageName
 from .story import StoryId
 from .story_words import Detail
@@ -239,6 +240,12 @@ class RecordContent(Value):
     missing: typing.Tuple[AnswerField, ...]
     #: the options with their first lines, as the record's `## Options` offers them
     option_lines: typing.Tuple[OptionLine, ...] = ()
+    #: the kind of question as the asking stage wrote it (`tag:`), "" where it wrote none
+    tag: Detail = Detail("")
+
+    def known_tag(self) -> typing.Optional[QuestionTag]:
+        """The tag the record names, when it is one of the factory's list; None otherwise."""
+        return QuestionTag.written(self.tag)
 
 
 class DecisionRecord(AggregateRoot[RecordId]):

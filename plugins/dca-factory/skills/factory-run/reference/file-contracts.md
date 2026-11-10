@@ -385,6 +385,7 @@ id: US-3-01
 story: US-3
 stage: plan
 asked: 2026-09-22T20:40:00Z
+tag: scope
 ---
 
 # Does an archived entry count?
@@ -411,6 +412,10 @@ rationale: <optional>
   takes the forms older records carry (`a.`, `a)`, `**a — …**`), and it is the only one: the inbox's JSON lists
   each record's `options` and `recommended` from it, and an answer naming a label becomes that option's first
   line in the story's `answered:` line.
+- `tag` is the kind of question in one word from the list the factory keeps (`QuestionTag` in the package, named
+  in every stage's brief); the gate refuses a stage's open question without one, or with a word outside the list.
+  It is counted across stories — the same kind asked again and again becomes a lesson in the inbox — and never
+  used to answer a question.
 - `id` is `<story>-<nn>`, `nn` the next two-digit number among the story's records, and it is
   the file name — the gate finds a record by its name and refuses one whose `id:` disagrees.
 - `stage` is the stage that re-runs once the answer is there and applies it — the stage that asked,

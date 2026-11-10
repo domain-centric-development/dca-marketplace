@@ -79,6 +79,7 @@ id: <story>-<nn>
 story: <story>
 stage: <the stage that will apply the answer>
 asked: <now, UTC, ISO 8601>
+tag: <one word from the list below>
 ---
 
 # <the question in one line>
@@ -90,6 +91,8 @@ asked: <now, UTC, ISO 8601>
 ## Recommendation
 <a — why, in one or two sentences>
 ```
+
+<!-- rule: STAGE-COMMON-30B -->
 
 <!-- rule: STAGE-COMMON-31 -->
 

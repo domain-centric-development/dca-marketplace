@@ -10,7 +10,8 @@ import typing
 
 from ....building_blocks import DomainService, Value
 from ..gateway.stage_evidence import StageEvidence
-from ..model.decision_record import DecisionState, RecordId, RecordKind
+from ..model.decision_record import Asker, DecisionState, RecordId, RecordKind
+from ..model.question_tag import QuestionTag
 from ..model.stage import StageName
 from ..model.story import Story
 from ..model.story_words import Detail, Place
@@ -78,6 +79,21 @@ class DecisionChecks(DomainService):
                     items.append(DECISIONS.fail(Said(
                         f"{hand_over.place.value}: `## needs-human` names decision {wanted.value!r}, but "
                         f"{evidence.record_place(story, wanted).value} does not exist or names another story.")))
+        # 1b. a stage's question names its kind from the factory's list — counted, so a question asked again and again
+        # becomes a lesson
+        by_id = {record.id: record for record in records}
+        for hand_over in facts.hand_overs:
+            for wanted in hand_over.asks or ():
+                asked = by_id.get(wanted)
+                if asked is None or asked.kind is not RecordKind.QUESTION or asked.asker is not Asker.STAGE \
+                        or not asked.waits() or asked.content.known_tag() is not None:
+                    continue
+                written = asked.content.tag.value
+                items.append(DECISIONS.fail(Said(
+                    f"{evidence.record_place(story, wanted).value}: "
+                    + (f"`tag: {written}` is none of the factory's list" if written else "names no `tag:`")
+                    + f" — one word for the kind of question: {QuestionTag.listed().value}. It is counted across "
+                      f"stories, never used to answer.")))
         failed_asking = bool(items)
         # 2. every record: open blocks, a draft is still open, answered must be applied by its stage. An acceptance
         # record is the document gate's own question; that gate reads it.

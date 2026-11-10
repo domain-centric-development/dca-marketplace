@@ -619,6 +619,7 @@ id: STORY-1-01
 story: STORY-1
 stage: plan
 asked: 2026-09-22T20:40:00Z
+tag: scope
 ---
 
 # Does an archived thing count?
@@ -6186,6 +6187,16 @@ def run_groups(args):
         (Case("decisions: an open record blocks the story and says where to answer", "test", 1,
               must_fail=("decisions",),
               text=("STORY-1-01 is open", "product/epics/sample/STORY-1/decisions/01.md", "`by:` and `at:`")),
+         with_decisions(("STORY-1-01", DECISION), plan=PLAN_ASKING)),
+        # The kind of question is one word from the factory's list, counted across stories (a lesson), never answered.
+        (Case("decisions: a stage's open question without a `tag:` is refused, and the list is named", "test", 1,
+              must_fail=("decisions",), text=("names no `tag:`", "`test-level`", "never used to answer")),
+         with_decisions(("STORY-1-01", DECISION.replace("tag: scope\n", "")), plan=PLAN_ASKING)),
+        (Case("decisions: a `tag:` outside the factory's list is refused", "test", 1,
+              must_fail=("decisions",), text=("`tag: layout` is none of the factory's list",)),
+         with_decisions(("STORY-1-01", DECISION.replace("tag: scope", "tag: layout")), plan=PLAN_ASKING)),
+        (Case("decisions: a tagged open question is refused for being open alone", "test", 1,
+              must_fail=("decisions",), text=("STORY-1-01 is open",), absent=("`tag:",)),
          with_decisions(("STORY-1-01", DECISION), plan=PLAN_ASKING)),
         (Case("decisions: a stage that writes on after the id on its decision line still names that record", "test", 1,
               must_fail=("decisions",), text=("STORY-1-01 is open",)),

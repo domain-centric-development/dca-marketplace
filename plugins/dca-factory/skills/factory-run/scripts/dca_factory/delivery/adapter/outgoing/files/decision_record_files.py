@@ -485,4 +485,5 @@ def record_of(name: str, front: Front, body: str, state: str, answer: typing.Map
             StageName(stage) if stage else None,
             Detail(str(answer.get("answer"))), Detail(str(answer.get("by"))),
             tuple(AnswerField(f) for f in ANSWER_FIELDS if not answer.get(f)),
-            tuple(OptionLine(OptionKey(option["key"]), Detail(option["line"])) for option in decision_options(body))))
+            tuple(OptionLine(OptionKey(option["key"]), Detail(option["line"])) for option in decision_options(body)),
+            Detail(str(front.get("tag", "") or "").strip())))
