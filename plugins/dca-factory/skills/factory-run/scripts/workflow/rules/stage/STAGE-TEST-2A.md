@@ -29,7 +29,17 @@ order: 3
    write the port test beside it. **A clause about what is stored** — the list stays unchanged, the task remains open, it is done
    afterwards — is never asserted here: the stub answers what you told it, so the assertion holds whatever
    the code does. Assert it through the input port with the real store (`integration (port)`), or end to end;
-   the adapter test asserts only the adapter's part (the status, the page, that the use case was not called). A plan line with the bare `integration` of an older plan is the port shape. An external system
+   the adapter test asserts only the adapter's part (the status, the page, that the use case was not called).
+   **The adapter half of a criterion with both shapes shows a state; it does not replay the change.** Arrange
+   the stub once with the outcome the port test of the criterion asserts, make the one request that shows
+   it, assert the text — and name the test after what is shown for that state (`showsTwoOfThreeTasksOpen`),
+   not after the change (`showsOneOpenTaskLessAfterCompletingOne`). Never perform the scenario's action
+   against the stubbed port and then answer the port a second time with the state after it: the second
+   answer is yours, the assertion holds with the action deleted, and the name claims a behaviour the test
+   cannot prove. The same holds for a value the use case computes — trimmed, counted, sorted: it is the
+   stub's arrangement here, never this test's claim. The action's own translation — the request turned
+   into the command, the redirect — is an adapter test of its own that asserts the command the port was
+   called with. A plan line with the bare `integration` of an older plan is the port shape. An external system
    is stubbed **at the protocol**, with the stub the profile names (`http.stub:` — WireMock,
    WireMock.Net): the stub's answer is the test's arrangement, and allowed. Never a mock of the port
    whose adapter the plan changes — that tests everything except the translation — and never a

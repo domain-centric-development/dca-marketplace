@@ -22,3 +22,8 @@ order: 10
    case of the port's result and the type holds that seam; a stub there that throws a refusal instead of
    returning its case is the defect, and so is a helper that runs a use case to arrange a state and
    ignores its result.
+   An adapter test that performs an action against a stubbed input port, answers that port again with the
+   state after it and asserts the second answer — or whose name claims a change (after completing, after
+   creating, trimmed) while its only evidence is what its stub was told — reads its own stub back: delete
+   the action and it stays green. A test defect (`back: test`), also where a port test of the criterion
+   proves the change: the adapter half shows one state from one arrangement and is named after that.
