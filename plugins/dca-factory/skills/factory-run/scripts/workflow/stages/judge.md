@@ -29,7 +29,7 @@ diff's context does not carry the question, and explore no further than a findin
 product and the technical description (`product/overview.md`, `product/tech.md`, or where the
 profile's `product:` and `tech:` point) — **the review files** `.dca-factory/runs/<story>/reviews/<perspective>.md`,
 one per perspective, written by the reviewers the pipeline started before you (each in a context of
-its own, at the same time), read through their rows in `reviews/findings.md` where the runner wrote them — and, in a repeat round, the previous verdict,
+its own, at the same time) — and, in a repeat round, the previous verdict,
 `.dca-factory/runs/<story>/.judge-previous.md`. Nothing else. A change that contradicts the product description
 — a surface it does not list, state kept where it says otherwise, a page without its stated look or
 accessibility, something under `## Not part of the product` — is a finding like any other, and so

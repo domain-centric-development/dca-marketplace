@@ -43,7 +43,6 @@ from ..claims.remote_claims import claim_config_here
 from ..claims.checkout_claim import claim
 from ..git.checkout import Checkouts
 from ..files.windows import freeze_all
-from ..files.review_rows import write_review_rows
 from ..files.usage_files import journal_usage
 from ..files.run_marks import back_in, run_stories, step_open
 from ..files.journal_files import journal_writer
@@ -960,7 +959,6 @@ class Run(ProfileSource):
         for thread in threads:
             thread.join()
         self.invocations += len(names)
-        write_review_rows(folder, names)          # the judge reads the findings as rows, the files where a row is not enough
         seconds = int(time.time() - began)
         for name in names:
             self.processes.record_usage(story, f"review:{name}", used[name], raws[name], seconds)

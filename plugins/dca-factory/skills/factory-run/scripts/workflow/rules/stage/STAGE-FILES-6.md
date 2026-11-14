@@ -17,5 +17,4 @@ each; a session starts one subagent each where the tool has them. The judge read
 converges — confirms each finding in the code or drops it with the reason — and names the file per
 perspective under `## Perspectives covered`. The document gate reads them as `reviews`: a missing file
 is a note (the judge ran that pass itself and says so), a file without a findings section is refused.
-The runner writes `reviews/findings.md` beside them once the reviewers are done — one row per
-finding, derived from the files, never edited — for the judge to read first. A repeat round writes new files; the old ones are not kept. `--contract review` prints the shape.
+A repeat round writes new files; the old ones are not kept. `--contract review` prints the shape.

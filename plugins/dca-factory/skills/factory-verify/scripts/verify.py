@@ -1791,11 +1791,10 @@ def verify_runner(runner, verbose=False):
         reviews = [n for n in names if n.startswith("review:")]
         review_files = sorted(os.listdir(os.path.join(root, ".dca-factory", "runs", "STORY-1", "reviews"))) \
             if os.path.isdir(os.path.join(root, ".dca-factory", "runs", "STORY-1", "reviews")) else []
-        check("reviews: three reviewers start before the judge, each a window of its own, each leaving reviews/<perspective>.md, "
-              "and the runner the rows the judge reads beside them",
+        check("reviews: three reviewers start before the judge, each a window of its own, each leaving reviews/<perspective>.md",
               sorted(reviews) == ["review:clean-code", "review:ddd", "review:hexagonal"]
               and names.index("judge") > max(names.index(r) for r in reviews)
-              and review_files == ["clean-code.md", "ddd.md", "findings.md", "hexagonal.md"]
+              and review_files == ["clean-code.md", "ddd.md", "hexagonal.md"]
               and "reviews: ddd, hexagonal, clean-code" in output
               and len([l for l in journal_text.splitlines() if "\tusage\treview:" in l]) == 3,
               (names, review_files))
