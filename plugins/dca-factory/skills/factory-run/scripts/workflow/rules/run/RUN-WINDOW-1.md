@@ -14,6 +14,6 @@ goes.fail: again
 
 # RUN-WINDOW-1
 
-**When:** the builder stages (plan to tidy) run shared
+**When:** the builder stages (test to tidy) run shared
 
 **Why:** one process carries what one mind would, and the runner checks what it claims

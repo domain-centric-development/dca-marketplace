@@ -464,7 +464,7 @@ class StageEvidenceFiles(StageEvidence):
         handovers = [stage_files()[name]]
         listing = [s.file for s in all_stages() if s.lists if os.path.isfile(os.path.join(runs, story_id, s.file))]
         if last_ended(runs, story_id, (name, "builder")) == "builder":
-            # A shared builder ran plan to tidy in one window: its record is the one that holds, and a file it
+            # A shared builder ran test to tidy in one window: its record is the one that holds, and a file it
             # changed is listed by whichever of its hand-overs belongs to the stage that changed it.
             record, handovers = os.path.join(evidence_dir(runs, story_id), "changed-builder.txt"), listing
         changed_now: typing.List[str] = []

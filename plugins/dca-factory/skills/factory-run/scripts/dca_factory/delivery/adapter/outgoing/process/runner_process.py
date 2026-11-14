@@ -865,7 +865,7 @@ class Run(ProfileSource):
         return 4
 
     def builder_window(self, story: str, tool: str, stages: typing.Sequence[str], start: str, dry: bool) -> int:
-        """Plan to tidy in one tool process, so each stage builds on what the one before read; the process runs each
+        """The builder's stages (test to tidy) in one tool process, so each stage builds on what the one before read; the process runs each
         stage's gate itself. The tool's exit, 0 in a dry run."""
         tool = self.tools.tool_for("builder", tool)
         prompt = (f"Carry out these stages of the delivery pipeline for backlog story {story}, one after another, in "

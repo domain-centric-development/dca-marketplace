@@ -119,7 +119,7 @@ class Route(unittest.TestCase):
         self.assertIn("a task has no criterion to test", skipped[0].skipped.value)
 
     def test_the_windows_carry_what_the_kind_runs_from_where_it_starts(self):
-        self.assertEqual(workflow().window(StoryKind.TASK, Window.BUILDER), names("plan", "build", "tidy"))
+        self.assertEqual(workflow().window(StoryKind.TASK, Window.BUILDER), names("build", "tidy"))
         self.assertEqual(workflow().window(StoryKind.STORY, Window.BUILDER, StageName("build")), names("build", "tidy"))
         self.assertEqual(workflow().window(StoryKind.ADOPT, Window.VERIFIER), names("judge"))
 

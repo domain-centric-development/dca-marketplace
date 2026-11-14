@@ -53,7 +53,7 @@ def window_open(runs: str, story_id: str, window: str) -> bool:
 
 
 def stage_open(runs: str, story_id: str, stage: str) -> bool:
-    """True while the journal's last mark for the stage is its start: the stage is running (plan to tidy
+    """True while the journal's last mark for the stage is its start: the stage is running (test to tidy
     also while a shared builder, which marks itself `builder`, runs them; judge and document also while a
     shared verifier, `verifier`, runs them)."""
     journal = os.path.join(evidence_dir(runs, story_id), "journal.tsv")

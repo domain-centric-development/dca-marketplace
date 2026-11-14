@@ -228,7 +228,7 @@ class StageTable(unittest.TestCase):
                                                 "tidy": "tidy.md", "judge": "judge.md", "document": "document.md"})
 
     def test_the_shared_windows_carry_their_stages(self):
-        self.assertEqual(rows.stage_windows(), {"builder": ("plan", "test", "build", "tidy"),
+        self.assertEqual(rows.stage_windows(), {"builder": ("test", "build", "tidy"),
                                                   "verifier": ("judge", "document")})
 
     def test_the_gated_stages_and_their_commands(self):

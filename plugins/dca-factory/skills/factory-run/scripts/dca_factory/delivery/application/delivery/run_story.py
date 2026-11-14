@@ -212,7 +212,7 @@ class RunStoryUseCase(RunStoryInputPort):
     @decides("RUN-WINDOW-1")
     def _builder(self, command: RunStoryCommand, kind: StoryKind, start: StageName,
                  resume: Resume) -> typing.Optional[Ended]:
-        """Plan to tidy in one process, so each stage builds on what the one before read. The process runs each
+        """The builder's stages (test to tidy) in one process, so each stage builds on what the one before read. The process runs each
         stage's gate itself; the run checks, not believes: the red proof must exist and the gates after it run again
         here. None when it holds."""
         story = command.story
