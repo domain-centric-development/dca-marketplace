@@ -18,6 +18,7 @@ def brief_model(brief: Brief) -> Model:
               for t in brief.told],
         measured=[dict(rule=m.rule.value, when=m.when.value, refused=m.refused.value if m.refused else "")
                   for m in brief.measured],
+        everywhere=[rule.value for rule in brief.held_everywhere],
         carriers=[dict(role=c.role.value, skill=c.skill.value) for c in brief.carriers])
 
 

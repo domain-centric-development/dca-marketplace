@@ -52,6 +52,16 @@ class StageBriefTest(unittest.TestCase):
         self.assertIn("GATE-HAPPY-PATH", [m.rule.value for m in brief("plan").measured])
         self.assertEqual((), brief("judge").measured)       # the judge has no gate of its own
 
+    def test_what_every_gate_holds_is_named_by_its_id_and_not_described_per_stage(self):
+        everywhere = frozenset({RuleId("GATE-STORY"), RuleId("GATE-CONTRACT")})
+        plan = StageBrief(workflow()).of(StageName("plan"), StoryKind.STORY, list(RULES.values()),
+                                         [RuleId(r) for r in judging("plan", StoryKind.STORY)], (), everywhere)
+        self.assertNotIn("GATE-STORY", [m.rule.value for m in plan.measured])
+        self.assertEqual(("GATE-STORY", "GATE-CONTRACT"), tuple(r.value for r in plan.held_everywhere))
+        text = written(plan, plan.said).value
+        self.assertIn("what every gate holds a story to: `GATE-STORY`, `GATE-CONTRACT` (`--contract plan`", text)
+        self.assertIn("`GATE-HAPPY-PATH` — when:", text)
+
     def test_a_stage_the_kind_does_not_run_or_the_workflow_lacks_has_no_brief(self):
         with self.assertRaises(ValueError):
             brief("build", StoryKind.JOURNEY)

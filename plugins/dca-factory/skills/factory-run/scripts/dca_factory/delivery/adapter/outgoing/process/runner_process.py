@@ -91,6 +91,11 @@ from .....sharedkernel.application.profile_source import ProfileSource
 # Its entry points — the arguments, the signals, the exit codes — are the incoming adapter
 # `delivery/adapter/incoming/runner/run_command.py`; the composition root `infrastructure/runner.py` builds the run.
 
+#: how a stage reads its briefs: what it reads stays in its context for every later turn, so a second read is paid on all
+#: of them — and a shell that prints two files at once cuts the output short, which is what made the second read
+READ_ONCE = ("Read each of these files once, whole, with a read of its own — never two in one shell command, whose "
+             "output is cut short — and do not read one again: it stays in front of you.")
+
 STAGE_SHELL = ("cd, ls, cat, head, tail, wc, sort, grep, diff, pwd, and git status, git diff, git log, git ls-files, "
                "git apply --check, and git rm (a file the plan removes)")
 
@@ -727,7 +732,7 @@ class Run(ProfileSource):
         """The prompt's first sentence for one stage: the stage, the story and the brief it works by."""
         every, (own,) = self.briefs(story, [stage], dry)
         return (f"Carry out the {stage} stage of the delivery pipeline for backlog story {story}. Its brief: {own}; "
-                f"what every stage is told: {every} — read both whole, then work by them.")
+                f"what every stage is told: {every} — read both whole, then work by them. {READ_ONCE}")
 
     def fresh_sentence(self, story: str, stages: typing.Sequence[str], dry: bool) -> typing.Optional[str]:
         """What a fresh restart (RUN-ROUNDS-3) is told in place of the earlier attempt's account: where it works from.
@@ -899,7 +904,7 @@ class Run(ProfileSource):
     def window_briefs(self, story: str, stages: typing.Sequence[str], dry: bool) -> str:
         every, own = self.briefs(story, stages, dry)
         return (f"What every stage is told: {every} — read it whole first; each stage's brief, read whole before the "
-                f"stage: {', '.join(f'{stage} {path}' for stage, path in zip(stages, own))}.")
+                f"stage: {', '.join(f'{stage} {path}' for stage, path in zip(stages, own))}. {READ_ONCE}")
 
     def run_reviews(self, story: str, tool: str, dry: bool) -> int:
         """One tool process per perspective, started at once, each writing reviews/<perspective>.md; the judge then
