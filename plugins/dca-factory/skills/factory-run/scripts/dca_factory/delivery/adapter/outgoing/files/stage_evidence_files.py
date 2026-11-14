@@ -78,7 +78,7 @@ from ....domain.model.verdict import FindingState
 from ..git.repository import git, git_blob, head_blobs
 from .decision_record_files import answered_decisions, records_of
 from .kept_files import (
-    assertions_kept, glossary_names, renames_in, changed_tests_in_plan, committed_by_a_stage, human_line, meaningful_lines, read_red_digests,
+    assertions_kept, marker_form, glossary_names, renames_in, changed_tests_in_plan, committed_by_a_stage, human_line, meaningful_lines, read_red_digests,
     red_tree, switched_off, TESTS_BASELINE, tidy_moves, unproven_tests)
 from .run_marks import last_ended, stage_open, window_open
 from .snapshots import git_tree, listed_files, snapshot_reason, tree_changes
@@ -526,6 +526,7 @@ class StageEvidenceFiles(StageEvidence):
         lost: typing.List[Place] = []
         arranged: typing.List[Place] = []
         renamed: typing.List[RenamedTest] = []
+        relocated: typing.List[Place] = []
         base_file = os.path.join(evidence_dir(runs, story_id), "base-tree")
         recorded = read_text(base_file).strip() if os.path.isfile(base_file) else ""
         base = recorded if recorded and recorded != "none" else None
@@ -558,6 +559,12 @@ class StageEvidenceFiles(StageEvidence):
             kept = not off and all(any(old == new for new in remaining) for old in was)
             held = not off and not kept and assertions_kept("\n".join(was), "\n".join(now))
             renames: typing.Dict[str, str] = {}
+            moved = False
+            if not off and not kept and not held:
+                # A locator that finds the same stable markers on another path: every assertion, expected value and
+                # matcher as before (the person's decision B, WP-218).
+                moved = assertions_kept(marker_form("\n".join(was)), marker_form("\n".join(now)))
+                held = moved
             if not off and not kept and not held:
                 # A name the story renamed, read from the tree: the test holds its assertions under the new name.
                 renames = renames_in(cwd, base, "\n".join(was), "\n".join(now), os.path.splitext(rel)[1])
@@ -570,11 +577,13 @@ class StageEvidenceFiles(StageEvidence):
                     Rename(SymbolName(old), SymbolName(new),
                            glossary_names(cwd, new))
                     for old, new in sorted(renames.items()))))
+            elif edit is TestEdit.ARRANGED and moved:
+                relocated.append(Place(rel))
             elif edit is TestEdit.ARRANGED:
                 arranged.append(Place(rel))
             elif edit is TestEdit.CHANGED:
                 changed.append(ChangedTest(Place(rel), TestChange.CHANGED))
-        return KeptTests(tuple(changed), tuple(lost), tuple(arranged), tuple(renamed))
+        return KeptTests(tuple(changed), tuple(lost), tuple(arranged), tuple(renamed), tuple(relocated))
 
     def decided_tests(self, story: StoryId) -> typing.Tuple[DecidedRecord, ...]:
         ids = answered_decisions(self._cwd, story.value, "test")

@@ -105,6 +105,10 @@ class KeptChecks(DomainService):
             found.append(TESTS_KEPT.note(Said(
                 f"{', '.join(p.value for p in kept.arranged)} changed only around its assertions — every assertion it "
                 f"had is still there, at most with more arguments (a type the test builds gained a field)")))
+        if kept.relocated:
+            found.append(TESTS_KEPT.note(Said(
+                f"{', '.join(p.value for p in kept.relocated)} changed only its locators — each finds the same stable "
+                f"markers (`data-test`) on another path; every assertion, expected value and matcher as before")))
         for test in kept.renamed:
             names = ", ".join(f"{r.was.value} → {r.now.value} ("
                               + ("named in a glossary" if r.in_glossary else "in no glossary")

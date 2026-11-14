@@ -4303,7 +4303,7 @@ def verify_setup(runner, verbose=False):
                                                          ("knowledge", "dca-knowledge"), ("carrier.plan", "dca-modelling"),
                                                          ("carrier.build", "dca-modelling"),
                                                          ("carrier.glossary", "ubiquitous-language"),
-                                                         ("carrier.domain", "context-map"), ("carrier.test", "e2e-testing"),
+                                                         ("carrier.domain", "context-map"), ("carrier.test", "testing"),
                                                          ("review.ddd", "review-ddd"),
                                                          ("review.hexagonal", "review-hexagonal"),
                                                          ("review.clean-code", "review-clean-code"))
@@ -8943,6 +8943,35 @@ def run_groups(args):
                 handle.write(change(page_test))
             verdict, output = kept_verdict(root)
             noted = "gate:note tests-kept" in output and "around its assertions" in output
+            expectations.append((f"tests-kept: {label}", verdict == expected and (noted or expected == "fail"),
+                                 f"verdict {verdict}, noted {noted}; "
+                                 + "; ".join(l for l in output.splitlines() if "tests-kept" in l)))
+    # WP-218 decision B: a locator that finds the same stable markers on another path passes as arranged, noted
+    list_test = ("class WidgetListTest {\n  void showsTwoWidgets() {\n    mvc.perform(get(\"/\"))\n"
+                 "        .andExpect(xpath(\"//*[@data-test='widget-name'][2]\").string(\"Lamp\"));\n  }\n}\n")
+    moved = lambda t: t.replace("//*[@data-test='widget-name'][2]", "(//*[@data-test='widget-name'])[2]")
+    for label, change, expected in (
+            ("a locator finds the same marker on another path, the expected value and matcher kept: passes with a note",
+             moved, "pass"),
+            ("a locator that drops its marker — refused", lambda t: t.replace(
+                "//*[@data-test='widget-name'][2]", "//*[contains(., 'Lamp')]"), "fail"),
+            ("a locator that swaps its marker — refused", lambda t: moved(t).replace("widget-name", "widget-label"),
+             "fail"),
+            ("the same marker on another path, but the expected value changed — refused",
+             lambda t: moved(t).replace('"Lamp"', '"Bulb"'), "fail"),
+            ("the same marker on another path, but another matcher — refused",
+             lambda t: moved(t).replace('.string("Lamp")', '.exists()'), "fail")):
+        for root in throwaway():
+            build_project(root, extra_sources=((page, list_test),))
+            for command in (["init", "-q"], ["add", "-A"],
+                            ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "base"]):
+                subprocess.run(["git", *command], cwd=root, capture_output=True)
+            subprocess.run([sys.executable, args.gate, "--story", "STORY-1", "--stage", "plan"], cwd=root,
+                           capture_output=True, text=True, encoding="utf-8", errors="replace")
+            with open(os.path.join(root, page), "w", encoding="utf-8") as handle:
+                handle.write(change(list_test))
+            verdict, output = kept_verdict(root)
+            noted = "gate:note tests-kept" in output and "same stable markers" in output
             expectations.append((f"tests-kept: {label}", verdict == expected and (noted or expected == "fail"),
                                  f"verdict {verdict}, noted {noted}; "
                                  + "; ".join(l for l in output.splitlines() if "tests-kept" in l)))

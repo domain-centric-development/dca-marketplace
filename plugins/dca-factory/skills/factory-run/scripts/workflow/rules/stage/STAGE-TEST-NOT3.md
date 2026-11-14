@@ -15,6 +15,7 @@ order: 19
   case and leave the old lines as they are. The gate compares every test file against the state
   the plan gate recorded and refuses a changed or removed line the plan does not list and back —
   except around the assertions: where a type the test builds gains a field, give the old call the
-  new argument and keep every assertion, its expected values and matchers as they were. That is
-  no changed expectation and needs no question.
+  new argument and keep every assertion, its expected values and matchers as they were; where the story's
+  markup moved an element, a locator may find the same stable markers (`data-test`) on the new path, its
+  expected value and matcher unchanged. That is no changed expectation and needs no question.
   A contradicting test the plan missed is a question (a decision record with `stage: test`).

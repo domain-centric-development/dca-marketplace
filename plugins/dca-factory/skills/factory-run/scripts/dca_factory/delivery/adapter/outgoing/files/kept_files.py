@@ -258,6 +258,22 @@ def assertions_kept(before: str, now: str, renames: typing.Optional[typing.Mappi
     return True
 
 
+#: A string literal of a test source.
+STRING = re.compile(r"\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'")
+#: A stable marker a locator names: the value of a `data-test`, `data-testid` or `data-test-id` attribute.
+MARKER = re.compile(r"data-test(?:-?id)?\s*=\s*\\?[\"']?([\w.:-]+)")
+
+
+def marker_form(text: str) -> str:
+    """The source with every string literal that names stable markers reduced to those markers, in order — so two
+    locators that find the same markers on another path or position read alike, and one that drops or swaps a
+    marker does not. A literal without a marker stays as it is."""
+    def reduce(match: "re.Match[str]") -> str:
+        markers = MARKER.findall(match.group(0))
+        return ('"§' + "§".join(markers) + '"') if markers else match.group(0)
+    return STRING.sub(reduce, text)
+
+
 IDENTIFIER = re.compile(r"[A-Za-z_]\w*")
 #: Words that stand before a call without declaring it: `return name(…)`, `new Name(…)`.
 NOT_A_TYPE = frozenset(("return", "new", "await", "yield", "throw", "else", "case", "in", "is", "as", "not", "and",

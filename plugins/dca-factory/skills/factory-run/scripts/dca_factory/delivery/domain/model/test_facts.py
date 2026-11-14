@@ -208,12 +208,13 @@ class RenamedTest(Value):
 class KeptTests(Value):
     """The tests that existed before the story, against their baseline: the ones that no longer expect what they
     did, the ones whose baseline git lost, the ones changed only around their assertions, the ones that follow a
-    rename."""
+    rename, the ones whose locators find the same stable markers on another path."""
 
     changed: typing.Tuple[ChangedTest, ...]
     lost: typing.Tuple[Place, ...]
     arranged: typing.Tuple[Place, ...]
     renamed: typing.Tuple[RenamedTest, ...] = ()
+    relocated: typing.Tuple[Place, ...] = ()
 
 
 class PlannedTestChange(Value):

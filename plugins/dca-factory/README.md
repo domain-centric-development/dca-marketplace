@@ -131,7 +131,7 @@ run. A new stack is one more preset file, no change to the script. It names a **
 stage takes its craft from, `carrier.<stage>:` in the profile — only where that skill is installed beside
 the pipeline (`dca-modelling`, `dca-discipline`
 where the project has the DCA rule packages; `frontend` as `carrier.frontend:` where it has a browser surface — build and tidy apply it to
-every page, template, stylesheet and client script, in the styling method and for the browsers `tech.md` names; `ubiquitous-language`, `context-map`, `e2e-testing`
+every page, template, stylesheet and client script, in the styling method and for the browsers `tech.md` names; `ubiquitous-language`, `context-map`, `testing` (the test stage's craft, which points to `e2e-testing` for the browser)
 wherever they are installed) and installs it in the same run. The skills go into the tool's skill
 folder as **copies** when the source is a plugin cache (the marketplace install: a cache folder is
 versioned and removed some time after an update, so a link into it would go stale) and as **links**

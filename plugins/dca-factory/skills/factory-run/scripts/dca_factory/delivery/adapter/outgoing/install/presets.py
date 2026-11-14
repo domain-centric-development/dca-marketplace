@@ -34,7 +34,7 @@ CARRIERS = (
     ("review.clean-code", "review-clean-code", "-"),
     ("carrier.glossary", "ubiquitous-language", "-"),
     ("carrier.domain", "context-map", "-"),
-    ("carrier.test", "e2e-testing", "-"),
+    ("carrier.test", "testing", "-"),
     ("carrier.discover", "product-discovery", "-"),
     ("carrier.frontend", "frontend", "frontend"),
 )
