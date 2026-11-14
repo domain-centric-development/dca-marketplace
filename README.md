@@ -16,7 +16,7 @@ Add the marketplace once, then install what you need. No clone, no build step:
 /plugin marketplace add domain-centric-development/dca-marketplace
 
 /plugin install dca-core@dca-marketplace       # the architecture method
-/plugin install dca-craft@dca-marketplace      # TDD, Clean Code, ADRs, end-user tests, frontend, discovery, glossary, context map, reviews
+/plugin install dca-craft@dca-marketplace      # testing (TDD, BDD), Clean Code, ADRs, end-user tests, frontend, discovery, glossary, context map, reviews
 /plugin install dca-factory@dca-marketplace    # the delivery pipeline
 /plugin install dca-factory-cockpit@dca-marketplace   # optional, Claude Code only: the pipeline as a cockpit
 ```
@@ -44,7 +44,7 @@ Only for working *on* these plugins — a clone, so edits take effect without a 
 |---|---|
 | write DDD/hexagonal code with the conventions enforced, ask what DCA says about something | `dca-core` |
 | start a DCA project from nothing, or add DCA to an existing one | `dca-core` (`/dca-new`, `/dca-init`) |
-| TDD, Clean Code, ADRs, end-user tests, a maintainable frontend, product discovery, a glossary, a context map and an outside review — with or without DCA | `dca-craft` |
+| The testing craft with TDD and BDD, Clean Code, ADRs, end-user tests, a maintainable frontend, product discovery, a glossary, a context map and an outside review — with or without DCA | `dca-craft` |
 | deliver stories through plan → test → build → tidy → judge → document with a gate between | `dca-factory` (+ `dca-core` for the method) |
 | see and steer that cycle in a Claude Code pane and a band above the prompt — discover feeding backlog, run, decide, delivered | `dca-factory-cockpit` (optional, Claude Code only) |
 
@@ -136,7 +136,7 @@ Details, including the backlog contract and every gate check:
 ### Craft on its own
 
 ```
-/tdd                  # red, green, refactor — with the failing test first
+/testing              # test levels, fixtures, names; test first (TDD) or scenario first (BDD)
 /clean-code           # names, function size, smells, while you edit
 /adr                  # record a decision so the next reader finds the reasoning
 /e2e-testing          # Page Objects, stable selectors, one flow per test — and setting up a runner

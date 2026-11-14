@@ -333,9 +333,10 @@ Verification
   goes through it before it appears in code, and the closing report names it.
 - **`dca-new`** lays out the files of an aggregate or a domain service and calls
   this skill for the domain types themselves.
-- **`/tdd`** — when building behavior on an aggregate, write the failing
-  test first (and run it). Static structure (records, markers) typically
-  doesn't need TDD; behavior on aggregates does.
+- **`/testing`** — when building behavior on an aggregate, write the failing
+  test first (and run it): a unit test per invariant, test first. Static
+  structure (records, markers) typically doesn't need it; behavior on
+  aggregates does.
 - **`/adr`** — when you make a design choice that affects more than the
   current task (e.g. introducing a Domain Service vs. moving logic to a
   single aggregate), record an ADR.
