@@ -309,7 +309,7 @@ class Workflow(AggregateRoot[WorkflowName]):
     def judged_back(self, kind: StoryKind, judge: HandOverText) -> StageName:
         """Where the judge's `changes-requested` sends the story: `back: test` — a confirmed defect is in a test, which
         only the test stage may change — to the test stage, anything else to the build; for a kind without that
-        stage, the stage before it the kind runs (`back_for`)."""
+        stage, the builder stage before it (`back_for`)."""
         for line in judge.value.splitlines():
             if line.strip().lower().startswith("back:"):
                 named = line.split(":", 1)[1].strip().strip("`\"' ").lower()
@@ -318,17 +318,16 @@ class Workflow(AggregateRoot[WorkflowName]):
         return self.back_for(kind, self.role(Role.BUILDS))
 
     def back_for(self, kind: StoryKind, stage: StageName) -> StageName:
-        """Where a round goes back to: <stage>, or the last stage of the run order before it the kind runs — whichever
-        process carries that stage."""
+        """Where a round goes back to: <stage>, or the last builder stage before it the kind runs."""
         found = self.stage(stage)
         if found is not None and kind in found.kinds:
             return stage
         back = stage
-        for step in self.having(Trait.IN_ORDER):
-            if step.name == stage:
+        for builder in self.in_window(Window.BUILDER):
+            if kind in builder.kinds:
+                back = builder.name
+            if builder.name == stage:
                 break
-            if kind in step.kinds:
-                back = step.name
         return back
 
     def targets(self) -> typing.FrozenSet[Target]:

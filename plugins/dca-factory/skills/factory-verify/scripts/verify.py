@@ -1466,9 +1466,8 @@ def verify_runner(runner, verbose=False):
         output = subprocess.run([BASH, runner, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run"], cwd=root,
                                 capture_output=True, text=True, env=plain_env, encoding="utf-8", errors="replace").stdout
         shared = [l for l in output.splitlines() if "would run" in l and "Carry out these stages" in l]
-        check("task: the plan runs in its own process, the shared builder carries build and tidy, and no test stage",
-              bool(shared) and "this one session: build, tidy." in shared[0] and "brief/test.md" not in shared[0]
-              and "── stage plan  (tool:" in output,
+        check("task: the shared builder carries plan, build and tidy, and no test stage",
+              bool(shared) and "this one session: plan, build, tidy." in shared[0] and "brief/test.md" not in shared[0],
               [l[:240] for l in shared][:1] or output[-300:])
         code, output = run_runner(runner, root, "run", "--story", "STORY-1", "--tool", "claude", "--dry-run",
                                   "--separate-stages")
@@ -1530,8 +1529,7 @@ def verify_runner(runner, verbose=False):
                           "--shared-verifier", env=dict(quiet_env, PATH=path))[1]
         check("tool per unit: the profile's `tool.verifier` starts judge and document with that tool, the builder with "
               "the run's; with separate stages `tool.judge` is the judge's alone; `--tool` names one tool for every unit",
-              "── stage plan  (tool: claude" in output and "test+build+tidy  (tool: claude" in output
-              and "judge+document  (tool: codex" in output
+              "plan+test+build+tidy  (tool: claude" in output and "judge+document  (tool: codex" in output
               and "judge+document  (tool: claude" in both and "── stage judge  (tool: codex" in separate
               and "── stage document  (tool: claude" in separate,
               [l for l in output.splitlines() if l.startswith(("── stage", "factory:"))][:8]
@@ -1837,10 +1835,9 @@ def verify_runner(runner, verbose=False):
                 return code, output, starts, story_delivered(root), extras
         code, output, starts, delivered, extras = shared_run()
         stage_lines = [l.split("  (")[0][3:] for l in output.splitlines() if l.startswith("── stage ")]
-        check("shared builder: the plan runs in its own process, test to tidy as one fed by plan.md, then judge and "
-              "document each in their own",
-              code == 0 and starts == ["plan", "builder", "judge", "document"] and delivered
-              and stage_lines == ["stage plan", "stage test+build+tidy", "stage judge", "stage document"]
+        check("shared builder: plan to tidy run as one process, then judge and document each in their own",
+              code == 0 and starts == ["builder", "judge", "document"] and delivered
+              and stage_lines == ["stage plan+test+build+tidy", "stage judge", "stage document"]
               and "ran through plan,test,build,tidy,judge,document." in output,
               f"exit {code}; starts {starts}; {stage_lines}; {output.strip().splitlines()[-3:]}")
         check("shared builder: the runner re-checks the build and tidy gates itself",
@@ -1862,20 +1859,19 @@ def verify_runner(runner, verbose=False):
             .replace("depends_on: []", "depends_on: [STORY-0]"), green=both_green)
         stage_lines = [l.split("  (")[0][3:] for l in output.splitlines()
                        if l.startswith("── stage ") and "(skipped" not in l]
-        check("shared builder: a journey plans in its own process, then its test, the test gate re-checked, and is delivered",
-              code == 0 and stage_lines == ["stage plan", "stage test", "stage judge", "stage document"] and delivered
+        check("shared builder: a journey shares plan and test, its test gate re-checked, and is delivered",
+              code == 0 and stage_lines == ["stage plan+test", "stage judge", "stage document"] and delivered
               and "── gate test  (re-checked by the runner)" in output,
               f"exit {code}; {stage_lines}; {output.strip().splitlines()[-3:]}")
         code, output, starts, delivered, _extras = shared_run(story=ADOPTED, green=both_green)
         stage_lines = [l.split("  (")[0][3:] for l in output.splitlines()
                        if l.startswith("── stage ") and "(skipped" not in l]
-        check("shared builder: an adopted story plans, then tests, then its judge and the adopt gate deliver it",
-              code == 0 and stage_lines == ["stage plan", "stage test", "stage judge"] and delivered,
+        check("shared builder: an adopted story shares plan and test, then its judge and the adopt gate deliver it",
+              code == 0 and stage_lines == ["stage plan+test", "stage judge"] and delivered,
               f"exit {code}; {stage_lines}; {output.strip().splitlines()[-3:]}")
         code, output, starts, delivered, _extras = shared_run(dry=True)
         check("shared builder: the dry run shows the one shared invocation and starts nothing",
-              "stage test+build+tidy  (tool: stand-in, one shared context)" in output and "── stage plan  (tool: stand-in" in output
-              and starts == [],
+              "stage plan+test+build+tidy  (tool: stand-in, one shared context)" in output and starts == [],
               [l for l in output.splitlines() if l.startswith("── stage")])
 
     # 1b''. --shared-verifier: judge and document in one process, the document gate re-checked by the runner
@@ -1933,9 +1929,9 @@ def verify_runner(runner, verbose=False):
               f"exit {code}; starts {starts}; {output.strip().splitlines()[-2:]}")
         code, output, starts, delivered, paths = verifier_run(builder=True)
         stage_lines = [l.split("  (")[0][3:] for l in output.splitlines() if l.startswith("── stage ")]
-        check("shared verifier: with the shared builder a story runs in three processes — one plans, one builds, one checks",
-              code == 0 and starts == ["plan", "builder", "verifier"] and delivered
-              and stage_lines == ["stage plan", "stage test+build+tidy", "stage judge+document"],
+        check("shared verifier: with the shared builder a story runs in two processes — one builds, one checks — never one",
+              code == 0 and starts == ["builder", "verifier"] and delivered
+              and stage_lines == ["stage plan+test+build+tidy", "stage judge+document"],
               f"exit {code}; starts {starts}; {stage_lines}")
         code, output, starts, delivered, paths = verifier_run(story=ADOPTED, green=both_green)
         stage_lines = [l.split("  (")[0][3:] for l in output.splitlines()
@@ -2042,7 +2038,7 @@ def verify_runner(runner, verbose=False):
                   + ("rewrites its file" if rewrite else "changes nothing")
                   + " holds for this pass — no `same` mark for a plan the window did not run, delivered",
                   code == 0 and story_delivered(root) and not stray
-                  and starts == ["plan", "builder", "verifier", "builder", "verifier"] and "gate 'document' refused" not in output,
+                  and starts == ["builder", "verifier", "builder", "verifier"] and "gate 'document' refused" not in output,
                   f"exit {code}; starts {starts}; stray {stray}; {output.strip().splitlines()[-4:]}")
 
     # #143: a run stopped by a signal closes its stage window, so a person may change the story before the next run —
@@ -2142,7 +2138,7 @@ def verify_runner(runner, verbose=False):
             if os.path.isfile(os.path.join(root, "builder-prompts.txt")) else []
         check("shared builder: a refused re-check is a round — the builder runs again from that stage with the gate's "
               "report, and the story is delivered",
-              code == 0 and story_delivered(root) and starts[:3] == ["plan", "builder", "builder"]
+              code == 0 and story_delivered(root) and starts[:2] == ["builder", "builder"]
               and len(prompts) == 2 and ".gate-build.txt" in prompts[1] and "brief/plan.md" not in prompts[1]
               and output.count("── gate build  (re-checked by the runner)") == 2
               and output.count("ran through") == 1,
@@ -2234,7 +2230,7 @@ def verify_runner(runner, verbose=False):
               prompts[-1][-260:] if prompts else "no test prompt recorded")
         code, output, starts, delivered, prompts, asked = buildback_run(shared=True)
         check("build sent back: a shared builder's `back: test` is a round from the test stage as well",
-              code == 0 and delivered and not asked and starts[:3] == ["plan", "builder", "builder"]
+              code == 0 and delivered and not asked and starts[:2] == ["builder", "builder"]
               and "goes back to the test stage" in output,
               f"exit {code}; starts {starts}; {output.strip().splitlines()[-3:]}")
         # 0.55.1: the shared builder went back to the test stage in its own session, repaired the test, built again and
@@ -2283,8 +2279,8 @@ def verify_runner(runner, verbose=False):
         starts = [l.split("\t")[2] for l in open(journal, encoding="utf-8").read().splitlines()
                   if "\tstage-start\t" in l and "\tstage-start\treview:" not in l] if os.path.isfile(journal) else []
         check("story-pass: a document gate refused over an earlier pass's build runs on from the build — "
-              "plan, builder, verifier, builder, verifier, delivered",
-              code == 0 and story_delivered(root) and starts == ["plan", "builder", "verifier", "builder", "verifier"]
+              "builder, verifier, builder, verifier, delivered",
+              code == 0 and story_delivered(root) and starts == ["builder", "verifier", "builder", "verifier"]
               and "runs stage 'build' again" in output,
               f"exit {code}; starts {starts}; {output.strip().splitlines()[-4:]}")
 
@@ -3192,9 +3188,8 @@ exit 0
         code, output = run_runner(os.path.join(root, ".agents", "factory", "factory.sh"), root, "status", "--brief",
                                   "--session-start", env={"FACTORY_WORKER": "runner:host:1", "FACTORY_STAGE": "builder",
                                                           "FACTORY_STORY": "STORY-1"})
-        check("priming: a shared builder is told it carries out test, build and tidy, all in this session",
-              code == 0 and "the shared builder of story STORY-1" in output and "test, build, tidy" in output
-              and "plan, test" not in output
+        check("priming: a shared builder is told it carries out plan, test, build and tidy, all in this session",
+              code == 0 and "the shared builder of story STORY-1" in output and "plan, test, build, tidy" in output
               and "stage builder" not in output, output.strip().splitlines()[-1:])
         # every gate run over a story is on record, with who ran it, so a later gate can tell this pass's files and a
         # report can tell the runner's refusals from a stage's own checks
@@ -9169,9 +9164,9 @@ def run_groups(args):
         expectations.append(("window: a name that is not backlog or decisions is refused",
                              gate("--window-start", "judge", "--story", "STORY-1").returncode == 2, ""))
     for root in throwaway():
-        # a shared builder that stopped on the test stage's question, then ran again: the second window is the
-        # question's, not a repeat a gate refused — the record names `stage: test`, the window is `builder`
-        build_project(root, **with_decisions(("STORY-1-01", DECISION.replace("stage: plan", "stage: test") + ANSWER)))
+        # a shared builder that stopped on the plan's question, then ran again: the second window is the
+        # question's, not a repeat a gate refused — the record names `stage: plan`, the window is `builder`
+        build_project(root, **with_decisions(("STORY-1-01", DECISION + ANSWER)))
         write_file(root, ".dca-factory/evidence/STORY-1/journal.tsv",
                    "2026-09-28T10:00:00.000Z\tstage-start\tbuilder\ttool=claude-session\n"
                    "2026-09-28T10:05:00.000Z\tstage-end\tbuilder\texit=0\n"

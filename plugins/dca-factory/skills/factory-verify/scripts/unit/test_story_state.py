@@ -142,7 +142,7 @@ class PassOrder(unittest.TestCase):
             owned.record_owned(p.runs, "S-1", path)
             owned.owned_end(p.runs, "S-1", "builder", ran="0")
             same = [e["name"] for e in journal.journal_events(p.runs, "S-1") if e["fields"].get("same") == "1"]
-            self.assertEqual(same, ["tests.md", "build.md", "tidy.md"])
+            self.assertEqual(same, ["plan.md", "tests.md", "build.md", "tidy.md"])
 
     def test_a_shared_window_marks_only_the_stages_it_carried_and_not_one_a_later_stage_built_on(self):
         with project() as p:

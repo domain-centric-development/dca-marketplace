@@ -3,6 +3,7 @@ name: plan
 role: plans
 order: 1
 hand_over: plan.md
+window: builder
 kinds:
 - story
 - journey

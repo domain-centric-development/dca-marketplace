@@ -3,23 +3,20 @@
 Part of the `factory-run` skill: what its *Execution tier* says about the shared builder and the shared
 verifier, in full.
 
-**The plan alone, then test to tidy in one context — the default.** The plan runs in a context of its own and
-hands over `plan.md`; the builder stages after it share a fresh context ("shared builder") that starts from that
-file, so the plan's research — the description, the code it read, the catalog — does not ride along through every
-later turn. Separate stages throughout
-when the profile says `stages: separate`, the person asks for them (`factory.sh run
---separate-stages`) or `FACTORY_SHARED_BUILDER=0` is set. In the runner, one process carries test, build and tidy and runs each
+**Plan to tidy in one context — the default.** The builder stages share a context ("shared builder")
+unless the profile says `stages: separate`, the person asks for separate stages (`factory.sh run
+--separate-stages`) or `FACTORY_SHARED_BUILDER=0` is set. In the runner, one process carries plan, test, build and tidy and runs each
 stage's gate itself; the runner checks that the red proof exists and runs the build and tidy gates
-again. In a session, the same variant is one subagent for the plan and one for test to tidy, running the gate after each
+again. In a session, the same variant is one subagent for plan to tidy, running the gate after each
 stage and stopping on a refusal it cannot fix in three attempts; its window is marked as one stage,
 `builder` — `--stage-start builder` before it, `--stage-end builder` after its last file — and the gate
-reads that window as test to tidy. After the end mark do what the runner does: check that
+reads that window as plan to tidy. After the end mark do what the runner does: check that
 `.dca-factory/evidence/<story>/.tests-red` exists (a builder that never ran its test gate left no red proof; a
 journey's or an adoption's test gate runs again instead), then run the build and tidy gates yourself —
 they now check the hand-overs against `changed-builder.txt`. In both, the judge keeps a fresh context
 of its own, and every stage still writes its own file, so the story can be resumed stage by stage. It
 costs less — the stages build on what the one before read — and it gives up one thing: build knows how
-the tests were written. With separate stages test, build and tidy each run in a context of its own, as below.
+the tests were written. With separate stages each of the four runs in a context of its own, as below.
 Say in the report which variant ran.
 
 **Judge and document in one context — the default.** The twin of the shared builder: "shared

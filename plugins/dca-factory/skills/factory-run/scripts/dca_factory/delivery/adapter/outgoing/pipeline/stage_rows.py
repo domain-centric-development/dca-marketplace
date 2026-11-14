@@ -82,7 +82,7 @@ def stage_files() -> typing.Dict[str, str]:
 
 
 def stage_windows() -> typing.Dict[str, typing.Tuple[str, ...]]:
-    """One process may carry several stages and mark its window under one name: the shared builder (test to tidy) and
+    """One process may carry several stages and mark its window under one name: the shared builder (plan to tidy) and
     the shared verifier (judge, then document). The journal, the changed-files record and the usage are that window's;
     every stage still writes its own file."""
     stages = all_stages()

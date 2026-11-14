@@ -62,7 +62,7 @@ class StageTableTest(unittest.TestCase):
         table = ShowStageTableUseCase(Tables()).execute(ShowStageTableQuery(("epics",), with_tools=True))
         self.assertEqual(["plan", "test", "build", "tidy", "judge", "document"], table["order"])
         self.assertEqual(["adopt", "integrate"], table["steps"])
-        self.assertEqual({"builder": ["test", "build", "tidy"], "verifier": ["judge", "document"]},
+        self.assertEqual({"builder": ["plan", "test", "build", "tidy"], "verifier": ["judge", "document"]},
                          table["windows"])
         self.assertIn(("journey", "test"), table["kinds"])
         self.assertNotIn(("task", "test"), table["kinds"])

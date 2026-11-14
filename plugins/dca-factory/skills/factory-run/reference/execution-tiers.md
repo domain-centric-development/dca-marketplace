@@ -28,8 +28,8 @@ tier ran.
   sandbox) come from the environment — `FACTORY_CLAUDE_ARGS`, `FACTORY_CODEX_ARGS`,
   `FACTORY_OPENCODE_ARGS` — because they are the tool's configuration and never the process's.
 
-**Shared stages — the default.** The plan in a context of its own, then test to tidy in one (the "shared builder",
-window `builder`, fed by `plan.md`), judge and document in another (the "shared verifier", window `verifier`) — never in one: the
+**Shared stages — the default.** Plan to tidy run in one context (the "shared builder", window
+`builder`), judge and document in another (the "shared verifier", window `verifier`) — never in one: the
 judge's independence from the builder is the point of the split. The profile's `stages: separate`,
 `factory.sh run --separate-stages` or `FACTORY_SHARED_BUILDER=0` / `FACTORY_SHARED_VERIFIER=0` separate
 them. `reference/shared-stages.md` says what each process carries, how a session marks its window and
