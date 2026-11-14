@@ -52,7 +52,7 @@ dca-marketplace/
 │   └── skills/factory-verify/                    # scripts/verify.py — the gate, the runner and the installer against fixtures
 ├── plugins/dca-factory-cockpit/           # Claude Code only, optional: the factory cycle as a cockpit (function hooks)
 ├── plugins/dca-craft/                     # craft independent of the architecture style; names no DCA artifact
-│   ├── skills/{tdd,clean-code,adr,e2e-testing,ubiquitous-language,context-map,product-discovery}/
+│   ├── skills/{testing,clean-code,adr,e2e-testing,ubiquitous-language,context-map,product-discovery}/
 │   ├── skills/{review-ddd,review-hexagonal,review-clean-code}/   # the three general review perspectives
 │   └── agents/{e2e-tester,ddd-reviewer,hexagonal-reviewer,clean-code-reviewer}.md
 ├── scripts/render-rule-catalog.py         # renders the rule catalog reference from the sibling rules.json files
@@ -91,7 +91,7 @@ dca-marketplace/
   process of its own and `serve` shows it in a browser (127.0.0.1, a token per start); a press there, like
   `factory.sh request`, writes a request under `.dca-factory/requests/` that the factory works headless with the
   skill a session would run — `factory-run/reference/requests.md`.
-- **dca-craft** — `/tdd`, `/clean-code`, `/adr`, `/e2e-testing`, `/frontend`, `/ubiquitous-language`, `/context-map`, `/product-discovery`,
+- **dca-craft** — `/testing`, `/clean-code`, `/adr`, `/e2e-testing`, `/frontend`, `/ubiquitous-language`, `/context-map`, `/product-discovery`,
   `/review-ddd`, `/review-hexagonal`, `/review-clean-code`; agents `e2e-tester`, `ddd-reviewer`,
   `hexagonal-reviewer`, `clean-code-reviewer`. Independent of the architecture style and usable alone: the
   skills and agents name no DCA artifact (rule ids, `dca-*` names, the building blocks' namespaces and
@@ -170,7 +170,7 @@ row "Marketplace bootstrap branch".
 - Skills never invent DCA conventions — they point to `/dca-knowledge` (the vendored catalog) when unsure.
 - Tool-agnostic knowledge lives in the catalog; anything about Claude Code, slash commands or plugins lives here.
 - Names: the skill prefix `dca-` says *this skill carries the method* and is `dca-core`'s alone; `dca-craft` and
-  `dca-factory` skills carry none (`factory-*`, `stage-*`, `tdd`, …) — `scripts/check-skills.py` fails on a
+  `dca-factory` skills carry none (`factory-*`, `stage-*`, `testing`, …) — `scripts/check-skills.py` fails on a
   `dca-` skill outside `dca-core`. The plugin prefix `dca-` is the marketplace's mark of origin, not a claim
   about the method: `dca-factory` carries no architecture knowledge and says so.
 

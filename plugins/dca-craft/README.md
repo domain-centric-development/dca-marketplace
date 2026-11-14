@@ -11,7 +11,7 @@ It pairs with [dca-core](../dca-core/), which adds the DCA method, and with
 
 ## Start here
 
-Pick the skill for what you are about to do — `/tdd` before writing new behaviour, `/clean-code`
+Pick the skill for what you are about to do — `/testing` before writing or planning a test (test first or scenario first), `/clean-code`
 while editing, `/adr` when a decision needs to outlive the conversation, `/e2e-testing` when a
 user-visible flow needs a test (or a project has no browser runner yet), `/frontend` when a page,
 a component or a stylesheet changes, `/product-discovery` when a problem needs framing before
@@ -25,7 +25,7 @@ a term enters the model, `/context-map` when a context or a relationship changes
 
 | Skill | Purpose | When it triggers |
 |---|---|---|
-| `/tdd` | Red-Green-Refactor workflow guidance | Adding new behaviour |
+| `/testing` | The testing craft: the level a criterion is tested at (unit, port, adapter, end to end), a fresh and visible fixture, one behaviour named after what it proves, a test seen red first, no logic in a test, state over interaction, injected time, no sleeps, no flaky test left standing, locators by stable marker — and the two ways of writing a test, test first (TDD: red, green, refactor) and scenario first (BDD: Given/When/Then to the test); answers in rows a script can read | Writing, planning or reviewing tests; adding new behaviour |
 | `/clean-code` | Naming, function size, SLAP, smells, Boy-Scout-Rule | Any code edit |
 | `/adr` | Architecture Decision Records (Michael Nygard format, immutable after Accepted) | Non-trivial architectural choice |
 | `/e2e-testing` | The end-user-testing craft: Page Objects, stable selectors, one flow per test, explicit waits, diagnosis-first when a test breaks — and setting up a browser runner where there is none, ending in a smoke test shown to fail | Adding or fixing an end-user test; a project without a runner |
@@ -73,7 +73,7 @@ the marketplace keeps DCA artifacts out of this plugin's skills and agents.
 - **Anything specific to one architecture style** — see dca-core for DCA.
 - **Code generators / scaffolds.**
 - **Formatter / static-analysis replacement.**
-- **BDD / Cucumber** — separate concern, not yet captured here.
+- **A Gherkin runner** — `/testing` turns scenarios into plain tests; adding Cucumber or Reqnroll is the project's stack decision.
 
 ## Installation
 

@@ -1,7 +1,7 @@
 # dca-core
 
 The **Domain-Centric Architecture** method as skills, for Java/Spring and .NET/C#. For the craft
-around it that holds in any architecture style — TDD, Clean Code, ADRs, end-user tests, the glossary,
+around it that holds in any architecture style — testing (TDD, BDD), Clean Code, ADRs, end-user tests, the glossary,
 the context map and three general review perspectives — see the companion plugin
 [dca-craft](../dca-craft/).
 
@@ -102,7 +102,7 @@ over the vendored snapshot.
 
 ## What this plugin deliberately does NOT include
 
-- **Craft independent of the architecture style** (TDD, Clean Code, ADRs, end-user tests, glossary,
+- **Craft independent of the architecture style** (testing with TDD and BDD, Clean Code, ADRs, end-user tests, glossary,
   context map, the general review perspectives) — see dca-craft.
 - **Event Storming / Discovery workshops** — those are facilitated activities,
   not tooling. The skills use Event Storming's grammar (event, command, aggregate,

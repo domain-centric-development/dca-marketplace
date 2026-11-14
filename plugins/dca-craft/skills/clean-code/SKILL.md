@@ -172,4 +172,4 @@ The skill **proposes**; the user decides.
 - Formatting (use the formatter)
 - Performance optimization (separate concern)
 - Architectural review (use `review-ddd`, `review-hexagonal` or their reviewer agents)
-- Test design (use `tdd`)
+- Test design (use `testing`)
