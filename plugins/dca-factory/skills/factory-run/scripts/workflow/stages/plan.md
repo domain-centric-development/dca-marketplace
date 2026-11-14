@@ -41,6 +41,7 @@ Output: `.dca-factory/runs/<story>/plan.md`, and nothing else. You write no test
 <!-- rule: STAGE-PLAN-4 -->
 <!-- rule: STAGE-PLAN-5 -->
 <!-- rule: STAGE-PLAN-6 -->
+<!-- rule: STAGE-PLAN-6A -->
 <!-- rule: STAGE-PLAN-7 -->
 <!-- rule: STAGE-PLAN-8 -->
 <!-- rule: STAGE-PLAN-8A -->

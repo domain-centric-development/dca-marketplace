@@ -148,6 +148,9 @@ the helpers — is in its evidence slices, linked at the node's end.
 
 ## When in doubt
 
+- Planning a change — naming the elements it needs, not writing them — reads `digest/index.md` and the
+  digests of the kinds it plans (each recipe in a few lines, its templates by path), and cites the recipe node;
+  a full recipe only for a decision the digest leaves open, a template's code only when writing the code.
 - Lead with `index.md` files (small) before node bodies; filter on frontmatter before reading bodies;
   read the one section, not the chapter. More in `reference/operations.md` (token discipline).
 - The shipped copy is read-only and may be older than the libraries the project uses: cite the node body,
