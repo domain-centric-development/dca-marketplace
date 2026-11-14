@@ -36,7 +36,8 @@ from ....domain.model.delivery_facts import (
 from ....domain.model.design_facts import (
     ContextMapFacts, ElementName, ElementRules, InvariantFacts, InvariantRow, PortName, Rule)
 from ....domain.model.plan_facts import (
-    AdoptRow, FileChange, HandOverName, HandOverSize, PlanAdoption, PlanLevels, PlannedDigest, PlannedFile)
+    AdoptRow, FileChange, HandOverName, HandOverSize, PlanAdoption, PlanLevels, PlannedDigest, PlannedFile,
+    PlannedTest)
 from ....domain.model.profile_facts import (
     ByteSize, ContractNumber, GateRelease, InstructionFile, ModelKey, ProfileKey, ProfileText, UnknownKey)
 from ....domain.model.story_words import (
@@ -86,7 +87,7 @@ from .story_layout import file_digest
 from .guarded_files import announced_changes, guarded_set, story_changed
 from ....domain.model.guarded import GuardedFacts
 from .design_files import (
-    adapter_shapes, asserts_at, locate_selector, MOCK_MARKERS, mocked_ports, PLAN_FILE_LINE, plan_domain_elements,
+    adapter_shapes, adapter_tests, asserts_at, locate_selector, MOCK_MARKERS, mocked_ports, PLAN_FILE_LINE, plan_domain_elements,
     plan_invariants, read_clause_rows, read_invariant_rows, scenario_actions, scenario_clauses)
 from .run_marks import OWNED_CHANGED
 from .story_layout import EPIC_FILE, epic_folder, find_story
@@ -374,7 +375,9 @@ class StageEvidenceFiles(StageEvidence):
         return PlanLevels(tuple(ScenarioKey(k) for k in unfinished_levels(self._runs, story.value)),
                           frozenset(ScenarioKey(k) for k in plan_levels(self._runs, story.value)),
                           frozenset(ScenarioKey(k) for k in alone),
-                          frozenset(ScenarioKey(k) for k in both))
+                          frozenset(ScenarioKey(k) for k in both),
+                          tuple(PlannedTest(ScenarioKey(k), Selector(t) if t else None)
+                                for k, t in adapter_tests(self._runs, story.value)))
 
     def hand_over_sizes(self, story: StoryId,
                         names: typing.Tuple[HandOverName, ...]) -> typing.Tuple[HandOverSize, ...]:

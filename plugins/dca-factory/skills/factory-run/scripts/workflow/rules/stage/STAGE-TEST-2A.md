@@ -33,7 +33,8 @@ order: 3
    **The adapter half of a criterion with both shapes shows a state; it does not replay the change.** Arrange
    the stub once with the outcome the port test of the criterion asserts, make the one request that shows
    it, assert the text — and name the test after what is shown for that state (`showsTwoOfThreeTasksOpen`),
-   not after the change (`showsOneOpenTaskLessAfterCompletingOne`). Never perform the scenario's action
+   not after the change (`showsOneOpenTaskLessAfterCompletingOne`): the name the plan gave it after
+   `test:` in the adapter shape, unchanged, mapped to that criterion (`tests-planned`). Never perform the scenario's action
    against the stubbed port and then answer the port a second time with the state after it: the second
    answer is yours, the assertion holds with the action deleted, and the name claims a behaviour the test
    cannot prove. The same holds for a value the use case computes — trimmed, counted, sorted: it is the

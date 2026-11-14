@@ -104,7 +104,7 @@ CHECKS: typing.List[Check] = []
 #: stage left, the tests last.
 ORDER = ("story", "contract", "status", "epic", "outcome", "rounds", "suites", "decisions", "plan", "guarded", "plan-adopts", "document",
          "pipeline", "owned", "brief", "adopt", "integrate", "tests-mapped", "files-listed", "test-design", "spec-delta",
-         "spec-tests", "tests-committed", "tests-real", "tests-assert-then", "plan-files", "size", "red-proof", "tests", "invariant-breaks",
+         "spec-tests", "tests-committed", "tests-real", "tests-planned", "tests-assert-then", "plan-files", "size", "red-proof", "tests", "invariant-breaks",
          "red-reproof", "commands")
 
 #: What a passing gate does, per stage — the writes a verdict makes.

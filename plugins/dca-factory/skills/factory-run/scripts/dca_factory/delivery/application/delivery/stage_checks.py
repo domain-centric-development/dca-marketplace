@@ -34,6 +34,8 @@ from .pipeline_workflow import workflow
 #: The contract that holds a build to the plan's files, and the one that holds a criterion's test to the real use case.
 PLAN_FILES_CONTRACT = ContractNumber(22)
 TESTS_REAL_CONTRACT = ContractNumber(21)
+#: The contract that holds a criterion's adapter test to the name the plan gave it.
+TESTS_PLANNED_CONTRACT = ContractNumber(34)
 TESTS_MAPPED = CheckName("tests-mapped")
 
 
@@ -213,6 +215,12 @@ def _test_design(run: Run) -> None:
 def _tests_real(run: Run) -> None:
     if run.contract.value >= TESTS_REAL_CONTRACT.value:
         run.result.take(DesignChecks.tests_real(run.story, mapped(run), run.evidence))
+
+
+@check("tests-planned", stages=("test",), kinds=frozenset((StoryKind.STORY,)), rule="GATE-TESTS-PLANNED")
+def _tests_planned(run: Run) -> None:
+    if run.contract.value >= TESTS_PLANNED_CONTRACT.value:
+        run.result.take(DesignChecks.tests_planned(run.story, mapped(run), run.evidence))
 
 
 @check("tests-assert-then", stages=("test",), kinds=frozenset((StoryKind.STORY,)), rule="GATE-TESTS-ASSERT-THEN")

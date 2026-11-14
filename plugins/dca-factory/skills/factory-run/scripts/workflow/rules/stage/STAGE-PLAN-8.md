@@ -35,8 +35,12 @@ order: 8
      that same failure; for any other change it answers with the outcome the port test asserts. A text
      the `Then` quotes as shown stands in the adapter test as it is quoted — the test gate looks for it
      in the criterion's tests. Write the shape after the level: `level: integration (port)`,
-     `level: integration (adapter: <Adapter>)`, or both on the criterion's line —
-     `level: integration (port) and integration (adapter: <Adapter>)`.
+     `level: integration (adapter: <Adapter>, test: <Class>#<method>)`, or both on the criterion's line —
+     `level: integration (port) and integration (adapter: <Adapter>, test: <Class>#<method>)`. The adapter
+     shape names its test: the class and the method, the method named after the state the adapter shows
+     (`showsATitleOf200Characters`), never after the scenario's action — the stub hands the adapter that
+     state, so the test cannot perform the action. The test stage writes it under that name, and the test
+     gate holds it to the criterion's rows (`tests-planned`).
      **Which of the two a context does is the project's choice, never the plan's.** Read it from the
      technical description (`product/tech.md`, or where the profile's `tech:` points) — a line
      `Refusals (<context>): thrown | returned`, else `Refusals: thrown | returned` for every context — and

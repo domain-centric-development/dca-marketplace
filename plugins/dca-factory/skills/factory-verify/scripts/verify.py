@@ -5795,8 +5795,28 @@ def run_groups(args):
               must_fail=("tests-real",), text=("ShowWidgetInputPort",)),
          dict(extra_sources=(("src/test-pages/java/com/example/WidgetPageTest.java", "class WidgetPageTest { @MockitoBean private ShowWidgetInputPort port; @DisplayName(\"Shows the thing\") void showsTheThing() {} }\n"),))),
         (Case("tests-real: the plan's `integration (adapter: …)` level stubs the input port by design and passes", "test", 0,
-              must_pass=("tests-real",)),
+              must_pass=("tests-real", "tests-planned")),
          dict(extra_sources=(("src/test-pages/java/com/example/WidgetPageTest.java", "class WidgetPageTest { @MockitoBean private ShowWidgetInputPort port; @DisplayName(\"Shows the thing\") void showsTheThing() {} }\n"),
+                             (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Acceptance criteria\n"
+                              "- shows-the-thing  →  level: integration (adapter: WidgetPage, test: WidgetPageTest#showsTheThing)\n"
+                              "- shows-nothing-when-empty  →  level: e2e\n")))),
+        # WP-216 lever 6: the plan names the adapter's test, the test gate finds it among the criterion's rows
+        (Case("tests-planned: an adapter shape without its test is refused, naming the criterion", "test", 1,
+              must_fail=("tests-planned",), text=("without naming its test", "shows-the-thing")),
+         dict(extra_sources=(("src/test-pages/java/com/example/WidgetPageTest.java", "class WidgetPageTest { @MockitoBean private ShowWidgetInputPort port; @DisplayName(\"Shows the thing\") void showsTheThing() {} }\n"),
+                             (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Acceptance criteria\n"
+                              "- shows-the-thing  →  level: integration (adapter: WidgetPage)\n"
+                              "- shows-nothing-when-empty  →  level: e2e\n")))),
+        (Case("tests-planned: the adapter test the plan names is not mapped to its criterion: refused, naming both",
+              "test", 1, must_fail=("tests-planned",), text=("shows-the-thing (WidgetPageTest#showsOneThing)",)),
+         dict(extra_sources=(("src/test-pages/java/com/example/WidgetPageTest.java", "class WidgetPageTest { @MockitoBean private ShowWidgetInputPort port; @DisplayName(\"Shows the thing\") void showsTheThing() {} }\n"),
+                             (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Acceptance criteria\n"
+                              "- shows-the-thing  →  level: integration (adapter: WidgetPage, test: WidgetPageTest#showsOneThing)\n"
+                              "- shows-nothing-when-empty  →  level: e2e\n")))),
+        (Case("tests-planned: an older profile (contract 33) is not held to it", "test", 0,
+              absent=("without naming its test",)),
+         dict(profile=PROFILE + "contract: 33\n",
+              extra_sources=(("src/test-pages/java/com/example/WidgetPageTest.java", "class WidgetPageTest { @MockitoBean private ShowWidgetInputPort port; @DisplayName(\"Shows the thing\") void showsTheThing() {} }\n"),
                              (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Acceptance criteria\n"
                               "- shows-the-thing  →  level: integration (adapter: WidgetPage)\n"
                               "- shows-nothing-when-empty  →  level: e2e\n")))),
@@ -5810,7 +5830,7 @@ def run_groups(args):
               extra_sources=(("src/test-pages/java/com/example/WidgetPageTest.java", "class WidgetPageTest { @MockitoBean private ShowWidgetInputPort port; @DisplayName(\"Shows the thing\") void showsTheThing() {} }\n"),
                              ("src/test-pages/java/com/example/WidgetPortTest.java", "class WidgetPortTest { @Autowired ShowWidgetInputPort port; void showsTheThing() {} }\n"),
                              (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Acceptance criteria\n"
-                              "- shows-the-thing  →  level: integration (port) and integration (adapter: WidgetPage) — port: the count\n"
+                              "- shows-the-thing  →  level: integration (port) and integration (adapter: WidgetPage, test: WidgetPageTest#showsTheThing) — port: the count\n"
                               "- shows-nothing-when-empty  →  level: e2e\n")))),
         (Case("tests-real: both shapes in the level, every test of the criterion stubs the port: the port shape is missing",
               "test", 1, must_fail=("tests-real",), text=("the port shape is missing", "shows-the-thing")),

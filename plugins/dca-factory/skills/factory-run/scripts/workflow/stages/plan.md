@@ -89,7 +89,7 @@ refusals: thrown | returned — <where it was read>   (only where a criterion re
 (one row per element; Evidence is the file:line, or the catalog node by its path inside the catalog)
 
 ## Acceptance criteria
-- <key>  →  level: e2e | integration (port) | integration (adapter: <Adapter>) | browser-only (<why>) — <the runner in this project>, happy path on the one the story marks
+- <key>  →  level: e2e | integration (port) | integration (adapter: <Adapter>, test: <Class>#<method>) | browser-only (<why>) — <the runner in this project>, happy path on the one the story marks
                                   (the key alone; the criterion's text stays in the story)
 
 ## Invariants

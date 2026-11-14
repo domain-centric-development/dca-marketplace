@@ -40,6 +40,23 @@ def adapter_shapes(runs: str, story_id: str) -> typing.Tuple[typing.Set[str], ty
     return alone, both
 
 
+#: The adapter test the plan names inside the adapter shape: `integration (adapter: <Adapter>, test: <Class>#<method>)`.
+ADAPTER_TEST = re.compile(r"\btest:\s*`?([A-Za-z_][\w.$]*#[A-Za-z_]\w*)`?")
+
+
+def adapter_tests(runs: str, story_id: str) -> typing.List[typing.Tuple[str, str]]:
+    """The adapter tests the plan names, one `(key, <Class>#<method>)` per adapter shape, with an empty test where the
+    shape names none."""
+    path = os.path.join(runs, story_id, "plan.md")
+    text = read_text(path) if os.path.isfile(path) else ""
+    named: typing.List[typing.Tuple[str, str]] = []
+    for m in LEVEL_LINE.finditer(text):
+        for shape in ADAPTER_SHAPE.finditer(m.group(2).split(" — ", 1)[0]):
+            test = ADAPTER_TEST.search(shape.group(0))
+            named.append((m.group(1), test.group(1) if test else ""))
+    return named
+
+
 #: The kinds of a plan's `## Changes` row that carry invariants: the domain's own types. A use case, a port, an
 #: adapter or a read model has none of its own — its rules are the domain's, reached through the use case.
 DOMAIN_KINDS = re.compile(r"\b(aggregate|entity|value object|value|domain service)\b", re.I)

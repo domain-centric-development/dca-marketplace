@@ -11,6 +11,27 @@ from .story_state import Detail
 from .story_words import Place, ScenarioKey, Selector
 
 
+class PlannedTest(Value):
+    """The adapter test the plan names for a criterion's adapter shape — `<Class>#<method>`, named after the state it
+    shows — or none, where the shape names no test."""
+
+    key: ScenarioKey
+    test: typing.Optional[Selector]
+
+    def found_in(self, selectors: typing.Iterable[Selector]) -> bool:
+        """Whether one of the criterion's mapped tests is this one: the same method, in a class of the same simple
+        name — the plan may name the class without its package."""
+        if self.test is None:
+            return False
+        cls, _, method = self.test.value.partition("#")
+        simple = cls.rsplit(".", 1)[-1]
+        for selector in selectors:
+            other, _, other_method = selector.value.partition("#")
+            if other_method == method and other.rsplit(".", 1)[-1] == simple:
+                return True
+        return False
+
+
 class PlanLevels(Value):
     """The levels the plan gave: the keys its skeleton left without one, the keys it gave `browser-only`, the keys
     it gave `integration (adapter: …)` alone — an incoming adapter's translation, tested against a stubbed input
@@ -20,6 +41,7 @@ class PlanLevels(Value):
     browser_only: typing.FrozenSet[ScenarioKey]
     adapter: typing.FrozenSet[ScenarioKey]
     both: typing.FrozenSet[ScenarioKey]
+    named: typing.Tuple[PlannedTest, ...] = ()
 
 
 class HandOverSize(Value):

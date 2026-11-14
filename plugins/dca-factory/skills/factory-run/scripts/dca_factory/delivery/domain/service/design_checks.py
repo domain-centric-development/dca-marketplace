@@ -22,6 +22,7 @@ from ..model.verdict import CheckName, Findings, Said
 INVARIANTS = CheckName("invariants")
 CLAUSES = CheckName("clauses")
 TESTS_REAL = CheckName("tests-real")
+TESTS_PLANNED = CheckName("tests-planned")
 PLAN_FILES = CheckName("plan-files")
 
 INVARIANTS_MARKER = "<!-- gate:invariants -->"
@@ -256,6 +257,32 @@ class DesignChecks(DomainService):
                 "adapter's: " + ", ".join(no_port))),)
         return (TESTS_REAL.ok(Said("every integrated and end-to-end test of a criterion runs through the real input "
                                    "port, or is the adapter's beside one that does")),)
+
+    @staticmethod
+    def tests_planned(story: Story, tests: typing.Tuple[MappedTest, ...], evidence: StageEvidence) -> Findings:
+        """The adapter test the plan names for a criterion's adapter shape is one of the criterion's tests. The plan
+        names it after the state the adapter shows; the test stage takes the name, so a test named after an action its
+        stub cannot perform does not stand where the plan put the adapter's."""
+        plan = evidence.plan_levels(story.id)
+        if plan is None or not plan.named:
+            return ()
+        unnamed = sorted({p.key.value for p in plan.named if p.test is None})
+        if unnamed:
+            return (TESTS_PLANNED.fail(Said(
+                "the plan gives these criteria the adapter shape without naming its test — write "
+                "`integration (adapter: <Adapter>, test: <Class>#<method>)`, the method named after the state the "
+                "adapter shows: " + ", ".join(unnamed))),)
+        missing = []
+        for planned in plan.named:
+            rows = [t.selector for t in tests if t.key == planned.key]
+            if not planned.found_in(rows):
+                missing.append(f"{planned.key.value} ({planned.test.value if planned.test else ''})")
+        if missing:
+            return (TESTS_PLANNED.fail(Said(
+                "the adapter test the plan names is not among the criterion's tests in `gate:tests` — write it under "
+                "that name and map it, or plan again: " + "; ".join(missing))),)
+        return (TESTS_PLANNED.ok(Said(f"every adapter test the plan names is mapped to its criterion "
+                                      f"({len(plan.named)})")),)
 
     @staticmethod
     def plan_files(story: Story, evidence: StageEvidence) -> Findings:
