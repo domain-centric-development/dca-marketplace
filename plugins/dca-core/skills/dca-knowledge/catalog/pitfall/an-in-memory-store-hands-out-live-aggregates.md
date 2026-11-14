@@ -14,7 +14,7 @@ A map-backed repository that returns the instance it holds — `store.get(id)` �
 - **A missing `save()` goes unseen.** The caller changed the stored object already; the test that should catch the forgotten write passes. Against a database the change is gone, because loading a row builds a new object.
 - **A rollback undoes nothing.** A use case that changes an aggregate, then fails or refuses, has already changed the store. A database would have rolled the change back; the test that passes in memory asserts a state production never has — or the other way round, a test cannot see that its rollback is missing.
 - **Two requests share one aggregate.** One request's half-made change is visible to another before anything committed.
-- **It is the adapter a reader copies first**, and the one the unit tests keep after the database arrives — so the gap travels with the fake.
+- **It is the adapter a reader copies first**, and the one tests keep when they replace the database adapter with it — so the gap travels with the fake.
 
 ## How to spot it
 

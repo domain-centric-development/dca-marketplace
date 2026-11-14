@@ -22,5 +22,6 @@ Domain-Centric Architecture synthesizes ideas from multiple foundational works a
 - [Software Architecture Patterns](/guide/references/software-architecture-patterns.md)
 - [Influential Blogs & Communities](/guide/references/influential-blogs-communities.md)
 - [Related Patterns & Practices](/guide/references/related-patterns-practices.md)
+- [Testing](/guide/references/testing.md)
 - [Acknowledgments](/guide/references/acknowledgments.md)
 - [Contributing to This Documentation](/guide/references/contributing-to-this-documentation.md)

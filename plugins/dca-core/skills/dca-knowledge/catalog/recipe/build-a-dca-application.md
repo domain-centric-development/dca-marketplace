@@ -28,7 +28,7 @@ generating, and the template to fill in.
 | Notify another bounded context | [Publish a cross-context event](/recipe/publish-a-cross-context-event.md) |
 | Integrate a foreign model without polluting the domain | [Add an anti-corruption layer](/recipe/add-an-anti-corruption-layer.md) |
 | Test an aggregate (invariants, state, domain events) | [Test an aggregate](/recipe/test-an-aggregate.md) |
-| Test a use case (Command/Query → Result, fake output ports) | [Test a use case](/recipe/test-a-use-case.md) |
+| Test a use case (through its input port, real outgoing adapters) | [Test a use case](/recipe/test-a-use-case.md) |
 | Move a repository adapter from in-memory to a database | [Move a repository from memory to a database](/recipe/move-a-repository-to-a-database.md) |
 | Add a read-optimized model for a query | [Add a read model](/recipe/add-a-read-model.md) |
 | Expose a bounded context's API to other contexts | [Expose an open host service](/recipe/expose-an-open-host-service.md) |

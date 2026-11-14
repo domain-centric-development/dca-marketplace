@@ -4,7 +4,7 @@ title: Add a browser runner to an existing project
 tags: [recipe, testing, bootstrap]
 review: draft
 owner: DCA catalog maintainers
-evidence: [/guide/e2e-testing/one-test-per-acceptance-criterion.md, /guide/e2e-testing/page-object-pattern.md, /guide/e2e-testing/data-test-attributes.md]
+evidence: [/guide/e2e-testing/every-criterion-a-test-the-happy-path-end-to-end.md, /guide/e2e-testing/page-object-pattern.md, /guide/e2e-testing/data-test-attributes.md]
 ---
 
 A project shows pages and has no way to drive a browser in its tests. Every story about a page then falls back to reading markup or script as text, which proves the wording and not the behaviour. Set the runner up once, as its own step, before the next story that needs it.
@@ -19,5 +19,5 @@ A project shows pages and has no way to drive a browser in its tests. Every stor
 
 ## Anchors
 
-- Guide: [One test per acceptance criterion](/guide/e2e-testing/one-test-per-acceptance-criterion.md) — *Adding a browser runner to an existing project*, *When there is no browser to drive*, *Where the application runs* · [Page Object Pattern](/guide/e2e-testing/page-object-pattern.md) · [Data-test attributes](/guide/e2e-testing/data-test-attributes.md)
+- Guide: [Every criterion a test, the happy path end to end](/guide/e2e-testing/every-criterion-a-test-the-happy-path-end-to-end.md) — *Adding a browser runner to an existing project*, *When there is no browser to drive*, *Where the application runs* · [Page Object Pattern](/guide/e2e-testing/page-object-pattern.md) · [Data-test attributes](/guide/e2e-testing/data-test-attributes.md)
 - From zero instead: [Bootstrap a new application](/recipe/bootstrap-a-new-application.md)

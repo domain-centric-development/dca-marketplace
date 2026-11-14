@@ -6,7 +6,8 @@ tags: [guide, guide]
 ---
 
 This document defines the three test levels a story's scenarios are tested at, which scenario goes to which
-level, and the three kinds of end-to-end test that are easy to mix up.
+level, how a test at any level is written so that its result means something, and the three kinds of
+end-to-end test that are easy to mix up.
 
 ---
 
@@ -18,6 +19,7 @@ level, and the three kinds of end-to-end test that are easy to mix up.
 - [The use case once, each adapter its translation](/guide/testing-levels/the-use-case-once-each-adapter-its-translation.md)
 - [Every invariant a unit test, every guard an invariant](/guide/testing-levels/every-invariant-a-unit-test-every-guard-an-invariant.md)
 - [Integrated, not integrated against another system](/guide/testing-levels/integrated-not-integrated-against-another-system.md)
+- [A test that holds](/guide/testing-levels/a-test-that-holds.md)
 - [Smoke test, happy-path test, journey test](/guide/testing-levels/smoke-test-happy-path-test-journey-test.md)
 - [Test shapes](/guide/testing-levels/test-shapes.md)
 - [Related Documentation](/guide/testing-levels/related-documentation.md)

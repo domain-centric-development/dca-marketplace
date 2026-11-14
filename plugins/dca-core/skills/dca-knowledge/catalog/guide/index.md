@@ -5,7 +5,7 @@
 - [dependency-structure/](dependency-structure/index.md) (10)
 - [deployment-patterns/](deployment-patterns/index.md) (6)
 - [domain-services-with-data-dependencies/](domain-services-with-data-dependencies/index.md) (8)
-- [e2e-testing/](e2e-testing/index.md) (11)
+- [e2e-testing/](e2e-testing/index.md) (12)
 - [elements/](elements/index.md) (5)
 - [factory/](factory/index.md) (19)
 - [integration-patterns/](integration-patterns/index.md) (12)
@@ -14,13 +14,13 @@
 - [package-structure/](package-structure/index.md) (7)
 - [quick-reference/](quick-reference/index.md) (5)
 - [readme/](readme/index.md) (6)
-- [references/](references/index.md) (15)
+- [references/](references/index.md) (16)
 - [repository-vs-store/](repository-vs-store/index.md) (6)
 - [rules/](rules/index.md) (13)
 - [spring-modulith/](spring-modulith/index.md) (11)
 - [strategic-design/](strategic-design/index.md) (2)
 - [team-topologies/](team-topologies/index.md) (11)
-- [testing-levels/](testing-levels/index.md) (9)
+- [testing-levels/](testing-levels/index.md) (10)
 
 - [ArchUnit Governance for Domain-Centric Architecture](archunit-governance.md) — ArchUnit Governance for Domain-Centric Architecture
 - [Domain-Centric Architecture vs Clean Architecture](clean-architecture-comparison.md) — Domain-Centric Architecture vs Clean Architecture

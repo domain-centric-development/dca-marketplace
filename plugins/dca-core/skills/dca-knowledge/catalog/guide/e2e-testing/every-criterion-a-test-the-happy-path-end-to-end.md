@@ -1,14 +1,22 @@
 ---
 type: Section
-title: One test per acceptance criterion
+title: "Every criterion a test, the happy path end to end"
 chapter: E2E Testing for Domain-Centric Architecture
 source: guide
 tags: [guide, section]
 ---
 
-An end-user test earns its cost when it is the evidence for a stated criterion, and it is easiest to
-keep honest when the mapping is explicit: **one end-user test per acceptance criterion of a story**,
-recorded next to the criterion's key rather than guessed from test names.
+**Rule: every acceptance criterion of a story has a test. One scenario per story — its happy path — gets the
+end-to-end test; every other criterion is tested integrated, at the level of
+[Test Levels](/guide/testing-levels/the-happy-path-end-to-end-the-rest-integrated.md).**
+
+The exception is a criterion whose `Then` only a browser can observe — a countdown, a script's reaction to a
+click, a notification. It gets an end-to-end test too, and the plan says why (`browser-only: <why>`). A browser
+test per criterion tests the same wiring again, runs slower and fails for reasons that have nothing to do with
+the criterion.
+
+A test is easiest to keep honest when the mapping is explicit: each criterion's test is recorded next to the
+criterion's key rather than guessed from test names.
 
 ```markdown
 | criterion | test |
@@ -17,14 +25,14 @@ recorded next to the criterion's key rather than guessed from test names.
 | lists-newest-first | com.example.reporting.MonthlyReportPageTest#listsNewestFirst |
 ```
 
-Three rules keep that mapping meaningful.
+Three rules keep that mapping meaningful, at every level.
 
 **The criterion's key never appears in the test.** Not in its name, not in a display name, not in a
 comment. A test says what the user can observe (`showsEmptyState`), and the link between criterion
 and test lives in the table alone. A key written into a test name pins the test to a story that will
 be closed long before the test is deleted.
 
-**Red for the right reason, before the code exists.** A new end-user test must fail on its
+**Red for the right reason, before the code exists.** A new test must fail on its
 *assertion*, not on a missing class or a wiring error, and it must not be green before the behaviour
 is built. A test that is green too early proves nothing about the criterion — and the most common
 cause is a stub that returns the very answer the criterion expects, so a stub should throw instead of
@@ -35,7 +43,7 @@ the criterion does. A test rewritten to match the implementation has stopped bei
 
 ### When there is no browser to drive
 
-A criterion still needs an end-user test when the story has no user interface — and the right shape
+A story's happy path still needs an end-user test when the story has no user interface — and the right shape
 is then the highest level the project can actually run today, not a browser runner installed for the
 occasion:
 

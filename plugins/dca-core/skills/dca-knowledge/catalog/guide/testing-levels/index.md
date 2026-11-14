@@ -1,5 +1,6 @@
 # testing-levels
 
+- [A test that holds](a-test-that-holds.md) — The levels say where a test runs. This section says how a test is written so that its result means something:
 - [Every invariant a unit test, every guard an invariant](every-invariant-a-unit-test-every-guard-an-invariant.md) — named as an invariant is not written.**
 - [Integrated, not integrated against another system](integrated-not-integrated-against-another-system.md) — An integration test of an outgoing adapter runs the adapter against a real HTTP server on a free port that
 - [Related Documentation](related-documentation.md) — Related Documentation
@@ -7,5 +8,5 @@
 - [Table of Contents](table-of-contents.md) — Table of Contents
 - [Test shapes](test-shapes.md) — The pyramid (Cohn, Fowler) asks for many unit tests and few UI tests; the trophy (Kent C. Dodds) for mostly
 - [The happy path end to end, the rest integrated](the-happy-path-end-to-end-the-rest-integrated.md) — The happy path is the scenario that shows what the story is for, as its author would demonstrate it. It is
-- [The three levels](the-three-levels.md) — The layering makes the integration level strong. The domain is free of framework types, adapters translate at
+- [The three levels](the-three-levels.md) — The integration level has two shapes, set out below: the
 - [The use case once, each adapter its translation](the-use-case-once-each-adapter-its-translation.md) — A use case is often called from more than one place: a page, an API, a message consumer, a tool an agent calls.

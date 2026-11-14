@@ -64,6 +64,27 @@ Pattern: `{context}-{element}-{action}` (kebab-case)
 - `checkout-place-order-button`
 - `confirmation-message`
 
+### A marker, not a position
+
+**Rule: a locator names a stable marker of the element itself, never its position among siblings.**
+
+A `data-test` attribute is stable only as long as the locator relies on nothing else. A position does:
+
+```java
+// ❌ BAD: the second title within one parent — breaks when each task gets an entry of its own
+page.locator("//*[@data-test='task-title'][2]");
+
+// ✅ GOOD: the task this test created, found by its marker and the value the test gave it
+page.locator("[data-test='task']").filter(new Locator.FilterOptions().setHasText(title));
+```
+
+The first locator finds nothing as soon as a later change wraps each task in an element of its own, although
+the page is right. The test then changes without a change in behaviour — the property Kent Beck's *Test
+Desiderata* call *structure-insensitive* is lost. Where several elements carry the same marker, the test tells
+them apart by the data it created itself ([Test Levels](/guide/testing-levels/a-test-that-holds.md)),
+or the markup gives each one a marker of its own (`data-task-id`). Filtering by the test's own unique value
+is not a selector by visible text: the value is the test's fixture, not the page's copy.
+
 ### Template Integration
 
 ```html

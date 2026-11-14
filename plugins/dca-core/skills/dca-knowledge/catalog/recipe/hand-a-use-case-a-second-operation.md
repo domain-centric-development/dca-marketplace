@@ -25,7 +25,7 @@ put together, in the composition root.
    behind it: `PriceSetter.setPrice(product, amount)`, not `ChangePriceCaller`. Its parameters are the first use
    case's types; it knows no command of the second.
 3. **Let the first use case decide.** It depends on the port only; the order of the steps, what a failure of one step
-   means for the rest, and what it counts all stay in its `execute`. Test it against a fake port.
+   means for the rest, and what it counts all stay in its `execute`. Test it through its input port with the real port implementation the composition root wires in.
 4. **Implement the port in the composition root.** In `{context}/infrastructure/` — a `@Bean` in the context's
    `@Configuration` (Spring), a registration in `Add{Context}Context()` (.NET), a line in the hand-written root (no
    container). The implementation takes the second use case's input port and turns a call into its command:

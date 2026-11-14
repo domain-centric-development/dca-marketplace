@@ -15,3 +15,4 @@
 - [Spring Modulith](spring-modulith.md) — Spring Modulith
 - [Strategic Design and Subdomains](strategic-design-and-subdomains.md) — behind DCA's pattern selection per subdomain
 - [Team Topologies](team-topologies.md) — Team Topologies
+- [Testing](testing.md) — Interacting Tests, Mystery Guest

@@ -26,6 +26,13 @@ A scenario's test is the one whose shape observes its `Then`: a business outcome
 status only the page or the API shows goes to that adapter's test, with the stubbed port answering the outcome.
 The happy path's end-to-end test is what proves the two fit together.
 
+**Rule: a scenario gets an adapter test only where the adapter itself produces what its `Then` says.** A quoted
+text, a status, a redirect, a mark on the page — these exist only in the adapter, and only an adapter test
+observes them below the browser. A value the use case computes — a trimmed title, a count, a sorted list — is
+proven by the port test; the page merely shows it. An adapter test for such a value has nothing left to prove: its
+stub returns the computed value, so the test either repeats the port test's claim without proving it, or claims a
+computation it never ran, whatever its name. Such a scenario gets the port test alone.
+
 A refusal the page shows needs both: the port test proves the use case refuses, and with which refusal; the adapter
 test proves the text, its stub answering with that same refusal. Where the context returns its refusals, the port
 test asserts the case the use case returns, with its values, and the adapter's stub returns the case, never throws

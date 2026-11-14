@@ -14,6 +14,10 @@ tags: [guide, section]
 
 **Rule: a scenario is tested at the lowest level that observes its `Then` from outside.**
 
+The integration level has two shapes, set out [below](#the-use-case-once-each-adapter-its-translation): the
+**port test** of a use case and the **adapter test** of an incoming adapter. Where a test records its level in one
+word, it writes `unit`, `port`, `adapter` or `e2e`.
+
 The layering makes the integration level strong. The domain is free of framework types, adapters translate at
 the edge, a use case sits behind an input port. A scenario whose `Then` is a business outcome or a response is
 fully observable below the page, through the same adapters a browser test would pass. What is left to a browser

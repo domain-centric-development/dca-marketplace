@@ -12,9 +12,9 @@ Put an aggregate into a relational database **without touching the output port o
 4. **Write the adapter** — `Jdbc{Name}Repository` ([template](/template/jdbc-repository-adapter.md)), a JPA adapter with its own entity ([template](/template/jpa-repository-adapter.md)), or the stack's equivalent (Dapper, EF Core).
 5. **Take the row lock where a check precedes a change** — a read that a use case checks and then changes on (a quantity reserved, a state advanced) is read `FOR UPDATE` inside the transaction, so a second caller waits instead of deciding on the same row.
 6. **Make the transaction boundary real** — the boundary opens the database transaction, every repository and store of the use case writes in it, and an outbox that records the use case's events writes in it too ([outbox entry written after commit](/pitfall/outbox-entry-written-after-commit.md)).
-7. **Move the in-memory adapter to the test sources** — it becomes the unit tests' fake and stores copies, on write and on read ([an in-memory store hands out live aggregates](/pitfall/an-in-memory-store-hands-out-live-aggregates.md)).
+7. **Move the in-memory adapter to the test sources, or delete it** — the use cases' port tests now run against the database adapter; an in-memory adapter that stays (for a contract test, or a fast local run) stores copies, on write and on read ([an in-memory store hands out live aggregates](/pitfall/an-in-memory-store-hands-out-live-aggregates.md)).
 8. **Test the adapter against the real database** — an integration test per adapter against the engine production runs, started in a container; the database's own behaviour (constraints, locks, the type mapping) is what the test is for.
-9. **Verify nothing above the port changed** — the existing use-case and domain tests pass untouched; then the project's architecture suite.
+9. **Verify nothing above the port changed** — the existing port and domain tests pass untouched, now against the database; then the project's architecture suite.
 
 ## Templates
 

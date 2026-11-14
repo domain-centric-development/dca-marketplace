@@ -32,7 +32,7 @@ part of a use case.
 5. **Keep incoming adapters off the host.** A command-line handler or a worker loop reaches the host only through
    the composition root's wiring, never by import: an incoming adapter uses no infrastructure (`DCA-HEX-004`), and
    another context's infrastructure is private (`DCA-HEX-005`).
-6. **Test the use case without the host.** Fake ports for the claim and the steps; one integration test starts the
+6. **Test the use case without the host.** Its port test runs it through its input port in the wired application, with the real claim store and the steps' real adapters; one integration test starts the
    real host, sends the stop signal mid-run and asserts the exit code and that the claim is released.
 
 ## Rules to satisfy (build-time checklist)

@@ -9,7 +9,7 @@ evidence: [/guide/testing-levels.md, /guide/factory.md, /marker/port-in/usecase.
 
 Test one scenario of a story below the page: the use case runs through the wired application — its input port or its HTTP surface, whichever the scenario's `When` names — with real adapters and persistence as the project runs it in tests. An external system the use case calls is a real HTTP server on a free port that answers what the test arranges. The test proves the scenario's `Then` and every adapter the use case passes through, the translation included.
 
-This is not the use-case unit test, which fakes the output ports to test orchestration alone ([Test a use case](/recipe/test-a-use-case.md)). Both have their place; when a change is about an adapter, only this one covers it.
+It is the port test of [Test a use case](/recipe/test-a-use-case.md) with an external system in it: the same wired application, the same real adapters, and the external system's answer as part of the arrangement. No output port is faked or mocked — when a change is about an adapter, the adapter is what the test is for.
 
 ## Steps
 

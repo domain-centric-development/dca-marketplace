@@ -2,18 +2,18 @@
 
 Node: `/recipe/test-a-use-case.md` — cite it by that path; read it in full only for a decision this digest leaves open.
 
-Test a use case as an application-layer unit test: construct the `*UseCase`, feed it a `Command` (write) or `Query` (read), assert on the returned `Result` and on observable state.
+Test a use case once, through its input port, in the wired application: real outgoing adapters, the store as the project runs it in tests (its own database engine in a container), an external system stubbed at the protocol.
 
 ## Steps (first sentence each)
 
-1. **Instantiate the use case directly** — no Spring context.
-2. **Fake the output ports, not the domain** — implement each output-port interface with a small `Test{Aggregate}Repository` backed by a `ConcurrentHashMap`, and a `TestDomainEventPublisher` that records events.
-3. **Arrange through the port** — seed state by calling `fakeRepo.save(aggregate)` with genuine domain objects, so the test round-trips real data.
-4. **Act once** — call `useCase.execute(command)` exactly once per test.
-5. **Assert on the contract, not internals** — check the `Result` fields and observable side effects (e.g. `fakeRepo.findById(...)` present/absent).
-6. **Verify event hygiene** — if the use case publishes, assert the fake publisher recorded the expected event and that `publishAndClearEvents` left the aggregate's `domainEvents()` empty.
-7. **One behaviour per test** — group scenarios with `@Nested` + `@DisplayName`; each `@Test` covers a single behaviour named in the ubiquitous language.
+1. **Take the input port from the wired application** — the test starts the application as it runs in tests (a Spring Boot test, a `WebApplicationFactory`) and asks it for `{Name}InputPort`.
+2. **Give the test data of its own** — values from the test's name and a random part, kept in variables the assertions use; no seeded record the test changes or needs exact ([A shared fixture makes tests interact](/pitfall/a-shared-fixture-makes-tests-interact.md)).
+3. **Arrange the `Given` through the input ports** — call the use cases that create the state, and assert that each succeeded; an ignored result swallows a refusal.
+4. **Act once** — call `execute(command)` exactly once.
+5. **Assert the outcome** — the `Result`, and what is stored, read back through the repository or a query the use case uses.
+6. **Assert an event where it is the outcome** — the published event, observed where the project observes events in tests; and, for a request to an unmanaged system, the request the stub received.
+7. **One behaviour per test**, named after what it proves in the ubiquitous language; the scenario's key never appears in the name.
 
 ## Templates
 
-- `/template/use-case-test.md` Use-case test skeleton (JUnit 5 + hand-written fake ports): Domain-free skeleton for a use-case unit test. — code: `/template/use-case-test/java.md`
+- `/template/use-case-test.md` Use-case port test skeleton (the input port in the wired application): Domain-free skeleton for a use case's port test. — code: `/template/use-case-test/java.md`

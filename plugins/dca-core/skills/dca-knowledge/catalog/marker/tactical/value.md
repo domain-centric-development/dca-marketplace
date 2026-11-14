@@ -59,4 +59,4 @@ Identifiers are Value Objects too, but carry their own marker: `Id`.
 - [ERROR HANDLING RULES](/guide/rules/error-handling-rules.md)
 - [Event-Driven Architecture in Spring Modulith](/guide/spring-modulith/event-driven-architecture-in-spring-modulith.md)
 - [Shared Kernel Pattern (Strategic DDD)](/guide/strategic-design/shared-kernel-pattern-strategic-ddd.md)
-- [What belongs in the shared kernel](/guide/strategic-design/what-belongs-in-the-shared-kernel.md)
+- [A test that holds](/guide/testing-levels/a-test-that-holds.md)

@@ -20,7 +20,7 @@ Give the application a way to learn *who is calling* without letting authenticat
 7. **Keep the domain caller-free** — no `User` parameter on an aggregate method, no role check in a value object. `cart.checkout()` guards its own invariants; the use case has already answered *who may* ([Authorization in the domain layer](/pitfall/authorization-in-domain-layer.md)).
 8. **Mark caller-less use cases** — an event consumer that reacts to the system's own event acts on nobody's behalf; it checks no caller, and saying so in a comment keeps the next reader from adding a guard that can never be satisfied. It still loads an owned aggregate through the owner the event names ([Ownership as a marker](/decision/ownership-as-a-marker.md)); only a path that holds no owner to name stays unscoped.
 9. **Render refusals in the adapter** — the use case answers "nothing here for you"; whether that becomes `403` or `404` is the resource's protocol decision (a `403` on a stranger's id confirms the id exists).
-10. **Verify** — the project's architecture suite (`./gradlew test-architecture`, or `dotnet test -c Debug` against the architecture-test project); a unit test of the use case passes a foreign `customerId` and expects an empty result, with no identity infrastructure involved ([Test a use case](/recipe/test-a-use-case.md)).
+10. **Verify** — the project's architecture suite (`./gradlew test-architecture`, or `dotnet test -c Debug` against the architecture-test project); the use case's port test passes a foreign `customerId` through the input port and expects an empty result — the identity port is the incoming adapter's concern, so the test needs no identity infrastructure ([Test a use case](/recipe/test-a-use-case.md)).
 
 ## Rules to satisfy (build-time checklist)
 
