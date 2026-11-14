@@ -36,6 +36,8 @@ PLAN_FILES_CONTRACT = ContractNumber(22)
 TESTS_REAL_CONTRACT = ContractNumber(21)
 #: The contract that holds a criterion's adapter test to the name the plan gave it.
 TESTS_PLANNED_CONTRACT = ContractNumber(34)
+#: The contract that gives a criterion the adapter shape only where its `Then` names what the adapter produces.
+ADAPTER_SHAPE_CONTRACT = ContractNumber(35)
 TESTS_MAPPED = CheckName("tests-mapped")
 
 
@@ -221,6 +223,12 @@ def _tests_real(run: Run) -> None:
 def _tests_planned(run: Run) -> None:
     if run.contract.value >= TESTS_PLANNED_CONTRACT.value:
         run.result.take(DesignChecks.tests_planned(run.story, mapped(run), run.evidence))
+
+
+@check("adapter-shape", stages=("plan",), kinds=frozenset((StoryKind.STORY,)), rule="GATE-ADAPTER-SHAPE")
+def _adapter_shape(run: Run) -> None:
+    if run.contract.value >= ADAPTER_SHAPE_CONTRACT.value:
+        run.result.take(ThenChecks.adapter_shape(run.story, run.evidence))
 
 
 @check("tests-assert-then", stages=("test",), kinds=frozenset((StoryKind.STORY,)), rule="GATE-TESTS-ASSERT-THEN")

@@ -11,11 +11,12 @@ from ....building_blocks import DomainService
 from ..gateway.stage_evidence import StageEvidence
 from ..model.stage import StoryKind
 from ..model.story import Story
-from ..model.story_words import Clause, Place
+from ..model.story_words import Clause, Place, ScenarioClauses
 from ..model.test_facts import MappedTest, ShownLiteral, TestSource
 from ..model.verdict import CheckName, Findings, Said
 
 TESTS_ASSERT_THEN = CheckName("tests-assert-then")
+ADAPTER_SHAPE = CheckName("adapter-shape")
 
 #: A quoted text, in each pair of quotes a story is written with: German „…“ (closed by “ or ”), English “…”, the
 #: straight "…", the single ‚…‘ and ‘…’, and «…». A straight single quote is an apostrophe too often to be one.
@@ -55,6 +56,33 @@ def shown_literals(clause: Clause) -> typing.Tuple[ShownLiteral, ...]:
         if literal not in (shown.value for shown in found):
             found.append(ShownLiteral(literal))
     return tuple(found)
+
+
+#: What only a surface has: a control (a button, a field, a link — `CONTROL_NOUNS`), a message, a hint, a page. A
+#: `Then` that names one says what the adapter renders, whatever value stands beside it.
+SURFACE = re.compile(rf"(?:^|\W)(?:{CONTROL_NOUNS}|messages?|hints?|notices?|pages?|"
+                     rf"Meldung(?:en)?|Hinweis(?:e)?|Nachricht(?:en)?|Seite(?:n)?)(?:\W|$)", re.IGNORECASE)
+#: A status a `Then` names — a three-digit code from 100 to 599 standing on its own.
+STATUS = re.compile(r"(?<![\w.,])[1-5]\d\d(?![\w.,])")
+
+
+def adapter_produced(scenario: ScenarioClauses) -> bool:
+    """Whether a scenario's expectations name something only an incoming adapter produces: a control, a message, a
+    hint or a page; a text quoted as shown that the person did not enter in a `When` step; or a status. A text the
+    `When` already holds — trimmed, counted or kept as entered — is the use case's outcome, which the page merely
+    shows; the port test proves it."""
+    entered = {next(g for g in m.groups() if g is not None).strip()
+               for action in scenario.actions for m in QUOTED.finditer(action.value)}
+    entered_numbers = {m.group(0) for action in scenario.actions for m in STATUS.finditer(action.value)}
+    for clause in scenario.clauses:
+        text = CODE_SPAN.sub(" ", clause.text.value)
+        if SURFACE.search(text):
+            return True
+        if any(literal.value.strip() not in entered for literal in shown_literals(clause)):
+            return True
+        if any(m.group(0) not in entered_numbers for m in STATUS.finditer(text)):
+            return True
+    return False
 
 
 class ThenChecks(DomainService):
@@ -108,3 +136,27 @@ class ThenChecks(DomainService):
             found.append(TESTS_ASSERT_THEN.ok(Said(
                 f"every text a `Then` quotes as shown stands in a test of its criterion ({held} text(s))")))
         return tuple(found)
+
+    @staticmethod
+    def adapter_shape(story: Story, evidence: StageEvidence) -> Findings:
+        """A criterion gets the adapter shape only where its `Then` names something the adapter itself produces — a
+        text quoted as shown that the person did not enter, or a status. Where it names neither, the page only shows
+        what the use case computed, the port test proves it, and an adapter test beside it is a copy or claims a
+        change its stub cannot make."""
+        if story.kind is not StoryKind.STORY or not story.content.clauses:
+            return ()
+        plan = evidence.plan_levels(story.id)
+        if plan is None:
+            return ()
+        shaped = plan.adapter | plan.both
+        if not shaped:
+            return ()
+        wrong = sorted(scenario.key.value for scenario in story.content.clauses
+                       if scenario.key in shaped and not adapter_produced(scenario))
+        if wrong:
+            return (ADAPTER_SHAPE.fail(Said(
+                "the plan gives these criteria the adapter shape, but their `Then` names nothing the adapter produces "
+                "— no text quoted as shown beyond what the person entered, no status; give them the port shape "
+                "alone: " + ", ".join(wrong))),)
+        return (ADAPTER_SHAPE.ok(Said(f"every adapter shape stands where the `Then` names what the adapter produces "
+                                      f"({len(shaped)})")),)

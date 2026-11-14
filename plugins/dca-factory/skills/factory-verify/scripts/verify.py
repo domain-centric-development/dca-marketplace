@@ -5442,6 +5442,35 @@ def run_groups(args):
         (Case("plan: a complete story passes", "plan", 0,
               must_pass=("story", "approved", "epic", "context-map", "instruction-size")),
          dict()),
+        # WP-218: an adapter shape only where the `Then` names what the adapter produces
+        (Case("adapter-shape: a `Then` that shows back what the `When` entered gets no adapter shape, naming it", "plan", 1,
+              must_fail=("adapter-shape",), text=("give them the port shape alone: shows-the-thing",)),
+         dict(story=STORY_SCENARIOS.replace("- When the reader opens the list\n- Then the list shows the thing",
+                                            "- When the reader records the thing „  Alpha  “\n- Then the list shows „Alpha“"),
+              extra_sources=((".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Acceptance criteria\n"
+                              "- shows-the-thing  →  level: integration (port) and integration (adapter: WidgetPage, test: WidgetPageTest#showsAlpha)\n"
+                              "- shows-nothing-when-empty  →  level: e2e\n"),))),
+        (Case("adapter-shape: a text the `When` did not enter, a status, a field or a message keep the adapter shape", "plan", 0,
+              must_pass=("adapter-shape",), text=("(2)",)),
+         dict(story=QUOTED_SCENARIOS.replace("- Then the list is empty\n", "- Then the answer has status 404\n"),
+              extra_sources=((".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Acceptance criteria\n"
+                              "- shows-the-thing  →  level: integration (adapter: WidgetPage, test: WidgetPageTest#showsTwoThingsOneOpen)\n"
+                              "- shows-nothing-when-empty  →  level: integration (adapter: WidgetPage, test: WidgetPageTest#answers404)\n"),))),
+        (Case("adapter-shape: a field the `Then` names keeps the adapter shape, whatever value it holds", "plan", 0,
+              must_pass=("adapter-shape",)),
+         dict(story=STORY_SCENARIOS.replace("- When the reader opens the list\n- Then the list shows the thing",
+                                            "- When the reader records the thing „Alpha“\n- Then the field Name holds „Alpha“"),
+              extra_sources=((".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Acceptance criteria\n"
+                              "- shows-the-thing  →  level: integration (adapter: WidgetPage, test: WidgetPageTest#keepsAlphaInTheField)\n"
+                              "- shows-nothing-when-empty  →  level: e2e\n"),))),
+        (Case("adapter-shape: an older profile (contract 34) is not held to it", "plan", 0,
+              absent=("give them the port shape alone",)),
+         dict(profile=PROFILE + "contract: 34\n",
+              story=STORY_SCENARIOS.replace("- When the reader opens the list\n- Then the list shows the thing",
+                                            "- When the reader records the thing „  Alpha  “\n- Then the list shows „Alpha“"),
+              extra_sources=((".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Acceptance criteria\n"
+                              "- shows-the-thing  →  level: integration (port) and integration (adapter: WidgetPage, test: WidgetPageTest#showsAlpha)\n"
+                              "- shows-nothing-when-empty  →  level: e2e\n"),))),
         (Case("plan: an epic missing a field is refused", "plan", 1, must_fail=("epic",)),
          dict(epic=EPIC.replace("domain_contact: the-expert\n", ""))),
         (Case("plan: a draft story is refused", "plan", 1, must_fail=("approved",)),

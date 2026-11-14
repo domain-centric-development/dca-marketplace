@@ -40,7 +40,13 @@ order: 8
      shape names its test: the class and the method, the method named after the state the adapter shows
      (`showsATitleOf200Characters`), never after the scenario's action — the stub hands the adapter that
      state, so the test cannot perform the action. The test stage writes it under that name, and the test
-     gate holds it to the criterion's rows (`tests-planned`).
+     gate holds it to the criterion's rows (`tests-planned`). **Give the adapter shape only where the `Then`
+     names something the adapter itself produces** — a text quoted as shown that the person did not enter, a
+     status, a redirect, a control, a message, a mark. A value the use case computes or keeps — a title
+     trimmed, a length counted after trimming, a title shown as entered — that the surface merely shows gets
+     the port shape alone: the port test proves it, and an adapter test beside it answers from a stub that
+     already holds the value. The plan gate refuses an adapter shape whose `Then` names no control, message,
+     hint or page, no quoted text beyond what the `When` entered, and no status (`adapter-shape`).
      **Which of the two a context does is the project's choice, never the plan's.** Read it from the
      technical description (`product/tech.md`, or where the profile's `tech:` points) — a line
      `Refusals (<context>): thrown | returned`, else `Refusals: thrown | returned` for every context — and
