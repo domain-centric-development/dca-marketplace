@@ -94,4 +94,3 @@ to have made one.
 <!-- rule: STAGE-TIDY-NOT1 -->
 <!-- rule: STAGE-TIDY-NOT2 -->
 <!-- rule: STAGE-TIDY-NOT3 -->
-<!-- rule: STAGE-BUILD-NOT6 -->

@@ -6701,7 +6701,18 @@ def run_groups(args):
              ("src/main/Thing.java", "class Thing {}\n"),
              (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Files\n- `src/main/Thing.java` — changes: new, the thing\n"),
              (".dca-factory/evidence/STORY-1/journal.tsv",
-              "2026-11-15T10:00:00Z\tgate\tplan\texit=0\tby=builder\tplan=000000000000\tcontract=38\tseq=1\n")))),
+              "2026-11-15T10:00:00Z\tgate\tplan\texit=0\tby=builder\tplan=000000000000\tcontract=38\tseq=1\n"
+              "2026-11-15T10:05:00Z\tgate\tbuild\texit=1\tfail=plan-files\tby=builder\tseq=2\n"
+              "2026-11-15T10:05:10Z\twrote\tplan.md\tsha=ffff\tseq=3\n")))),
+        (Case("plan-kept: a plan the plan stage wrote again after an answer is no later stage's", "build", 0,
+              absent=("plan.md changed after its gate passed it",)),
+         dict(green=both_green, ledger=both_green, extra_sources=(
+             ("src/main/Thing.java", "class Thing {}\n"),
+             (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Files\n- `src/main/Thing.java` — changes: new, the thing\n"),
+             (".dca-factory/evidence/STORY-1/journal.tsv",
+              "2026-11-15T10:00:00Z\tgate\tplan\texit=0\tby=builder\tplan=000000000000\tcontract=38\tseq=1\n"
+              "2026-11-15T10:05:00Z\tgate\tplan\texit=0\tby=runner\tseq=2\n"
+              "2026-11-15T10:05:10Z\twrote\tplan.md\tsha=ffff\tseq=3\n")))),
         (Case("plan-kept: a plan as its stamped gate passed it passes", "build", 0, must_pass=("plan-kept",)),
          dict(green=both_green, ledger=both_green, extra_sources=(
              ("src/main/Thing.java", "class Thing {}\n"),

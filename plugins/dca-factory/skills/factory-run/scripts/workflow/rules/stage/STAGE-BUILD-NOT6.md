@@ -4,7 +4,6 @@ part: told
 why: a build rewrote the plan after the tests to answer a gate, and the delivery sent the story a round back
 stages:
 - build
-- tidy
 section: Do not
 order: 16
 ---
