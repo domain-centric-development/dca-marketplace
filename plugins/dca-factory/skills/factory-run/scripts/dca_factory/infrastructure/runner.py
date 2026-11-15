@@ -24,7 +24,8 @@ from ..delivery.application.delivery.resolve_conflicts import ResolveConflictsCo
 from ..delivery.application.delivery.run_story import RunStoryCommand, RunStoryUseCase
 from ..delivery.application.requests.request_queue import RequestQueue
 from ..delivery.application.requests.work_request import WorkRequestCommand, WorkRequestUseCase
-from ..delivery.application.delivery.show_brief import ShowBriefQuery, ShowEveryStageUseCase
+from ..delivery.application.delivery.show_brief import ShowBriefQuery, ShowEveryStageUseCase, ShowProcessBriefUseCase
+from ..delivery.domain.model.workflow_rule import ProcessName
 from ..delivery.domain.model.stage import StageName, StageText, Window
 from ..delivery.domain.model.story import StoryId
 from ..delivery.domain.service.stage_brief import Brief
@@ -86,6 +87,9 @@ class RunnerCases:
 
     def every_stage(self, run: Run) -> StageText:
         return ShowEveryStageUseCase().execute()
+
+    def told_to(self, run: Run, process: str) -> StageText:
+        return ShowProcessBriefUseCase().execute(ProcessName(process))
 
     def cli_here(self, argv: typing.Sequence[str]) -> int:
         from . import cli

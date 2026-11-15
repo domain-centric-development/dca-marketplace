@@ -30,7 +30,7 @@ from ....domain.model.jump import RuleId, Target
 from ....domain.model.stage import StageName, StoryKind
 from ....domain.model.verdict import CheckName
 from ....domain.model.workflow_rule import (
-    Outcome, OutcomeState, Restart, RuleOrder, RulePart, RuleText, WorkflowRule, Written)
+    Outcome, OutcomeState, ProcessName, Restart, RuleOrder, RulePart, RuleText, WorkflowRule, Written)
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import read_front_matter
 from ....application.shared.workflow_rule_repository import WorkflowRuleRepository
 
@@ -132,7 +132,8 @@ class RuleFiles(WorkflowRuleRepository):
                 [StageName(s) for s in listed(front.get("stages"))], [StoryKind(k) for k in listed(front.get("kinds"))],
                 RuleText(str(retired)) if retired else None, self._written(path), RuleText(told_of(body, rule_id)),
                 RuleText(str(section)) if section else None, Written(str(see)) if see else None,
-                RuleOrder(int(order)) if order.isdigit() else None)
+                RuleOrder(int(order)) if order.isdigit() else None,
+                processes=[ProcessName(p) for p in listed(front.get("processes"))])
         return WorkflowRule.restore(
             rule_id, RulePart(str(front.get("part") or "decision")), RuleText(paragraph(body, WHEN)),
             RuleText(paragraph(body, WHY)), outcomes, [CheckName(n) for n in listed(front.get("reports"))],
@@ -186,7 +187,8 @@ def told_text(rule: WorkflowRule) -> str:
     lines = ["---", f"id: {rule.id.value}", f"part: {rule.part.value}"]
     if rule.why.value:
         lines.append(f"why: {written_value(rule.why.value)}")
-    for key, values in (("stages", [s.value for s in rule.stages]), ("kinds", [k.value for k in rule.kinds])):
+    for key, values in (("stages", [s.value for s in rule.stages]), ("kinds", [k.value for k in rule.kinds]),
+                        ("processes", [p.value for p in rule.processes])):
         if values:
             lines += [f"{key}:"] + [f"- {v}" for v in values]
     if rule.section is not None:

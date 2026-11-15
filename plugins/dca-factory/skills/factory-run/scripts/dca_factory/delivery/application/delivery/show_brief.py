@@ -9,7 +9,7 @@ from ....building_blocks import UseCase
 from ...domain.model.jump import RuleId
 from ...domain.model.stack_profile import SkillName
 from ...domain.model.stage import StageName, StageText, StoryKind, Trait
-from ...domain.model.workflow_rule import RuleGroup, RuleText
+from ...domain.model.workflow_rule import ProcessName, RuleGroup, RuleText
 from ...domain.model.story import StoryId
 from ...domain.service.stage_brief import Brief, Carrier, CarrierRole, StageBrief
 from ....sharedkernel.application.profile_source import ProfileSource
@@ -86,3 +86,12 @@ class ShowEveryStageInputPort(UseCase[None, StageText], typing.Protocol):
 class ShowEveryStageUseCase(ShowEveryStageInputPort):
     def execute(self, query: None = None) -> StageText:
         return StageBrief(workflow()).every_stage(list(RULES.values()))
+
+
+class ShowProcessBriefInputPort(UseCase[ProcessName, StageText], typing.Protocol):
+    """What a process beside the stages is told — the reviewers."""
+
+
+class ShowProcessBriefUseCase(ShowProcessBriefInputPort):
+    def execute(self, query: ProcessName) -> StageText:
+        return StageBrief(workflow()).told_to(query, list(RULES.values()))

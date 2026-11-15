@@ -67,7 +67,11 @@ from ..files.stage_evidence_files import source_of
 from ..files.status_facts import changed_production
 from ..stack.mutation_runs import mutation_command, run_mutation, score_of
 from ....domain.service.stage_brief import Brief, written
-from ..files.brief_files import brief_dir, EVERY_STAGE, write_brief, write_every_stage, write_told_everywhere
+from ..files.brief_files import brief_dir, EVERY_STAGE, write_brief, write_every_stage, write_file, write_told_everywhere
+
+#: The process the reviewers are, and the brief it is told.
+REVIEW_PROCESS = "review"
+REVIEW_BRIEF = "review.md"
 from ..files.request_files import default_by, REQUEST_JOURNAL, requests_dir
 from ....application.requests.list_requests import target_text
 from ..files.run_readers import contradiction_in, needs_human_lines, open_decision_files, verdict_of_story
@@ -132,6 +136,9 @@ class RunCases(typing.Protocol):
 
     def every_stage(self, run: Run) -> StageText:
         """What every stage is told, for a session that works no stage (`ShowEveryStageUseCase`)."""
+
+    def told_to(self, run: Run, process: str) -> StageText:
+        """What a process beside the stages is told — the reviewers (`ShowProcessBriefUseCase`)."""
 
     def gate_here(self, argv: typing.Sequence[str]) -> int:
         """The gate's command line (`story-gate.py <argv>`) in this process, wired by its composition root; its exit."""
@@ -919,7 +926,10 @@ class Run(ProfileSource):
         folder = f"{self.runs}/{story}/reviews"
         print(f"   reviews: {', '.join(names)} — one process each, at once; the judge converges from "
               "reviews/<perspective>.md")
-        every = self.briefs(story, [stage_of(Role.JUDGES)], dry)[0]
+        # A reviewer is told what reaches it by name (`processes: [review]`), not what every stage is told.
+        every = f"{brief_dir(self.runs, story).replace(os.sep, '/')}/{REVIEW_BRIEF}"
+        if not dry:
+            write_file(every, self.cases.told_to(self, REVIEW_PROCESS).value.rstrip() + "\n")
         prompts = [(f"Review the change of backlog story {story} from the {name} perspective: apply the `{carrier}` "
                     f"skill to the diff {self.evidence(story)}/story.diff, as *A review the runner started* in "
                     f"{every} says. Its input beside the diff: the story and its epic (epic.md "

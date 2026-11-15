@@ -95,6 +95,12 @@ class RuleGroup(Value):
         return self.stage in rule.stages if self.stage is not None else not rule.stages
 
 
+class ProcessName(Value):
+    """A process the runner starts beside the stages, which a told rule reaches by name — `review`, the reviewers."""
+
+    value: str
+
+
 class WorkflowRule(AggregateRoot[RuleId]):
     # A root without a transition, like the workflow: a rule file is changed by a person, the factory reads it whole
     # and holds its outcomes to the workflow's targets — one rule, one unit, through its repository.
@@ -108,7 +114,8 @@ class WorkflowRule(AggregateRoot[RuleId]):
                  retired: typing.Optional[RuleText] = None, written: typing.Optional[Written] = None,
                  told: typing.Optional[RuleText] = None, section: typing.Optional[RuleText] = None,
                  see: typing.Optional[Written] = None, order: typing.Optional[RuleOrder] = None,
-                 title: typing.Optional[RuleText] = None, restart: typing.Optional[Restart] = None) -> None:
+                 title: typing.Optional[RuleText] = None, restart: typing.Optional[Restart] = None,
+                 processes: typing.Sequence[ProcessName] = ()) -> None:
         super().__init__()
         states = [o.state for o in outcomes]
         if part is RulePart.TOLD:
@@ -136,6 +143,7 @@ class WorkflowRule(AggregateRoot[RuleId]):
         self._order = order
         self._title = title
         self._restart = restart
+        self._processes = tuple(processes)
 
     @classmethod
     def restore(cls, rule_id: RuleId, part: RulePart, when: RuleText, why: RuleText,
@@ -144,10 +152,17 @@ class WorkflowRule(AggregateRoot[RuleId]):
                 retired: typing.Optional[RuleText] = None, written: typing.Optional[Written] = None,
                 told: typing.Optional[RuleText] = None, section: typing.Optional[RuleText] = None,
                 see: typing.Optional[Written] = None, order: typing.Optional[RuleOrder] = None,
-                title: typing.Optional[RuleText] = None, restart: typing.Optional[Restart] = None) -> WorkflowRule:
+                title: typing.Optional[RuleText] = None, restart: typing.Optional[Restart] = None,
+                processes: typing.Sequence[ProcessName] = ()) -> WorkflowRule:
         """The workflow rule as it was kept — the one way a repository builds it."""
         return cls(rule_id, part, when, why, outcomes, reports, stages, kinds, retired, written, told, section, see, order, title,
-                   restart)
+                   restart, processes)
+
+    @property
+    def processes(self) -> typing.Tuple[ProcessName, ...]:
+        """The processes beside the stages a told rule reaches — told to them, and to them alone of what every stage
+        is told."""
+        return self._processes
 
     @property
     def id(self) -> RuleId:

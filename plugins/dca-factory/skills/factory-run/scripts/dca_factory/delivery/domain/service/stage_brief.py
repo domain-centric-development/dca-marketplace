@@ -14,7 +14,7 @@ from ..model.stack_profile import SkillName
 from ..model.stage import HandOver, Stage, StageName, StageText, StoryKind, Window
 from ..model.story_words import Place
 from ..model.workflow import Workflow
-from ..model.workflow_rule import OutcomeState, RulePart, RuleText, WorkflowRule
+from ..model.workflow_rule import OutcomeState, ProcessName, RulePart, RuleText, WorkflowRule
 
 
 class CarrierRole(enum.Enum):
@@ -119,6 +119,14 @@ class StageBrief(DomainService):
                      tuple(Measure(r.id, r.when, refused_by(r)) for r in measured if r.id not in everywhere),
                      tuple(carriers),
                      tuple(r.id for r in measured if r.id in everywhere))
+
+    def told_to(self, process: ProcessName, rules: typing.Sequence[WorkflowRule]) -> StageText:
+        """What a process beside the stages is told — the reviewers: the told rules that name it, and nothing else of
+        what every stage is told; the rest is the stages' and never reaches it."""
+        held = sorted((r for r in rules if r.part is RulePart.TOLD and r.retired is None and r.told is not None
+                       and process in r.processes),
+                      key=lambda r: (r.order.value if r.order else 0, r.id.value))
+        return StageText("\n\n".join(rest_text(r).value for r in held))
 
     def every_stage(self, rules: typing.Sequence[WorkflowRule]) -> StageText:
         """What every stage is told, for a session that works no stage — a request: every stage's frame with the told

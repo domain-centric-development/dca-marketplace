@@ -1359,13 +1359,18 @@ def verify_runner(runner, verbose=False):
               output.count("would run (review:") == 3 and "apply the `review-ddd` skill" in output
               and ".dca-factory/runs/STORY-1/reviews/hexagonal.md" in output
               and output.index("would run (review:ddd)") < output.index("── stage judge"), [l[:120] for l in output.splitlines() if "review:" in l][:3])
+        check("reviews: a reviewer is told what reaches it by name — its own brief, not what every stage is told",
+              "brief/review.md" in output and not any("review:" in l and "every-stage.md" in l for l in output.splitlines()),
+              [l[:200] for l in output.splitlines() if "would run (review:" in l][:1])
         # what a session does with those paths is in what every stage is told, which the prompt names
         common = told_text(runner)
         check("runner: every stage prompt says where things are — the profile, the run folder, the gate's contract "
-              "through the cli and what every stage is told, which says never the gate's source",
+              "through the cli and what every stage is told, which says never the gate's source; a reviewer's names "
+              "its own brief instead",
               output.count("the stack profile is dca-factory.profile.yaml") == 9
               and output.count("factory-cli.py --contract <stage>") == 9
-              and output.count(".dca-factory/evidence/STORY-1/brief/every-stage.md") == 9
+              and output.count(".dca-factory/evidence/STORY-1/brief/every-stage.md") == 6
+              and output.count(".dca-factory/evidence/STORY-1/brief/review.md") == 3
               and "never the gate's source" in common and "never the gate's source" not in output,
               [l[:160] for l in output.splitlines() if "would run" in l][:2])
         document_skill = told_text(runner, "document")
@@ -6387,6 +6392,12 @@ def run_groups(args):
               extra_sources=(UNIT_TWO, ("src/main/java/com/example/domain/WidgetId.java", "record WidgetId(String value) { static WidgetId fromText(String t) { return new WidgetId(t); } }\n"),
                              (".dca-factory/evidence/STORY-1/changed-build.txt", "modified\tsrc/main/java/com/example/domain/WidgetId.java\n"),
                              (".dca-factory/evidence/STORY-1/changed.txt", "modified\tsrc/main/java/com/example/domain/WidgetId.java\n"), (".dca-factory/runs/STORY-1/build.md", "## Files\n\n- `src/main/java/com/example/domain/WidgetId.java` — fromText\n"), (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Changes\n| Element | Kind |\n| --- | --- |\n| Widget | aggregate |\n\n## Invariants\n- Widget: none — no rule of its own\n- WidgetId: none — any text, parsed elsewhere\n")))),
+(Case("invariants-cover: a type the build reached gets its line in build.md, the plan stays as planned",
+              "build", 0, must_pass=("invariants-cover",)),
+         dict(tests=UNIT_TESTS, green=unit_two, ledger=unit_two, profile=PROFILE + "layer.domain: src/main/java/**/domain/**\n",
+              extra_sources=(UNIT_TWO, ("src/main/java/com/example/domain/WidgetId.java", "record WidgetId(String value) { static WidgetId fromText(String t) { return new WidgetId(t); } }\n"),
+                             (".dca-factory/evidence/STORY-1/changed-build.txt", "modified\tsrc/main/java/com/example/domain/WidgetId.java\n"),
+                             (".dca-factory/evidence/STORY-1/changed.txt", "modified\tsrc/main/java/com/example/domain/WidgetId.java\n"), (".dca-factory/runs/STORY-1/build.md", "## Files\n\n- `src/main/java/com/example/domain/WidgetId.java` — fromText\n\n## Invariants\n- WidgetId: none — any text, parsed elsewhere\n"), (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Changes\n| Element | Kind |\n| --- | --- |\n| Widget | aggregate |\n\n## Invariants\n- Widget: none — no rule of its own\n")))),
         (Case("invariants-cover: a plan from before the stamps keeps its rules and passes", "build", 0,
               absent=("invariants-cover — the story changes",)),
          dict(tests=UNIT_TESTS, green=unit_two, ledger=unit_two, profile=PROFILE + "layer.domain: src/main/java/**/domain/**\n",
