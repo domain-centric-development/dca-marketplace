@@ -52,12 +52,12 @@ dca-marketplace/
 │   └── skills/factory-verify/                    # scripts/verify.py — the gate, the runner and the installer against fixtures
 ├── plugins/dca-factory-cockpit/           # Claude Code only, optional: the factory cycle as a cockpit (function hooks)
 ├── plugins/dca-craft/                     # craft independent of the architecture style; names no DCA artifact
-│   ├── skills/{testing,clean-code,adr,e2e-testing,ubiquitous-language,context-map,product-discovery}/
+│   ├── skills/{testing,clean-code,adr,e2e-testing,frontend,ubiquitous-language,context-map,product-discovery,skill-writing}/
 │   ├── skills/{review-ddd,review-hexagonal,review-clean-code}/   # the three general review perspectives
 │   └── agents/{e2e-tester,ddd-reviewer,hexagonal-reviewer,clean-code-reviewer}.md
 ├── scripts/render-rule-catalog.py         # renders the rule catalog reference from the sibling rules.json files
 ├── .github/workflows/check.yml            # syntax, manifests, skill front matter, factory-verify (Linux, macOS, Windows/Git Bash)
-├── scripts/check-skills.py                # every skill folder has a SKILL.md with name and description, under 32 KiB; dca-craft names no DCA artifact (--self-test)
+├── scripts/check-skills.py                # every skill folder has a SKILL.md with name and description, under 500 lines and ~5,000 tokens (warns past 300 / ~3,000) and 32 KiB; dca-craft names no DCA artifact (--self-test)
 └── MULTI-HARNESS-PORTABILITY-2026-09-03.md  # superseded plan, kept as history — see its header
 ```
 
@@ -91,7 +91,7 @@ dca-marketplace/
   process of its own and `serve` shows it in a browser (127.0.0.1, a token per start); a press there, like
   `factory.sh request`, writes a request under `.dca-factory/requests/` that the factory works headless with the
   skill a session would run — `factory-run/reference/requests.md`.
-- **dca-craft** — `/testing`, `/clean-code`, `/adr`, `/e2e-testing`, `/frontend`, `/ubiquitous-language`, `/context-map`, `/product-discovery`,
+- **dca-craft** — `/testing`, `/clean-code`, `/adr`, `/e2e-testing`, `/frontend`, `/ubiquitous-language`, `/context-map`, `/product-discovery`, `/skill-writing`,
   `/review-ddd`, `/review-hexagonal`, `/review-clean-code`; agents `e2e-tester`, `ddd-reviewer`,
   `hexagonal-reviewer`, `clean-code-reviewer`. Independent of the architecture style and usable alone: the
   skills and agents name no DCA artifact (rule ids, `dca-*` names, the building blocks' namespaces and
@@ -165,6 +165,8 @@ row "Marketplace bootstrap branch".
 
 ## Conventions for skill content
 
+- Skills are written for the model, as short as they hold — `skill-writing` in dca-craft is the style; `branding/voice.md`
+  is for prose a person reads, never for skills.
 - Prose describes the current state, never history.
 - Java and C# examples side by side where behaviour differs; one example where it does not.
 - No links into sibling repositories; cite the guide by name, not by path or URL.

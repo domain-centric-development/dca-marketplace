@@ -12,7 +12,8 @@ works without the method's artifacts, and without the check its general skills d
 rule ids, `dca-*` skills, marker names and the conventions overlay. `--self-test` runs only the
 boundary check's own cases.
 
-Every SKILL.md stays under 32 KiB, because some tools stop reading a project document there and cut the
+Every SKILL.md stays under 500 lines and ~5,000 tokens (characters / 4), the published limit for what a model reads
+on every call, and warns past 300 lines or ~3,000 tokens. Every SKILL.md stays under 32 KiB, because some tools stop reading a project document there and cut the
 rest without saying so: an instruction past that point does not exist for them. Detail moves into files
 beside the skill that its SKILL.md names.
 """
@@ -183,7 +184,6 @@ def self_test(patterns):
 
 # The size past which some tools cut a project document without saying so.
 SKILL_LIMIT = 32 * 1024
-SKILL_WARN = 20 * 1024  # a SKILL.md is loaded whole on every call: past this, move detail into a reference beside it
 
 
 def check_skill_sizes(root):
@@ -200,13 +200,67 @@ def check_skill_sizes(root):
         size = len(text) + text.count(b"\n")
         where = os.path.relpath(path, root)
         largest = max(largest, (size, where))
-        if SKILL_WARN <= size < SKILL_LIMIT:
-            print(f"check-skills: WARN {where}: {size} bytes with CRLF line endings — past {SKILL_WARN // 1024} KiB; "
-                  "move detail into a reference the SKILL.md names", file=sys.stderr)
         if size >= SKILL_LIMIT:
             problems.append(f"{where}: {size} bytes with CRLF line endings, over the {SKILL_LIMIT // 1024} KiB a tool may cut without "
                             f"saying so — move detail into a file beside it that it names")
     return problems, largest
+
+
+# What a model reads on every call of a skill: the published limit for SKILL.md (Anthropic's skill authoring best
+# practices, the Agent Skills specification) — under 500 lines and under ~5,000 tokens. Tokens are estimated as
+# characters / 4; past the warning a skill carries detail that belongs in a reference file it names.
+LINE_LIMIT, TOKEN_LIMIT = 500, 5000
+LINE_WARN, TOKEN_WARN = 300, 3000
+
+
+def estimated_tokens(text):
+    return (len(text) + 3) // 4
+
+
+def budget_finding(text):
+    """('error' | 'warn' | None, what) for one SKILL.md's text against the line and token limits."""
+    lines, tokens = len(text.splitlines()), estimated_tokens(text)
+    measured = f"{lines} lines, ~{tokens} tokens"
+    if lines > LINE_LIMIT or tokens > TOKEN_LIMIT:
+        return "error", f"{measured} — over {LINE_LIMIT} lines or ~{TOKEN_LIMIT} tokens; move detail into reference/"
+    if lines > LINE_WARN or tokens > TOKEN_WARN:
+        return "warn", f"{measured} — past {LINE_WARN} lines or ~{TOKEN_WARN} tokens; cut what the model already knows"
+    return None, measured
+
+
+def check_skill_budgets(root):
+    """Every SKILL.md under plugins/ against the line and token limits: (problems, warnings)."""
+    problems, warnings = [], []
+    plugins = os.path.join(root, "plugins")
+    for folder, dirs, files in os.walk(plugins):
+        dirs[:] = sorted(d for d in dirs if not d.startswith("."))
+        if "SKILL.md" not in files:
+            continue
+        path = os.path.join(folder, "SKILL.md")
+        with open(path, encoding="utf-8") as handle:
+            level, what = budget_finding(handle.read())
+        where = os.path.relpath(path, plugins)
+        if level == "error":
+            problems.append(f"{where}: {what}")
+        elif level == "warn":
+            warnings.append(f"{where}: {what}")
+    return problems, warnings
+
+
+# The budget check's own cases: (text, expected level).
+SELF_TEST_BUDGET = (
+    ("---\nname: x\n---\n" + "- one line\n" * 20, None),
+    ("x\n" * (LINE_WARN + 1), "warn"),
+    ("x" * (TOKEN_WARN * 4 + 8), "warn"),
+    ("x\n" * (LINE_LIMIT + 1), "error"),
+    ("x" * (TOKEN_LIMIT * 4 + 8), "error"),
+    ("x" * (TOKEN_LIMIT * 4), "warn"),
+)
+
+
+def budget_self_test():
+    return [f"budget: expected {want}, got {budget_finding(text)}"
+            for text, want in SELF_TEST_BUDGET if budget_finding(text)[0] != want]
 
 
 # Paragraphs every delivery stage holds to, said once in what every stage is told — a `STAGE-COMMON-<n>` rule file the
@@ -276,13 +330,13 @@ def check_every_stage(root):
 def main():
     read = dca_java_types(ROOT)
     patterns = boundary_patterns(read)
-    failures = self_test(patterns) + self_test(boundary_patterns())
+    failures = self_test(patterns) + self_test(boundary_patterns()) + budget_self_test()
     for failure in failures:
         print(f"check-skills: self-test: {failure}", file=sys.stderr)
     if "--self-test" in sys.argv[1:]:
         print(f"check-skills: self-test {'failed' if failures else 'passed'} "
               f"({len(SELF_TEST_RED)} red and {len(SELF_TEST_GREEN)} green lines, "
-              f"with and without the dca-java type list)")
+              f"with and without the dca-java type list; {len(SELF_TEST_BUDGET)} budget cases)")
         return 1 if failures else 0
     problems, counted = [], 0
     for plugin in sorted(os.listdir(os.path.join(ROOT, "plugins"))):
@@ -329,6 +383,15 @@ def main():
     print(f"check-skills: every SKILL.md is under {SKILL_LIMIT // 1024} KiB (the largest: {where}, {size} bytes)"
           if not sizes else f"check-skills: {len(sizes)} SKILL.md file(s) over {SKILL_LIMIT // 1024} KiB")
     problems += sizes
+    budgets, budget_warnings = check_skill_budgets(ROOT)
+    for warning in budget_warnings:
+        print(f"check-skills: WARN {warning}", file=sys.stderr)
+    for problem in budgets:
+        print(f"check-skills: {problem}", file=sys.stderr)
+    print(f"check-skills: every SKILL.md is under {LINE_LIMIT} lines and ~{TOKEN_LIMIT} tokens "
+          f"({len(budget_warnings)} past {LINE_WARN} lines or ~{TOKEN_WARN} tokens)"
+          if not budgets else f"check-skills: {len(budgets)} SKILL.md file(s) over {LINE_LIMIT} lines or ~{TOKEN_LIMIT} tokens")
+    problems += budgets
     boundary = check_boundary(ROOT, patterns)
     for problem in boundary:
         print(f"check-skills: {problem}", file=sys.stderr)

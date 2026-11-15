@@ -17,7 +17,7 @@ user-visible flow needs a test (or a project has no browser runner yet), `/front
 a component or a stylesheet changes, `/product-discovery` when a problem needs framing before
 anyone builds, `/ubiquitous-language` when
 a term enters the model, `/context-map` when a context or a relationship changes, one of the three
-`/review-*` perspectives before a change is merged. Nothing has to be set up first.
+`/review-*` perspectives before a change is merged, `/skill-writing` when a skill or a rule a model reads is written or grows. Nothing has to be set up first.
 
 ## What's inside
 
@@ -36,6 +36,7 @@ a term enters the model, `/context-map` when a context or a relationship changes
 | `/review-ddd` | The **ddd** review perspective: real invariants, entity vs. value, aggregate boundaries, ubiquitous language, event hygiene, repository vs. store | Reviewing a change from the model's point of view |
 | `/review-hexagonal` | The **hexagonal** review perspective: dependency direction, port granularity, adapter direction, framework leaks, input-port shape, translation at the edge | Reviewing a change from the ports-and-adapters point of view |
 | `/review-clean-code` | The **clean-code** review perspective: naming, function size and SLAP, SOLID, smells, DRY with judgement | Reviewing a change for readability |
+| `/skill-writing` | Writing a skill, rule or brief for a model: only what it lacks, imperative and tabular, one job, `SKILL.md` under 500 lines and ~5,000 tokens with detail in `reference/`, the effect measured | Creating, shortening or reviewing a skill |
 
 ### Agents (4) — the same craft in an isolated context
 
