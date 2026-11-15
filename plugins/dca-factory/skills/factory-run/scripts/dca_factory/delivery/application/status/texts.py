@@ -62,6 +62,11 @@ def signals_line(totals: Entry) -> str:
                      f"({totals['named']} rules named)")
     elif totals.get("measured") is not None and totals.get("stories") and not totals.get("measured"):
         parts.append("rules not measured")
+    if totals.get("judged_stories"):
+        parts.append(f"judge: {totals['first_pass']}/{totals['judged_stories']} pass first time · "
+                     f"{totals['rounds_per_story']:g} round(s) a story"
+                     + (f" · false alarms {totals['false_alarm_share']:.2f}" if totals.get("false_alarm_share") is not None
+                        else ""))
     if totals.get("domain"):
         parts.append("domain findings " + " · ".join(f"{n} {c.replace('domain-', '', 1)}"
                                                      for c, n in sorted(totals["domain"].items())))
@@ -138,7 +143,8 @@ def signal_totals(rows: typing.Sequence[Entry], perspectives: typing.Optional[ty
                         asked=0, answered=0, assumptions_open=0, assumptions_answered=0, plan_open=0, fresh=0, repeated=0, contradictions=0,
                         asked_acceptance=0, accepted=0, corrections_at_acceptance=0, waited=0, rework=0,
                         mutation_measured=0, mutation_skipped=0, mutation_median=None,
-                        findings={}, domain={}, corrections={})
+                        findings={}, domain={}, corrections={},
+                        judged_stories=0, first_pass=0, judge_rounds=0, outcomes={}, outcome_by={})
     scores: typing.List[float] = []
     for row in rows:
         signals = row.get("signals") or {}
@@ -170,6 +176,17 @@ def signal_totals(rows: typing.Sequence[Entry], perspectives: typing.Optional[ty
                 total["mutation_skipped"] += 1
             else:
                 scores.append(score)
+        if signals.get("judged") and row.get("done", True):
+            total["judged_stories"] += 1
+            total["first_pass"] += 1 if signals.get("first_pass") else 0
+            total["judge_rounds"] += signals.get("judge_rounds") or 0
+        for outcome, n in (signals.get("outcomes") or {}).items():
+            total["outcomes"][outcome] = total["outcomes"].get(outcome, 0) + n
+        for perspective, split in (signals.get("outcome_by") or {}).items():
+            name = "other" if perspectives is not None and perspective not in perspectives else perspective
+            mine = total["outcome_by"].setdefault(name, {})
+            for outcome, n in split.items():
+                mine[outcome] = mine.get(outcome, 0) + n
         for key in ("findings", "domain", "corrections"):
             for name, n in (signals.get(key) or {}).items():
                 if key == "findings" and perspectives is not None and name not in perspectives:
@@ -178,6 +195,12 @@ def signal_totals(rows: typing.Sequence[Entry], perspectives: typing.Optional[ty
     total["mutation_measured"] = len(scores)
     total["mutation_median"] = median(scores)
     named = total["named"]
+    judged = total["judged_stories"]
+    total["first_pass_share"] = round(total["first_pass"] / judged, 2) if judged else None
+    total["rounds_per_story"] = round(total["judge_rounds"] / judged, 2) if judged else None
+    resolved = sum(total["outcomes"].values())
+    total["false_alarm_share"] = round((total["outcomes"].get("dropped", 0) + total["outcomes"].get("overruled", 0))
+                                       / resolved, 2) if resolved else None
     total["kill_rate"] = round(total["killed"] / named, 2) if named else None
     total["guarded_rate"] = round((total["red"] + total["killed"]) / named, 2) if named else None
     total["line"] = signals_line(total)

@@ -69,3 +69,39 @@ def pass_contradicted(judged: Judged, rows: typing.Sequence[JudgeRow]) -> typing
     if judged is not Judged.PASS:
         return ()
     return tuple(row for row in rows if row.blocks() and row.origin is Origin.INTRODUCED)
+
+
+class FindingOutcome(enum.Enum):
+    """What became of a blocking finding by the next verdict: raised again, gone with its line changed, gone with its
+    line as it was, or closed by a person's answer."""
+
+    REPEATED = "repeated"
+    FIXED = "fixed"
+    DROPPED = "dropped"
+    OVERRULED = "overruled"
+
+
+class NextSeen(enum.Enum):
+    """What the next verdict showed of a blocking finding: raised again, or gone — its line changed or as it was."""
+
+    RAISED_AGAIN = "raised again"
+    GONE_LINE_CHANGED = "gone, line changed"
+    GONE_LINE_SAME = "gone, line as it was"
+
+
+class Closure(enum.Enum):
+    """Whether a person's answer closed the finding."""
+
+    OPEN = "open"
+    ANSWERED = "answered"
+
+
+def outcome_of(seen: NextSeen, closure: Closure) -> FindingOutcome:
+    """The outcome of a blocking finding at the next verdict — computed, never written by a model: a person's answer
+    that closed it overrules it; raised again it repeats; gone, it was fixed where its line changed and dropped where
+    it did not."""
+    if closure is Closure.ANSWERED:
+        return FindingOutcome.OVERRULED
+    if seen is NextSeen.RAISED_AGAIN:
+        return FindingOutcome.REPEATED
+    return FindingOutcome.FIXED if seen is NextSeen.GONE_LINE_CHANGED else FindingOutcome.DROPPED

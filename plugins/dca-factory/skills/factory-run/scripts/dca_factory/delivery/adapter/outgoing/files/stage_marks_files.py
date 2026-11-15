@@ -12,7 +12,7 @@ from ..stack import commands
 from ..stack.commands import open_suites_record
 from .run_marks import current_stage_files
 from ..git.checkout import Checkouts
-from .signals import record_judge_signal
+from .judge_record import answered_places, record_verdict
 from ....application.shared.stage_marks import StageMarks
 
 
@@ -26,7 +26,7 @@ class StageMarkFiles(StageMarks):
         self._checkouts = checkouts
 
     def judge_passed(self, story: str) -> None:
-        record_judge_signal(self._runs, story, current_stage_files(self._runs, story, order_for(self._kind))[stage_of(Role.JUDGES)])
+        record_verdict(self._runs, story, answered_places(story))
 
     def record_suites(self, story: str) -> bool:
         key = os.environ.get("FACTORY_SUITES_KEY", "")

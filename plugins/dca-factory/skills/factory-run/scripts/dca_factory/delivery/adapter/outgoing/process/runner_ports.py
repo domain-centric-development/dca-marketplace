@@ -33,6 +33,7 @@ from ....domain.model.stage import StageName, StoryKind
 from ....domain.model.story_state import GateReport, Judged, Rounds
 from ..files.run_marks import judged_of
 from ..files.judge_rows_files import judge_rows, keep_judged_diff
+from ..files.judge_record import answered_places, record_judge_round, record_verdict
 from ....domain.model.judge_rows import JudgeRow
 from ..files.round_files import mark_fresh, record_round, refusal_history as journal_refusals
 from ....domain.model.refusal_history import RefusalHistory
@@ -295,6 +296,12 @@ class RunnerStages(StoryRunJournal, StageSteps):
 
     def keep_judged(self, story: str) -> None:
         keep_judged_diff(self._run.runs, story)
+
+    def record_verdict(self, story: str) -> None:
+        record_verdict(self._run.runs, story, answered_places(story))
+
+    def record_judge_round(self, story: str) -> None:
+        record_judge_round(self._run.runs, story)
 
     def back(self, story: str) -> typing.Optional[StageName]:
         back = self._run.back_to(story)

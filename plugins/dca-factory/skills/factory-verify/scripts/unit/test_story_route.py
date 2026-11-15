@@ -354,6 +354,12 @@ class Stages:
     def keep_judged(self, story):
         pass
 
+    def record_verdict(self, story):
+        pass
+
+    def record_judge_round(self, story):
+        pass
+
     def back(self, story):
         return None
 

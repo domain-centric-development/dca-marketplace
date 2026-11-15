@@ -196,10 +196,11 @@ def finding_records(epics: str) -> typing.List[typing.Dict[str, typing.Any]]:
     found: typing.List[typing.Dict[str, typing.Any]] = []
 
     def add(owner: str, path: str, project: bool) -> None:
-        for n, perspective, where, severity, defect, fix, status, plain, _origin, _outcome in findings_rows(path):
-            if status == OPEN_ROW.value:
+        for n, perspective, where, severity, defect, fix, status, plain, origin, outcome in findings_rows(path):
+            if status == OPEN_ROW.value and outcome in ("", "dropped"):
                 found.append(dict(owner=owner, row=f"{owner}#{n}", path=path, project=project, where=where,
-                                  severity=severity, defect=defect, perspective=perspective, fix=fix, plain=plain))
+                                  severity=severity, defect=defect, perspective=perspective, fix=fix, plain=plain,
+                                  origin=origin, outcome=outcome))
     for story_path in story_files(epics):
         add(story_id_of(story_path), findings_path(story_path), False)
     folder = os.path.join(os.path.dirname(epics.rstrip("/")) or ".", PROJECT_FINDINGS)

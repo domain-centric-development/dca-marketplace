@@ -87,6 +87,14 @@ class StoryRunJournal(Store, typing.Protocol):
         """Keep what a verdict that sent the story back was given on, for the next round to weigh against."""
         ...
 
+    def record_verdict(self, story: str) -> None:
+        """Journal the verdict as it stands and what became of the findings of the one before."""
+        ...
+
+    def record_judge_round(self, story: str) -> None:
+        """A line in the round record for a verdict that sent the story back."""
+        ...
+
     def back(self, story: str) -> typing.Optional[StageName]:
         """The stage the judge sends the story back to; None where it names none."""
         ...

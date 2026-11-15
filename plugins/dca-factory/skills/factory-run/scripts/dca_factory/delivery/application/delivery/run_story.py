@@ -317,6 +317,7 @@ class RunStoryUseCase(RunStoryInputPort):
         """The judge's verdict decides what comes next — read from its file, never assumed. None to go on."""
         written = self._journal.verdict(story)
         judge = self._journal.artefact(story, role_of(Role.JUDGES).value)
+        self._journal.record_verdict(story)
         judged = weighed(written, self._journal.judge_rows(story)) if written is Judged.AGAIN else written
         if written is Judged.AGAIN and judged is Judged.PASS:
             self._lines.out("factory: judge verdict 'changes-requested', but no blocking row lies on what the story "
@@ -328,6 +329,7 @@ class RunStoryUseCase(RunStoryInputPort):
             self._steps.measure_mutation(story)
             return None
         if judged is Judged.AGAIN:
+            self._journal.record_judge_round(story)
             self._journal.keep_judged(story)
             rounds = self._round(story, "judge verdict 'changes-requested'")
             if rounds is None:

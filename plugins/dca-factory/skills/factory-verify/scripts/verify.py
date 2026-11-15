@@ -6875,6 +6875,20 @@ def run_groups(args):
               after=lambda root: [] if "| src/main/Thing.java:40 | major | pre-existing |" in open(
                   os.path.join(root, "product/epics/sample/STORY-1/findings.md"), encoding="utf-8").read()
               else ["findings.md has no pre-existing major row"])),
+        # WP-209: a blocking finding of an earlier round stays beside the story with what became of it
+        (Case("findings: a major an earlier verdict raised is kept at delivery with what became of it", "document", 0,
+              must_pass=("delivered",), text=("1 blocking finding(s) of an earlier round kept in",)),
+         dict(green=both_green, ledger=both_green, document=DOCUMENT,
+              extra_sources=((".dca-factory/runs/STORY-1/judge.md", "## Verdict\nverdict: pass\n\n## Confirmed defects\n"
+                              "| Perspective | File:line | Severity | In plain words | Defect | Fix |\n|---|---|---|---|---|---|\n"),
+                             (".dca-factory/evidence/STORY-1/journal.tsv",
+                              "2026-11-15T10:00:00Z\tsignal\tjudge\trun=r1\tsha=0000000000000000\tfindings=1\tverdict=changes-requested\tweighed=changes-requested\tseq=1\n"
+                              "2026-11-15T10:00:00Z\tfinding\tddd\trun=r1\tseverity=major\tfile=src/main/Thing.java:3\torigin=introduced\tsince=first\tblocks=yes\tline=\tdefect=unchecked null\tseq=2\n"
+                              "2026-11-15T10:20:00Z\tsignal\tjudge\trun=r2\tsha=1111111111111111\tfindings=0\tverdict=pass\tweighed=pass\tseq=3\n"
+                              "2026-11-15T10:20:00Z\toutcome\tddd\trun=r2\tseverity=major\tfile=src/main/Thing.java:3\torigin=introduced\toutcome=fixed\tdefect=unchecked null\tseq=4\n")),
+              after=lambda root: [] if "| src/main/Thing.java:3 | major | introduced | fixed |" in open(
+                  os.path.join(root, "product/epics/sample/STORY-1/findings.md"), encoding="utf-8").read()
+              else ["findings.md keeps no earlier major with its outcome"])),
         (Case("story-pass: changes-requested with a major the story introduced still delivers nothing", "document", 1,
               must_fail=("story-pass",)),
          dict(green=both_green, ledger=both_green, document=DOCUMENT,

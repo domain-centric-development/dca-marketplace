@@ -453,6 +453,15 @@ def story_signals(runs: str, story_id: str, records: typing.Sequence[typing.Any]
         findings[perspective] = findings.get(perspective, 0) + 1
         if fields.get("code"):
             domain[fields["code"]] = domain.get(fields["code"], 0) + 1
+    verdicts = [e for e in events if e["kind"] == "signal" and e["name"] == "judge" and e["fields"].get("weighed")]
+    outcomes: typing.Dict[str, int] = {}
+    outcome_by: typing.Dict[str, typing.Dict[str, int]] = {}
+    for event in events:
+        if event["kind"] == "outcome" and event["fields"].get("outcome"):
+            outcome = event["fields"]["outcome"]
+            outcomes[outcome] = outcomes.get(outcome, 0) + 1
+            per = outcome_by.setdefault(event["name"], {})
+            per[outcome] = per.get(outcome, 0) + 1
     corrections: typing.Dict[str, int] = {}
     for _p, front, _b, state, answer in records:
         code = correction_code(answer.get("answer")) if is_acceptance(front) and DecisionState(state).answered else None
@@ -471,7 +480,11 @@ def story_signals(runs: str, story_id: str, records: typing.Sequence[typing.Any]
                 repeated=sum(1 for e in events if e["kind"] == "stop" and e["fields"].get("rule") == "RUN-ROUNDS-4"),
                 contradictions=sum(1 for e in events if e["kind"] == "contradiction"),
                 acceptance=acceptance_figures(records), production=changed_production(runs, story_id),
-                mutation=mutation_of(events))
+                mutation=mutation_of(events),
+                judged=len(verdicts) or None,
+                first_pass=(verdicts[0]["fields"]["weighed"] == "pass") if verdicts else None,
+                judge_rounds=sum(1 for e in verdicts if e["fields"]["weighed"] == "changes-requested") if verdicts else None,
+                outcomes=outcomes, outcome_by=outcome_by)
 
 
 def mutation_of(events: typing.Sequence[typing.Any]) -> typing.Optional[str]:

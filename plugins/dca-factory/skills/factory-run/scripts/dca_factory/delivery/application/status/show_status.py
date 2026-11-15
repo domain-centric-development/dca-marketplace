@@ -416,13 +416,21 @@ class ShowStatusUseCase(ShowStatusInputPort):
             # `plain` leads: the finding in one sentence a person understands at once (contract 23; '' in an older
             # row). A project finding (`<product>/findings/<name>.md`, WP-146) belongs to no story: the backlog skill
             # is handed its row, which a task's `closes:` names.
+            # A blocker on code the story did not write cost no round (WP-208): it is proposed as a task of its own,
+            # which closes its row.
+            old_blocker = found.get("origin") == "pre-existing" and found["severity"].lower() == "blocker"
             findings.append(dict(story=story, row=found["row"], project=found["project"], plain=plain,
                                  where=found["where"], severity=found["severity"], defect=defect,
                                  perspective=found["perspective"], fix=found["fix"], file=kept,
-                                 action=self._action(text=f"fix it in a story, or set its Status to done or wont-fix "
-                                                          f"in {kept}",
-                                                     skill=f"/factory-backlog {found['row'] if found['project'] else story}: "
-                                                           f"{plain or defect}", label="to the backlog")))
+                                 origin=found.get("origin", ""), outcome=found.get("outcome", ""),
+                                 action=self._action(
+                                     text=(f"a blocker on code the story did not write — draft a task that closes "
+                                           f"{found['row']}, or set its Status to wont-fix in {kept}") if old_blocker
+                                     else f"fix it in a story, or set its Status to done or wont-fix in {kept}",
+                                     skill=(f"/factory-backlog task closes {found['row']}: {plain or defect}" if old_blocker
+                                            else f"/factory-backlog {found['row'] if found['project'] else story}: "
+                                                 f"{plain or defect}"),
+                                     label="draft a task" if old_blocker else "to the backlog")))
         return findings
 
     def _foreign_claims(self) -> typing.List[Model]:
