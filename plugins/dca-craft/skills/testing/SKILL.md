@@ -40,14 +40,15 @@ level file you need.
 
 - **One scenario per story — its happy path — gets the e2e test.** The rest below the surface; a `Then` only a
   browser observes is the exception, reason written down.
-- **A use case is tested once, through its input port**, never once per adapter, never with output ports mocked.
-  Real outgoing adapters and the project's own database; an external system stubbed at the protocol, never mocked
+- **A use case is tested once, through its input port**, never once per adapter, never with output ports mocked:
+  a mocked output port proves the mock, and the adapter behind it is the thing most likely to be wrong. Real outgoing adapters and the project's own database; an external system stubbed at the protocol, never mocked
   at the port, never called for real.
 - **Adapter test only where the adapter itself produces what the `Then` says** (quoted text, status, redirect,
-  mark). A value the use case computes (trimmed, counted, sorted) and the page shows gets the port test alone.
+  mark). A value the use case computes (trimmed, counted, sorted) and the page shows gets the port test alone: an
+  adapter test of it either repeats the port test or claims a computation its stub never ran.
 - **A refusal the page shows needs both**: port test proves which refusal; adapter test proves the text, its stub
   answering with that same refusal — same returned case or the very failure type, never a parent or generic one.
-- **A stored-state clause is never asserted in an adapter test.**
+- **A stored-state clause is never asserted in an adapter test.** The stub answers what you told it.
 - **Every invariant of a domain type has its own unit test**, guards included; a guard nobody named is not written.
 - **An adapter case no scenario names** (malformed body, timeout) gets its own test.
 - Output port with several adapters: each passes one **contract test** of what the port promises.
