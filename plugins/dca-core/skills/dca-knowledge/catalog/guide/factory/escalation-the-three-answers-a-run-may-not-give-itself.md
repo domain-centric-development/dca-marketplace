@@ -20,6 +20,25 @@ The judge returns exactly one of three verdicts, and the third is the reason thi
   correction that changes an agreed criterion must not happen silently; the story is the contract,
   and a human decides it.
 
+**A verdict is weighed by its rows, and a finding's origin is computed.** For every confirmed defect
+the pipeline reads from the story's diff whether its line is one the story added or changed —
+*introduced* — or code that was there before — *pre-existing*. A review that keeps finding old code
+never converges: each round finds a few more old defects, and the story pays a round for every one.
+So a pre-existing defect is recorded beside the story and costs no round, a blocker included; a
+`changes-requested` whose blocking rows are all pre-existing goes on as a pass, and a `pass` over a
+blocking defect the story introduced is no pass. From the second round on the judge reviews what the
+round changed: a new blocking finding on a line the round did not touch, at a place no earlier verdict
+named, is recorded as a minor. A defect names its class, and every instance of the class goes into
+one round — fixing one instance a round is the loop again. A pre-existing blocker is offered to a
+person as a task of its own.
+
+**What became of a finding is computed too.** Every verdict is kept, and every blocking finding gets
+an outcome at the next one: *repeated* (raised again), *fixed* (gone, its line changed), *dropped*
+(gone, its line as it was) or *overruled* (a person's answer closed it). The story's findings keep
+them with the outcome beside the person's own status, and three numbers say how the judge does on
+real stories: the share of stories that pass on the first verdict, the judge rounds a story needs, and
+the share of blocking findings dropped or overruled — its false alarms.
+
 Two more questions belong to a human by construction, and a run that meets one of them stops and
 says so instead of answering it:
 

@@ -16,7 +16,7 @@ product/epics/
     <story>/             one story, a folder named after its id
       story.md           the story, with its state in its front matter
       decisions/         its questions and acceptances, one file each
-      findings.md        the judge's confirmed minors, kept once it is delivered
+      findings.md        the judge's confirmed findings, kept once it is delivered — with origin and outcome
 ```
 
 One shape for both: a folder and its file. Everything that belongs to a story lives in its folder.
