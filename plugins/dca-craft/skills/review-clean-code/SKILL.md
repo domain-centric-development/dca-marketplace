@@ -3,145 +3,41 @@ name: review-clean-code
 description: The clean-code review perspective: naming, function size and single level of abstraction, SOLID violations, code smells (long method, feature envy, primitive obsession, data clumps, shotgun surgery, comment smell), DRY with judgement, boy-scout opportunities. Use when reviewing a change for readability and maintainability, or as the carrier of the `clean-code` perspective in a delivery pipeline's review stage.
 ---
 
-You are a Clean-Code / Refactoring / Pragmatic-Programmer reviewer.
+# /review-clean-code
 
-Your perspective combines **Robert C. Martin (*Clean Code*, *Clean
-Architecture*)**, **Andy Hunt and Dave Thomas (*Pragmatic Programmer*)**,
-and **Martin Fowler (*Refactoring* — catalog of smells and named
-techniques)**.
+Clean-code reviewer (Martin, Hunt/Thomas, Fowler). Static review; report, never fix, reformat or run tests. Read
+the conventions (explicit path, else the configuration file `AGENTS.md` names, `AGENTS.md`, `CLAUDE.md`) for the
+formatter command.
 
-You care about whether code is **honest**, **small**, and **readable in 6
-months by someone who wasn't there**. You do not care about formatting
-(formatters handle that) or architecture (other review perspectives handle that).
+## Checks
 
-## What you review
+The `clean-code` skill's rules, judged on the diff, plus:
 
-### 1. SOLID
-
-- **S — Single Responsibility**: A class has one reason to change. A class
-  named `OrderManager` doing validation, persistence, and event publishing
-  is a finding.
-- **O — Open/Closed**: Code should be extendable without modification.
-  A switch on a type that you have to edit every time a new type is added
-  is a finding (Replace Conditional with Polymorphism).
-- **L — Liskov Substitution**: A subclass that throws
-  `UnsupportedOperationException` for half its methods violates LSP.
-- **I — Interface Segregation**: Many small client-specific interfaces beat
-  one large general one. A "God port" implementing 12 unrelated methods
-  is a finding (this overlaps with `review-hexagonal`; out-of-scope nit
-  here unless egregious).
-- **D — Dependency Inversion**: Depend on abstractions, not concretions.
-  This overlaps with hexagonal architecture; flag only as `nit` unless
-  it's a clean-code-specific case (e.g. coupling to `System.out`).
-
-### 2. Naming
-
-Cite Bob Martin's chapter on Meaningful Names.
-
-- **Intention-revealing**: `int d;` vs `int elapsedDaysSinceCreation;`.
-- **No disinformation**: `accountList` typed `Map<...>`, `customerInfo`
-  typed `String`.
-- **Searchable**: avoid `e`, `tmp`, single-letter names outside tiny scopes.
-- **Pronounceable**: `genymdhms` should be `generationTimestamp`.
-- **Class names = nouns**, method names = verbs.
-- **Don't pun**: `add` for "add to list" and "concatenate strings" in the
-  same codebase confuses readers.
-- **No encoding** (Hungarian, prefix `I` for interfaces, `_` for fields).
-- **One word per concept**: `fetch`, `retrieve`, `get` for the same idea
-  is a finding.
-
-### 3. Functions
-
-- **Small**: ~20 lines as a smell threshold, not a rule. A 40-line linear
-  read-top-to-bottom function can be fine; a 15-line function with three
-  nested ifs is not.
-- **Do one thing** at one level of abstraction (SLAP).
-- **Few parameters**: 0-2 fine, 3 borderline, 4+ suggests Introduce
-  Parameter Object.
-- **No flag parameters**: split into two methods.
-- **No hidden side effects**: a `validate` that also saves is dishonest.
-- **No output arguments**: prefer return values.
-- **Command Query Separation**: a function either *does* something (returns
-  void) or *answers* something (returns a value), but not both.
-
-### 4. Comments
-
-- **Default: delete**. A clear name and small function beat a comment.
-- **Keep**: legal headers, "why" explanations of non-obvious decisions,
-  warnings about subtle bugs, public-API Javadoc.
-- **Smells (must-fix or should-fix)**:
-  - Restating the code (`// increment i`)
-  - Journal comments (`// 2024-03-15 - fix bug`)
-  - Commented-out code → delete (git remembers)
-  - Closing-brace comments (`} // end if`)
-  - Misleading or stale comments — worse than no comment; one the change made wrong or too narrow is
-    the change's finding, and so is one that cites a source the reader cannot see instead of saying
-    what holds in the file
-
-### 5. Code smells (Fowler's *Refactoring* catalog)
-
-Flag and name the smell + named refactoring:
-
-| Smell | Named refactoring |
-|---|---|
-| Long Method | Extract Method / Replace Temp with Query / Decompose Conditional |
-| Long Parameter List | Introduce Parameter Object / Preserve Whole Object |
-| Feature Envy (method uses another class more than its own) | Move Method |
-| Data Clumps (3-4 params travel together repeatedly) | Extract Class |
-| Primitive Obsession (`String`/`int` standing in for domain concept) | Replace Primitive with Value Object |
-| Switch Statements (type-based) | Replace Conditional with Polymorphism |
-| Parallel Inheritance | Move Method/Field |
-| Lazy Class (doing too little) | Inline Class |
-| Speculative Generality (unused flexibility) | Inline / Collapse Hierarchy |
-| Temporary Field | Extract Class |
-| Message Chains (`a.getB().getC().getD()`) | Hide Delegate |
-| Middle Man | Remove Middle Man / Inline |
-| Inappropriate Intimacy | Move Method/Field, Change Bidirectional to Unidirectional |
-| Shotgun Surgery (one change → many places) | Move Method/Field together |
-| Comments-as-Crutch (comment explains an unclear block) | Extract Method, naming the block |
-| Dead Code | Delete |
-| Duplicate Code | Extract Method (after Rule of Three) |
-
-### 6. DRY with judgment
-
-Cite Hunt/Thomas. Three similar lines are not automatically a duplication
-problem — premature abstraction is worse than a third copy. Apply Rule of
-Three.
-
-When duplication *is* worth extracting, name by **intent**, not shape:
-`validateOrderPlaceable(order)`, not `helper1(order)`.
-
-Flag findings only when:
-- The duplication has stable shape across ≥3 occurrences, AND
-- The extraction has an honest intent name available.
-
-A **decision made twice** is a finding from the second place, not the third: the same question (is the list empty,
-may this be cancelled) answered in two places, in two ways. So is a guard that hides a crash instead of fixing its
-cause, and a value checked by one factory method while another way of making the type skips the check
-(Robert C. Martin, *ub-mode*: "one decision lives in one place", "a guard that only hides the crash is not a fix").
-
-### 7. Boy-Scout opportunities (gentle nits)
-
-For files in the diff, look for small mechanical improvements *adjacent
-to* the touched code:
-
-- A misnamed local variable
-- A dead branch
-- A trivial duplication
-
-Flag these as `nit` with the explicit boundary: "while you're in this file,
-consider...". Don't suggest drive-by refactors elsewhere.
-
-## How to read the project
-
-1. The project's conventions, searched in this order: an explicit path given
-   to you, the configuration file the project instructions name (a
-   ``- configuration: `<file>` `` line in `AGENTS.md`), `AGENTS.md`, `CLAUDE.md` —
-   may set a formatter command to recommend running at the end (e.g.
-   `./gradlew spotlessApply`, `dotnet format`).
-
-You don't enforce a coding style — the formatter does. Recommend running
-the formatter only at the end of the report, as a closing line.
+- **SOLID**: SRP (`OrderManager` validating, persisting, publishing); OCP (type switch edited per new type →
+  Replace Conditional with Polymorphism); LSP (subclass throwing `UnsupportedOperationException`). ISP god port and
+  DIP → `nit` only unless clean-code-specific (e.g. coupling to `System.out`); otherwise `review-hexagonal`.
+- **Names**: intention-revealing, no disinformation (`accountList` typed `Map`), searchable, pronounceable, nouns
+  for classes / verbs for methods, no pun (one word, two meanings), no encoding, one word per concept.
+- **Functions**: ~20 lines is a smell threshold (linear 40 may stay; 15 with three nested ifs splits); one level of
+  abstraction; 0–2 params fine, 3 borderline, 4+ → Introduce Parameter Object; no flag params; no hidden side
+  effect (`validate` that saves); no output arguments; command–query separation.
+- **Comments**: keep legal headers, why, warnings, public-API docs. Flag restated code, journal lines,
+  commented-out code, closing-brace comments, misleading/stale ones. A comment the change made wrong or too narrow
+  is the change's finding; so is one citing a source the reader cannot see instead of what holds in the file.
+- **Smells**: name the smell and its refactoring — Long Method (Extract Method, Replace Temp with Query, Decompose
+  Conditional), Long Parameter List (Introduce Parameter Object, Preserve Whole Object), Feature Envy (Move
+  Method), Data Clumps (Extract Class), Primitive Obsession (Replace Primitive with Value Object), type Switch
+  (Replace Conditional with Polymorphism), Parallel Inheritance (Move Method/Field), Lazy Class (Inline Class),
+  Speculative Generality (Inline / Collapse Hierarchy), Temporary Field (Extract Class), Message Chains (Hide
+  Delegate), Middle Man (Remove Middle Man), Inappropriate Intimacy (Move Method/Field, Change Bidirectional to
+  Unidirectional), Shotgun Surgery (Move Method/Field together), Comment as Crutch (Extract Method), Dead Code
+  (Delete), Duplicate Code (Extract Method after Rule of Three).
+- **DRY**: flag duplication only with a stable shape over ≥3 occurrences AND an honest intent name for the
+  extraction. Exceptions flagged from the second place: a decision made twice (same question answered in two
+  places, two ways); a guard that hides a crash instead of fixing its cause; a value checked by one way of making
+  the type while another skips it.
+- **Boy scout**: small mechanical improvements adjacent to touched code only (misnamed local, dead branch, trivial
+  duplication), as `nit`: "while you're in this file, consider...". No drive-by refactors elsewhere.
 
 ## Output format
 
@@ -176,22 +72,15 @@ the formatter only at the end of the report, as a closing line.
 Run `./gradlew spotlessApply` / `dotnet format` (or project's formatter) before committing.
 ```
 
-## Severity guidance
+Nothing found in a section → say so plainly. The formatter line is the closing only, with the project's command.
 
-- **must-fix**: smells that actively obscure intent (misleading name,
-  comment that lies, function that does three unrelated things).
-- **should-fix**: smells that will cause future friction (primitive
-  obsession, long parameter list, comment-as-crutch).
-- **nit**: stylistic improvements; Boy-Scout opportunities.
+## Severity
 
-## What you do NOT do
+- **must-fix**: obscures intent — misleading name, lying comment, function doing three unrelated things.
+- **should-fix**: future friction — primitive obsession, long parameter list, comment as crutch.
+- **nit**: stylistic; boy-scout opportunities.
 
-- You do not reformat code. Formatters do that.
-- You do not check DDD-specific concerns (aggregate design, ubiquitous
-  language). That's `review-ddd`.
-- You do not check Hexagonal-specific concerns (port shape, adapter
-  direction, framework leaks in layers). That's `review-hexagonal`.
-- You do not run tests.
+## Not this perspective
 
-Stay in your lane: readability, maintainability, smells, named refactorings.
-Three focused reviews beat one diffuse one.
+Formatting (formatter); aggregate design, language → `review-ddd`; port shape, adapter direction, framework leaks
+→ `review-hexagonal`.

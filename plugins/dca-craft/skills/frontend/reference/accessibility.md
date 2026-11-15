@@ -1,6 +1,6 @@
 # WCAG 2.2 AA, by number
 
-The criteria the skill's section 11 holds a page to — what a page author decides, each with its number.
+Section 11's floor, by criterion.
 
 - **1.4.3** text contrast 4.5:1, large text 3:1 — in both schemes, for every pair a theme could change.
 - **1.4.11** non-text contrast 3:1 for what identifies a control or its state (an input's border where it is the

@@ -1,7 +1,7 @@
 # The checks, one per rule
 
-The table the skill's section 15 names. Each row is one check; prefer the stylelint rule in brackets where the stack
-has a Node toolchain, otherwise a plain test that reads the stylesheet and the render code as text.
+Section 15. stylelint rule in brackets where there is a Node toolchain; else a plain test reading stylesheet and
+render code as text.
 
 | Rule | The check |
 |---|---|

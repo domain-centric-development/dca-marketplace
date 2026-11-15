@@ -1,36 +1,18 @@
 # Test first (TDD): red, green, refactor
 
-Test-driven development is one way of writing the tests the rest of this skill describes: the test comes before the
-code, one small step at a time. It changes the order of work, not what a test must be.
+Changes the order of work, not what a test must be.
 
 ## The cycle
 
-### 1. Red — a failing test
-
-- Pick the **smallest** observable behaviour you want next.
-- Express it as one focused test at the level that observes it (`SKILL.md`, section 1).
-- Run it. **Confirm it fails for the right reason** — on its assertion, not on a compile error or a typo. If the
-  failure is mechanical, fix the mechanics and run again. Where a type is needed to compile, write it whole if
-  nothing a test observes lives in it; a method whose answer a test asserts throws until it is built — never a
-  default value, which can make the test green before any code exists.
-
-### 2. Green — make it pass, minimally
-
-- Write the **smallest** production change that makes the test green. Hard-coding a value is fine when the next
-  test will force the general form; do not anticipate.
-- No new features, no extra branches, no defensive code nobody asked for — a guard is written when an invariant
-  names it, test first.
-- Run the test: green.
-
-### 3. Refactor — with the net on
-
-- Improve names, remove duplication, extract small functions, tighten types.
-- The tests stay green throughout. Red means the refactoring changed behaviour: revert or fix.
-- **No new test during refactoring.** That is the next red.
-
-### 4. Repeat
-
-A cycle takes minutes. One that takes more than fifteen is a step too big: split the behaviour.
+1. **Red.** The smallest next observable behaviour, one test at the level that observes it (`SKILL.md`,
+   section 1). Confirm it fails on its assertion, not a compile error; fix mechanics and rerun. A type needed to
+   compile may be written whole if nothing a test observes lives in it; a method whose answer a test asserts
+   throws until built — never a default value.
+2. **Green.** The smallest production change. Hard-coding is fine when the next test forces the general form. No
+   extra features, branches or defensive code — a guard is written when an invariant names it, test first.
+3. **Refactor.** Names, duplication, extraction, types; tests green throughout — red means behaviour changed:
+   revert or fix. **No new test during refactoring.**
+4. **Repeat.** A cycle over fifteen minutes is a step too big: split.
 
 ## Where it fits, by level
 
@@ -42,24 +24,21 @@ A cycle takes minutes. One that takes more than fifteen is a step too big: split
 | `e2e` | the happy path, before the build | red first like every criterion's test; a journey test is green when written and is no TDD step |
 | architecture rules | no | governance over code that exists, not behaviour |
 
-## Anti-patterns
+## Refuse
 
-- **Test after.** Code first, then a test that mirrors it — a test that cannot fail in an interesting way.
-- **Big-bang test.** The whole feature in one test. Split it into the smallest observable behaviours.
-- **Refactoring during red.** Structure and behaviour changed together; when it breaks, nobody knows which did it.
-- **Reading the implementation to write the test.** The test follows from the requirement, not from the code.
-- **Mocking the class under test, or a value object.** Neither has anything worth replacing.
+Test after; one big-bang test for a feature; refactoring during red; writing the test from the implementation
+instead of the requirement; mocking the class under test or a value object.
 
 ## Commands
 
-Use the project's own commands. Common forms:
+The project's own. Common forms:
 
 ```bash
 ./gradlew test --tests '*TitleTest*'                                   # Java: one class
 dotnet test --filter "FullyQualifiedName~TitleTests"                    # .NET: one class
 ```
 
-Run the single test while writing it, the relevant tests after green and again after refactoring.
+The single test while writing, the relevant tests after green and after refactoring.
 
 ## Output per cycle
 

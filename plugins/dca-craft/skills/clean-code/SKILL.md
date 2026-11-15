@@ -8,187 +8,67 @@ description: |
 disable-model-invocation: false
 ---
 
-# /clean-code — Clean-Code principles while writing
+# /clean-code
 
-This skill is a **set of writing principles**, not a linter. It guides what
-Claude *types* — naming choices, function size, comment discipline. Formatters
-handle whitespace; this skill handles judgment.
-
-Sources: Bob Martin's *Clean Code* and his *ub-mode* principles, Hunt/Thomas's
-*Pragmatic Programmer*, Fowler's *Refactoring* (smells + named techniques).
+Writing principles while editing, not a linter. Propose; the user decides.
 
 ## Names
 
-- **Verbs for functions**, nouns for classes, adjectives or short noun phrases
-  for booleans (`isEmpty`, `hasPaidInvoice`, not `getEmpty`).
-- **Domain words, not technical words.** `placeOrder` beats `processData`.
-  `Customer` beats `UserDto` in domain code (DTOs belong in adapters anyway).
-- **No encoding prefixes.** Don't use `I` for interfaces, `m_` for fields,
-  `str` for strings. Modern IDEs make these noise.
-- **No disinformation.** A `Map<UserId, User>` named `userList` lies. So does
-  a parameter `accountInfo` that's a single string.
-- **Searchable names.** Avoid single-letter names except in tiny scopes
-  (lambdas, loop counters).
-- **Pick one word per concept.** `fetch`, `retrieve`, `get` for the same
-  operation across the codebase = three searches instead of one.
+- Domain words over technical ones: `placeOrder`, not `processData`; `Customer`, not `UserDto` in domain code.
+- No encoding prefixes (`m_`, `str`, `I` unless the language's convention requires it).
+- A name says what the thing holds: a `Map<UserId, User>` is not `userList`; a sentence shown on a page is not a
+  `count`. One name never stands for two things in one type.
+- One word per concept across the code base (`fetch` or `get`, not both).
 
 ## Functions
 
-- **One function = one task** at one level of abstraction.
-- **Short.** ~20 lines is a *smell threshold*, not a hard rule. If a 40-line
-  function is genuinely linear and reads top-to-bottom, leave it. If a
-  15-line function has three nested ifs, split it.
-- **Few parameters.** 0-2 is fine, 3 is borderline, 4+ suggests a Parameter
-  Object (Java or C# record / value object).
-- **No flag parameters.** `process(item, /*async=*/ true)` should be
-  `processAsync(item)` and `processSync(item)`.
-- **No hidden side effects.** A function called `validate` should not also
-  *save* to a database. Name reflects the full effect.
-
-## SLAP — Single Level of Abstraction Per function
-
-Inside one function, all statements live at the same conceptual level.
-
-Bad (mixed levels):
-
-```java
-public Order placeOrder(Cart cart) {
-    var lines = new ArrayList<OrderLine>();
-    for (var item : cart.items()) {                       // <-- low level
-        lines.add(new OrderLine(item.productId(), item.qty()));  // low
-    }
-    Order order = Order.create(cart.customerId(), lines); // high level
-    publishEvent(new OrderPlaced(order.id()));            // high level
-    return order;
-}
-```
-
-Good (separated):
-
-```java
-public Order placeOrder(Cart cart) {
-    Order order = Order.create(cart.customerId(), toOrderLines(cart));
-    publishEvent(new OrderPlaced(order.id()));
-    return order;
-}
-
-private List<OrderLine> toOrderLines(Cart cart) {
-    return cart.items().stream()
-        .map(item -> new OrderLine(item.productId(), item.qty()))
-        .toList();
-}
-```
+- One task, one level of abstraction (SLAP): orchestration lines and loop/mapping detail never share a body —
+  extract the detail into a named function.
+- ~20 lines is a smell threshold, not a limit: a linear 40-line function may stay; a 15-line one with three nested
+  ifs splits.
+- 0–2 parameters fine, 3 borderline, 4+ → parameter object (record / value object).
+- No flag parameters: `processAsync(item)` / `processSync(item)`, not `process(item, true)`.
+- The name states the full effect: `validate` does not save.
 
 ## Comments
 
-**Default: don't write a comment.** Make the code say it.
+- Default: none — make the code say it.
+- Write one only for a why: a non-obvious constraint, a workaround with its reason, a public API boundary.
+- Delete: restated code, journal lines, commented-out code, ownerless TODOs older than six months.
+- A comment the change made wrong or too narrow is rewritten or deleted in the same change. It states what holds
+  in this file, never what a source the reader cannot see says.
 
-When a comment **is** warranted:
+## Duplication and decisions
 
-- **Why, not what.** Document non-obvious constraints, hidden invariants,
-  surprising tradeoffs.
-- **Workarounds.** "We avoid `Stream.parallel()` here because the JDBC driver
-  isn't thread-safe under load — see incident-2024-03." That comment earns
-  its keep.
-- **Public API / library boundary.** Javadoc on exported types.
-
-**Comment smells (delete on sight):**
-
-- Restating the code: `// increment i` next to `i++`.
-- Journal comments: `// 2024-03-15: bug fix`.
-- Commented-out code: delete it. Git remembers.
-- TODOs with no owner or date that are >6 months old.
-- A comment the change made wrong or too narrow: it names one case where there
-  are two now, or a mechanism the code no longer uses. Rewrite it in the same
-  change — or delete it where the code now says it. A comment says what holds
-  in this file, not what a source the reader cannot see says.
-
-## DRY with judgment
-
-Three similar lines are not yet a duplication problem. Two-three-four occurrences
-of similar code are sometimes simpler than the abstraction that would unify
-them.
-
-Apply **Rule of Three**: extract on the third occurrence — when the *shape*
-of the duplication is stable. Premature abstraction is harder to undo than
-duplication.
-
-When duplication *is* worth extracting, name the extraction by **intent**, not
-shape:
-
-- Good: `validateOrderPlaceable(order)`
-- Bad: `helper1(order)`, `commonChecks(order)`
-
-## One decision in one place
-
-DRY is about code; this is about decisions. A question the code answers — is the list empty, may this order be
-cancelled, which price applies — is answered once, and every other place asks that one answer. Two places that each
-decide "empty" in their own way drift apart the first time one of them changes. ("One decision lives in one place",
-Robert C. Martin, *ub-mode*.)
-
-- A field or variable is named after **what it holds**: a sentence shown on the page is not a `count`, a piece of
-  wording is not `tasks`. One name never stands for two things in the same type.
-- A view or a template reads a decision the model made; it does not make it again.
+- Rule of Three: extract on the third occurrence, once the shape is stable. Name the extraction by intent
+  (`validateOrderPlaceable`), never by shape (`commonChecks`).
+- One decision in one place: a question the code answers (is it empty, may it be cancelled, which price applies)
+  is answered once; every other place asks that answer. A view reads the model's decision, never makes it again.
 
 ## Subtract before you add
 
-- **The smallest change that solves the problem.** Take complexity out before you put any in; a new requirement
-  bolted onto a design that did not foresee it is a sign to reshape the design first, then add.
-- **A guard that only hides a crash is not a fix.** Reproduce the failure, fix its cause. A value that must never be
-  illegal is made impossible to create — every way the type is made checks it, not one factory method beside an open
-  constructor.
+- Smallest change that solves the problem. A requirement the design did not foresee → reshape first, then add.
+- A guard that only hides a crash is no fix: reproduce, fix the cause.
+- A value that must never be illegal cannot be created illegal: every way the type is made checks it, not one
+  factory beside an open constructor.
 
-## Code smells (from Fowler's *Refactoring*) — flag these
+## Smells to flag while writing
 
-| Smell | Fix (named refactoring) |
-|---|---|
-| Long Method | Extract Method, Replace Temp with Query, Decompose Conditional |
-| Long Parameter List | Introduce Parameter Object, Preserve Whole Object |
-| Feature Envy (method talks more to another class's data than its own) | Move Method |
-| Data Clumps (same 3-4 params travel together) | Extract Class / Parameter Object |
-| Primitive Obsession (lots of `String`, `int` standing in for domain concepts) | Replace Primitive with Value Object |
-| Shotgun Surgery (one change touches many classes) | Move Method/Field to consolidate |
-| Comments-as-Crutch | Extract Method (name the explained section) |
-| Dead Code | Delete |
-| Speculative Generality (unused flexibility) | Inline / Collapse Hierarchy |
-| Switch on type | Replace Conditional with Polymorphism |
+Long method, long parameter list, feature envy, data clumps, primitive obsession, shotgun surgery, comment as
+crutch, dead code, speculative generality, switch on type — name the smell and Fowler's refactoring for it.
+Example: "Passing `(String customerId, String productId, int qty)` — introduce an `OrderLineDraft` record?"
 
 ## Boy-Scout Rule
 
-Leave touched code a little cleaner than you found it. Bounds:
+Leave touched code a little cleaner — only adjacent to the change, only mechanical and obvious (rename a local,
+extract a block, delete dead code). A risky cleanup goes into its own commit.
 
-- **Adjacent to the change**, not anywhere in the file. No drive-by refactors
-  in a feature commit.
-- **Mechanical and obvious.** Rename a poorly-named local, extract a
-  three-line block, delete dead code. Not "rewrite the architecture."
-- **Reversible.** If the cleanup is risky, do it as a separate commit so
-  reviewers can isolate the feature change.
+## Formatting
 
-## Formatting & style
-
-This skill does **not** auto-reformat. It works alongside whatever formatter
-the project has configured. Read
-the configuration file the project instructions name (a ``- configuration: `<file>` `` line in
-`AGENTS.md`), or `AGENTS.md` itself, for the project's formatter command (e.g. `./gradlew spotlessApply`, `dotnet format`); offer to run it at the end of a
-larger edit, but don't reformat invisibly mid-edit.
-
-## What this skill flags during editing
-
-When Claude is about to write code that has a smell:
-
-- **Long Method incoming**: "This function is approaching 40 lines mixing
-  validation, mapping, and persistence. Extract the validation block?"
-- **Primitive Obsession**: "We're passing `(String customerId, String
-  productId, int qty)` — these are domain concepts. Introduce
-  `OrderLineDraft` record?"
-- **Comment-as-crutch**: "This block has a comment explaining what it does.
-  Extract it into a named method instead?"
-
-The skill **proposes**; the user decides.
+Never reformat invisibly mid-edit. Take the formatter command from the configuration file `AGENTS.md` names
+(``- configuration: `<file>` ``) or from `AGENTS.md`; offer to run it at the end of a larger edit.
 
 ## Not in scope
 
-- Formatting (use the formatter)
-- Performance optimization (separate concern)
-- Architectural review (use `review-ddd`, `review-hexagonal` or their reviewer agents)
-- Test design (use `testing`)
+Formatting (formatter), performance, architecture review (`review-ddd`, `review-hexagonal`), test design
+(`testing`).

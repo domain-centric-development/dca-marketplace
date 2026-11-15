@@ -5,9 +5,8 @@ description: The craft of writing tests that hold — the level a criterion is t
 
 # Tests that hold
 
-A test is worth its cost when its result means something: green when the behaviour is there, red when it is not,
-whatever ran before it. Everything below serves that sentence. The rules hold at every level; the level files in
-`reference/` add what one level needs, and the two ways of writing a test have a file each.
+Green when the behaviour is there, red when it is not, whatever ran before. Rules hold at every level; read the
+level file you need.
 
 | You are | Read |
 |---|---|
@@ -20,16 +19,15 @@ whatever ran before it. Everything below serves that sentence. The rules hold at
 
 ## 0. Read the project first
 
-Read the project's conventions, searched in this order: an explicit path given to you, the configuration file the
-project instructions name (a ``- configuration: `<file>` `` line in `AGENTS.md`), `AGENTS.md`, `CLAUDE.md`. Take
-from them, and from the tests that exist: the test source sets and their commands, the test frameworks, the stub
-for external systems (WireMock, WireMock.Net), the base classes, builders and page objects, how the store is reset,
-how test classes and methods are named. Follow the local idiom; never add a second convention beside it. **Before
-you write a helper, find the existing one** and call it. Adding a dependency, a source set or a runner is a stack
-decision for the person, never part of writing a test.
-
-Where nothing is said: JUnit 5 in `src/test/java/` (Java) or xUnit in `tests/<Root>.UnitTests/` (.NET), the
-production package mirrored, test classes suffixed `Test`/`Tests`.
+- Conventions, in this order: a path given to you, the configuration file `AGENTS.md` names
+  (``- configuration: `<file>` ``), `AGENTS.md`, `CLAUDE.md`.
+- Take from them and the existing tests: source sets and commands, frameworks, the external-system stub (WireMock,
+  WireMock.Net), base classes, builders, page objects, store reset, class/method naming. Follow the local idiom;
+  never a second convention beside it.
+- **Find the existing helper before writing one**, and call it.
+- A new dependency, source set or runner is the person's stack decision, never part of writing a test.
+- Nothing said: JUnit 5 in `src/test/java/` (Java) or xUnit in `tests/<Root>.UnitTests/` (.NET), production package
+  mirrored, classes suffixed `Test`/`Tests`.
 
 ## 1. The level: the lowest that observes the `Then` from outside
 
@@ -40,86 +38,71 @@ production package mirrored, test classes suffixed `Test`/`Tests`.
 | `adapter` | one incoming adapter against a stubbed input port | what only the adapter produces: a text on the page, a status, a redirect, a payload, the command it hands the port |
 | `e2e` | the running application through its surface | that the surface is wired to the use case, and what only a browser observes |
 
-- **One scenario per story — its happy path — gets the end-to-end test.** Every other scenario is tested below the
-  surface. A scenario whose `Then` only a browser observes is the exception, with the reason written down.
-- **A use case is tested once, through its input port**, whichever adapter calls it — never once per adapter, and
-  never with its output ports mocked: a mocked output port proves the mock, and the adapter behind it is the thing
-  most likely to be wrong. Real outgoing adapters and the project's own database; an external system stubbed at the
-  protocol, never mocked at the port and never called for real.
-- **An adapter test only where the adapter itself produces what the `Then` says** — a quoted text, a status, a
-  redirect, a mark. A value the use case computes (trimmed, counted, sorted) and the page merely shows gets the port
-  test alone: an adapter test of it either repeats the port test or claims a computation its stub never ran.
-- **A refusal the page shows needs both**: the port test proves the use case refuses, with which refusal; the
-  adapter test proves the text, its stub answering with that same refusal — the same returned case, or the very
-  failure type thrown, never a parent or a generic one.
-- **A clause about what is stored is never asserted in an adapter test.** The stub answers what you told it.
-- **Every invariant of a domain type has its own unit test**, its guards included; a guard nobody named is not written.
-- **An adapter's case no scenario names** (a malformed body, a timeout) gets a test of its own beside the scenarios'.
-- Where an output port has several adapters, each passes one **contract test** of what the port promises.
+- **One scenario per story — its happy path — gets the e2e test.** The rest below the surface; a `Then` only a
+  browser observes is the exception, reason written down.
+- **A use case is tested once, through its input port**, never once per adapter, never with output ports mocked.
+  Real outgoing adapters and the project's own database; an external system stubbed at the protocol, never mocked
+  at the port, never called for real.
+- **Adapter test only where the adapter itself produces what the `Then` says** (quoted text, status, redirect,
+  mark). A value the use case computes (trimmed, counted, sorted) and the page shows gets the port test alone.
+- **A refusal the page shows needs both**: port test proves which refusal; adapter test proves the text, its stub
+  answering with that same refusal — same returned case or the very failure type, never a parent or generic one.
+- **A stored-state clause is never asserted in an adapter test.**
+- **Every invariant of a domain type has its own unit test**, guards included; a guard nobody named is not written.
+- **An adapter case no scenario names** (malformed body, timeout) gets its own test.
+- Output port with several adapters: each passes one **contract test** of what the port promises.
 
 ## 2. The rules of a test that holds
 
-The names are Gerard Meszaros' (*xUnit Test Patterns*, 2007); the properties Robert C. Martin's F.I.R.S.T. and Kent
-Beck's *Test Desiderata*.
-
-1. **Fresh fixture, at every level.** A test creates what it needs, with values of its own — a title from the test's
-   name and a random part, a user of its own — and reads no data another test can change. Resetting the store before
-   each test is allowed; unique data is better, because the tests can then run in parallel. Seed data is shared: a
-   test that changes a seeded record, or needs one of its values exact, creates its own. Meszaros' smell for the
-   opposite is **Interacting Tests** — "expected 2 rows, got 4", only on the build server.
-2. **The fixture is visible and minimal.** What the outcome depends on stands in the test — no seed row, no hidden
-   builder default the reader has to look up (**Mystery Guest**). A **Minimal Fixture** holds what this behaviour
-   needs; no general fixture shared by tests that need different parts of it. A builder may give defaults; the test
-   states the values its outcome depends on (DAMP over DRY).
-3. **One behaviour, named after what it proves.** `refusesAnEmptyTitle`, `showsTwoOfThreeTasksOpen` — what a user or
-   caller observes, never the method under test, never a criterion's key or number. A test that stays green with the
-   action deleted does not name the action: an adapter test whose stub answers with the outcome is named after the
-   state it shows, never after the change that led there.
-4. **A test can turn red.** Seen red before it is trusted, on its assertion — not on a missing class or a wiring
-   error. Ask of every assertion: with the behaviour absent, would it turn red? Robert C. Martin's short form: a test
-   that would still pass if every function under it returned nothing is thrown out. A stub returning the expected answer,
-   an assertion inside an `if`, an absence checked before the page reacted, an assertion on a mechanism the code does
-   not use — each is green whatever the code does. Where the behaviour exists already, break the production code
-   minimally, see red, revert: mutation testing by hand.
-5. **No logic in a test.** No loop, no condition, no expected value built from parts; a test reads top to bottom.
-   Cases that can fail apart are tests of their own. The rule is about the expected value: a helper call that makes a
-   value unique belongs to the fixture — keep the value in a variable and assert against the variable.
-6. **State over interaction.** Assert the outcome; assert an interaction only where it is the outcome — a message to
-   a system the application does not own, an event published, an incoming adapter's translation: the command it hands
-   its port, or that it does not call the use case for input that does not parse. What a stub returns is never the
-   result a test asserts. Never mock what you are testing or a value object.
-7. **Time and randomness are injected.** The code under test reaches the time only through an injected clock
-   (`Clock`, `TimeProvider`) and chance only through an injected source; the test fixes the clock and seeds the
-   source. Never `now()` in the code under test.
-8. **No fixed sleep.** Wait for the state the action leads to, polling with a timeout.
-9. **A flaky test is fixed at once**, never retried into green and never left for later. Its cause is usually one of
-   the rules above.
-10. **Select by a stable marker, never by position among siblings.** `//*[@data-test='task-title'][2]` breaks when the
-    markup around the titles changes, although the page is right. Find the element by its own marker and the data the
-    test created. This holds for every level that reads a page, the adapter test included.
-11. **Test data a swap would turn red.** Two quantities, two names alike let the code mix them up and stay green;
-    give each its own value.
-12. **A test that held before is not rewritten to match new code.** Add a case; change an old expectation only where
-    the requirement itself changed, and say so. Rearranging around the assertions — a new constructor argument, a
-    locator that names the same markers on a new path — keeps every assertion, expected value and matcher as it was.
+1. **Fresh fixture, every level.** A test creates what it needs with its own values (title from the test name plus
+   a random part, its own user) and reads no data another test can change. Store reset before each test is
+   allowed; unique data is better (parallel runs). Seed data is shared: a test that changes a seeded record or
+   needs one of its values exact creates its own.
+2. **Visible, minimal fixture.** What the outcome depends on stands in the test — no seed row, no hidden builder
+   default. No general fixture shared by tests needing different parts. Builders may default; the test states the
+   values its outcome depends on (DAMP over DRY).
+3. **One behaviour, named after what it proves.** `refusesAnEmptyTitle`, `showsTwoOfThreeTasksOpen` — what a
+   caller observes; never the method under test, never a criterion's key or number. A test green with the action
+   deleted does not name the action: an adapter test whose stub answers with the outcome is named after the state.
+4. **A test can turn red.** Seen red on its assertion — not a missing class or wiring error — before trusted. Ask
+   of every assertion: with the behaviour absent, would it turn red? A test still green if every function under it
+   returned nothing is thrown out. Always green whatever the code does: a stub returning the expected answer, an
+   assertion inside an `if`, an absence checked before the page reacted, an assertion on a mechanism the code does
+   not use. Behaviour already there: break the production code minimally, see red, revert.
+5. **No logic in a test.** No loop, condition, or expected value built from parts. Cases that fail apart are
+   separate tests. A helper that makes a value unique is fixture: keep it in a variable, assert against it.
+6. **State over interaction.** Assert an interaction only where it is the outcome: a message to a system the
+   application does not own, an event published, an incoming adapter's translation (the command it hands its
+   port, or not calling the use case for unparseable input). A stub's return is never the asserted result. Never
+   mock what you test or a value object.
+7. **Time and randomness injected** (`Clock`, `TimeProvider`, a seeded source); the test fixes them. Never `now()`
+   in the code under test.
+8. **No fixed sleep.** Poll for the resulting state with a timeout.
+9. **A flaky test is fixed at once** — never retried green, never deferred.
+10. **Select by a stable marker, never by position among siblings** (`//*[@data-test='task-title'][2]` breaks on
+    unrelated markup changes). Use the element's own marker and the data the test created. Holds for every level
+    that reads a page, adapter tests included.
+11. **Test data a swap would turn red.** Two quantities or names never share a value.
+12. **A test that held before is not rewritten to match new code.** Add a case; change an old expectation only
+    where the requirement changed, and say so. Rearranging (a new constructor argument, a locator naming the same
+    markers on a new path) keeps every assertion, expected value and matcher.
 
 ## 3. Refuse
 
 - An output port mocked in a use case's test; an external system mocked at its port or called for real.
-- A use case tested once per adapter, or a scenario tested end to end that is not the happy path, without a reason.
+- A use case tested once per adapter, or a non-happy-path scenario tested end to end without a reason.
 - A stored-state clause asserted in an adapter test; an adapter test named after the action it cannot perform.
-- Rows written with SQL as an end-to-end test's precondition; a seeding entry for tests in production code (a
-  product's own demo data is a feature, not a test fixture — a test does not read its exact values).
-- A loop, a condition or a sleep in a test; `now()` in the code under test.
-- A test green before the behaviour exists, a test never seen red, a retry that turns a flaky test green.
+- SQL rows as an e2e precondition; a test seeding entry in production code (a product's demo data is a feature —
+  no test reads its exact values).
+- A loop, condition or sleep in a test; `now()` in the code under test.
+- A test green before the behaviour exists, never seen red, or retried green.
 - A criterion's key in a test name, display name or comment.
 - A spike or scratch test left behind.
 
 ## 4. Answer in rows
 
-What this skill decides ends in tables with fixed columns, so a script can read and check it and a session leaves
-the same trace as an automated stage. Write them into the file the caller names, or into your answer. One row per
-item; no prose in a cell beyond the clause's own words.
+Write into the file the caller names, or the answer. One row per item; no prose in a cell beyond the clause's own
+words.
 
 ```markdown
 ## Tests
@@ -138,18 +121,18 @@ item; no prose in a cell beyond the clause's own words.
 | <DomainType> | <n> | <the rule> | <fully.qualified.Class>#<method> |
 ```
 
-- `criterion` is the key the story gives the criterion; without a story, a short kebab-case name of the behaviour.
-- `test` is the fully qualified class and the method — a dotted module path in languages without classes.
-- `clauses`: one row per `Then` and each `And` after it, `n` counting from 1; `assertion` is the line that asserts
-  that clause, `level` one of the four words — never `adapter` for a clause about what is stored.
+- `criterion`: the story's key; without a story, a short kebab-case name of the behaviour.
+- `test`: fully qualified class and method — a dotted module path in languages without classes.
+- `clauses`: one row per `Then` and each `And` after it, `n` from 1; `assertion` the line asserting that clause;
+  `level` one of the four words — never `adapter` for a stored-state clause.
 - `invariants`: one row per rule of every domain type the change touches, each with its own unit test — never a
-  criterion's test. A type without a rule gets one row with `none — <why>` in place of the test.
+  criterion's test. A type without a rule: one row with `none — <why>` in place of the test.
 - An adapter test carries the state it shows in its method name (`showsTwoOfThreeTasksOpen`) — what the stub was
   arranged with, never a change; no column of its own.
-- A criterion with no test possible gets a line `- uncovered: <key> — <why>` under the tables. Nothing else.
+- A criterion with no test possible: a line `- uncovered: <key> — <why>` under the tables. Nothing else.
 
 ## Boundaries
 
-This skill writes and judges tests; it does not decide the stack. A missing runner, a missing stub library or a
-missing source set is a question for the person — never installed while writing a test, and never replaced by a
-lower-level test that asserts less. End-to-end tests drive a browser through the `e2e-testing` skill.
+Writes and judges tests; does not decide the stack. A missing runner, stub library or source set is a question for
+the person — never installed while writing a test, never replaced by a lower-level test that asserts less. Browser
+tests: the `e2e-testing` skill.

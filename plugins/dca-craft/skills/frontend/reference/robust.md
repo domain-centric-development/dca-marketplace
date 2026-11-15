@@ -1,6 +1,6 @@
 # Robust by construction
 
-The detail of the skill's section 13.
+Section 13.
 
 - **Text goes in as text.** Never bypass the stack's escaping with data: `th:utext`, `Html.Raw`, `|safe`, `!{}`,
   `dangerouslySetInnerHTML`, `v-html`, `{@html}`, `innerHTML` are each reviewed and sanitised.
