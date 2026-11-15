@@ -100,3 +100,4 @@ no hand-over after the gate ran.
 <!-- rule: STAGE-BUILD-NOT2 -->
 <!-- rule: STAGE-BUILD-NOT3 -->
 <!-- rule: STAGE-BUILD-NOT4 -->
+<!-- rule: STAGE-BUILD-NOT5 -->

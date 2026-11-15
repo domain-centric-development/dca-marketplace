@@ -279,7 +279,7 @@ PROFILE_KEYS = frozenset((
 #: Key families: `<prefix><name>`, with an open list of names — a test command (`test.integration`), what a
 #: command covers (`covers.test`), a carrier (`carrier.build`), a perspective's reviewer (`review.ddd`), a model
 #: (`model.claude`, `model.claude.tidy`; the model check holds tool and stage).
-PROFILE_FAMILIES = ("test.", "covers.", "carrier.", "review.", "model.", "tool.", "effort.")
+PROFILE_FAMILIES = ("test.", "covers.", "carrier.", "review.", "model.", "tool.", "effort.", "layer.")
 
 
 def unknown_profile_keys(profile: typing.Mapping[str, typing.Any]) -> typing.List[typing.Tuple[str, typing.Optional[str]]]:

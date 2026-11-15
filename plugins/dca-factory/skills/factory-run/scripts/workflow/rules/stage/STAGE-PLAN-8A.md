@@ -19,4 +19,6 @@ order: 9
    value as one of its rules, with the failure its rule names (a missing title refused like an empty one);
    a value only code passes needs no such line. The test stage writes a
    unit test for every rule named here, and the build writes no guard that is not named: a check nobody
-   planned is code no test asked for. The test gate refuses a changed domain type without its line.
+   planned is code no test asked for. The test gate refuses a changed domain type without its line, and the
+   build gate refuses one the story's change touched that the plan never named (`invariants-cover`) — so name
+   also the type the build will only reach, a new way to make an identifier from a request among them.

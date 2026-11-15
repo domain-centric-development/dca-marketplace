@@ -18,6 +18,9 @@ from ..model.story_words import Detail, Place
 from ..model.verdict import CheckName, Finding, Said
 
 DECISIONS = CheckName("decisions")
+MINOR_QUESTION = CheckName("minor-question")
+#: The severities that hold a story back; every other one the judge records without blocking.
+BLOCKING = ("blocker", "major")
 
 
 class Applying(Value):
@@ -155,3 +158,24 @@ class DecisionChecks(DomainService):
         if not records and not failed_asking:
             items.append(DECISIONS.note(Said("no decision record for this story")))
         return DecisionsChecked(tuple(items))
+
+    @staticmethod
+    def minor_questions(story: Story, evidence: StageEvidence) -> typing.Tuple[Finding, ...]:
+        """In a round, a stage repairs what sent the story back; a minor the judge recorded stays in the findings and
+        is shown at the acceptance. A question that cites only places the judge ranked minor — none it ranked blocker
+        or major — asks a person about what blocks nothing: the stage takes it back and notes the minor instead."""
+        questions = evidence.round_questions(story)
+        if not questions:
+            return ()
+        defects = evidence.judged_defects(story)
+        minor = {d.where.value for d in defects if d.severity.value not in BLOCKING}
+        blocking = {d.where.value for d in defects if d.severity.value in BLOCKING}
+        wrong = [q.record.value for q in questions
+                 if q.cited and all(c.value in minor and c.value not in blocking for c in q.cited)]
+        if wrong:
+            return (MINOR_QUESTION.fail(Said(
+                "a question in a round about what the judge ranked minor only — " + ", ".join(sorted(wrong))
+                + ": a minor blocks nothing and is no person's question now. Delete the record, drop the "
+                  "`## needs-human` section, repair what the round is about, and name the minor in your file — it "
+                  "stays in the findings and is shown at the acceptance.")),)
+        return (MINOR_QUESTION.ok(Said("no question of the round asks about a minor alone")),)

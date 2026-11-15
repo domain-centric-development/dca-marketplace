@@ -10,14 +10,14 @@ import typing
 from ....building_blocks import DomainGateway
 from ..model.decision_record import RecordId
 from ..model.stage import StageName
-from ..model.decision_record import DecisionRecord
+from ..model.decision_record import DecisionRecord, JudgedDefect, RoundQuestion
 from ..model.story import Story
 from ..model.backlog_facts import DecidedRecord, DecisionsFacts, EpicFacts, OutcomeFacts, ProposalFacts, RowState
 from ..model.brief_facts import BriefFacts, OwnedFacts, RoundsRecord
 from ..model.delivery_facts import (
     DocumentFacts, Integration, MainTests, PipelineFacts, ReviewFacts, StageChanges, StoryCommit, StoryPass)
 from ..model.guarded import GuardedFacts
-from ..model.design_facts import ContextMapFacts, InvariantFacts, PortName
+from ..model.design_facts import ChangedDomainType, ContextMapFacts, InvariantFacts, PortName
 from ..model.plan_facts import HandOverName, HandOverSize, PlanAdoption, PlanLevels, PlannedFile, PlanOrigin
 from ..model.profile_facts import GateRelease, InstructionFile, ModelKey, ProfileText, UnknownKey
 from ..model.story_words import Count, Place, RowId, Selector
@@ -80,6 +80,14 @@ class StageEvidence(DomainGateway, typing.Protocol):
         """The store of the story's decision records and the stages' hand-overs — or why the store cannot be read."""
         ...
 
+    def round_questions(self, story: Story) -> typing.Tuple[RoundQuestion, ...]:
+        """The open questions a stage asked while the judge's last verdict sent the story back — none outside a round."""
+        ...
+
+    def judged_defects(self, story: Story) -> typing.Tuple[JudgedDefect, ...]:
+        """The defects the judge's last verdict confirmed, as its `## Confirmed defects` table lists them."""
+        ...
+
     def decision_records(self, story: Story) -> typing.Sequence[DecisionRecord]:
         """The story's decision records, in id order — none where the store cannot be read (`decisions` says why)."""
         ...
@@ -103,6 +111,10 @@ class StageEvidence(DomainGateway, typing.Protocol):
     def hand_over_sizes(self, story: StoryId,
                         names: typing.Tuple[HandOverName, ...]) -> typing.Tuple[HandOverSize, ...]:
         """The hand-overs of these names the story's run holds, with the bytes the stage wrote of each."""
+        ...
+
+    def changed_domain_types(self, story: Story) -> typing.Optional[typing.Tuple[ChangedDomainType, ...]]:
+        """The domain types the story's change touched so far — None where nothing of its change was recorded."""
         ...
 
     def invariants(self, story: Story) -> typing.Optional[InvariantFacts]:

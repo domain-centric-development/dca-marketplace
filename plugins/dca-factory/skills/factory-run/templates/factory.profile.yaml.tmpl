@@ -175,6 +175,9 @@
 #              stops it; FACTORY_STAGE_TIMEOUT overrides the line for one run
 # evidence.keepDays  days a delivered story's raw tool streams (`*.out`), tree snapshots and suite record stay beside its
 #              journal (default 7); the journal, the gate reports and story.diff stay for good
+# layer.domain where the domain layer lies, as globs from the project root, blank-separated — `src/main/**/domain/**`.
+#              Without it a project with `dca.profile.yaml` has every folder named `domain`; the build gate holds each
+#              domain type the story changes to a line under the plan's `## Invariants` (`invariants-cover`)
 # guarded      what decides whether a gate is green beside this profile (always guarded), as globs from the
 #              project root, blank-separated: the commit hook's folder, the architecture suite's rule-selection
 #              file and its test classes — `.githooks/** src/test-architecture/**`. A stage may change a guarded
@@ -200,7 +203,7 @@
 # Which gate file contract this profile is written for. The gate refuses a run when the number is
 # higher than the gate it is asked to run against — the project would be relying on keys that copy
 # of the script does not know, and a key ignored in silence is a check that has quietly gone.
-contract: 35
+contract: 36
 
 release: required
 compile: {{COMPILE_COMMAND}}

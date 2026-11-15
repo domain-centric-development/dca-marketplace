@@ -57,6 +57,14 @@ class InvariantFacts(Value):
     rows: typing.Optional[typing.Tuple[InvariantRow, ...]]
 
 
+class ChangedDomainType(Value):
+    """A domain type the story's change touched: its name as its file names it, and the file — the domain layer as
+    the profile's `layer.domain` places it."""
+
+    name: ElementName
+    place: Place
+
+
 class PortName(Value):
     """A port type a test declares as a double."""
 

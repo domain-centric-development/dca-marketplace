@@ -102,9 +102,9 @@ CHECKS: typing.List[Check] = []
 
 #: The order the checks run in, whichever module registers them: the story and the profile first, then what the
 #: stage left, the tests last.
-ORDER = ("story", "contract", "status", "epic", "outcome", "rounds", "suites", "decisions", "plan", "adapter-shape", "guarded", "plan-adopts", "document",
+ORDER = ("story", "contract", "status", "epic", "outcome", "rounds", "suites", "decisions", "minor-question", "plan", "adapter-shape", "guarded", "plan-adopts", "document",
          "pipeline", "owned", "brief", "adopt", "integrate", "tests-mapped", "files-listed", "test-design", "spec-delta",
-         "spec-tests", "tests-committed", "tests-real", "tests-planned", "tests-assert-then", "plan-files", "size", "red-proof", "tests", "invariant-breaks",
+         "spec-tests", "tests-committed", "tests-real", "tests-planned", "tests-assert-then", "plan-files", "invariants-cover", "size", "red-proof", "tests", "invariant-breaks",
          "red-reproof", "commands")
 
 #: What a passing gate does, per stage — the writes a verdict makes.

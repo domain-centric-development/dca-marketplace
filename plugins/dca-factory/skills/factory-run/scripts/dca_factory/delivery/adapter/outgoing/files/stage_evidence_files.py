@@ -34,7 +34,7 @@ from ....domain.model.delivery_facts import (
     DocumentFacts, Integration, MainTestLines, MainTests, PassGap, PipelineFacts, ReviewFacts, StageChanges,
     StoryCommit, StoryPass, Unobserved)
 from ....domain.model.design_facts import (
-    ContextMapFacts, ElementName, ElementRules, InvariantFacts, InvariantRow, PortName, Rule)
+    ChangedDomainType, ContextMapFacts, ElementName, ElementRules, InvariantFacts, InvariantRow, PortName, Rule)
 from ....domain.model.plan_facts import (
     AdoptRow, FileChange, HandOverName, HandOverSize, PlanAdoption, PlanLevels, PlannedDigest, PlannedFile,
     PlannedTest, PlanOrigin)
@@ -51,7 +51,7 @@ from ....domain.model.story import StoryContent, StoryId, StorySource
 from ....domain.model.story_state import Detail, HandOverText, Rounds, StatusWord
 from ....domain.service.backlog_checks import EPIC_FIELDS, normal_name
 from .brief_files import given_digest, named_digest
-from ....domain.model.decision_record import DecisionRecord
+from ....domain.model.decision_record import DecisionRecord, JudgedDefect, RoundQuestion
 from .decision_record_files import (
     record_of,
     decisions_store, needs_human_ids, read_decisions, record_path)
@@ -65,6 +65,8 @@ from .delivery_files import (
 from .decision_record_files import NOTHING
 from .kept_files import bare_path, row_cells
 from .plan_stamp import plan_origin
+from .round_questions import cited_places, judge_sent_back, judged_defects
+from .domain_types import changed_domain_types
 from .run_marks import current_stage_files, STORY_DIGEST, judged_of, verdict_in
 from .snapshots import NOT_OBSERVED
 from .story_layout import depends_on, journeys_hold, story_digest
@@ -352,6 +354,22 @@ class StageEvidenceFiles(StageEvidence):
                                               tuple(RecordId(i) for i in ids) if ids is not None else None))
         return DecisionsFacts(Place(shown(store)), tuple(hand_overs))
 
+    def round_questions(self, story: Story) -> typing.Tuple[RoundQuestion, ...]:
+        if not judge_sent_back(self._runs, story.id.value):
+            return ()
+        try:
+            store = decisions_store(self.place_of(story.id).value or find_story(place("epics"), story.id.value))
+            read = read_decisions(store, story.id.value)
+        except GateError:
+            return ()
+        return tuple(RoundQuestion(RecordId(os.path.basename(path)[:-3]), tuple(Detail(c) for c in cited_places(body)))
+                     for path, front, body, state, _answer in read
+                     if state == "open" and str(front.get("stage", "")).strip())
+
+    def judged_defects(self, story: Story) -> typing.Tuple[JudgedDefect, ...]:
+        return tuple(JudgedDefect(Detail(where), Detail(severity))
+                     for where, severity in judged_defects(self._runs, story.id.value))
+
     def decision_records(self, story: Story) -> typing.Sequence[DecisionRecord]:
         try:
             store = decisions_store(self.place_of(story.id).value or find_story(place("epics"), story.id.value))
@@ -395,6 +413,13 @@ class StageEvidenceFiles(StageEvidence):
     def _run_file(self, story: StoryId, name: str) -> typing.Optional[str]:
         path = os.path.join(self._runs, story.value, name)
         return read_text(path) if os.path.isfile(path) else None
+
+    def changed_domain_types(self, story: Story) -> typing.Optional[typing.Tuple[ChangedDomainType, ...]]:
+        changed = story_changed(self._cwd, self._runs, story.id.value, self._checkouts)
+        if changed is None:
+            return None
+        return tuple(ChangedDomainType(ElementName(name), Place(path))
+                     for name, path in changed_domain_types(self._cwd, changed, self._profile))
 
     def invariants(self, story: Story) -> typing.Optional[InvariantFacts]:
         plan = self._run_file(story.id, "plan.md")

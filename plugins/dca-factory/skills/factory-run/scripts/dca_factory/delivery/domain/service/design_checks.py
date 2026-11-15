@@ -23,6 +23,7 @@ INVARIANTS = CheckName("invariants")
 CLAUSES = CheckName("clauses")
 TESTS_REAL = CheckName("tests-real")
 TESTS_PLANNED = CheckName("tests-planned")
+INVARIANTS_COVER = CheckName("invariants-cover")
 PLAN_FILES = CheckName("plan-files")
 
 INVARIANTS_MARKER = "<!-- gate:invariants -->"
@@ -283,6 +284,27 @@ class DesignChecks(DomainService):
                 "that name and map it, or plan again: " + "; ".join(missing))),)
         return (TESTS_PLANNED.ok(Said(f"every adapter test the plan names is mapped to its criterion "
                                       f"({len(plan.named)})")),)
+
+    @staticmethod
+    def invariants_cover(story: Story, evidence: StageEvidence) -> Findings:
+        """Every domain type the story's change touched has its line under the plan's `## Invariants` — its rules, or
+        `none — <why>`. A type the plan never weighed gets a guard nobody named and a rule nobody tested: a value
+        from a request reaching it through a new factory is the plan's to see, not the build's to slip in."""
+        changed = evidence.changed_domain_types(story)
+        if not changed:
+            return ()
+        facts = evidence.invariants(story)
+        def plain(name: str) -> str:
+            return name.replace("_", "").replace("-", "").lower()
+        named = {plain(rules.element.value) for rules in facts.named} if facts else set()
+        missing = sorted({f"{t.name.value} ({t.place.value})" for t in changed if plain(t.name.value) not in named})
+        if missing:
+            return (INVARIANTS_COVER.fail(Said(
+                "the story changes domain types the plan's `## Invariants` has no line for — add one per type, its "
+                "rules or `none — <why>`, and a unit test per rule: " + "; ".join(missing[:8])
+                + (" …" if len(missing) > 8 else ""))),)
+        return (INVARIANTS_COVER.ok(Said(f"every domain type the story changes has its `## Invariants` line "
+                                         f"({len({t.name.value for t in changed})})")),)
 
     @staticmethod
     def plan_files(story: Story, evidence: StageEvidence) -> Findings:

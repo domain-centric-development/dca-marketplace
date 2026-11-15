@@ -38,6 +38,10 @@ TESTS_REAL_CONTRACT = ContractNumber(21)
 TESTS_PLANNED_CONTRACT = ContractNumber(34)
 #: The contract that gives a criterion the adapter shape only where its `Then` names what the adapter produces.
 ADAPTER_SHAPE_CONTRACT = ContractNumber(35)
+#: The contract that holds every domain type a story changes to a line under the plan's `## Invariants`.
+INVARIANTS_COVER_CONTRACT = ContractNumber(36)
+#: The contract that refuses a round's question about a minor alone.
+MINOR_QUESTION_CONTRACT = ContractNumber(36)
 TESTS_MAPPED = CheckName("tests-mapped")
 
 
@@ -235,6 +239,18 @@ def _tests_planned(run: Run) -> None:
 def _adapter_shape(run: Run) -> None:
     if plan_held_to(run).value >= ADAPTER_SHAPE_CONTRACT.value:
         run.result.take(ThenChecks.adapter_shape(run.story, run.evidence))
+
+
+@check("invariants-cover", stages=("build", "tidy"), kinds=frozenset((StoryKind.STORY,)), rule="GATE-INVARIANTS-COVER")
+def _invariants_cover(run: Run) -> None:
+    if plan_held_to(run).value >= INVARIANTS_COVER_CONTRACT.value:
+        run.result.take(DesignChecks.invariants_cover(run.story, run.evidence))
+
+
+@check("minor-question", stages=("test", "build", "tidy"), rule="GATE-MINOR-QUESTION")
+def _minor_question(run: Run) -> None:
+    if run.contract.value >= MINOR_QUESTION_CONTRACT.value:
+        run.result.take(DecisionChecks.minor_questions(run.story, run.evidence))
 
 
 @check("tests-assert-then", stages=("test",), kinds=frozenset((StoryKind.STORY,)), rule="GATE-TESTS-ASSERT-THEN")
