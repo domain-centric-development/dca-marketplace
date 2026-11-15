@@ -18,7 +18,7 @@ from ..model.delivery_facts import (
     DocumentFacts, Integration, MainTests, PipelineFacts, ReviewFacts, StageChanges, StoryCommit, StoryPass)
 from ..model.guarded import GuardedFacts
 from ..model.design_facts import ContextMapFacts, InvariantFacts, PortName
-from ..model.plan_facts import HandOverName, HandOverSize, PlanAdoption, PlanLevels, PlannedFile
+from ..model.plan_facts import HandOverName, HandOverSize, PlanAdoption, PlanLevels, PlannedFile, PlanOrigin
 from ..model.profile_facts import GateRelease, InstructionFile, ModelKey, ProfileText, UnknownKey
 from ..model.story_words import Count, Place, RowId, Selector
 from ..model.suite_run import CommandKey
@@ -94,6 +94,10 @@ class StageEvidence(DomainGateway, typing.Protocol):
 
     def plan_levels(self, story: StoryId) -> typing.Optional[PlanLevels]:
         """The levels the story's plan gave — None where it has no plan yet."""
+        ...
+
+    def plan_origin(self, story: StoryId) -> PlanOrigin:
+        """Under which contract the plan as it stands came about: the stamp of the passing plan gate that saw it."""
         ...
 
     def hand_over_sizes(self, story: StoryId,

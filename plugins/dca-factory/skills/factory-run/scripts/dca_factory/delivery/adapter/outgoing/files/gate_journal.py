@@ -13,6 +13,7 @@ import typing
 from ....application.delivery.check_stage import Verdict
 from .journal_files import journal_append
 from .run_marks import backlog_digest, step_open
+from .plan_stamp import plan_stamp_fields
 
 
 #: How many failing tests a refused gate's journal line names at most.
@@ -45,15 +46,17 @@ def gate_fields(result: Verdict, args: typing.Any, code: int) -> typing.List[str
 
 
 def journal_gate(result: Verdict, args: typing.Any, story_id: typing.Optional[str],
-                 story_path: typing.Optional[str], code: int) -> int:
+                 story_path: typing.Optional[str], code: int, contract: typing.Optional[int] = None) -> int:
     """Every gate run over a story is an event (`gate_fields`); a delivery journaled its passing verdict before its
     commit (`close_record`). The plan gate's refusal carries the backlog's digest, so a repair is seen without a
-    clock."""
+    clock. A passing plan gate stamps the plan with its digest and the contract it held the plan to (`plan_stamp`)."""
     if not story_id or code == 0 and result.closed:
         return code
     fields = gate_fields(result, args, code)
     if args.stage == stage_of(Role.PLANS) and code == 1 and story_path:
         fields.append(f"backlog={backlog_digest(story_path)}")
+    if args.stage == stage_of(Role.PLANS) and code == 0 and contract is not None:
+        fields.extend(plan_stamp_fields(args.runs, story_id, contract))
     with contextlib.suppress(OSError):
         journal_append(args.runs, story_id, "gate", args.stage, *fields)
     return code

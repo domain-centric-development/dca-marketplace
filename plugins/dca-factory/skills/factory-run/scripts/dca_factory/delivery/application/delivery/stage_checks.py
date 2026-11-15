@@ -219,15 +219,21 @@ def _tests_real(run: Run) -> None:
         run.result.take(DesignChecks.tests_real(run.story, mapped(run), run.evidence))
 
 
+def plan_held_to(run: Run) -> ContractNumber:
+    """The contract a check of the plan's form holds this story's plan to: the profile's, never a later one than the
+    plan came about under (`PlanOrigin`) — a check introduced after a plan was written does not reach back to it."""
+    return run.evidence.plan_origin(run.story.id).held_to(run.contract)
+
+
 @check("tests-planned", stages=("test",), kinds=frozenset((StoryKind.STORY,)), rule="GATE-TESTS-PLANNED")
 def _tests_planned(run: Run) -> None:
-    if run.contract.value >= TESTS_PLANNED_CONTRACT.value:
+    if plan_held_to(run).value >= TESTS_PLANNED_CONTRACT.value:
         run.result.take(DesignChecks.tests_planned(run.story, mapped(run), run.evidence))
 
 
 @check("adapter-shape", stages=("plan",), kinds=frozenset((StoryKind.STORY,)), rule="GATE-ADAPTER-SHAPE")
 def _adapter_shape(run: Run) -> None:
-    if run.contract.value >= ADAPTER_SHAPE_CONTRACT.value:
+    if plan_held_to(run).value >= ADAPTER_SHAPE_CONTRACT.value:
         run.result.take(ThenChecks.adapter_shape(run.story, run.evidence))
 
 

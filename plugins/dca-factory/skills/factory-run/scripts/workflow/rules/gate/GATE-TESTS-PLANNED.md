@@ -12,7 +12,8 @@ fail: the plan gives a criterion the adapter shape without naming its test, or t
 
 # GATE-TESTS-PLANNED
 
-**When:** the test gate runs (contract 34 on)
+**When:** the test gate runs, for a plan that came about under contract 34 or later (a plan keeps the rules it was
+written under: the stamp of the passing plan gate that saw it; a plan from before the stamps counts as contract 33)
 
 **Why:** an adapter test answers from a stubbed input port, so it shows a state the stub hands it and cannot perform
 the change its scenario describes; the plan names it after that state, and the test stage keeps the name

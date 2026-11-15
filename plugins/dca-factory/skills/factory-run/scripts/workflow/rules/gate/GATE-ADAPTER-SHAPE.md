@@ -12,7 +12,8 @@ fail: a criterion with the adapter shape whose `Then` names no control, message,
 
 # GATE-ADAPTER-SHAPE
 
-**When:** the plan gate runs (contract 35 on)
+**When:** the plan gate runs, for a plan that came about under contract 35 or later — a new or changed plan is held to
+the profile's contract; one an earlier plan gate passed keeps the contract it was stamped with
 
 **Why:** a value the use case computes and a surface merely shows is proven by the port test; an adapter test beside
 it answers from a stub that already holds the value, so it copies another test or claims a change it cannot make

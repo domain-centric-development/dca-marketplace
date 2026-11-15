@@ -375,6 +375,28 @@ STORY_SCENARIOS = STORY.replace("""- shows-the-thing: The reader sees the thing.
 - Sharing things with others.
 """)
 
+#: A plan whose adapter shape names no test — the form before contract 34.
+PLAN_UNNAMED = ("# Plan\n\n## Acceptance criteria\n- shows-the-thing  →  level: integration (adapter: WidgetPage)\n"
+                "- shows-nothing-when-empty  →  level: e2e\n")
+
+
+def plan_digest_of(text):
+    """The digest a passing plan gate stamps a plan with (`plan_stamp`)."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
+
+
+def plan_stamped(root):
+    """The problems with the plan gate's stamp: its passing line carries the plan's digest and the contract."""
+    path = os.path.join(root, ".dca-factory", "evidence", "STORY-1", "journal.tsv")
+    plan = os.path.join(root, ".dca-factory", "runs", "STORY-1", "plan.md")
+    lines = open(path, encoding="utf-8").read().splitlines() if os.path.isfile(path) else []
+    passed = [l for l in lines if "\tgate\tplan\texit=0" in l]
+    want = "plan=" + plan_digest_of(open(plan, encoding="utf-8").read())
+    if not any(want in l and "\tcontract=" in l for l in passed):
+        return [f"no passing plan gate line with {want} and contract= — {passed}"]
+    return []
+
+
 #: The scenarios with quoted texts: one the `Then` says is shown, one a step points at as a form's name, one pressed.
 QUOTED_SCENARIOS = STORY_SCENARIOS.replace(
     "- When the reader opens the list\n- Then the list shows the thing",
@@ -5463,6 +5485,20 @@ def run_groups(args):
               extra_sources=((".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Acceptance criteria\n"
                               "- shows-the-thing  →  level: integration (adapter: WidgetPage, test: WidgetPageTest#keepsAlphaInTheField)\n"
                               "- shows-nothing-when-empty  →  level: e2e\n"),))),
+        (Case("adapter-shape: a plan a plan gate passed before the stamps keeps its rules and passes", "plan", 0,
+              absent=("give them the port shape alone",)),
+         dict(story=STORY_SCENARIOS.replace("- When the reader opens the list\n- Then the list shows the thing",
+                                            "- When the reader records the thing „  Alpha  “\n- Then the list shows „Alpha“"),
+              extra_sources=((".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Acceptance criteria\n"
+                              "- shows-the-thing  →  level: integration (port) and integration (adapter: WidgetPage, test: WidgetPageTest#showsAlpha)\n"
+                              "- shows-nothing-when-empty  →  level: e2e\n"),
+                             (".dca-factory/evidence/STORY-1/journal.tsv", "2026-11-01T10:00:00Z\tgate\tplan\texit=0\tby=runner\tseq=1\n")))),
+        (Case("plan stamp: a passing plan gate stamps the plan's digest and the contract it held the plan to", "plan", 0,
+              must_pass=("adapter-shape",)),
+         dict(story=QUOTED_SCENARIOS, after=plan_stamped,
+              extra_sources=((".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Acceptance criteria\n"
+                              "- shows-the-thing  →  level: integration (adapter: WidgetPage, test: WidgetPageTest#showsTwoThingsOneOpen)\n"
+                              "- shows-nothing-when-empty  →  level: e2e\n"),))),
         (Case("adapter-shape: an older profile (contract 34) is not held to it", "plan", 0,
               absent=("give them the port shape alone",)),
          dict(profile=PROFILE + "contract: 34\n",
@@ -5836,6 +5872,32 @@ def run_groups(args):
                              (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Acceptance criteria\n"
                               "- shows-the-thing  →  level: integration (adapter: WidgetPage)\n"
                               "- shows-nothing-when-empty  →  level: e2e\n")))),
+        # a plan keeps the rules it came about under: a plan gate passed it before the stamps, or stamped it older
+        (Case("tests-planned: a plan from before the stamps, an adapter shape without its test, passes", "test", 0,
+              absent=("without naming its test",)),
+         dict(extra_sources=(("src/test-pages/java/com/example/WidgetPageTest.java", "class WidgetPageTest { @MockitoBean private ShowWidgetInputPort port; @DisplayName(\"Shows the thing\") void showsTheThing() {} }\n"),
+                             (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Acceptance criteria\n"
+                              "- shows-the-thing  →  level: integration (adapter: WidgetPage)\n"
+                              "- shows-nothing-when-empty  →  level: e2e\n"),
+                             (".dca-factory/evidence/STORY-1/journal.tsv", "2026-11-01T10:00:00Z\tgate\tplan\texit=0\tby=runner\tseq=1\n")))),
+        (Case("tests-planned: a plan stamped under contract 33, an adapter shape without its test, passes", "test", 0,
+              absent=("without naming its test",)),
+         dict(extra_sources=(("src/test-pages/java/com/example/WidgetPageTest.java", "class WidgetPageTest { @MockitoBean private ShowWidgetInputPort port; @DisplayName(\"Shows the thing\") void showsTheThing() {} }\n"),
+                             (".dca-factory/runs/STORY-1/plan.md", PLAN_UNNAMED),
+                             (".dca-factory/evidence/STORY-1/journal.tsv",
+                              f"2026-11-01T10:00:00Z\tgate\tplan\texit=0\tby=runner\tplan={plan_digest_of(PLAN_UNNAMED)}\tcontract=33\tseq=1\n")))),
+        (Case("tests-planned: a plan stamped under contract 35, an adapter shape without its test, is refused", "test", 1,
+              must_fail=("tests-planned",), text=("without naming its test",)),
+         dict(extra_sources=(("src/test-pages/java/com/example/WidgetPageTest.java", "class WidgetPageTest { @MockitoBean private ShowWidgetInputPort port; @DisplayName(\"Shows the thing\") void showsTheThing() {} }\n"),
+                             (".dca-factory/runs/STORY-1/plan.md", PLAN_UNNAMED),
+                             (".dca-factory/evidence/STORY-1/journal.tsv",
+                              f"2026-11-01T10:00:00Z\tgate\tplan\texit=0\tby=runner\tplan={plan_digest_of(PLAN_UNNAMED)}\tcontract=35\tseq=1\n")))),
+        (Case("tests-planned: a plan changed since its stamp is held to today's contract and refused", "test", 1,
+              must_fail=("tests-planned",), text=("without naming its test",)),
+         dict(extra_sources=(("src/test-pages/java/com/example/WidgetPageTest.java", "class WidgetPageTest { @MockitoBean private ShowWidgetInputPort port; @DisplayName(\"Shows the thing\") void showsTheThing() {} }\n"),
+                             (".dca-factory/runs/STORY-1/plan.md", PLAN_UNNAMED),
+                             (".dca-factory/evidence/STORY-1/journal.tsv",
+                              "2026-11-01T10:00:00Z\tgate\tplan\texit=0\tby=runner\tplan=000000000000\tcontract=33\tseq=1\n")))),
         (Case("tests-planned: the adapter test the plan names is not mapped to its criterion: refused, naming both",
               "test", 1, must_fail=("tests-planned",), text=("shows-the-thing (WidgetPageTest#showsOneThing)",)),
          dict(extra_sources=(("src/test-pages/java/com/example/WidgetPageTest.java", "class WidgetPageTest { @MockitoBean private ShowWidgetInputPort port; @DisplayName(\"Shows the thing\") void showsTheThing() {} }\n"),

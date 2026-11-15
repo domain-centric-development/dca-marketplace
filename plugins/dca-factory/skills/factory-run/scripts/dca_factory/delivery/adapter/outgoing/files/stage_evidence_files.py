@@ -37,7 +37,7 @@ from ....domain.model.design_facts import (
     ContextMapFacts, ElementName, ElementRules, InvariantFacts, InvariantRow, PortName, Rule)
 from ....domain.model.plan_facts import (
     AdoptRow, FileChange, HandOverName, HandOverSize, PlanAdoption, PlanLevels, PlannedDigest, PlannedFile,
-    PlannedTest)
+    PlannedTest, PlanOrigin)
 from ....domain.model.profile_facts import (
     ByteSize, ContractNumber, GateRelease, InstructionFile, ModelKey, ProfileKey, ProfileText, UnknownKey)
 from ....domain.model.story_words import (
@@ -64,6 +64,7 @@ from .delivery_files import (
     proposal_words, REVIEW_RANKS)
 from .decision_record_files import NOTHING
 from .kept_files import bare_path, row_cells
+from .plan_stamp import plan_origin
 from .run_marks import current_stage_files, STORY_DIGEST, judged_of, verdict_in
 from .snapshots import NOT_OBSERVED
 from .story_layout import depends_on, journeys_hold, story_digest
@@ -378,6 +379,9 @@ class StageEvidenceFiles(StageEvidence):
                           frozenset(ScenarioKey(k) for k in both),
                           tuple(PlannedTest(ScenarioKey(k), Selector(t) if t else None)
                                 for k, t in adapter_tests(self._runs, story.value)))
+
+    def plan_origin(self, story: StoryId) -> PlanOrigin:
+        return plan_origin(self._runs, story.value)
 
     def hand_over_sizes(self, story: StoryId,
                         names: typing.Tuple[HandOverName, ...]) -> typing.Tuple[HandOverSize, ...]:

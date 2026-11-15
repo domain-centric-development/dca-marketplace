@@ -160,4 +160,4 @@ def gate_story(result: Verdict, args: typing.Any, cwd: str, profile: Profile, re
         return journal_gate(result, args, story_id, story_path, report(args.story))
     if not result.failed:
         run_passed(run)
-    return journal_gate(result, args, story_id, story_path, report(story_id))
+    return journal_gate(result, args, story_id, story_path, report(story_id), run.contract.value)
