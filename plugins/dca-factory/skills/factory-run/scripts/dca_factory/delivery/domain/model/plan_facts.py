@@ -61,11 +61,13 @@ class FileChange(enum.Enum):
 
 
 class PlannedFile(Value):
-    """A file the plan's `## Files` says becomes new or is removed, and whether it is there after the build."""
+    """A file the plan's `## Files` says becomes new or is removed, whether it is there after the build, and the reason
+    build.md's `## Plan changes` gives where the build took the planned change back."""
 
     place: Place
     change: FileChange
     _exists: bool
+    withdrawn: typing.Optional[Detail] = None
 
     @property
     def exists(self) -> bool:
@@ -116,11 +118,13 @@ class PlannedDigest(enum.Enum):
 
 class PlanStamp(enum.Enum):
     """What the journal knows of the plan as it stands: a passing plan gate stamped it with its contract; plan gates
-    passed before stamps existed and none stamped it; or no gate has passed it yet — a new or changed plan."""
+    passed before stamps existed and none stamped it; no gate has passed it yet — a new plan; or a stamped plan gate
+    passed it, and it was changed after — by a stage after the plan."""
 
     STAMPED = "stamped"
     BEFORE_STAMPS = "before stamps"
     NEW = "new"
+    CHANGED = "changed since its gate"
 
 
 #: The contract a plan from before the stamps is held to: the one before the first check of the plan's form

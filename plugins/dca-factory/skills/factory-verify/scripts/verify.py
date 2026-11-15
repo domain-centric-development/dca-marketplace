@@ -6689,6 +6689,25 @@ def run_groups(args):
          dict(green=both_green, ledger=both_green, extra_sources=(
              (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Files\n- `src/main/Thing.java` — changes: new, "
               "the thing\n- `src/main/Page.java` — read: the pattern\n"),))),
+        # 0.188.1: what the build takes back stands in build.md; plan.md stays as its gate passed it
+        (Case("plan-files: a planned file the build took back with its reason in build.md passes, noted for the judge",
+              "build", 0, text=("gate:note plan-files", "src/main/Thing.java (one class was enough)")),
+         dict(green=both_green, ledger=both_green, extra_sources=(
+             (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Files\n- `src/main/Thing.java` — changes: new, the thing\n"),
+             (".dca-factory/runs/STORY-1/build.md", "## Files\n\n## Plan changes\n- `src/main/Thing.java` — one class was enough\n")))),
+        (Case("plan-kept: a plan changed after its stamped gate is refused at once", "build", 1,
+              must_fail=("plan-kept",), text=("plan.md changed after its gate passed it",)),
+         dict(green=both_green, ledger=both_green, extra_sources=(
+             ("src/main/Thing.java", "class Thing {}\n"),
+             (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Files\n- `src/main/Thing.java` — changes: new, the thing\n"),
+             (".dca-factory/evidence/STORY-1/journal.tsv",
+              "2026-11-15T10:00:00Z\tgate\tplan\texit=0\tby=builder\tplan=000000000000\tcontract=38\tseq=1\n")))),
+        (Case("plan-kept: a plan as its stamped gate passed it passes", "build", 0, must_pass=("plan-kept",)),
+         dict(green=both_green, ledger=both_green, extra_sources=(
+             ("src/main/Thing.java", "class Thing {}\n"),
+             (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Files\n- `src/main/Thing.java` — changes: new, the thing\n"),
+             (".dca-factory/evidence/STORY-1/journal.tsv",
+              f"2026-11-15T10:00:00Z\tgate\tplan\texit=0\tby=builder\tplan={plan_digest_of("# Plan\n\n## Files\n- `src/main/Thing.java` — changes: new, the thing\n")}\tcontract=38\tseq=1\n")))),
         (Case("plan-files: a removed file gone and a new one written pass", "build", 0, must_pass=("plan-files",)),
          dict(green=both_green, ledger=both_green, extra_sources=(
              ("src/main/Thing.java", "class Thing {}\n"),

@@ -11,7 +11,7 @@ from ....building_blocks import DomainService
 from ..gateway.stage_evidence import StageEvidence
 from ..model.stage import StoryKind
 from ..model.story import Story
-from ..model.plan_facts import FileChange
+from ..model.plan_facts import FileChange, PlanStamp
 from ..model.profile_facts import ContractNumber
 from ..model.story_words import Clause, Count, Place, ScenarioKey
 from ..model.suite_run import CommandKey
@@ -23,6 +23,7 @@ INVARIANTS = CheckName("invariants")
 CLAUSES = CheckName("clauses")
 TESTS_REAL = CheckName("tests-real")
 TESTS_PLANNED = CheckName("tests-planned")
+PLAN_KEPT = CheckName("plan-kept")
 INVARIANTS_COVER = CheckName("invariants-cover")
 PLAN_FILES = CheckName("plan-files")
 
@@ -319,15 +320,34 @@ class DesignChecks(DomainService):
                                          f"({len({t.name.value for t in changed})})")),)
 
     @staticmethod
+    def plan_kept(story: Story, evidence: StageEvidence) -> Findings:
+        """The plan stays as its gate passed it. A stage after the plan that changes plan.md makes every later hand-over
+        one of an earlier pass, and the delivery sends the story a round back; what the build adds or takes back stands
+        in build.md (`## Invariants`, `## Plan changes`), which the gates read beside the plan."""
+        origin = evidence.plan_origin(story.id)
+        if origin.stamp is PlanStamp.CHANGED:
+            return (PLAN_KEPT.fail(Said(
+                "plan.md changed after its gate passed it — put it back as the plan gate passed it, and write what "
+                "the build adds or takes back in build.md: a domain type's line under `## Invariants`, a planned file "
+                "taken back under `## Plan changes` (`- `<path>` — <why>`). A plan that is wrong goes back to the plan "
+                "stage, never into plan.md from a later one")),)
+        if origin.stamp is PlanStamp.STAMPED:
+            return (PLAN_KEPT.ok(Said("plan.md is as its gate passed it")),)
+        return ()
+
+    @staticmethod
     def plan_files(story: Story, evidence: StageEvidence) -> Findings:
         """The plan's file list holds after the build — a file it says `removed` is gone, one it says `new` is there.
         A deviation the build's file explains is still one: the plan changes, or the file does."""
         planned = evidence.plan_files(story.id)
         if planned is None:
             return (PLAN_FILES.skip(Said("plan.md has no `## Files` section — nothing to hold the build to")),)
-        wrong, held = [], 0
+        wrong, held, taken_back = [], 0, []
         for file in planned:
-            if file.change is FileChange.REMOVED and file.exists:
+            missed = (file.change is FileChange.REMOVED and file.exists) or (file.change is FileChange.NEW and not file.exists)
+            if missed and file.withdrawn is not None:
+                taken_back.append(f"{file.place.value} ({file.withdrawn.value})")
+            elif file.change is FileChange.REMOVED and file.exists:
                 wrong.append(f"{file.place.value} (planned removed, still there)")
             elif file.change is FileChange.NEW and not file.exists:
                 wrong.append(f"{file.place.value} (planned new, not there)")
@@ -335,8 +355,12 @@ class DesignChecks(DomainService):
                 held += 1
         if wrong:
             return (PLAN_FILES.fail(Said(
-                "the build did not do what the plan's `## Files` says — remove the file (`git rm`) or write it, or "
-                "plan again; an explanation in build.md does not change the plan: " + "; ".join(wrong))),)
+                "the build did not do what the plan's `## Files` says — write the file or remove it (`git rm`); where "
+                "the plan was wrong, name the file and why under `## Plan changes` in build.md — never change plan.md "
+                "after the tests: " + "; ".join(wrong))),)
+        if taken_back:
+            return (PLAN_FILES.note(Said("planned files the build took back, with its reason in build.md's `## Plan "
+                                         "changes` — the judge weighs them: " + "; ".join(taken_back))),)
         if held:
             return (PLAN_FILES.ok(Said(f"every file the plan says new or removed is so ({held})")),)
         return (PLAN_FILES.ok(Said("the plan's `## Files` names no file new or removed")),)

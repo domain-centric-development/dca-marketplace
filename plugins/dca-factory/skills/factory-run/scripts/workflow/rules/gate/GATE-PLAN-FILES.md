@@ -5,7 +5,7 @@ part: check
 reports:
 - plan-files
 pass: every file planned `new` is there and every one planned `removed` is gone
-fail: a planned file is missing or still there — it has to be written, removed with `git rm`, or planned again
+fail: a planned file is missing or still there — it has to be written, removed with `git rm`, or taken back with its reason under build.md's `## Plan changes`
 skip: the plan has no `## Files`
 ---
 
@@ -13,4 +13,4 @@ skip: the plan has no `## Files`
 
 **When:** the build gate runs (contract 22 on)
 
-**Why:** the plan's files are a promise; an explanation is none
+**Why:** the plan's files are a promise; a file taken back is named with its reason in build.md, never by rewriting the plan after the tests

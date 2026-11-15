@@ -274,6 +274,8 @@ def mocked_ports(text: str, markers: typing.Sequence[str], suffixes: typing.Iter
 
 #: A plan's `## Files` line that says what becomes of the file: `- `<path>` — changes: new …` or `… changes: removed …`.
 PLAN_FILE_LINE = re.compile(r"^\s*[-*]\s*`([^`]+)`\s*[—–-]+\s*changes:\s*(new|removed)\b", re.I)
+#: A line of build.md's `## Plan changes`: a planned file the build took back, and why — `- `<path>` — <why>`.
+PLAN_CHANGE_LINE = re.compile(r"^\s*[-*]\s*`([^`]+)`\s*[—–-]+\s*(.+?)\s*$")
 
 
 BREAK_IGNORE = (".git", "build", "bin", "obj", "target", "node_modules", ".gradle", "TestResults", "out")

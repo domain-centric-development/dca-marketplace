@@ -38,4 +38,6 @@ def plan_origin(runs: str, story_id: str) -> PlanOrigin:
             return PlanOrigin(PlanStamp.STAMPED, ContractNumber(int(event["fields"]["contract"])))
     if digest and passed and not any("plan" in event["fields"] for event in passed):
         return PlanOrigin(PlanStamp.BEFORE_STAMPS)
+    if digest and any(event["fields"].get("plan") for event in passed):
+        return PlanOrigin(PlanStamp.CHANGED)
     return PlanOrigin(PlanStamp.NEW)

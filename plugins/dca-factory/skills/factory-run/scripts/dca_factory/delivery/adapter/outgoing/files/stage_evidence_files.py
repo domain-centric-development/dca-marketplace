@@ -91,7 +91,7 @@ from .story_layout import file_digest
 from .guarded_files import announced_changes, guarded_set, story_changed
 from ....domain.model.guarded import GuardedFacts
 from .design_files import (
-    adapter_shapes, adapter_tests, asserts_at, locate_selector, MOCK_MARKERS, mocked_ports, PLAN_FILE_LINE, plan_domain_elements,
+    adapter_shapes, adapter_tests, asserts_at, locate_selector, MOCK_MARKERS, mocked_ports, PLAN_CHANGE_LINE, PLAN_FILE_LINE, plan_domain_elements,
     plan_invariants, read_clause_rows, read_invariant_rows, scenario_actions, scenario_clauses)
 from .run_marks import OWNED_CHANGED
 from .story_layout import EPIC_FILE, epic_folder, find_story
@@ -484,6 +484,10 @@ class StageEvidenceFiles(StageEvidence):
         lines = section_of(plan, "files") if plan is not None else None
         if lines is None:
             return None
+        build = self._run_file(story, "build.md")
+        withdrawn = {m.group(1).strip(): m.group(2).strip() for m in
+                     (PLAN_CHANGE_LINE.match(l) for l in (section_of(build, "plan changes") or [] if build else []))
+                     if m}
         planned = []
         for line in lines:
             match = PLAN_FILE_LINE.match(line)
@@ -492,7 +496,8 @@ class StageEvidenceFiles(StageEvidence):
             rel = match.group(1).strip()
             planned.append(PlannedFile(
                 Place(rel), FileChange(match.group(2).lower()),
-                os.path.lexists(os.path.join(self._cwd, rel))))
+                os.path.lexists(os.path.join(self._cwd, rel)),
+                Detail(withdrawn[rel]) if rel in withdrawn else None))
         return tuple(planned)
 
     def stage_changes(self, story: StoryId, stage: StageName,
