@@ -52,6 +52,14 @@ def main(argv: typing.Sequence[str]) -> int:
         if view.get("unexplained"):
             print(f"rules: information — {len(view['unexplained'])} told rule(s) say `why: unknown`, a bet nobody can "
                   f"name the failure of: {', '.join(view['unexplained'])}")
+        disabled = view.get("disabled") or []
+        if disabled:
+            print(f"rules: information — {len(disabled)} rule(s) disabled: "
+                  + ", ".join(f"{r['id']} ({r['delivered_since']}/{view['delete_after']})" for r in disabled))
+        ready = [r["id"] for r in disabled if r["delivered_since"] >= view["delete_after"]]
+        if ready:
+            print(f"rules: information — ready to delete, {view['delete_after']} or more stories delivered since "
+                  f"disabled without turning it on again: {', '.join(ready)}")
         print(f"rules: {len(view['rules'])} rule(s), {len(view['problems'])} problem(s)")
         return 1 if view["problems"] or not view["skills"] else 0
     sys.stdout.write(render(view, args.format))

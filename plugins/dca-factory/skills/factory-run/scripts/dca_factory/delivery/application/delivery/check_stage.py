@@ -186,6 +186,9 @@ def run_checks(run: Run) -> None:
     unrun and named."""
     kind = StoryKind(run.kind)
     chosen = [c for c in CHECKS if run.stage.name in c.stages and kind in c.kinds]
+    for entry in (c for c in chosen if switched_off(c)):
+        run.result.skip(entry.name, f"not run — {', '.join(b.rule for b in entry.rules)} disabled (state: disabled)")
+    chosen = [c for c in chosen if not switched_off(c)]
     for entry in (c for c in chosen if not c.needs_process):
         entry.run(run)
     process = [c for c in chosen if c.needs_process]
@@ -199,6 +202,11 @@ def run_checks(run: Run) -> None:
         entry.run(run)
 
 
+def switched_off(entry: Check) -> bool:
+    """Every rule the check holds is disabled — the check does not run."""
+    return all(rule_of(b.rule).disabled is not None for b in entry.rules)
+
+
 def run_passed(run: Run) -> None:
     """What a passing gate of the run's stage does."""
     for finish in PASSED.get(run.stage.name, ()):
@@ -210,7 +218,7 @@ def judging(stage: str, kind: StoryKind) -> typing.Tuple[str, ...]:
     found: typing.List[str] = []
     for entry in CHECKS:
         if stage in entry.stages and kind in entry.kinds:
-            found += [b.rule for b in entry.rules if b.rule not in found]
+            found += [b.rule for b in entry.rules if b.rule not in found and rule_of(b.rule).disabled is None]
     return tuple(found)
 
 

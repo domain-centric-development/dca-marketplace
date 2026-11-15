@@ -8,8 +8,6 @@ order: 28
 
 # STAGE-COMMON-28
 
-The stack profile may name a carrier for a stage — `carrier.<stage>: <name>` — the skill or agent
-that holds this project's craft for it. A **skill** works in every tool; an **agent** only where the
-tool has agents. Use the named carrier when this tool offers it; otherwise do the stage as its skill
-describes and say in your file which it was ("in-session; `<carrier>` not available here"). A
-missing carrier is a missing preference, never a reason to skip the stage.
+`carrier.<stage>: <name>` names the skill or agent holding the project's craft for a stage. A skill works in every
+tool, an agent only where the tool has agents. Use it when offered; otherwise do the stage as its brief says and name
+it in your file ("in-session; `<carrier>` not available here"). A missing carrier never skips the stage.

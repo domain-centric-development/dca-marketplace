@@ -5,7 +5,7 @@ from __future__ import annotations
 import typing
 
 from .....delivery.api.rules import (
-    kind_orders, pipeline_rules, project_runs, round_limit, stage_rows, story_gate_findings)
+    delete_after, kind_orders, pipeline_rules, project_runs, round_limit, stage_rows, story_gate_findings)
 from ....domain.model.rule import (
     Count, Fired, KindName, Outcome, OutcomeState, Part, Refused, Restart, Rule, RuleId, RuleState, Source, StageName,
     Words)
@@ -29,8 +29,8 @@ def told(published: typing.Mapping[str, typing.Any]) -> Rule:
         RuleId(published["id"]), Part.INSTRUCTION, tuple(StageName(s) for s in published["stages"]),
         tuple(KindName(k) for k in published["kinds"]), Words(where), (), Words(published.get("why", "")),
         Words(plain(published["told"])),
-        (), Source(published["source"]), RuleState.RETIRED if published["retired"] else RuleState.ACTIVE,
-        Source(published["placed"]), restart=restart_of(published))
+        (), Source(published["source"]), state_of(published),
+        Source(published["placed"]), restart=restart_of(published), disabled=Words(published.get("disabled", "")))
 
 
 def translated(published: typing.Mapping[str, typing.Any]) -> Rule:
@@ -43,8 +43,16 @@ def translated(published: typing.Mapping[str, typing.Any]) -> Rule:
         tuple(Outcome(OutcomeState(o["state"]), Words(o["said"]), tuple(StageName(t) for t in o.get("goes", ())))
               for o in published["outcomes"]),
         Words(published["why"]), Words(""), tuple(Words(r) for r in published["reports"]),
-        Source(published["source"]), RuleState.RETIRED if published["retired"] else RuleState.ACTIVE,
-        Source(published.get("bound", "")), Words(published.get("title", "")), restart_of(published))
+        Source(published["source"]), state_of(published),
+        Source(published.get("bound", "")), Words(published.get("title", "")), restart_of(published),
+        Words(published.get("disabled", "")))
+
+
+def state_of(published: typing.Mapping[str, typing.Any]) -> RuleState:
+    """Retired, disabled, or in force."""
+    if published["retired"]:
+        return RuleState.RETIRED
+    return RuleState.DISABLED if published.get("disabled") else RuleState.ACTIVE
 
 
 def restart_of(published: typing.Mapping[str, typing.Any]) -> typing.Optional[Restart]:
@@ -93,12 +101,16 @@ class DeliveryFindings(GateFindings):
 EVENT_KINDS = {"gate": JournalLineKind.GATE, "jump": JournalLineKind.JUMP, "restart": JournalLineKind.RESTART,
                "stage-start": JournalLineKind.START, "rounds-reset": JournalLineKind.FROM}
 REOPENED = "StoryReopened"
+#: The events a delivery writes — `StoryDeliveredByGate`, `StoryDeliveredByHand`.
+DELIVERED_EVENT = "StoryDelivered"
 
 
 def run_event(line: typing.Mapping[str, typing.Any]) -> typing.Optional[JournalLine]:
     """One journal line as the reading takes it; None for a line it does not read."""
     kind, fields, at = line["kind"], line["fields"], Moment(line["at"])
     if kind == "event":
+        if line["name"].startswith(DELIVERED_EVENT):
+            return JournalLine(JournalLineKind.DELIVERED, at, StageName("document"))
         return JournalLine(JournalLineKind.REOPENED, at, StageName("plan")) if line["name"] == REOPENED else None
     if kind not in EVENT_KINDS:
         return None
@@ -126,6 +138,9 @@ class DeliveryJournals(ProjectJournals):
 
     def __init__(self, cwd: str) -> None:
         self._cwd = cwd
+
+    def delete_after(self) -> Count:
+        return Count(delete_after(self._cwd))
 
     def journals(self) -> typing.Tuple[StoryJournal, ...]:
         kinds = {k.value: k for k in KindName}

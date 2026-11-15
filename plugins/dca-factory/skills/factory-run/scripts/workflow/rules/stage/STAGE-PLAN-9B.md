@@ -10,21 +10,17 @@ order: 13
 
 # STAGE-PLAN-9B
 
-9b. **Derive the spec delta.** Read the story's context's spec — `product/spec/<context>/scenarios.md` and every
-   `<feature>/scenarios.md` below it, the context lowercase and hyphenated; a context without one holds nothing yet.
-   The story's `feature:` says which file its criteria go to (none: the context's own). A feature the context does
-   not have yet is born here: the skeleton writes `- adds feature <name>`, and the plan proposes its glossary entry
-   (`<Term> (<name>): <what it groups>`, `Type: Feature`) under `## Glossary proposals` — the document stage writes
-   it, and the delivery refuses a feature without one. A criterion that stands under another feature moves; the
-   skeleton writes `- moves <key>: <from> → <to>`. The skeleton's `## Spec delta`
-   already says, key by key, what the comparison finds: `adds` (the spec lacks it), `holds` (word for word
-   there) or `changes` (there, otherwise). Add what only you can see: `- removes <key>: <why>` for a criterion
-   of the spec the story takes away, and `- rule "<old>" → "<new>"` where the story rewords a rule — the criteria the
-   spec holds under the old text follow it to the new one without being the story's (a `- holds <key>` for one
-   is accepted); a criterion the story takes away is `removes`. A rule `## Changed expectations` quotes that the
-   story no longer writes is such a rewording: the test gate refuses a delta without its line. A change or removal must follow from
-   the story's `## Changed expectations`; where it does not, it is a change of agreed behaviour nobody said —
-   one decision record naming the keys, as in step 9, and stop. The other way round as well: a line of
-   `## Changed expectations` that alters a criterion the spec holds, while the story does not carry that key
-   with its new text, would leave the spec's old text standing — one decision record naming the keys and
-   the text each would need, and stop.
+9b. **Derive the spec delta.** Read `product/spec/<context>/scenarios.md` and every `<feature>/scenarios.md` below it
+   (context lowercase, hyphenated; none → holds nothing yet). `feature:` says where the criteria go (none: the context's
+   own file).
+   - A new feature: the skeleton writes `- adds feature <name>`; propose its glossary entry under `## Glossary
+     proposals` (`<Term> (<name>): <what it groups>`, `Type: Feature`) — delivery refuses a feature without one.
+   - A criterion under another feature moves: `- moves <key>: <from> → <to>` (skeleton).
+   - The skeleton's `## Spec delta` gives per key `adds`, `holds` (word for word) or `changes`. Add what only you see:
+     `- removes <key>: <why>`; `- rule "<old>" → "<new>"` where the story rewords a rule (the spec's criteria under it
+     follow without being the story's; `- holds <key>` for one is accepted). A rule `## Changed expectations` quotes that
+     the story no longer writes is such a rewording — the test gate refuses a delta without its line.
+   - A change or removal not following from `## Changed expectations` = agreed behaviour changed unsaid → one decision
+     record naming the keys (as step 9), stop. Conversely, a `## Changed expectations` line altering a spec criterion
+     the story does not carry with its new text would leave the old text standing → one decision record naming the
+     keys and the text each needs, stop.

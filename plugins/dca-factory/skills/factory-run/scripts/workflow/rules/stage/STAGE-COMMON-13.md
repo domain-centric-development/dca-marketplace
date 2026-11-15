@@ -8,5 +8,4 @@ order: 13
 
 # STAGE-COMMON-13
 
-- Each hand-over says what the next stage needs and nothing a reader has elsewhere;
-  `--contract <stage>` names its measure.
+- A hand-over carries what the next stage needs, nothing a reader has elsewhere; `--contract <stage>` names its measure.

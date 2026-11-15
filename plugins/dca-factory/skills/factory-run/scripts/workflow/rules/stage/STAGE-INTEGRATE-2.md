@@ -10,6 +10,6 @@ order: 2
 
 # STAGE-INTEGRATE-2
 
-2. Keep both. The main line carries what another story delivered and a person accepted: its behaviour stays.
-   The story's change goes on top of it, in the shape the main line has now — a renamed method is called by
-   its new name, a glossary entry the other story added stays beside this story's.
+2. Keep both. The main line carries an accepted story: its behaviour stays. The story's change goes on top, in the main
+   line's current shape — a renamed method called by its new name, the other story's glossary entry kept beside this
+   one's.

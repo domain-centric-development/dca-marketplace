@@ -6,6 +6,7 @@ from __future__ import annotations
 import typing
 
 from ....building_blocks import OutputPort
+from ...domain.model.rule import Count
 from ...domain.model.runs import StoryJournal
 
 
@@ -14,4 +15,8 @@ class ProjectJournals(OutputPort, typing.Protocol):
 
     def journals(self) -> typing.Tuple[StoryJournal, ...]:
         """Each story's journal, its route's lines in order — none where the project has no journal."""
+        ...
+
+    def delete_after(self) -> Count:
+        """How many stories the project delivers after a rule was disabled before it is ready to delete."""
         ...

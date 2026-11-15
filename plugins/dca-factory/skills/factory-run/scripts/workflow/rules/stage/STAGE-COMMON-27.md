@@ -8,6 +8,5 @@ order: 27
 
 # STAGE-COMMON-27
 
-Without a `knowledge:` entry, work from what the project itself carries: its rule catalog and the
-report its architecture suite prints, its building blocks, its glossary, its documents. Nothing
-here fails for the absence of a knowledge skill.
+No `knowledge:` entry: work from what the project carries — its rule catalog and suite report, building blocks,
+glossary, documents. Nothing fails for its absence.

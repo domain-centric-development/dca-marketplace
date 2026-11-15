@@ -8,5 +8,5 @@ order: 4
 
 # STAGE-COMMON-4
 
-- What the gate checks in a stage's file, in a page, is `factory-cli.py --contract <stage>`, the command
-  the prompt names. Read that, never the gate's source.
+- What the gate checks in a stage's file: `factory-cli.py --contract <stage>` (the prompt names it). Never read the
+  gate's source.

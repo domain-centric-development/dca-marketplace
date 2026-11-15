@@ -10,9 +10,7 @@ order: 30
 
 # STAGE-BUILD-9
 
-9. **When the specification contradicts itself, stop.** Where the story, the plan and the tests cannot all hold —
-   a criterion asks one thing, a test asserts another, the plan names a third —, end the stage with
-   `## needs-human`: `decision: <story>-<nn>` and a line `contradiction: <the criterion, the plan line and the test
-   that cannot all hold>`, its record beside the story. Never edit a test or the plan to resolve it, and never make
-   the code satisfy one side by breaking the other: the stop is counted apart from a failure, and a person decides
-   which side is right.
+9. **Specification contradicts itself → stop.** Story, plan and tests cannot all hold (a criterion asks one thing, a
+   test another, the plan a third) → `## needs-human` with `decision: <story>-<nn>` and `contradiction: <the criterion,
+   the plan line and the test that cannot all hold>`, record beside the story. Never edit a test or the plan to resolve
+   it, never satisfy one side by breaking the other — a person decides which is right.

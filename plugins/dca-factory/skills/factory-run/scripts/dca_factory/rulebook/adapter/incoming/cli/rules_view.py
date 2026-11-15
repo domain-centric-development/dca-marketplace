@@ -114,6 +114,11 @@ def markdown(view: Model) -> str:
             refused = story["refused"].get(rule_id)
             lines.append(f"- `{rule_id}` — {said}" + (f" · refused {refused}×" if refused else ""))
         lines.append("")
+    if view.get("disabled"):
+        lines += ["## Disabled", "", "Switched off, not deleted: no brief tells it, no gate runs its check; "
+                  "`state: disabled` → `active` turns it on again.", ""]
+        lines += [f"- `{rule['id']}` — {rule['disabled']} · {rule['delivered_since']} stor"
+                  f"{'y' if rule['delivered_since'] == 1 else 'ies'} delivered since" for rule in view["disabled"]] + [""]
     if view["retired"]:
         lines += ["## Retired", ""] + [f"- `{rule['id']}` — {rule['why']}" for rule in view["retired"]] + [""]
     if view["problems"]:

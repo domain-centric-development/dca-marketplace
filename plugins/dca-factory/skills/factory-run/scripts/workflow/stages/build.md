@@ -28,16 +28,12 @@ Writes the production code that turns the story's red tests green, with the smal
 
 <!-- frame: what the stage is told, each rule by its marker -->
 
-First read what every stage is told — a session the runner started, one session that carries
-several stages, a repeat round, the shell, the gate. The runner's prompt names its file and this
-brief repeats none of it.
+Read what every stage is told first (its file: in the prompt).
 
-Input: the story, `.dca-factory/runs/<story>/plan.md`, `.dca-factory/runs/<story>/tests.md`, the product
-description's `## Look and feel` and `## Qualities` (`product/overview.md`, or where the profile's
-`product:` points), and — in a repeat round — the gate or judge report. Nothing
-else. Open the files the plan's and the tests' `## Files` name first; search the tree only for what
-they do not answer.
-Output: the production code, plus `.dca-factory/runs/<story>/build.md`.
+Input, nothing else: the story, `plan.md`, `tests.md` (in `.dca-factory/runs/<story>/`), `## Look and feel` and
+`## Qualities` of `product/overview.md` (or `product:`), in a repeat round the gate or judge report. Open the plan's
+and the tests' `## Files` first; search the tree only for the rest.
+Output: the production code and `.dca-factory/runs/<story>/build.md`.
 
 ## Do
 
@@ -55,18 +51,13 @@ Output: the production code, plus `.dca-factory/runs/<story>/build.md`.
 
 ## Ask, do not recall
 
-Where the profile names `knowledge: <skill>`, ask it instead of your recollection whenever an
-answer would decide something, and cite the node by its path inside the catalog; never adopt a
-knowledge source the profile did not name. The rule in full: in what every stage is told.
+`knowledge: <skill>` in the profile: ask it, cite the node path; never a source the profile does not name.
 
 ## Who carries this stage
 
-`carrier.build: <name>` in the stack profile names the skill or agent that holds this project's
-craft for it; use it where this tool offers it, otherwise do the stage as described here and say so
-in your file. `carrier.guard: <name>` names the skill that holds the architecture's invariants while
-you edit — apply it to every file you write, the same way; `carrier.frontend: <name>` the skill that holds
-the frontend craft — apply it to every page, template, stylesheet and client script.
-The rule in full: in what every stage is told.
+`carrier.build: <name>`: use that skill or agent; none in this tool → do the stage as written here and say so in your
+file. `carrier.guard:` applies to every file you write; `carrier.frontend:` to every page, template, stylesheet and
+client script.
 
 ## The build file
 
@@ -90,9 +81,7 @@ decision: <story>-<nn>
 contradiction: <the criterion, the plan line and the test that cannot all hold>
 ```
 
-That is the whole file. The criteria are not restated here — the judge re-checks each one against the
-code itself — and the gate's outcome is not recorded here: its report is the evidence, and a stage edits
-no hand-over after the gate ran.
+That is the whole file: no criteria restated, no gate outcome; no hand-over edited after the gate ran.
 
 ## Do not
 

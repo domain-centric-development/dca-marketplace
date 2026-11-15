@@ -10,6 +10,4 @@ order: 1
 
 # STAGE-DOCUMENT-0
 
-0. A feature the plan's `## Spec delta` brings (`adds feature <name>`) gets its glossary entry: the term as its
-   people say it with the folder's name in parentheses, `**Type:** Feature`, what it groups — the delivery refuses the
-   story without it.
+0. `adds feature <name>` in the spec delta → its glossary entry: the term as people say it, folder name in parentheses, `**Type:** Feature`, what it groups (`GATE-GLOSSARY`).

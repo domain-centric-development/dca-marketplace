@@ -10,6 +10,4 @@ order: 5
 
 # STAGE-TIDY-5
 
-5. Respect the architecture as the build stage did: the domain free of framework types, ports
-   declared inward, no raw cross-context imports. A tidy-up that moves a type across a layer is a
-   design change and belongs in a plan, not here.
+5. Keep the architecture (`GATE-COMMANDS`); a move across a layer is a design change for a plan.

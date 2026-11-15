@@ -58,6 +58,7 @@ def published(bound: typing.Optional[Bound], found: WorkflowRule) -> Published:
                 kinds=[kind for kind in KIND_ORDER if kind in chosen],
                 source=found.written.value if found.written else "", bound=bound.place if bound else "",
                 retired=found.retired.value if found.retired else "",
+                disabled=found.disabled.value if found.disabled else "",
                 told=found.told.value if found.told else "", section=found.section.value if found.section else "",
                 placed=placed(found) if found.part is RulePart.TOLD else "",
                 restart=dict(stage=found.restart.stage.value, when=found.restart.when.value) if found.restart else None)
@@ -123,6 +124,16 @@ def story_gate_findings(cwd: str, story_id: str) -> Published:
     set_places(read_profile(resolve_profile(None, cwd)))
     runs = place("runs")
     return story_findings(runs if os.path.isabs(runs) else os.path.join(cwd, runs), story_id)
+
+
+#: How many stories a project delivers after a rule was disabled before `rules --check` names it ready to delete.
+DELETE_AFTER = 20
+
+
+def delete_after(cwd: str) -> int:
+    """`rules.deleteAfter` of the project <cwd>'s profile, or DELETE_AFTER — counted in delivered stories."""
+    said = str(read_profile(resolve_profile(None, cwd)).get("rules.deleteAfter") or "").strip()
+    return int(said) if said.isdigit() else DELETE_AFTER
 
 
 def round_limit() -> int:

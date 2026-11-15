@@ -274,6 +274,8 @@ PROFILE_KEYS = frozenset((
     "ablate",
     # how strong a story's tests are, measured after the judge — informational, never a gate
     "mutation",
+    # how many delivered stories after a rule was disabled `rules --check` names it ready to delete (WP-220)
+    "rules.deleteAfter",
 ))
 
 #: Key families: `<prefix><name>`, with an open list of names — a test command (`test.integration`), what a

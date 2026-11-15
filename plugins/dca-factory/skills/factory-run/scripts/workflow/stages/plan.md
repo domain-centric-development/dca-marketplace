@@ -20,18 +20,13 @@ Turns the story into an implementation plan — each acceptance criterion by its
 
 <!-- frame: what the stage is told, each rule by its marker -->
 
-First read what every stage is told — a session the runner started, one session that carries
-several stages, a repeat round, the shell, the gate. The runner's prompt names its file and this
-brief repeats none of it.
+Read what every stage is told first (its file: in the prompt).
 
-Input: the story file, the project description — `product/overview.md`, `product/tech.md` and
-`product/domain.md`, or where the profile's `product:`, `tech:` and `domain:` point — the method's
-configuration `dca.profile.yaml` at the project root (the instruction file's ``- configuration: `dca.profile.yaml` ``
-line points at it; the layout, the naming suffixes and the resolved configuration the architecture suite holds the
-code to; where it is missing or a key is absent, the defaults), and the
-glossary and the context map generated from the code (`contextMap:`) where the project has them.
-Nothing else — not the chat history, not an earlier run.
-Output: `.dca-factory/runs/<story>/plan.md`, and nothing else. You write no test and no production code.
+Input, nothing else (no chat history, no earlier run): the story; `product/overview.md`, `product/tech.md`,
+`product/domain.md` (or the profile's `product:`, `tech:`, `domain:`); `dca.profile.yaml` at the root — layout,
+naming suffixes, the configuration the architecture suite holds code to (missing key → default); the glossary and the
+generated context map (`contextMap:`) where present.
+Output: `.dca-factory/runs/<story>/plan.md` only. No test, no production code, no build run.
 
 ## Do
 
@@ -65,15 +60,11 @@ Output: `.dca-factory/runs/<story>/plan.md`, and nothing else. You write no test
 
 ## Ask, do not recall
 
-Where the profile names `knowledge: <skill>`, ask it instead of your recollection whenever an
-answer would decide something, and cite the node by its path inside the catalog; never adopt a
-knowledge source the profile did not name. The rule in full: in what every stage is told.
+`knowledge: <skill>` in the profile: ask it, cite the node path; never a source the profile does not name.
 
 ## Who carries this stage
 
-`carrier.plan: <name>` in the stack profile names the skill or agent that holds this project's craft
-for it; use it where this tool offers it, otherwise do the stage as described here and say so in
-your file. The rule in full: in what every stage is told.
+`carrier.plan: <name>`: use that skill or agent; none in this tool → do the stage as written here and say so in your file.
 
 ## The plan file
 
@@ -124,8 +115,7 @@ decision: <story>-<nn>
 <one line saying what is asked>
 ```
 
-A `## needs-human` names a **decision record** with `stage: plan` — the shape, and how an answered
-record is cited when you plan again, in what every stage is told.
+`## needs-human` names a decision record with `stage: plan` (shape: what every stage is told).
 
 ## Do not
 

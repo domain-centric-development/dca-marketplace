@@ -10,7 +10,7 @@ order: 10
 
 # STAGE-BUILD-8
 
-8. **A task** (`kind: task`) has no test written for it: the existing suite is the measure, and the build gate runs
-   every test command whole. Change what the plan names and nothing an actor sees; change no test that existed
-   before (the gate refuses it), add one where it pins down what the change keeps. A test that goes red is a
-   behaviour you changed — put it back, or say under `## Deviations from the plan` that the task is a story.
+8. **Task** (`kind: task`): no new criterion test — the existing suite, run whole by the build gate, is the measure.
+   Change what the plan names and nothing an actor sees; no earlier test changed (refused); add one where it pins what the
+   change keeps. A red test = behaviour you changed: put it back, or say under `## Deviations from the plan` that the task
+   is a story.

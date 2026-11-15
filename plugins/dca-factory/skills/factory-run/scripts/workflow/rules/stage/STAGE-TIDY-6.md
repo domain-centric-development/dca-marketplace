@@ -10,6 +10,5 @@ order: 6
 
 # STAGE-TIDY-6
 
-6. Stop early. Two or three moves that make the story's code plainly better is a good stage; a
-   rewrite is a plan nobody approved. When you find yourself wanting one, write it down as a
-   finding and leave the code alone.
+6. Stop early: two or three moves that make the story's code plainly better is a good stage; a rewrite is a plan nobody
+   approved — write it down as a finding, leave the code.

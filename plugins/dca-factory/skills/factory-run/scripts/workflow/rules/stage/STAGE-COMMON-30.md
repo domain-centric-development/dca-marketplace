@@ -8,11 +8,8 @@ order: 30
 
 # STAGE-COMMON-30
 
-A stage that cannot go on writes its file anyway, with a `## needs-human` section naming a
-**decision record**: `decision: <story>-<nn>`, the record at `<story>/decisions/<nn>.md` in the
-story (`nn` — the next two-digit number among this story's records) with the question, the options
-you see, the evidence you read and your recommendation — never an answer. The story file and every
-`## Answer` are the person's: the window's end compares them with its start, and a change stops the story
-until a person confirms it. The full shape is
-`factory-run/templates/decision.md.tmpl`, beside this file; the gate reads exactly this front matter,
-and a record without `id:` equal to the file name is refused:
+A stage that cannot go on still writes its file, with `## needs-human` naming a **decision record**:
+`decision: <story>-<nn>`, at `<story>/decisions/<nn>.md` (`nn`: the story's next two-digit number) — the question, the
+options, the evidence read, your recommendation, never an answer. The story file and every `## Answer` are the
+person's; a change to them stops the story. Shape: `factory-run/templates/decision.md.tmpl`; the gate reads exactly
+this front matter and refuses a record whose `id:` differs from the file name (`GATE-DECISIONS`):

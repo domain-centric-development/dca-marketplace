@@ -10,4 +10,4 @@ order: 23
 
 # STAGE-PLAN-NOT4
 
-- Do not renumber or rename the criterion keys; they are committed identifiers.
+- Do not renumber or rename the criterion keys (`GATE-TESTS-MAPPED`).

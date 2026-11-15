@@ -12,12 +12,16 @@ An id is stable: a rule that goes stays, retired, with the reason, as the rule l
 from __future__ import annotations
 
 import enum
+import re
 import typing
 
 from ....building_blocks import AggregateRoot, Value
 from .jump import Jump, RuleId, Target
 from .stage import StageName, StoryKind
 from .verdict import CheckName
+
+#: `disabled:` begins with the day the rule was switched off.
+DISABLED_SINCE = re.compile(r"^\d{4}-\d{2}-\d{2}\b")
 
 
 class RulePart(enum.Enum):
@@ -106,7 +110,8 @@ class WorkflowRule(AggregateRoot[RuleId]):
     # and holds its outcomes to the workflow's targets — one rule, one unit, through its repository.
     """One rule: its id, the code that binds it, when it applies, why, its outcomes — and the stages, kinds and
     report names that narrow it where it is narrower than the code that binds it. A retired rule keeps its id and
-    says why, with no outcome."""
+    says why, with no outcome. A disabled rule (`state: disabled`) is in force nowhere — no brief tells it, no gate
+    runs its check — and says since when and why; turning it on again is one line."""
 
     def __init__(self, rule_id: RuleId, part: RulePart, when: RuleText, why: RuleText,
                  outcomes: typing.Sequence[Outcome] = (), reports: typing.Sequence[CheckName] = (),
@@ -115,8 +120,11 @@ class WorkflowRule(AggregateRoot[RuleId]):
                  told: typing.Optional[RuleText] = None, section: typing.Optional[RuleText] = None,
                  see: typing.Optional[Written] = None, order: typing.Optional[RuleOrder] = None,
                  title: typing.Optional[RuleText] = None, restart: typing.Optional[Restart] = None,
-                 processes: typing.Sequence[ProcessName] = ()) -> None:
+                 processes: typing.Sequence[ProcessName] = (),
+                 disabled: typing.Optional[RuleText] = None) -> None:
         super().__init__()
+        if disabled is not None and not DISABLED_SINCE.match(disabled.value):
+            raise ValueError(f"rule {rule_id.value}: `disabled:` begins with the date it was disabled (YYYY-MM-DD)")
         states = [o.state for o in outcomes]
         if part is RulePart.TOLD:
             if outcomes:
@@ -144,6 +152,7 @@ class WorkflowRule(AggregateRoot[RuleId]):
         self._title = title
         self._restart = restart
         self._processes = tuple(processes)
+        self._disabled = disabled
 
     @classmethod
     def restore(cls, rule_id: RuleId, part: RulePart, when: RuleText, why: RuleText,
@@ -153,10 +162,21 @@ class WorkflowRule(AggregateRoot[RuleId]):
                 told: typing.Optional[RuleText] = None, section: typing.Optional[RuleText] = None,
                 see: typing.Optional[Written] = None, order: typing.Optional[RuleOrder] = None,
                 title: typing.Optional[RuleText] = None, restart: typing.Optional[Restart] = None,
-                processes: typing.Sequence[ProcessName] = ()) -> WorkflowRule:
+                processes: typing.Sequence[ProcessName] = (),
+                disabled: typing.Optional[RuleText] = None) -> WorkflowRule:
         """The workflow rule as it was kept — the one way a repository builds it."""
         return cls(rule_id, part, when, why, outcomes, reports, stages, kinds, retired, written, told, section, see, order, title,
-                   restart, processes)
+                   restart, processes, disabled)
+
+    @property
+    def disabled(self) -> typing.Optional[RuleText]:
+        """Since when and why the rule is switched off — none for a rule in force or retired."""
+        return self._disabled
+
+    @property
+    def in_force(self) -> bool:
+        """Neither retired nor disabled: a brief tells it, a gate runs its check."""
+        return self._retired is None and self._disabled is None
 
     @property
     def processes(self) -> typing.Tuple[ProcessName, ...]:

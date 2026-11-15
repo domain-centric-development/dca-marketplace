@@ -367,6 +367,10 @@ class Rulebook(Value):
             if nowhere:
                 found.append(Problem(Words(f"{rule.id.value} goes to no stage {', '.join(nowhere)} — "
                                            f"{rule.source.value}")))
+        for rule in self.rules:
+            if rule.state is RuleState.DISABLED and rule.enforcement is Enforcement.RUNNER:
+                found.append(Problem(Words(f"{rule.id.value} is disabled — a runner's decision cannot be switched off; "
+                                           f"retire it or turn it on — {rule.source.value}")))
         known = {r.id.value: r for r in self.rules}
         for citation in citations:
             cited = known.get(citation.id.value)

@@ -80,7 +80,7 @@ class AblationTest(unittest.TestCase):
         whole, without = brief(""), brief("plan:Do not, every:nothing")
         self.assertIn("Do not renumber or rename the criterion keys", whole)
         self.assertNotIn("Do not renumber or rename the criterion keys", without)
-        self.assertIn("Announce a change to what judges the story", without)
+        self.assertIn("A change to the profile or a `guarded:` path", without)
 
 
 if __name__ == "__main__":

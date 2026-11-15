@@ -8,5 +8,5 @@ order: 23
 
 # STAGE-COMMON-23
 
-- *The previous verdict*: the judge accounts for each defect it confirmed under `## Previous round` —
-  fixed (with the evidence) or withdrawn (with the reason) — before judging anew.
+- *The previous verdict*: the judge accounts under `## Previous round` for each defect it confirmed — fixed (evidence)
+  or withdrawn (reason) — before judging anew.

@@ -10,5 +10,4 @@ order: 13
 
 # STAGE-TEST-8
 
-8. Delete every spike, scratch or exploration test before you finish. A passing spike trips no
-   gate, so nothing else will catch it.
+8. Delete every spike, scratch or exploration test before you finish — a passing spike trips no gate.

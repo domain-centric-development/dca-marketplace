@@ -12,9 +12,8 @@ order: 13
 
 # STAGE-JUDGE-ADOPT
 
-For a story with `status: adopted`, the change is not code but a claim: each mapped test proves its
-scenario. Read every test against its scenario — does it arrange the `Given`, perform the `When` and
-assert every `Then` and `And` with the scenario's values? A test that passes without asserting the outcome,
-or asserts another one, is **major**. A break that changes something the test does not depend on is major
-too. Each row of the `gate:invariants` table is read the same way: a test that does not assert its rule is
-**major**. The verdict is `pass` only when every scenario is proved; nothing else is reviewed — nothing was built.
+`status: adopted`: the change is a claim — each mapped test proves its scenario. Read each test against its scenario:
+arranges the `Given`, performs the `When`, asserts every `Then` and `And` with the scenario's values? Passing without
+asserting the outcome, or asserting another → **major**. A break changing something the test does not depend on →
+major. Each `gate:invariants` row the same: a test not asserting its rule → **major**. `pass` only when every scenario is
+proved; nothing else is reviewed.

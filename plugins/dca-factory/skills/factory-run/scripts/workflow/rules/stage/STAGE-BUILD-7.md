@@ -10,4 +10,4 @@ order: 9
 
 # STAGE-BUILD-7
 
-7. `formatFix:` runs last, before you finish (what every stage is told).
+7. `formatFix:` runs last (`GATE-COMMANDS`).

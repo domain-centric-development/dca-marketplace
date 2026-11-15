@@ -10,6 +10,6 @@ order: 16
 
 # STAGE-BUILD-NOT6
 
-- Do not change plan.md. Whatever a gate asks of the plan once the tests are written goes into build.md: a domain
-  type's invariants under `## Invariants`, a planned file you took back under `## Plan changes` with why
-  (`- `<path>` — <why>`). The gates read it beside the plan (`plan-kept`).
+- Never change plan.md. What a gate asks of the plan once tests exist goes into build.md: a domain type's invariants
+  under `## Invariants`, a planned file taken back under `## Plan changes` (`- `<path>` — <why>`) — read beside the plan
+  (`plan-kept`).

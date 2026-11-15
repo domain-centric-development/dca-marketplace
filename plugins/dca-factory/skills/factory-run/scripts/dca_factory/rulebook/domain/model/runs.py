@@ -33,6 +33,7 @@ class JournalLineKind(enum.Enum):
     START = "start"            # a stage's process started
     FROM = "from"              # a person named the stage to run from (`--from`, the rounds counted anew)
     REOPENED = "reopened"      # a delivered story taken back for a correction at its acceptance
+    DELIVERED = "delivered"    # the story was delivered — by its gate or by hand
 
 
 class GateHand(enum.Enum):
@@ -194,6 +195,11 @@ class Journals(Value):
                                    tuple(StageTimes(StageName(s), Count(c)) for s, c in stages[rule_id].items()))
                       for rule_id, n in sorted(times.items(), key=lambda x: -x[1]))
         return ProjectRefusals(found, Count(unnamed), tuple(j.story for j in self.journals))
+
+    def delivered_since(self, day: Moment) -> Count:
+        """How many stories were delivered on <day> (YYYY-MM-DD) or later — each story once."""
+        return Count(sum(1 for j in self.journals if any(e.kind is JournalLineKind.DELIVERED and e.at.value[:10] >= day.value
+                                                         for e in j.events)))
 
     def story(self, name: Words) -> typing.Optional[StoryJournal]:
         return next((j for j in self.journals if j.story == name), None)

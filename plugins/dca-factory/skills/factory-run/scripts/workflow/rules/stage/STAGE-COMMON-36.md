@@ -8,8 +8,5 @@ order: 36
 
 # STAGE-COMMON-36
 
-Where the stack profile declares `formatFix:`, run it last, before you finish: it corrects the
-formatting of what you wrote, so the stages after you find their own files as the formatter wants
-them. The gate and the commit hook only check `format:` and change no file. A file the formatter
-touches that this story never changed is not yours to keep quiet about — the pipeline's record of
-what changed names it, and the judge reads it as the finding it is.
+`formatFix:` declared → run it last, before you finish (`GATE-COMMANDS` checks `format:`). A file it touches that the
+story never changed: the change record names it, the judge reads it as a finding.

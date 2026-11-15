@@ -10,5 +10,4 @@ order: 21
 
 # STAGE-PLAN-NOT2
 
-- Do not widen the story. A change you consider necessary but that no criterion asks for goes
-  into `## Open assumptions`, not into the plan's change list.
+- Do not widen the story: a change no criterion asks for goes under `## Open assumptions`, not the change list.

@@ -9,5 +9,5 @@ order: 1
 
 # STAGE-FILES-9
 
-A stage that cannot finish writes its file anyway, with a `## needs-human` section, and the
-orchestrator stops the run at that point. Two situations always escalate rather than being solved:
+A stage that cannot finish still writes its file, with `## needs-human`; the run stops there. Two situations always
+escalate, never solved:

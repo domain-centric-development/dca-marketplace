@@ -269,17 +269,17 @@ def budget_self_test():
 WORKFLOW = "plugins/dca-factory/skills/factory-run/scripts/workflow"
 STAGE_COMMON_SENTENCES = (
     "Never adopt a knowledge source the profile did not name",
-    "A missing carrier is a missing preference, never a reason to skip the stage",
-    "the next two-digit number among this story's records",
-    "a stage that runs them first pays twice for one answer",
-    "The gate and the commit hook only check `format:`",
-    "never a reason to edit your file after the gate ran",
+    "A missing carrier never skips the stage",
+    "the story's next two-digit number",
+    "you pay twice for one answer",
+    "`formatFix:` declared → run it last",
+    "never a reason to edit or re-run",
     "the worker named at session start is the one that started you, not a second writer",
-    "Read that, never the gate's source",
-    "Do it yourself in this session; do not delegate it",
-    "Run one plain command per call from the project root",
-    "put the calls that do not wait for each other's result into one turn",
-    "With any other verdict stop after `judge.md`; write no `document.md`",
+    "Never read the gate's source",
+    "that one stage, yourself, no delegation",
+    "One plain command per call from the project root",
+    "batch independent reads, searches and writes into one turn",
+    "Any other verdict: stop after `judge.md`, no `document.md`",
 )
 
 

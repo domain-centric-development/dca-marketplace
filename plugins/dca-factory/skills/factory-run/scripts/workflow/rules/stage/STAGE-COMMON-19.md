@@ -8,5 +8,5 @@ order: 19
 
 # STAGE-COMMON-19
 
-- *The <gate> gate refused the story and sent it back to* this stage (or *stage <stage>*): fix in that
-  stage exactly what its report names, nothing else.
+- *The <gate> gate refused the story and sent it back to* this stage (or *stage <stage>*): fix there exactly what its
+  report names, nothing else.

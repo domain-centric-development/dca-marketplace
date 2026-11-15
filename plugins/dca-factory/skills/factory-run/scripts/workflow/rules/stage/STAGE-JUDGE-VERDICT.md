@@ -10,4 +10,4 @@ order: 11
 
 # STAGE-JUDGE-VERDICT
 
-Which value you choose decides where the run goes back to, and that is the point of this stage:
+The value decides where the run goes back to:

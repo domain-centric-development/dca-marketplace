@@ -10,4 +10,4 @@ order: 17
 
 # STAGE-TEST-NOT1
 
-- Do not implement production behaviour to make a test pass.
+- No production behaviour to make a test pass (`GATE-TESTS-RED`).

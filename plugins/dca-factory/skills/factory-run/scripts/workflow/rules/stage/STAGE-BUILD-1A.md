@@ -10,6 +10,5 @@ order: 2
 
 # STAGE-BUILD-1A
 
-1a. **A refusal shown on a page is bound to its field** where the product description's `## Qualities` names
-   accessibility: the message beside the field and tied to it (`aria-describedby`, `aria-invalid`, or the
-   stack's equivalent), the entered value kept where the product says so.
+1a. With accessibility under `## Qualities`: a refusal on a page is bound to its field — the message beside it and tied
+   to it (`aria-describedby`, `aria-invalid`, or the stack's equivalent), the entered value kept where the product says so.

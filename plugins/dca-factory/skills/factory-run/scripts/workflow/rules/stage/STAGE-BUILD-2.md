@@ -10,16 +10,12 @@ order: 3
 
 # STAGE-BUILD-2
 
-2. Follow the plan's change list. An element the plan did not name is a sign the plan was wrong:
-   note it in the build file rather than quietly extending the design. The same holds for a **guard in a
-   domain type** — a null check, a trim, a range, a uniqueness rule — that the plan's `## Invariants`
-   does not name: it is code no test asked for, so it stays out; name it in the build file as an
-   unplanned invariant (`<Element>: <rule>`), and the judge reads it as the plan's gap it is. Every guard
-   the plan names has a unit test already — make it pass, add none beside it. The incoming adapter does
-   not check such a rule again: it passes a missing field on as missing — no default that turns absence
-   into an empty value, no annotation repeating what the value object refuses — so the
-   value object's planned refusal is the one that answers.
-   A file the plan's `## Files` says `removed` goes with `git rm <path>` — on the shell you have — and one it
-   says `new` is written; the build gate refuses either left undone (`plan-files`), whatever the build file
-   explains. Where a removal or a new file turns out wrong, that is the plan's error: say so under
-   `## needs-human` rather than leaving the plan's line unmet.
+2. Follow the plan's change list. An unnamed element means the plan was wrong: note it in build.md, do not extend the
+   design quietly.
+   - A **domain guard** (null check, trim, range, uniqueness) not under the plan's `## Invariants` is code no test asked
+     for: leave it out, name it in build.md as an unplanned invariant (`<Element>: <rule>`) — the judge reads it as the
+     plan's gap. Planned guards have unit tests already: make them pass, add none.
+   - The incoming adapter does not check such a rule again: a missing field is passed on as missing (no default turning
+     absence into empty, no annotation repeating the value object's refusal) — the value object's refusal answers.
+   - `## Files` says `removed` → `git rm <path>`; `new` → write it. Either left undone is refused (`plan-files`), whatever
+     build.md explains. A wrong removal or new file is the plan's error → `## needs-human`.

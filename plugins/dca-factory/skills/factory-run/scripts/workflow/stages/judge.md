@@ -19,29 +19,25 @@ Reviews the story's change from the review perspectives and returns one verdict,
 
 <!-- frame: what the stage is told, each rule by its marker -->
 
-First read what every stage is told — a session the runner started, one session that carries
-several stages, a repeat round, the shell, the gate. The runner's prompt names its file and this
-brief repeats none of it.
+Read what every stage is told first (its file: in the prompt).
 
-Input: the story and its epic (`epic.md` beside it), `.dca-factory/runs/<story>/plan.md`, `tests.md`, `build.md`, the diff of the change —
-`.dca-factory/evidence/<story>/story.diff`, which the pipeline writes; open a whole file only where the
-diff's context does not carry the question, and explore no further than a finding needs — the
-product and the technical description (`product/overview.md`, `product/tech.md`, or where the
-profile's `product:` and `tech:` point) — **the review files** `.dca-factory/runs/<story>/reviews/<perspective>.md`,
-one per perspective, written by the reviewers the pipeline started before you (each in a context of
-its own, at the same time) — and, in a repeat round, the previous verdict,
-`.dca-factory/runs/<story>/.judge-previous.md`. Nothing else. A change that contradicts the product description
-— a surface it does not list, state kept where it says otherwise, a page without its stated look or
-accessibility, something under `## Not part of the product` — is a finding like any other, and so
-is a change that brings in what the technical description excludes: a second persistence, a client
-framework where the pages are server-rendered, an integration it does not list.
-Output: `.dca-factory/runs/<story>/judge.md`. You change no code.
+Input, nothing else: the story and its `epic.md`; `plan.md`, `tests.md`, `build.md`; `.dca-factory/evidence/<story>/story.diff`
+(open a whole file only where the diff's context does not carry the question; explore no further than a finding
+needs); `product/overview.md`, `product/tech.md` (or `product:`, `tech:`); **the review files**
+`.dca-factory/runs/<story>/reviews/<perspective>.md`, one per perspective, written before you by reviewers in contexts
+of their own; in a repeat round `.dca-factory/runs/<story>/.judge-previous.md`.
+Output: `.dca-factory/runs/<story>/judge.md`. No code change.
+
+A change against the product description (a surface it does not list, state kept where it says otherwise, a page
+without its stated look or accessibility, anything under `## Not part of the product`) is a finding; so is one that
+brings in what the technical description excludes (a second persistence, a client framework where pages are
+server-rendered, an unlisted integration).
 
 ## Do
 
 <!-- rule: STAGE-JUDGE-1 -->
 
-What the project configures is what it *adds* and *who runs it*:
+The project adds perspectives and names who runs them:
 
 | Profile key | Meaning |
 |---|---|
@@ -50,19 +46,15 @@ What the project configures is what it *adds* and *who runs it*:
 
 <!-- rule: STAGE-JUDGE-2 -->
 
-1. the carrier its `review.<name>:` names — a review **skill** installed in the project is offered by every
-   tool: load it and run its pass; only an **agent** can be missing;
-2. otherwise a review skill of the project whose own description covers that perspective — a skill
-   named for the perspective (`review-ddd`, `review-hexagonal`, `review-clean-code`) is the obvious
-   case, but match on what a skill's description says it reviews, never on its name alone;
-3. otherwise, for the three built-ins, the question below — the fallback for a project that has no such
-   skill installed, never a shortcut where one is.
+1. the carrier `review.<name>:` names — a review **skill** in the project is offered by every tool: load it, run its
+   pass; only an **agent** can be missing;
+2. else a project review skill whose description covers that perspective — match on what the description says it
+   reviews, never on the name alone;
+3. else, for the three built-ins, the question below — a fallback, never a shortcut where a skill is installed.
 
-Say in the report which of the three it was. A named carrier that this tool does not offer is a
-missing *preference*, not a missing review: the built-in pass still runs, and the report says so
-("in-session; `<carrier>` not available here"). An **added** perspective is different — it has no
-built-in description, so if its carrier is unavailable it is reported as **not covered** and nothing
-silently stands in for it.
+Say which of the three it was. A named carrier this tool lacks is a missing preference, not a missing review: the
+built-in pass runs and the report says "in-session; `<carrier>` not available here". An **added** perspective without
+its carrier is **not covered** — nothing stands in for it.
 
 <!-- rule: STAGE-JUDGE-3 -->
 2. **hexagonal** — do the dependencies point inward? (`review-hexagonal`: framework-free domain,
@@ -71,38 +63,29 @@ silently stands in for it.
 3. **clean-code** — is it readable? (`review-clean-code`: names, one level of abstraction, no
    duplication that carries a decision twice, no dead code, no comment on history.)
 
-Each perspective is described in **one** place — the review skill named in parentheses, the one the
-profile's `review.<name>:` points at and `factory.sh setup` installs beside the pipeline. This file
-holds the question each asks, not the description. Where the skill is installed you load it — the
-question is what you review from only in a project without it, and then `## Perspectives covered`
-says so.
+Each perspective is described once — in the review skill named in parentheses (`review.<name>:`, installed by
+`factory.sh setup`). Installed → load it; the question alone only without it, and `## Perspectives covered` says so.
 
-Where the profile names a browser runner (`browser:` other than `none`), an end-user test that reads a page's script or markup as
-text in place of driving the browser is a **major** finding: it proves the wording, not the behaviour,
-and the project has the runner that would prove the behaviour.
+**Major findings — check each, whatever a reviewer said:**
 
-**Test levels are major findings too.** A browser test for a scenario that is neither the story's happy
-path nor `browser-only` with a reason in the plan; an adapter the plan changed that no integration test
-passes through; a port mocked where the plan changed its adapter — each is **major**: the first makes the
-suite slow and flaky where an integrated test would do, the other two leave the translation untested. A
-clause about what is stored (stays, unchanged, done afterwards) asserted in an adapter test against stubbed input
-ports is **major**: it reads back the stub. So is a `Then` or `And` of a scenario that no test asserts — check each
-clause against tests.md's `## Clauses` row and the line it names, not only the criterion's test name. A
-journey test that stops short of the epic's outcome event is **major** as well, and so is a change that names the
-epic's outcome event otherwise than its `metric:` does — a synonym, a translation (`TaskAdded` where the epic says
-`TaskCreated`): the outcome is then measured by an event nobody publishes. A test that rebuilds the
-application context per method where a data reset would do (`@DirtiesContext` on every test, a new host
-per fact) is **minor**: it makes the suite slow for nothing, and the project's own reset convention is
-the fix.
+| Defect | Why major |
+|---|---|
+| with `browser:` other than `none`: an end-user test reads a page's script or markup as text instead of driving the browser | proves the wording, not the behaviour; the runner that would prove it is there |
+| a browser test for a scenario that is neither the happy path nor `browser-only` with a reason in the plan | slow and flaky where an integrated test would do |
+| an adapter the plan changed that no integration test passes through; a port mocked where the plan changed its adapter | the translation stays untested |
+| a stored-state clause (stays, unchanged, done afterwards) asserted in an adapter test against stubbed input ports | it reads back the stub |
+| a `Then` or `And` no test asserts — check each clause against its `## Clauses` row and the line it names, not the test name | the criterion is met only nominally |
+| a journey test that stops short of the epic's outcome event; an outcome event named otherwise than the epic's `metric:` (`TaskAdded` where it says `TaskCreated`) | the outcome is measured by an event nobody publishes |
 
-Across the three, check the change against the story itself. A criterion written as a scenario is
-covered only when its test arranges the `Given`, performs the `When` and asserts every `Then` and
-`And` with the scenario's values: an outcome the test does not assert is a finding. Behaviour listed
-under the story's `## Out of scope`, or under the product description's `## Not part of the product`, that
-the change delivers anyway is a finding too.
+Minor: a test that rebuilds the application context per method where a data reset would do (`@DirtiesContext` on
+every test, a new host per fact) — slow for nothing; the project's reset convention is the fix.
 
-An added perspective is one more pass with its own rows in the report. Adding one is a profile
-line plus the skill that carries it — never an edit to this file.
+Against the story: a scenario is covered only when its test arranges the `Given`, performs the `When` and asserts
+every `Then` and `And` with the scenario's values. Behaviour under the story's `## Out of scope` or the product's
+`## Not part of the product` that the change delivers anyway is a finding.
+
+An added perspective = one more pass with its own rows; adding one is a profile line plus its skill, never an edit
+here.
 
 Then converge:
 
@@ -117,9 +100,7 @@ Then converge:
 
 ## Ask, do not recall
 
-Where the profile names `knowledge: <skill>`, ask it instead of your recollection whenever an
-answer would decide something, and cite the node by its path inside the catalog; never adopt a
-knowledge source the profile did not name. The rule in full: in what every stage is told.
+`knowledge: <skill>` in the profile: ask it, cite the node path; never a source the profile does not name.
 
 ## The verdict has three values, not two
 
@@ -131,25 +112,22 @@ knowledge source the profile did not name. The rule in full: in what every stage
 | `changes-requested` | the code deviates from the plan or is wrong — or a test asserts less than its criterion | the build stage, or the test stage with `back: test` |
 | `story-conflict` | the **plan or the story itself** was wrong: a criterion contradicts another, the design cannot meet it, or meeting it would need a decision nobody took | the story — a human, never the build stage |
 
-Only `blocker` and `major` findings prevent `pass`. A review that finds something everywhere is
-ignored and therefore worthless: rank, and let `minor` findings be recorded without blocking.
-The perspectives rank in their own words — `must-fix`, `should-fix`, `nit` — and you translate, from
-what you confirmed in the code, never by copying: a `must-fix` is `major`, and `blocker` where it
-breaks a criterion, the architecture suite or the product description; a `should-fix` is `minor`,
-and `major` where you confirm it deviates from the plan; a `nit` is `minor`.
-**Three domain defects are `major` whatever the perspective called them**, and whatever the plan says — you rank
-what the code does: a rule over an aggregate's state decided outside the aggregate (`domain-invariant:`); a
-precondition the command does not check again after an earlier read — a choice shown on one request and acted on by
-the next, a snapshot and its reload, a remote answer and the step that confirms it (`domain-invariant:`); a result
-that encodes three or more outcomes as flags or nullables a caller must decode, an impossible combination
-representable (`domain-concept:`) — found-or-not as one nullable is two outcomes, not this.
-A `story-conflict` is a question to a human, so it is a **decision record** like any other (what every stage is told):
-`## needs-human` in the judge file naming it, and the record's `stage:` is the stage that will
-**apply** the answer, not yourself — `plan` when the story or the plan has to change, `test` when an
-agreed expectation has to change. Say in `## Question` that the judge asked. The run waits for the answer and resumes at that stage; everything after it runs again.
-Never resolve a `story-conflict` by quietly reinterpreting the criterion — a correction that
-changes an agreed decision belongs in the story, where a human decides it, or after five rounds the story describes
-something the code no longer does and nobody notices.
+- Only `blocker` and `major` prevent `pass`. Rank: a review that finds something everywhere is ignored; `minor` is
+  recorded, never blocking.
+- Translate the reviewers' ranks from what you confirmed in the code, never by copying: `must-fix` → `major`
+  (`blocker` where it breaks a criterion, the architecture suite or the product description); `should-fix` →
+  `minor` (`major` where you confirm it deviates from the plan); `nit` → `minor`.
+- **Three domain defects are `major`** whatever the perspective or the plan says — you rank what the code does:
+  - a rule over an aggregate's state decided outside the aggregate (`domain-invariant:`);
+  - a precondition not checked again after an earlier read — a choice shown on one request and acted on by the next,
+    a snapshot and its reload, a remote answer and the step that confirms it (`domain-invariant:`);
+  - a result encoding three or more outcomes as flags or nullables a caller must decode, an impossible combination
+    representable (`domain-concept:`) — found-or-not as one nullable is two outcomes, not this.
+- `story-conflict` is a decision record (what every stage is told): `## needs-human` names it; its `stage:` is the
+  stage that **applies** the answer — `plan` when story or plan change, `test` when an agreed expectation changes;
+  `## Question` says the judge asked. The run resumes there.
+- Never resolve a `story-conflict` by quietly reinterpreting the criterion: the story then describes something the
+  code no longer does, and nobody notices.
 
 ## The judge file
 
@@ -177,41 +155,25 @@ back: test                        (only when a confirmed defect is in a test —
   was not a defect after all> | still open — listed above
 ```
 
-A defect the DDD perspective confirms about the domain model starts its Defect cell with what it gets wrong —
-`domain-concept:`, `domain-boundary:`, `domain-invariant:` or `domain-term:` — the same codes a person's
-correction carries, so a run's domain misses can be counted beside them.
-
-**Where the round goes.** A `changes-requested` goes to the build stage, which may not change a test —
-its red proof holds each test's version. When a confirmed defect is in a test itself (it asserts less
-than its criterion, it proves the scenario only nominally), write `back: test` under the verdict: the
-round then starts at the test stage, which strengthens the test and proves with a break that the new
-assertion bites, and the build follows for whatever code defect you confirmed beside it. Without a test
-defect, write no `back:` line.
-
-Where the plan lists `## Changed tests`, check each changed test against the line that backs it:
-the new assertion follows from that line, and nothing else in the test changed. A changed test
-that expects more or other than its backing line says is a `major` defect.
-
-In a repeat round, account for **every** defect the previous verdict confirmed before you judge
-anew. A defect does not disappear because this round's reading missed it: it is fixed, with the
-line that shows it, or withdrawn, with the reason — and a withdrawal that contradicts the source
-the previous round cited (a glossary line, a criterion) is a `story-conflict`, not a `pass`.
-
-**In plain words.** Every confirmed defect carries one short sentence a person understands at once, without
-opening the file: what is wrong, in the words of the product or the code's purpose — "the checkout controller
-checks the step twice", not "repeats `Page`'s guard check (`:133`–`:143`)". No code name, no line, no reviewer
-term; the precise account stays in `Defect`, the remedy in `Fix`. A person deciding in the inbox reads this
-sentence first and opens the rest only when it matters.
-
-A `minor` you confirm is not lost with the run folder: when the story is delivered, the pipeline copies every
-row of `## Confirmed defects` into `<story>/findings.md` in the story's folder (`| # | Perspective | File:line |
-Severity | In plain words | Defect | Fix | Status |`, `open` until a person or a later story closes it). So a row
-you write here is a row somebody will read later — file and line exact, the plain sentence and the fix one
-sentence each.
-
-`verdict: pass` means the change is deliverable. Say it plainly when it is true; inventing a
-finding to look thorough costs a build round and teaches the pipeline nothing. Every finding
-names the file and line it stands on — a finding without that is a suspicion and is marked as one.
+- The DDD perspective's domain-model defects start their Defect cell with `domain-concept:`, `domain-boundary:`,
+  `domain-invariant:` or `domain-term:`.
+- **Where the round goes.** `changes-requested` goes to build, which may not change a test (its red proof holds each
+  test's version). A confirmed defect in a test itself (asserts less than its criterion, proves it only nominally) →
+  `back: test` under the verdict: the test stage strengthens it and proves the new assertion bites with a break;
+  build follows for any code defect beside it. No test defect → no `back:` line.
+- `## Changed tests` in the plan: each changed test's new assertion follows from its backing line and nothing else in
+  it changed; expecting more or other is `major`.
+- Repeat round: account for **every** defect the previous verdict confirmed before judging anew — fixed (with the
+  line) or withdrawn (with the reason). A miss in this round's reading does not make it disappear. A withdrawal that
+  contradicts the source the previous round cited (a glossary line, a criterion) is a `story-conflict`, not a `pass`.
+- **In plain words**: one short sentence a person understands without opening the file, in the product's or the
+  code's-purpose words — "the checkout controller checks the step twice", not "repeats `Page`'s guard check
+  (`:133`–`:143`)". No code name, no line, no reviewer term; precision stays in `Defect`, the remedy in `Fix`.
+- At delivery every `## Confirmed defects` row is copied to `<story>/findings.md` (`| # | Perspective | File:line |
+  Severity | In plain words | Defect | Fix | Status |`, `open` until closed): file and line exact, plain sentence and
+  fix one sentence each.
+- `verdict: pass` when true; an invented finding costs a build round and teaches nothing. A finding without file and
+  line is a suspicion and marked as one.
 
 ## Task mode
 

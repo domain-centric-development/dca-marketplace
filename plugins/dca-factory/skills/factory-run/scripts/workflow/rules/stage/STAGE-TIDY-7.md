@@ -10,6 +10,5 @@ order: 7
 
 # STAGE-TIDY-7
 
-7. The gate is your test run (what every stage is told): a single test while you move
-   things, then the tidy gate, never the whole suite before it. Write nothing about the gate into
-   your file: its report is the record.
+7. A single test while moving things, then the tidy gate — never the whole suite first. Nothing about the gate in your
+   file.

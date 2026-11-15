@@ -10,4 +10,4 @@ order: 8
 
 # STAGE-TIDY-8
 
-8. `formatFix:` runs last, before you finish (what every stage is told).
+8. `formatFix:` runs last (`GATE-COMMANDS`).

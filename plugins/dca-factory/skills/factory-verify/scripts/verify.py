@@ -1371,12 +1371,12 @@ def verify_runner(runner, verbose=False):
               and output.count("factory-cli.py --contract <stage>") == 9
               and output.count(".dca-factory/evidence/STORY-1/brief/every-stage.md") == 6
               and output.count(".dca-factory/evidence/STORY-1/brief/review.md") == 3
-              and "never the gate's source" in common and "never the gate's source" not in output,
+              and "Never read the gate's source" in common and "Never read the gate's source" not in output,
               [l[:160] for l in output.splitlines() if "would run" in l][:2])
         document_skill = told_text(runner, "document")
         check("runner: the document stage's brief names the skeleton the pipeline writes, and that brief is in its prompt",
               "--document-skeleton <story>` (the runner runs it" in document_skill
-              and "cite paths from that section in exactly that form" in document_skill
+              and "cite paths from `## Paths` in exactly that form" in document_skill
               and ".dca-factory/evidence/STORY-1/brief/document.md" in output,
               document_skill[:200])
 
@@ -2016,8 +2016,7 @@ def verify_runner(runner, verbose=False):
         test_skill = told_text(runner, "test")
         check("judge sent back: the test stage runs again on its brief, which says to fix the judge's confirmed defects",
               len(prompts.strip().splitlines()) >= 2 and "Carry out the test stage" in second
-              and "Where `judge.md` in the run folder says `verdict: changes-requested`, fix exactly the confirmed "
-                  "defects that are this stage's" in test_skill, second[-240:] or "no test prompt recorded")
+              and "`judge.md` says `verdict: changes-requested`: fix exactly this stage's confirmed defects" in test_skill, second[-240:] or "no test prompt recorded")
         code, output, starts, delivered, prompts = back_run(verifier=True)
         check("judge sent back: the shared verifier's `back: test` goes to the test stage as well",
               code == 0 and delivered and starts == ["plan", "test", "build", "tidy", "verifier", "test", "build", "tidy", "verifier"],
@@ -2178,7 +2177,7 @@ def verify_runner(runner, verbose=False):
         check("prompt: a stage is asked for independent calls in one turn and for plain commands the allow-list covers "
               "— by what every stage is told, which its prompt names",
               bool(prompts) and "brief/every-stage.md" in prompts[0]
-              and "into one turn" in common and "one plain command per call" in common,
+              and "into one turn" in common and "One plain command per call" in common,
               [p[-400:] for p in prompts[:1]])
 
     # 1b-api. the catalog nodes the profile names (`knowledge.read`) are in the prompt as paths; without the key the
@@ -2253,7 +2252,7 @@ def verify_runner(runner, verbose=False):
               len(prompts) == 2 and "The build stage sent the story back: " in prompts[1] and "build.md" in prompts[1]
               and "brief/every-stage.md" in prompts[1]
               and "*The build stage sent the story back*: `build.md` names a defect in a test's own code — the test "
-                  "stage repairs exactly that, without changing what the test asserts" in common,
+                  "stage repairs exactly that, without changing what it asserts" in common,
               prompts[-1][-260:] if prompts else "no test prompt recorded")
         code, output, starts, delivered, prompts, asked = buildback_run(shared=True)
         check("build sent back: a shared builder's `back: test` is a round from the test stage as well",

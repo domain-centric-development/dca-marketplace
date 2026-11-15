@@ -10,9 +10,8 @@ order: 6
 
 # STAGE-TEST-2D
 
-2d. **Every test starts from a state it sets itself.** A suite that shares one application and one store empties what
-   its tests write before each test — the base class does it, through the reset the profile's `reset:` names, the
-   end-user suite included. A test of a criterion above the unit level runs through the real input port, except at
-   the plan's `integration (adapter: …)` level; the test gate refuses the double (`tests-real`). The fixture's other
-   rules — values of its own, visible and minimal, a helper that asserts its arrangement succeeded — are the
-   testing craft's.
+2d. **Every test starts from a state it sets itself**: a suite sharing one app and store empties what its tests write
+   before each test — the base class does it through the profile's `reset:`, end-user suite included. Above unit level
+   a criterion's test runs through the real input port, except the plan's `integration (adapter: …)`; the gate refuses
+   the double (`tests-real`). Other fixture rules (own values, visible, minimal, a helper that asserts its arrangement
+   worked): the testing craft.

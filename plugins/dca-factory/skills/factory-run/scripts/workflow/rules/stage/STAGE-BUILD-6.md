@@ -10,7 +10,5 @@ order: 8
 
 # STAGE-BUILD-6
 
-6. In a repeat round, work only on what the gate or the judge confirmed. Do not take the
-   opportunity to refactor elsewhere. Where `judge.md` in the run folder says
-   `verdict: changes-requested`, fix exactly the confirmed defects that are this stage's — the code;
-   a test that asserts too little is the test stage's — nothing else.
+6. Repeat round: only what the gate or the judge confirmed, no refactoring elsewhere. `verdict: changes-requested` → fix
+   exactly this stage's confirmed defects (the code; a test asserting too little is the test stage's).

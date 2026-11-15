@@ -10,12 +10,4 @@ order: 19
 
 # STAGE-TEST-NOT3
 
-- Do not change what a test that existed before this story expects — unless the plan lists it
-  under `## Changed tests`. Change those to the story's new expectation; everywhere else add a
-  case and leave the old lines as they are. The gate compares every test file against the state
-  the plan gate recorded and refuses a changed or removed line the plan does not list and back —
-  except around the assertions: where a type the test builds gains a field, give the old call the
-  new argument and keep every assertion, its expected values and matchers as they were; where the story's
-  markup moved an element, a locator may find the same stable markers (`data-test`) on the new path, its
-  expected value and matcher unchanged. That is no changed expectation and needs no question.
-  A contradicting test the plan missed is a question (a decision record with `stage: test`).
+- Never change what an earlier test expects unless the plan lists and backs it under `## Changed tests` (`GATE-TESTS-KEPT`); elsewhere add a case. Allowed without a question: a new argument where a built type gains a field, a locator finding the same `data-test` marker on a moved path — assertions, expected values and matchers unchanged. A contradicting test the plan missed → decision record, `stage: test`.

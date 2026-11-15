@@ -8,5 +8,4 @@ order: 1
 
 # STAGE-COMMON-1
 
-A prompt that begins with *Carry out the … stage*, *Carry out these stages* or *Review the change*
-comes from the pipeline's runner. Then:
+A prompt beginning *Carry out the … stage*, *Carry out these stages* or *Review the change* comes from the runner. Then:

@@ -10,7 +10,6 @@ order: 6
 
 # STAGE-BUILD-4A
 
-4a. **A comment the change made wrong is rewritten in this story.** A comment or doc comment in a file
-   you touch that your change made wrong or too narrow — it names the one case where there are two now,
-   a mechanism the code no longer uses — says what holds after the change. A comment says what holds
-   in this file, not what a source the reader cannot see says (the plan, the story, another document).
+4a. A comment or doc comment in a touched file that your change made wrong or too narrow (names one case where there
+   are two, a mechanism no longer used) is rewritten to what holds now — in this file's terms, not a source the reader
+   cannot see (plan, story, another document).

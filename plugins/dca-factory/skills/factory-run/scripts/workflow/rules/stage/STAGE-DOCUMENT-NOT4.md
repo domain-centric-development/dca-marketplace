@@ -10,5 +10,4 @@ order: 10
 
 # STAGE-DOCUMENT-NOT4
 
-- Do not add a term to the glossary that the code does not use, and do not rename a term in the
-  code from here. Renaming is a story of its own.
+- No glossary term the code does not use; no renaming a code term from here — renaming is a story of its own.

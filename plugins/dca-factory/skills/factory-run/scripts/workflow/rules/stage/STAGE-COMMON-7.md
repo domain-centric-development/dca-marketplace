@@ -8,4 +8,4 @@ order: 7
 
 # STAGE-COMMON-7
 
-- A guard the prompt names is the profile's `carrier.guard` (*The guard beside the carrier*, below).
+- A guard in the prompt is the profile's `carrier.guard` (*The guard beside the carrier*).

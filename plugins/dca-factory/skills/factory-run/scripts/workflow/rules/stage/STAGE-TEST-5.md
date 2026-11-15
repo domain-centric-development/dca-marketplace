@@ -10,6 +10,5 @@ order: 10
 
 # STAGE-TEST-5
 
-5. **Never** write a criterion key or number into a test name, display name, comment or documentation. The link
-   between criterion and test lives in the tests table and nowhere else — one place the gate reads; a key in a name
-   drifts when the story is renumbered. A test is named after the behaviour it proves (the testing craft).
+5. **Never** a criterion key or number in a test name, display name, comment or doc — the tests table is the one link
+   the gate reads; a key in a name drifts on renumbering. Name the test after the behaviour it proves.

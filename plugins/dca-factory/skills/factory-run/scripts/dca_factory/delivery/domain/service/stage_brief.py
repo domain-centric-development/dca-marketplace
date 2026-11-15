@@ -89,7 +89,7 @@ class StageBrief(DomainService):
             raise ValueError(f"the workflow has no stage {stage.value}")
         if kind not in found.kinds:
             raise ValueError(f"a {kind.value} story does not run the {stage.value} stage")
-        held = {r.id: r for r in rules if r.part is RulePart.TOLD and r.retired is None and r.told is not None
+        held = {r.id: r for r in rules if r.part is RulePart.TOLD and r.in_force and r.told is not None
                 and holds(r, stage, kind)}
         placed = {r.id for r in rules if r.part is RulePart.TOLD}
         framed = [expanded(frame, held, placed) if frame is not None else None
@@ -110,7 +110,7 @@ class StageBrief(DomainService):
                 order += [r.id for r in rules_of]
         by_id = {r.id: r for r in rules}
         measured = [by_id[rule_id] for rule_id in measured_by if rule_id in by_id
-                    and by_id[rule_id].retired is None and holds(by_id[rule_id], stage, kind)]
+                    and by_id[rule_id].in_force and holds(by_id[rule_id], stage, kind)]
         return Brief(stage, kind, found.about, found.hand_over, found.window,
                      StageText("\n\n".join(p for p in common if p.strip())),
                      StageText("\n\n".join(p for p in own if p.strip())),
@@ -123,7 +123,7 @@ class StageBrief(DomainService):
     def told_to(self, process: ProcessName, rules: typing.Sequence[WorkflowRule]) -> StageText:
         """What a process beside the stages is told — the reviewers: the told rules that name it, and nothing else of
         what every stage is told; the rest is the stages' and never reaches it."""
-        held = sorted((r for r in rules if r.part is RulePart.TOLD and r.retired is None and r.told is not None
+        held = sorted((r for r in rules if r.part is RulePart.TOLD and r.in_force and r.told is not None
                        and process in r.processes),
                       key=lambda r: (r.order.value if r.order else 0, r.id.value))
         return StageText("\n\n".join(rest_text(r).value for r in held))
@@ -131,7 +131,7 @@ class StageBrief(DomainService):
     def every_stage(self, rules: typing.Sequence[WorkflowRule]) -> StageText:
         """What every stage is told, for a session that works no stage — a request: every stage's frame with the told
         rules of <rules> that name no stage and no kind, then those no frame places."""
-        held = {r.id: r for r in rules if r.part is RulePart.TOLD and r.retired is None and r.told is not None
+        held = {r.id: r for r in rules if r.part is RulePart.TOLD and r.in_force and r.told is not None
                 and not r.stages and not r.kinds}
         placed = {r.id for r in rules if r.part is RulePart.TOLD}
         frame = self._workflow.every_stage

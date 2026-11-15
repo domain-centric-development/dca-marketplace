@@ -8,4 +8,4 @@ order: 14
 
 # STAGE-COMMON-14
 
-- Stop at once when a stage ends in a `## needs-human` section.
+- A stage ends in `## needs-human` → stop at once.

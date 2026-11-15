@@ -8,6 +8,5 @@ order: 9
 
 # STAGE-COMMON-9
 
-A prompt that says *Carry out these stages* names them in order. Apply each stage's skill in turn, in
-this one session, reading only the story and the files that stage's skill names as its input, and
-writing its output file in the run folder. Run only the stages the prompt names.
+*Carry out these stages*: each named stage in order, in this session, reading only the story and that stage's inputs,
+writing its output in the run folder. No other stage.

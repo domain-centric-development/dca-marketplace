@@ -10,17 +10,14 @@ order: 9
 
 # STAGE-PLAN-8A
 
-8a. **Name the invariants of every domain type you change.** For each aggregate, entity, value object and
-   domain service in `## Changes`: the rules it must never break — what the criteria imply and the guards
-   its type implies (a value that is required, trimmed, within a range, unique in its aggregate). One line
-   each under `## Invariants`, the rules separated by `;` — each rule gets its own unit test, so one rule
-   is one thing the type refuses or keeps; a type without rules of its own says `none — <why>`. A value
-   object built from input — a field a request, a form or a message fills — names its refusal of a missing
-   value as one of its rules, with the failure its rule names (a missing title refused like an empty one);
-   a value only code passes needs no such line. The test stage writes a
-   unit test for every rule named here, and the build writes no guard that is not named: a check nobody
-   planned is code no test asked for. The test gate refuses a changed domain type without its line, and the
-   build gate refuses one the story's change touched that the plan never named (`invariants-cover`) — so name
-   also the type the build will only reach, a new way to make an identifier from a request among them. A type the
-   build reaches after all gets its line under `## Invariants` in build.md, never a change to the plan once the
-   tests are written.
+8a. **Name the invariants of every domain type you change** — each aggregate, entity, value object and domain service
+   in `## Changes`: the rules it must never break (from the criteria, and its guards: required, trimmed, in range,
+   unique in its aggregate). One line each under `## Invariants`, rules separated by `;`; one rule = one thing the type
+   refuses or keeps = one unit test. No rules → `none — <why>`.
+   - A value object built from input (a field a request, form or message fills) names refusing a missing value as a
+     rule, with its failure (a missing title refused like an empty one). A value only code passes needs none.
+   - The build writes no guard not named here: an unplanned check is code no test asked for.
+   - Name also the types the build will only reach (a new way to make an identifier from a request among them): the
+     test gate refuses a changed domain type without its line, the build gate one the change touched that the plan
+     never named (`invariants-cover`). One the build reaches after all gets its line in build.md, never a plan change
+     once tests are written.

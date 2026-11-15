@@ -7,7 +7,7 @@ import dataclasses
 import typing
 
 from ...building_blocks import UseCase
-from ..domain.model.rule import KindName, Rule, StageName, Words
+from ..domain.model.rule import KindName, Rule, RuleState, StageName, Words
 from ..domain.model.rulebook import FlowEdge, FlowGraph, FlowStep, Rulebook
 from ..domain.model.runs import Journals, ProjectRefusals, StoryRun, story_run
 from ..domain.model.track import TileTurn, Track
@@ -129,7 +129,11 @@ class ShowRulebookUseCase(ShowRulebookInputPort):
             stages=[dict(name=row.name.value, about=row.about.value, source=row.source.value) for row in book.rows
                     if stage is None or row.name == stage],
             rules=[rule_model(r) for r in chosen],
-            retired=[rule_model(r) for r in book.rules if r not in book.active()],
+            retired=[rule_model(r) for r in book.rules if r.state is RuleState.RETIRED],
+            disabled=[dict(rule_model(r), disabled=r.disabled.value,
+                           delivered_since=journals.delivered_since(r.disabled_since).value)
+                      for r in book.rules if r.state is RuleState.DISABLED],
+            delete_after=self._journals.delete_after().value,
             flow={k.value: dict(every_gate=ids(book.at_every_gate(k)),
                                 edges=[dict(source=e.source.value, target=e.target.value, rule=e.rule.value,
                                             state=e.state.value) for e in book.edges(k)],

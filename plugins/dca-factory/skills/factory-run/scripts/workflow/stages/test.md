@@ -26,16 +26,12 @@ Writes a test per criterion at the level the plan gives it, plus unit tests for 
 
 <!-- frame: what the stage is told, each rule by its marker -->
 
-First read what every stage is told — a session the runner started, one session that carries
-several stages, a repeat round, the shell, the gate. The runner's prompt names its file and this
-brief repeats none of it.
+Read what every stage is told first (its file: in the prompt).
 
-Input: the story, `.dca-factory/runs/<story>/plan.md`, and the `## Qualities` and `## Look and feel` of the
-product description (`product/overview.md`, or where the profile's `product:` points) where the plan
-says a criterion touches them. Nothing else. Open the files the plan's
-`## Files` names first — the pattern to mirror, the fixture to reuse; search only for the rest.
-Output: the test sources, plus `.dca-factory/runs/<story>/tests.md` with a `## Files` section naming the test
-files written. You write **no** production behaviour.
+Input, nothing else: the story, `.dca-factory/runs/<story>/plan.md`, and `## Qualities` / `## Look and feel` of
+`product/overview.md` (or `product:`) where the plan says a criterion touches them. Open the plan's `## Files` first;
+search only for the rest.
+Output: the test sources and `.dca-factory/runs/<story>/tests.md`. **No** production behaviour.
 
 ## Do
 
@@ -56,15 +52,11 @@ files written. You write **no** production behaviour.
 
 ## Ask, do not recall
 
-Where the profile names `knowledge: <skill>`, ask it instead of your recollection whenever an
-answer would decide something, and cite the node by its path inside the catalog; never adopt a
-knowledge source the profile did not name. The rule in full: in what every stage is told.
+`knowledge: <skill>` in the profile: ask it, cite the node path; never a source the profile does not name.
 
 ## Who carries this stage
 
-`carrier.test: <name>` in the stack profile names the skill or agent that holds this project's craft
-for it; use it where this tool offers it, otherwise do the stage as described here and say so in
-your file. The rule in full: in what every stage is told.
+`carrier.test: <name>`: use that skill or agent; none in this tool → do the stage as written here and say so in your file.
 
 ## The tests file
 
@@ -98,32 +90,23 @@ nothing else from the file:
 - uncovered: <criterion key> — <why no test was possible>   (only when unavoidable)
 ```
 
-What each test fails on is not written here: the gate's red run records it, assertion by assertion.
-
-`## Clauses` (contract 15) holds every expectation of every scenario — its `Then` and each `And` after it — with the
-line that asserts it, in a test mapped to that criterion, and the level the assertion runs at. Fill it in after the
-tests are written and formatted: the test gate refuses a clause without a line, a line where nothing is asserted, and
-a clause about what is stored at the `adapter` level. A scenario whose third `And` has no row is the test that
-forgot it — write the assertion, then the row.
-
-The `## Files` list is the pipeline's to write: run `factory-cli.py --files-skeleton <story> test` when your
-changes are done — it creates the file with every changed file listed, or adds the missing paths to a file you
-wrote first. Fill in the other sections — the `gate:tests` table first of all — **then** run the gate; never type
-the list yourself, the gate compares it with the tree. A gate run on the bare skeleton refuses on the empty
-table and costs a suite run for nothing.
-
-One row per criterion, at least. A criterion you could not turn into a test is named explicitly
-under `uncovered` — never left silently missing, because the build gate can only fail on what a
-test covers.
+- The gate's red run records what each test fails on; do not write it here.
+- `## Clauses`: every `Then` and each `And` after it, with the asserting line in a test mapped to that criterion and
+  its level. Fill after the tests are written and formatted. Refused: a clause without a line, a line asserting
+  nothing, a stored-state clause at `adapter` level. A missing `And` row = a missing assertion: write it, then the row.
+- `## Files`: when your changes are done run `factory-cli.py --files-skeleton <story> test` (creates the file or adds
+  missing paths); never type the list. Fill `gate:tests` first, **then** run the gate — a bare skeleton is refused
+  and wastes a suite run.
+- At least one row per criterion. A criterion without a test goes under `uncovered`, never silently missing: the
+  build gate fails only on what a test covers.
 
 ## A round sent back to this stage
 
 <!-- rule: STAGE-TEST-ROUND -->
 
-When the prompt says the story's tests changed after this stage saw them fail — the main line was merged into
-the story's branch — record each test it names as it now is: what it asserts stays the story's, so change
-nothing in it. Where the code already meets it, it is green and gets its break the same way; where it is still
-red, the gate records the red run. Ask nobody about it.
+Prompt says the story's tests changed after this stage saw them fail (main merged into the branch): record each
+named test as it now is, change nothing in it. Green → it gets its break; still red → the gate records the red run.
+Ask nobody.
 
 ## Adopt mode
 

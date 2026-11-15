@@ -10,6 +10,6 @@ order: 9
 
 # STAGE-TEST-4
 
-4. Place tests where this project places tests — its source set, folder, naming, base classes, test data builders —
-   and call the helper, page object or context setup it has before writing one (the testing craft, section 0). The
-   test support is yours to change; the tests that existed before keep what they assert.
+4. Place tests as the project does (source set, folder, naming, base classes, builders); use its existing helper, page
+   object or context setup before writing one (testing craft, section 0). Test support is yours to change; earlier tests
+   keep what they assert.

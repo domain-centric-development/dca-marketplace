@@ -12,12 +12,8 @@ order: 19
 
 # STAGE-PLAN-ADOPT
 
-A story with `status: adopted` describes behaviour the project already has; nothing is built. The plan
-restates its scenarios with their keys and, for each, names **where the behaviour lives** (file and line)
-and **which existing test covers it** (file, class, method) — or that none does. It plans no change to
-production code and no change to an existing test. A scenario the code does not show at all is not
-adoptable: stop with a `## needs-human` — the story describes behaviour the system does not have.
-Step 8a applies to what the scenarios exercise instead of what changes: under `## Invariants`, one line per
-aggregate, entity, value object and domain service the adopted behaviour runs through, with the rules it
-enforces today, its guards included (`- <Element>: <rule>; <rule>`, or `- <Element>: none — <why>`); where the
-scenarios exercise no domain type, one line `- none — <why>`. The test gate refuses an adoption without a line.
+`status: adopted`: the behaviour exists; nothing is built. Per scenario, with its key: **where it lives** (file, line)
+and **which existing test covers it** (file, class, method) — or none. No production or test change. A scenario the
+code does not show → `## needs-human`: not adoptable. Step 8a covers what the scenarios exercise: one `## Invariants`
+line per domain type the behaviour runs through, with today's rules and guards (`- <Element>: <rule>; <rule>` or
+`- <Element>: none — <why>`); no domain type → `- none — <why>`. The test gate refuses an adoption without a line.

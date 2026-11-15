@@ -64,6 +64,8 @@ class RuleState(enum.Enum):
 
     ACTIVE = "active"
     RETIRED = "retired"
+    #: switched off, not deleted: no brief tells it, no gate runs its check; one line turns it on again
+    DISABLED = "disabled"
 
 
 class Words(Value):
@@ -133,6 +135,13 @@ class Rule(Value):
     title: Words = Words("")
     #: where it starts the run anew, and on what; none for a rule that restarts nothing
     restart: typing.Optional[Restart] = None
+    #: a disabled rule's `disabled:` — since when (its first ten characters, YYYY-MM-DD) and why
+    disabled: Words = Words("")
+
+    @property
+    def disabled_since(self) -> Moment:
+        """The day a disabled rule was switched off, YYYY-MM-DD; empty for one that is not."""
+        return Moment(self.disabled.value[:10] if self.state is RuleState.DISABLED else "")
 
     @property
     def enforcement(self) -> Enforcement:

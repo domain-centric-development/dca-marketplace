@@ -10,5 +10,5 @@ order: 6
 
 # STAGE-JUDGE-5
 
-5. Discard style preferences, speculative concerns and anything you cannot point at in the code.
-   Every remaining finding names a file, a line and the fix.
+5. Discard style preferences, speculative concerns and anything you cannot point at in the code. Each remaining finding
+   names file, line and fix.

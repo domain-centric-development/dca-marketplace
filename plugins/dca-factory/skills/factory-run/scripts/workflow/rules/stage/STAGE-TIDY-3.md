@@ -10,6 +10,5 @@ order: 3
 
 # STAGE-TIDY-3
 
-3. Change no behaviour. Nothing removed that a criterion needs, nothing added that meets a
-   criterion the build stage did not meet, no error message a caller can see reworded unless a
-   criterion names it. If a change would be visible to a caller, it is not tidying.
+3. Change no behaviour: nothing removed a criterion needs, nothing added meeting a criterion the build did not, no
+   caller-visible message reworded unless a criterion names it. Visible to a caller → not tidying.

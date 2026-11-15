@@ -10,9 +10,4 @@ order: 11
 
 # STAGE-BUILD-NOT1
 
-- Do not change a test to make it pass. **A test that cannot pass because of its own code** — a
-  helper, a locator, a fixture, a page object that can never find what the page renders — while what
-  it asserts stays exactly as it is, is not yours to repair and not a human's to decide: write the
-  finding in `build.md` (the test, the line, why it cannot pass, and how you showed that the code
-  meets the scenario) and a line `back: test` on its own; the round goes to the test stage, which
-  repairs the test and proves with a break that it still bites.
+- Never change a test to make it pass (`GATE-TESTS-KEPT`, `GATE-RED-PROOF`); a test unable to pass because of its own code (helper, locator, fixture, page object) while its assertion stays right → finding in build.md (test, line, why, how you showed the code meets the scenario) and a line `back: test` — the test stage repairs it.

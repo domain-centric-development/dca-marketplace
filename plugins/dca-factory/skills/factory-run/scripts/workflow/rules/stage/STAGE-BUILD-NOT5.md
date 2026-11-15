@@ -10,7 +10,4 @@ order: 15
 
 # STAGE-BUILD-NOT5
 
-- Do not ask a person, in a round, about a defect the judge ranked minor. A round repairs what sent the story
-  back — the blockers and the majors; a minor stays in the findings and is shown at the acceptance. Where a
-  minor would need a product decision, say so in your file beside it; the gate refuses a question of the round
-  that cites only minors (`minor-question`).
+- In a round, never ask a person about a minor — repair blockers and majors; a minor needing a product decision is said beside it in your file (`GATE-MINOR-QUESTION`).

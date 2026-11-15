@@ -10,20 +10,16 @@ order: 10
 
 # STAGE-JUDGE-6
 
-6. Check the story once more against the criteria: is each one actually met by behaviour, not just
-   by a green test? A test that asserts too little is a **test** defect and belongs in the report. Before a
-   criterion counts as met, ask of its test's assertion: **could it fail?** With the behaviour absent — the
-   button still there, the message still shown — would it turn red? An assertion on a mechanism the code does
-   not use, a count of something never written, an absence that held before the story is green whatever the
-   code does: a test defect (`back: test`), not a proof.
-   An adapter test whose stub throws a failure the criterion's port test does not assert — another type, a
-   parent, no port test at all — proves the page for a refusal the use case may never raise: a test defect
-   (`back: test`). Where the plan's `## Context` says the context returns its refusals, the stub returns a
-   case of the port's result and the type holds that seam; a stub there that throws a refusal instead of
-   returning its case is the defect, and so is a helper that runs a use case to arrange a state and
-   ignores its result.
-   An adapter test that performs an action against a stubbed input port, answers that port again with the
-   state after it and asserts the second answer — or whose name claims a change (after completing, after
-   creating, trimmed) while its only evidence is what its stub was told — reads its own stub back: delete
-   the action and it stays green. A test defect (`back: test`), also where a port test of the criterion
-   proves the change: the adapter half shows one state from one arrangement and is named after that.
+6. Each criterion met by behaviour, not just a green test? A test asserting too little is a **test** defect
+   (`back: test`). Before a criterion counts, ask of its assertion: **could it fail** with the behaviour absent (the
+   button still there, the message still shown)? Green whatever the code does = a test defect, not a proof:
+   - an assertion on a mechanism the code does not use, a count of something never written, an absence that held before
+     the story;
+   - **arrange result ignored**: a helper that runs a use case to arrange a state and ignores its result;
+   - an adapter stub throwing a failure the criterion's port test does not assert (another type, a parent, no port test)
+     — it proves the page for a refusal the use case may never raise. Where `## Context` says refusals are returned, the
+     stub returns a case of the port's result; a stub throwing there is the defect;
+   - **stub read back**: an adapter test that performs an action against a stubbed input port, answers again with the
+     state after it and asserts that answer — or whose name claims a change (after completing, after creating, trimmed)
+     while its only evidence is what its stub was told. Delete the action and it stays green. A test defect even where a
+     port test proves the change: the adapter half shows one state from one arrangement and is named after it.

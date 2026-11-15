@@ -10,4 +10,4 @@ order: 14
 
 # STAGE-TEST-9
 
-9. `formatFix:` runs last, before you finish (what every stage is told).
+9. `formatFix:` runs last (`GATE-COMMANDS`).

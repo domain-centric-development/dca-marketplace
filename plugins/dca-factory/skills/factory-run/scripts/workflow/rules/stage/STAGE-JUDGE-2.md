@@ -10,6 +10,5 @@ order: 2
 
 # STAGE-JUDGE-2
 
-A **carrier** is whatever this tool can actually run under that name: a review skill (portable —
-every tool reads skills) or, in a tool that has separate review agents, such an agent. Resolve each
-perspective in this order:
+A **carrier** is what this tool can run under that name: a review skill (every tool) or a review agent (where the tool
+has them). Resolve each perspective in this order:

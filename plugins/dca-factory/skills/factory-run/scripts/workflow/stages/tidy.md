@@ -28,20 +28,14 @@ The refactor step the build stage skips, taken with every test green and without
 
 <!-- frame: what the stage is told, each rule by its marker -->
 
-First read what every stage is told — a session the runner started, one session that carries
-several stages, a repeat round, the shell, the gate. The runner's prompt names its file and this
-brief repeats none of it.
+Read what every stage is told first (its file: in the prompt).
 
-Input: the story, `.dca-factory/runs/<story>/plan.md`, `.dca-factory/runs/<story>/build.md`, and the code as the build
-stage left it — green: the files `.dca-factory/evidence/<story>/changed.txt` lists, which the pipeline
-recorded from the working tree. Nothing else. Every file you change is a row under `## Moves`; the
-gate checks the table against what changed.
-Output: the tidied code, plus `.dca-factory/runs/<story>/tidy.md`.
+Input, nothing else: the story, `plan.md`, `build.md`, and the green code the build left — the files
+`.dca-factory/evidence/<story>/changed.txt` lists. Every file you change is a row under `## Moves` (the gate checks).
+Output: the tidied code and `.dca-factory/runs/<story>/tidy.md`.
 
-The build stage answers the criteria with the smallest change that works, which is the right thing
-for it to do and leaves the second half of red–green–refactor undone. This stage is that half. It
-is the only stage that may improve code without a criterion asking for it, and the price of that
-freedom is that it may not change what the code *does*.
+The refactor half of red–green–refactor: the only stage that improves code no criterion asks for — and it may not
+change what the code *does*.
 
 ## Do
 
@@ -57,12 +51,9 @@ freedom is that it may not change what the code *does*.
 
 ## Who carries this stage
 
-`carrier.tidy: <name>` in the stack profile names the skill or agent that holds this project's craft
-for it; use it where this tool offers it, otherwise do the stage as described here and say so in
-your file. `carrier.guard: <name>` names the skill that holds the architecture's invariants while
-you edit — apply it to every file you write, the same way; `carrier.frontend: <name>` the skill that holds
-the frontend craft — apply it to every page, template, stylesheet and client script.
-The rule in full: in what every stage is told.
+`carrier.tidy: <name>`: use that skill or agent; none in this tool → do the stage as written here and say so in your
+file. `carrier.guard:` applies to every file you write; `carrier.frontend:` to every page, template, stylesheet and
+client script.
 
 ## The tidy file
 
@@ -82,12 +73,8 @@ decision: <story>-<nn>
 contradiction: <what cannot all hold>
 ```
 
-The gate's outcome is not recorded here: its report is the evidence, and a stage edits no hand-over
-after the gate ran.
-
-Where you changed nothing, say so and why: a green build that was already clean is a finished
-stage, not a skipped one. An empty `## Moves` with a reason is a better outcome than a move made
-to have made one.
+No gate outcome here; no hand-over edited after the gate ran. Nothing to improve → empty `## Moves` with the reason:
+a finished stage, better than a move made to have made one.
 
 ## Do not
 

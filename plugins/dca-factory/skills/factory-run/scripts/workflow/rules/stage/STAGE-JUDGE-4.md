@@ -10,5 +10,5 @@ order: 4
 
 # STAGE-JUDGE-4
 
-4. Deduplicate findings that describe the same defect and drop anything the project's own rule
-   suite already enforces — a rule catches it every run, a review comment does not.
+4. Deduplicate findings of the same defect; drop what the project's rule suite enforces — a rule catches it every run, a
+   comment does not.

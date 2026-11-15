@@ -23,18 +23,14 @@ The story on the main line as it is now: everything the tidy gate holds the stor
 
 <!-- frame: what the stage is told, each rule by its marker -->
 
-First read what every stage is told — a session the runner started, one session that carries
-several stages, a repeat round, the shell, the gate. The runner's prompt names its file and this
-brief repeats none of it.
+Read what every stage is told first (its file: in the prompt).
 
-Input: the story, `.dca-factory/runs/<story>/plan.md`, `.dca-factory/evidence/<story>/conflicts` — the files git
-could not merge — and the two sides as git shows them (`git diff`, `git log`). Nothing else.
-Output: the conflicted files with every conflict resolved, plus `.dca-factory/runs/<story>/integrate.md`.
+Input, nothing else: the story, `plan.md`, `.dca-factory/evidence/<story>/conflicts` (files git could not merge),
+both sides via `git diff` / `git log`.
+Output: every conflict resolved, and `.dca-factory/runs/<story>/integrate.md`.
 
-Every story runs in a worktree of its own and reaches the main line only when it is integrated: the runner
-merges the main line into the story's branch and squashes the story to one commit. Most merges need no hand.
-Where two stories changed the same lines — the same glossary section, the same aggregate, the same page — git
-stops and names the files. This step makes both changes true; it is not a choice between them.
+The runner merged the main line into the story's branch; git stopped where two stories changed the same lines.
+Make both changes true — never pick one.
 
 ## Do
 
@@ -55,7 +51,7 @@ stops and names the files. This step makes both changes true; it is not a choice
 |---|---|---|---|
 ```
 
-One row per conflicted file. The gate's outcome is not recorded here: its report is the evidence.
+One row per conflicted file. No gate outcome here.
 
 ## Do not
 
