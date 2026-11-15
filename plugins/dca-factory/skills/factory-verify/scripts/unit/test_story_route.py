@@ -348,6 +348,12 @@ class Stages:
     def verdict(self, story):
         return judged_of(self.verdicts.pop(0) if len(self.verdicts) > 1 else self.verdicts[0])
 
+    def judge_rows(self, story):
+        return ()
+
+    def keep_judged(self, story):
+        pass
+
     def back(self, story):
         return None
 

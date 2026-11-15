@@ -6857,18 +6857,34 @@ def run_groups(args):
               extra_sources=((".dca-factory/runs/STORY-1/judge.md", "## Verdict\nverdict: pass\n\n## Confirmed defects\n"
                               "| Perspective | File:line | Severity | In plain words | Defect | Fix |\n|---|---|---|---|---|---|\n"
                               "| clean-code | src/main/Thing.java:3 | minor | the page checks the step twice | repeats `Page`'s guard (`:3`–`:9`) | call the guard once |\n"),),
-              after=lambda root: [] if "| 1 | clean-code | src/main/Thing.java:3 | minor | the page checks the step twice | "
+              after=lambda root: [] if "| 1 | clean-code | src/main/Thing.java:3 | minor |  |  | the page checks the step twice | "
               "repeats `Page`'s guard (`:3`–`:9`) | call the guard once | open |" in open(
                   os.path.join(root, "product/epics/sample/STORY-1/findings.md"), encoding="utf-8").read()
-              and "| # | Perspective | File:line | Severity | In plain words | Defect | Fix | Status |" in open(
+              and "| # | Perspective | File:line | Severity | Origin | Outcome | In plain words | Defect | Fix | Status |" in open(
                   os.path.join(root, "product/epics/sample/STORY-1/findings.md"), encoding="utf-8").read()
-              else ["findings.md has no eight-column row with the plain sentence after Severity"])),
+              else ["findings.md has no row with the plain sentence after Severity, Origin and Outcome"])),
+        # WP-208: a finding's origin is computed from the story's diff; the verdict is weighed by its rows
+        (Case("story-pass: a judge's pass with a major on a line the story added is no pass", "document", 1,
+              must_fail=("story-pass",), text=("major at src/main/Thing.java:2",)),
+         dict(green=both_green, ledger=both_green, document=DOCUMENT,
+              extra_sources=((".dca-factory/evidence/STORY-1/story.diff", "diff --git a/src/main/Thing.java b/src/main/Thing.java\n--- a/src/main/Thing.java\n+++ b/src/main/Thing.java\n@@ -1,2 +1,4 @@\n class Thing {\n+  int a;\n+  int b;\n }\n"), (".dca-factory/runs/STORY-1/judge.md", "## Verdict\nverdict: pass\n\n## Confirmed defects\n| Perspective | File:line | Severity | In plain words | Defect | Fix |\n|---|---|---|---|---|---|\n| ddd | src/main/Thing.java:2 | major | the thing guards nothing | no guard | add the guard |\n")))),
+        (Case("story-pass: changes-requested whose only major lies on code the story did not write is delivered, the row "
+              "kept as pre-existing", "document", 0, must_pass=("delivered",)),
+         dict(green=both_green, ledger=both_green, document=DOCUMENT,
+              extra_sources=((".dca-factory/evidence/STORY-1/story.diff", "diff --git a/src/main/Thing.java b/src/main/Thing.java\n--- a/src/main/Thing.java\n+++ b/src/main/Thing.java\n@@ -1,2 +1,4 @@\n class Thing {\n+  int a;\n+  int b;\n }\n"), (".dca-factory/runs/STORY-1/judge.md", "## Verdict\nverdict: changes-requested\n\n## Confirmed defects\n| Perspective | File:line | Severity | In plain words | Defect | Fix |\n|---|---|---|---|---|---|\n| ddd | src/main/Thing.java:40 | major | the thing guards nothing | no guard | add the guard |\n")),
+              after=lambda root: [] if "| src/main/Thing.java:40 | major | pre-existing |" in open(
+                  os.path.join(root, "product/epics/sample/STORY-1/findings.md"), encoding="utf-8").read()
+              else ["findings.md has no pre-existing major row"])),
+        (Case("story-pass: changes-requested with a major the story introduced still delivers nothing", "document", 1,
+              must_fail=("story-pass",)),
+         dict(green=both_green, ledger=both_green, document=DOCUMENT,
+              extra_sources=((".dca-factory/evidence/STORY-1/story.diff", "diff --git a/src/main/Thing.java b/src/main/Thing.java\n--- a/src/main/Thing.java\n+++ b/src/main/Thing.java\n@@ -1,2 +1,4 @@\n class Thing {\n+  int a;\n+  int b;\n }\n"), (".dca-factory/runs/STORY-1/judge.md", "## Verdict\nverdict: changes-requested\n\n## Confirmed defects\n| Perspective | File:line | Severity | In plain words | Defect | Fix |\n|---|---|---|---|---|---|\n| ddd | src/main/Thing.java:3 | major | the thing guards nothing | no guard | add the guard |\n")))),
         (Case("document: a judge table from before contract 23 is still kept, its rows noted for the missing sentence",
               "document", 0, must_pass=("delivered", "findings"),
               text=("2 confirmed finding(s) kept in", "gate:note findings — 2 confirmed defect(s) in judge.md without `In plain words`")),
          dict(green=both_green, ledger=both_green, document=DOCUMENT,
               extra_sources=((".dca-factory/runs/STORY-1/judge.md", "## Verdict\nverdict: pass\n\n## Confirmed defects\n| Perspective | File:line | Severity | Defect | Fix |\n|---|---|---|---|---|\n| clean-code | src/main/Thing.java:3 | minor | a name that says nothing | rename it |\n| ddd | src/main/Thing.java:9 | minor | an event in the present tense | past tense |\n"),),
-              after=lambda root: [] if "| 2 | ddd | src/main/Thing.java:9 | minor |  | an event in the present tense | past tense | open |"
+              after=lambda root: [] if "| 2 | ddd | src/main/Thing.java:9 | minor |  |  |  | an event in the present tense | past tense | open |"
               in open(os.path.join(root, "product/epics/sample/STORY-1/findings.md"), encoding="utf-8").read()
               else ["an old judge row is not kept with an empty plain-words cell"])),
         (Case("document: a findings.md from before contract 23 is widened when a row is added — its rows kept, one table",
@@ -6882,9 +6898,9 @@ def run_groups(args):
                               "| Perspective | File:line | Severity | In plain words | Defect | Fix |\n|---|---|---|---|---|---|\n"
                               "| hexagonal | src/main/Thing.java:5 | minor | the shop asks the database from the page | adapter call in the controller | go through the port |\n")),
               after=lambda root: (lambda text: [] if
-                                  "| # | Perspective | File:line | Severity | In plain words | Defect | Fix | Status |\n|---|---|---|---|---|---|---|---|\n"
-                                  "| 1 | ddd | src/main/Old.java:1 | minor |  | an old defect | old fix | open |\n"
-                                  "| 2 | hexagonal | src/main/Thing.java:5 | minor | the shop asks the database from the page | "
+                                  "| # | Perspective | File:line | Severity | Origin | Outcome | In plain words | Defect | Fix | Status |\n|---|---|---|---|---|---|---|---|---|---|\n"
+                                  "| 1 | ddd | src/main/Old.java:1 | minor | introduced |  |  | an old defect | old fix | open |\n"
+                                  "| 2 | hexagonal | src/main/Thing.java:5 | minor |  |  | the shop asks the database from the page | "
                                   "adapter call in the controller | go through the port | open |" in text
                                   else [text[-500:]])(open(os.path.join(root, "product/epics/sample/STORY-1/findings.md"),
                                                            encoding="utf-8").read()))),

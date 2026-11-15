@@ -15,6 +15,7 @@ from ..model.story import Story
 from ..model.plan_facts import PlannedDigest
 from ..model.profile_facts import ContractNumber
 from ..model.verdict import CheckName, Findings, Said
+from ..model.judge_rows import pass_contradicted, weighed
 
 STORY_PASS = CheckName("story-pass")
 OUTCOME = CheckName("outcome")
@@ -56,7 +57,14 @@ class DeliveryChecks(DomainService):
             return StoryPassChecked((STORY_PASS.fail(Said(
                 f"{gaps} — the document gate delivers a story whose stages all ran, in order, in this pass; the story "
                 f"runs on from the first of them")),), False)
-        if facts.verdict is not Judged.PASS:
+        contradicted = pass_contradicted(facts.verdict, facts.rows)
+        if contradicted:
+            return StoryPassChecked((STORY_PASS.fail(Said(
+                f"{judge.value if judge else 'judge.md'} says `verdict: pass`, but confirms blocking defects on lines the "
+                f"story added or changed: " + "; ".join(f"{r.severity.value} at {r.where.value}" for r in contradicted)
+                + " — a blocking defect the story introduced is no pass; the judge weighs its rows again")),), False)
+        verdict = weighed(facts.verdict, facts.rows)
+        if verdict is not Judged.PASS:
             said = "none" if facts.verdict is Judged.MISSING else facts.verdict.value
             return StoryPassChecked((STORY_PASS.fail(Said(
                 f"{judge.value if judge else 'judge.md'} says `verdict: {said}` — only a judge's `pass` "

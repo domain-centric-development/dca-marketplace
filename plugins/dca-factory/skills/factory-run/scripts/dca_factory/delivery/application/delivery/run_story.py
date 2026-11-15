@@ -12,6 +12,7 @@ from ...domain.model.jump import Jumped, Next, RestartReason, Restarted, RuleId,
 from ...domain.model.stage import Role, StageName, StoryKind, Trait, Window
 from ...domain.model.refusal_history import Repetition
 from ...domain.model.route import Around, Move
+from ...domain.model.judge_rows import weighed
 from ...domain.model.story_state import Judged, Rounds
 from ..shared.run_lines import RunLines
 from ..shared.run_outcome import GateOutcome, RunOutcome
@@ -314,14 +315,20 @@ class RunStoryUseCase(RunStoryInputPort):
     @decides("RUN-VERDICT-1")
     def _judged(self, story: str, kind: StoryKind) -> typing.Optional[Ended]:
         """The judge's verdict decides what comes next — read from its file, never assumed. None to go on."""
-        judged = self._journal.verdict(story)
+        written = self._journal.verdict(story)
         judge = self._journal.artefact(story, role_of(Role.JUDGES).value)
+        judged = weighed(written, self._journal.judge_rows(story)) if written is Judged.AGAIN else written
+        if written is Judged.AGAIN and judged is Judged.PASS:
+            self._lines.out("factory: judge verdict 'changes-requested', but no blocking row lies on what the story "
+                            "wrote or this round changed — recorded in the story's findings, no round: it goes on as a "
+                            "pass.")
         if judged is Judged.PASS:
             self._lines.out("factory: judge verdict 'pass'.")
             # how strong the story's tests are, read after the judge — a measure, never a gate (WP-190 A)
             self._steps.measure_mutation(story)
             return None
         if judged is Judged.AGAIN:
+            self._journal.keep_judged(story)
             rounds = self._round(story, "judge verdict 'changes-requested'")
             if rounds is None:
                 return RunOutcome.FAILED

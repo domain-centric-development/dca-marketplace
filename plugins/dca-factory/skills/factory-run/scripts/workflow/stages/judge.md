@@ -113,6 +113,7 @@ Then converge:
 <!-- rule: STAGE-JUDGE-5A -->
 <!-- rule: STAGE-JUDGE-5B -->
 <!-- rule: STAGE-JUDGE-6 -->
+<!-- rule: STAGE-JUDGE-6A -->
 
 ## Ask, do not recall
 

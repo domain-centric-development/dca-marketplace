@@ -9,6 +9,7 @@ from ....building_blocks import Store
 from ...domain.model.jump import Jumped, Restarted
 from ...domain.model.refusal_history import RefusalHistory
 from ...domain.model.stage import StageName, StoryKind
+from ...domain.model.judge_rows import JudgeRow
 from ...domain.model.story_state import GateReport, Judged, Rounds
 
 
@@ -76,6 +77,14 @@ class StoryRunJournal(Store, typing.Protocol):
         ...
 
     def verdict(self, story: str) -> Judged:
+        ...
+
+    def judge_rows(self, story: str) -> typing.Tuple[JudgeRow, ...]:
+        """The judge's confirmed defects with their origin against the story's diff."""
+        ...
+
+    def keep_judged(self, story: str) -> None:
+        """Keep what a verdict that sent the story back was given on, for the next round to weigh against."""
         ...
 
     def back(self, story: str) -> typing.Optional[StageName]:
