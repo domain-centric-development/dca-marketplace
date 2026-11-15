@@ -9,7 +9,7 @@ kinds:
 - story
 reports:
 - invariants-cover
-pass: every domain type the story's change touched has a line under the plan's `## Invariants`
+pass: every domain type the story's change touched has a line under `## Invariants` — the plan's, or build.md's for a type the build reached
 fail: a domain type the story changed has no line under the plan's `## Invariants`
 ---
 

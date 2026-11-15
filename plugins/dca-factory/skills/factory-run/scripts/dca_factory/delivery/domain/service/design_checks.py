@@ -307,11 +307,13 @@ class DesignChecks(DomainService):
         def plain(name: str) -> str:
             return name.replace("_", "").replace("-", "").lower()
         named = {plain(rules.element.value) for rules in facts.named} if facts else set()
+        named |= {plain(rules.element.value) for rules in evidence.build_invariants(story)}
         missing = sorted({f"{t.name.value} ({t.place.value})" for t in changed if plain(t.name.value) not in named})
         if missing:
             return (INVARIANTS_COVER.fail(Said(
-                "the story changes domain types the plan's `## Invariants` has no line for — add one per type, its "
-                "rules or `none — <why>`, and a unit test per rule: " + "; ".join(missing[:8])
+                "the story changes domain types the plan's `## Invariants` has no line for — add one per type under "
+                "`## Invariants` in build.md, its rules or `none — <why>`, and a unit test per rule; the plan stays as "
+                "it was planned: " + "; ".join(missing[:8])
                 + (" …" if len(missing) > 8 else ""))),)
         return (INVARIANTS_COVER.ok(Said(f"every domain type the story changes has its `## Invariants` line "
                                          f"({len({t.name.value for t in changed})})")),)

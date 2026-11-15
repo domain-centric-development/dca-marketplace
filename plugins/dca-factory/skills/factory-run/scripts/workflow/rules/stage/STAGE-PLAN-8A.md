@@ -21,4 +21,6 @@ order: 9
    unit test for every rule named here, and the build writes no guard that is not named: a check nobody
    planned is code no test asked for. The test gate refuses a changed domain type without its line, and the
    build gate refuses one the story's change touched that the plan never named (`invariants-cover`) — so name
-   also the type the build will only reach, a new way to make an identifier from a request among them.
+   also the type the build will only reach, a new way to make an identifier from a request among them. A type the
+   build reaches after all gets its line under `## Invariants` in build.md, never a change to the plan once the
+   tests are written.

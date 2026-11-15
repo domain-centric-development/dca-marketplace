@@ -415,6 +415,11 @@ class StageEvidenceFiles(StageEvidence):
         path = os.path.join(self._runs, story.value, name)
         return read_text(path) if os.path.isfile(path) else None
 
+    def build_invariants(self, story: Story) -> typing.Tuple[ElementRules, ...]:
+        build = self._run_file(story.id, "build.md")
+        named = plan_invariants(build) if build is not None else None
+        return tuple(ElementRules(ElementName(e), tuple(Rule(r) for r in rules)) for e, rules in (named or {}).items())
+
     def changed_domain_types(self, story: Story) -> typing.Optional[typing.Tuple[ChangedDomainType, ...]]:
         changed = story_changed(self._cwd, self._runs, story.id.value, self._checkouts)
         if changed is None:
