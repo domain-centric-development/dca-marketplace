@@ -78,7 +78,8 @@ generated maps) goes to `docs/`. Not yet built → `product/`; the code could sh
    <!-- dca-describe: end -->
    ```
 
-   Pointer, not source: tools read places from `dca.profile.yaml`; a place changes there first, then here. Keep
+   Pointer, not source: the source is the files under `product/`; the section only makes every implementation read
+   them first. Tools read places from `dca.profile.yaml`; a place changes there first, then here. Keep
    the lines' form. Only this block is yours. A `CLAUDE.md` without `@AGENTS.md` → say Claude Code will not
    read the section.
 8. **Say what comes next.** No code → `/dca-new`. Code → nothing, or the first epic where stories run through
@@ -111,5 +112,5 @@ commit.
 - Write a story, epic, plan or code.
 - Fill a heading the person did not answer, or keep an answer taken back.
 - Create a second designed map beside the one the instructions name.
-- Read a delivery pipeline's configuration for the places; the `AGENTS.md` section is the source, and a
-  pipeline reads it from there.
+- Read a delivery pipeline's configuration for the places — they come from `dca.profile.yaml` (step 1). Treat the
+  `AGENTS.md` section as the source — it points to `product/`, which is.

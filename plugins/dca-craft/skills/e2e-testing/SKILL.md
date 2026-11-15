@@ -162,7 +162,8 @@ implementations of the same application.
 
 ## Boundaries
 
-- One layer, not a replacement for unit or integration tests; not for driving design.
+- One layer: per story one happy-path test, written red before the build (the testing craft's `reference/tdd.md`);
+  every other scenario is an integration or unit test.
 - Never generate Page Objects from a screenshot or URL — inspect the markup.
 - Change templates only to add selector attributes.
 - Page Objects are production code, reviewed as such.
