@@ -3,156 +3,79 @@ name: review-ddd
 description: The DDD review perspective, from outside any one method: aggregate design and real invariants versus anemic records, entity versus value object, aggregate boundaries a transaction can hold, ubiquitous language without synonym drift, domain-event hygiene, repository versus store, named failures versus argument guards. Use when reviewing a change from the model's point of view, or as the carrier of the `ddd` perspective in a delivery pipeline's review stage.
 ---
 
-You are a Domain-Driven Design reviewer.
+# /review-ddd
 
-Your perspective: **Eric Evans (Domain-Driven Design)** and **Vaughn Vernon
-(Implementing Domain-Driven Design)**. You care about whether code reflects
-the *business* — its language, its rules, its boundaries — not just whether
-it compiles.
+DDD reviewer (Evans, Vernon). Static review of a path, diff or file list; report, never fix or run.
 
-## What you review
+## Read first
 
-Given a path, a diff, or a list of files, evaluate them on these DDD axes:
+1. Conventions: an explicit path given, else the configuration file `AGENTS.md` names (``- configuration: `<file>` ``),
+   `AGENTS.md`, `CLAUDE.md` — suffixes, aggregate/entity/value markers, glossary paths, adapter folders.
+2. Glossary of each touched context: `<spec>/<context>/glossary.md` (`<spec>` = configuration's `spec:`, default
+   `product/spec`). Cite entries. None → flag once at the top: "consider /ubiquitous-language to start a glossary".
+3. Context map: the configuration's `domain:`, else ``- domain: `<path>` `` in `AGENTS.md` (typically
+   `product/domain.md`), else `docs/context-map.md`; plus a map generated from code where kept. Decides whether a
+   cross-context import is designed or smuggled.
 
-### 1. Aggregate design
+## Checks
 
-- Does the aggregate **enforce invariants**? Setters and public field access
-  that bypass invariants are findings.
-- Is the aggregate root the **only entry point** to its children? Direct
-  access to a child entity from outside is a finding.
-- Is the aggregate **the right size**? Too large = consistency boundary too
-  wide (performance, contention); too small = invariants leak across
-  aggregates.
-- Does it reference other aggregates **by ID only** (not by reference)?
-  Direct references couple lifecycles.
-- Is identity established by an **Id type** (e.g. `OrderId`), not a raw
-  `UUID`/`Long`?
+**Aggregates**
+- Invariants enforced inside; setters / public fields that bypass them → finding.
+- Root is the only entry to children; other aggregates referenced by id only; identity is an id type, not raw
+  `UUID`/`Long`.
+- Size: too wide → contention; too small → invariants leak across aggregates.
+- Default construction, deserialization and reconstitution are entry points too; constructor validation alone may
+  be bypassed.
+- A lookup callback or resolver handed to an aggregate is a hidden dependency — review it as a field.
 
-### 2. Ubiquitous Language
+**Ubiquitous language**
+- Business words; judge vague names in context (`Manager` is not forbidden).
+- One concept, one name (`OrderLine` here, `OrderItem` there → finding). Identifiers match the glossary.
 
-- Class, method, and event names use **business words**, not technical ones.
-  Review vague names in their domain context; `Manager` is not a forbidden suffix.
-- The same concept is named **consistently**. `OrderLine` in one file,
-  `OrderItem` in another → finding.
-- A glossary exists for each context (where the project's conventions put
-  it; `product/spec/<context>/glossary.md` otherwise, the folder moved by the
-  configuration's `spec:` key). If
-  present, code identifiers should match. If absent, flag once at the top
-  of the report: "consider /ubiquitous-language to start a glossary".
+**Context boundaries**
+- Cross-context import of domain types → finding (use ACL, OHS or events). A context's `domain/` knows no other
+  context. Shared kernel only for universal values (`Money`, `EmailAddress`).
 
-### 3. Bounded-context boundaries
+**Entity vs. value object**
+- Value object with a setter → immutable. `*Entity` without identity → value object. `String customerId`
+  everywhere → `CustomerId`.
 
-- Cross-context imports of domain types are findings (downstream should use
-  ACL, OHS, or events — see [[context-map]] patterns).
-- A context's `domain/` should know nothing about other contexts' code.
-- Shared kernel use should be minimal — only universal value objects
-  (`Money`, `EmailAddress`).
+**Domain events**
+- Past tense (`OrderPlaced`); immutable record; carries `occurredOn` (or the project's convention); raised at the
+  state transition, not per setter; never a command (`OrderShouldShip`).
 
-### 4. Entity vs. Value Object
+**Repository vs. store**
+- Repository: aggregate roots, collection-like, identity-based (`findById`, `save`).
+- Store: operational / append-only data (`record`, `count`, `exists`); may look up records by id.
+- `*Repository` for a value object or non-root entity → finding (a store). Aggregate `save`/`delete` belongs to a
+  repository.
 
-- Identity matters → Entity. Equality by attributes only → Value Object.
-- Common smells:
-  - A "Value Object" with a setter → make immutable.
-  - A class named `*Entity` that has no identity → it's a Value Object,
-    rename and make immutable.
-  - Primitive obsession: `String customerId` everywhere → Value Object
-    `CustomerId`.
+**Domain services, factories, specifications**
+- Service: stateless, in the domain; logic that belongs in an aggregate is a smell. Facts come in as parameters
+  (snapshots the use case fetched), not via a lookup it reaches out with; a domain-owned read interface is the
+  exception and carries a recorded reason. An external calculation receives immutable facts in a domain service.
+- Factory: prefer `Order.create(...)` unless construction crosses aggregates.
+- Scattered `if (order.status == ...)` → suggest a specification.
 
-### 5. Domain events
-
-- Past-tense names (`OrderPlaced`, not `PlaceOrder` or `OrderPlacement`).
-- Immutable (Java `record` / C# `sealed record`).
-- Carry an `occurredOn` (or convention) timestamp.
-- Emitted at the **right state transition**, not on every setter.
-- Not used as commands ("OrderShouldShip" is not an event).
-
-### 6. Repository vs. Store
-
-- **Repository** is for Aggregate Roots: collection-like (`findById`, `save`),
-  identity-based.
-- **Store** is for operational/append-only data: `record`, `count`, `exists`.
-- A `*Repository` for a value object or non-aggregate-root entity is a finding
-  (probably should be a `*Store`).
-- A Store may look up operational records by id; `findById` alone is not a finding. Aggregate lifecycle `save`/`delete` belongs to a Repository.
-
-### 7. Domain Services, Factories, Specifications
-
-- **Domain Service**: operation that doesn't fit into an aggregate, lives in
-  the domain layer. Stateless. Common smell: a "service" that's really just
-  business logic that should live inside an aggregate. Its facts come in as
-  parameters — snapshots the use case fetched — not through a lookup the
-  service reaches out with; a domain-owned read interface is the exception
-  and carries a recorded reason.
-- **Factory**: when creation logic is non-trivial. Static factory methods on
-  the aggregate (`Order.create(...)`) are usually preferable to separate
-  factory classes unless the construction crosses aggregate boundaries.
-- **Specification**: encapsulates a business rule (`OverdueOrderSpecification`).
-  When you see scattered `if (order.status == ...)` checks across several
-  places, suggest a Specification.
-
-### 8. Named failures
-
-- A broken business rule raises a named domain failure (a subtype of the
-  project's domain exception base, where it has one), not the platform's
-  `IllegalStateException` / `InvalidOperationException`. The name is
-  the rule in the ubiquitous language: `InsufficientStockException`,
-  `CartAlreadyCompletedException`.
-- **An argument guard is not a domain failure.** A null check, a range check,
-  "must not be blank" on a value only code passes states a caller contract, and
-  the platform's argument exception is correct there. On a value built from
-  input the same check is the rule the product names: the value object refuses
-  null and its bounds with that rule's named failure, and the edge does not
-  check it again. This is the judgement no rule can make, so make it: where does
-  the value come from, would a domain expert have a word for this failure?
-- The exception carries the facts the rule compared (requested vs. available),
-  so a caller can react without parsing a message.
-- It lives beside the model that raises it. A `domain/exception/` package
-  separates a failure from the concept it belongs to and is a finding.
-- The failure names no transport concept and carries no framework metadata —
-  if it does, the model has decided what a caller is told.
-- A failure only a store can state ("no such order", "that number is taken") is
-  the application's, not the model's. Ask who can state it: the aggregate, or the
-  collection of them. "No such order" is what the use case finds from what the
-  repository answered — its own failure, or a case of its result; "that number is
-  taken" is a failure the output port's contract declares, thrown by the adapter
-  and caught by the use case. A use case that constructs a domain failure has
-  put the application's finding into the model's words.
-- **"None" is an answer, not a refusal.** A query that asks "which one, if
-  any" — the caller's active session, an open draft — answers absence with an
-  empty value. "Not found" is a refusal only where the caller demands a specific
-  thing by its identity. A refusal for an ordinary "none" makes every caller
-  handle a failure the domain does not have.
-- **The model throws, whichever way the context answers.** Where a context
-  returns its expected refusals as cases of a closed result, the aggregate and
-  the value objects still throw their named failures — a behaviour method that
-  returned an outcome would make every caller unpack a case a correct call never
-  produces. The use case catches each concrete one it can raise, once, and
-  returns its case; a catch of the domain base type turns a defect into a
-  refusal and is a finding.
-- **Decide, then write.** Every refusal, thrown or returned, comes before the
-  first save. A refusal that can only be known after a write is two aggregates
-  in one transaction — the boundary may roll it back, the cut is still wrong.
-
-## How to read the project
-
-Before reviewing, gather context:
-
-1. Read the project's conventions, searched in this order: an explicit path
-   given to you, the configuration file the project instructions name (a
-   ``- configuration: `<file>` `` line in `AGENTS.md`), `AGENTS.md`, `CLAUDE.md`.
-   They tell you the project's suffix conventions, the types or annotations
-   it uses to mark aggregates, entities and values, the glossary paths and
-   the adapter folder names.
-2. If glossaries exist, read the one for each context that the diff
-   touches (`<spec>/<context>/glossary.md`, `<spec>` the configuration's
-   `spec:` key, `product/spec` by default). Cite specific entries when flagging.
-3. If a context map exists, read it. The designed map is where the
-   configuration file names it (`domain:`), else where the project
-   instructions do (a ``- domain: `<path>` `` line in `AGENTS.md`, typically
-   `product/domain.md`), `docs/context-map.md` otherwise; a map
-   generated from the code, where the project keeps one, shows what was
-   built. Use them to judge whether cross-context imports are designed (and
-   thus expected) or smuggled in.
+**Named failures**
+- A broken business rule raises a named domain failure (subtype of the project's domain exception base, where it
+  has one) named in the language (`InsufficientStockException`), not `IllegalStateException` /
+  `InvalidOperationException`.
+- Argument guard ≠ domain failure. Null/range/blank on a value only code passes is a caller contract — the
+  platform's argument exception is right. On a value built from input the same check is the product's rule: the
+  value object refuses with that rule's named failure, the edge does not check again. Decide: where does the value
+  come from, would a domain expert have a word for it?
+- Carries the compared facts (requested vs. available). Lives beside its model — a `domain/exception/` package is a
+  finding. No transport concept, no framework metadata.
+- A failure only a store can state is the application's: "no such order" the use case finds from the repository's
+  answer (its own failure or a result case); "that number is taken" is declared by the output port's contract,
+  thrown by the adapter, caught by the use case. A use case constructing a domain failure → finding.
+- "None" is an answer: a "which one, if any" query returns empty; "not found" is a refusal only when a specific
+  thing is demanded by identity.
+- The model throws even where the context returns refusals as result cases; the use case catches each concrete
+  failure once and returns its case. Catching the domain base type turns a defect into a refusal → finding.
+- Decide, then write: every refusal before the first save. One knowable only after a write = two aggregates in one
+  transaction; the cut is wrong.
 
 ## Output format
 
@@ -189,44 +112,23 @@ Before reviewing, gather context:
 - ADRs that might be warranted
 ```
 
-## Severity guidance
+Quote line numbers and glossary entries. Nothing found in a section → say so plainly.
 
-- **must-fix**: violates a DDD invariant; the code is dishonest about what
-  it represents (anemic aggregate with business rules outside; Repository
-  for a non-aggregate; cross-context import bypassing boundaries). Three of
-  them spelled out, always must-fix, whatever a plan says: a rule over an
-  aggregate's state decided outside the aggregate (in the use case, the
-  controller, a query); a precondition the command does not check again
-  after an earlier read (a choice shown on one request and acted on by the
-  next, a snapshot and its reload, a remote answer and the step that
-  confirms it); a result that encodes three or more outcomes as flags or
-  nullables a caller must decode, an impossible combination representable,
-  instead of naming them.
-- **should-fix**: a name, shape, or placement that will cause confusion —
-  but the code works.
-- **nit**: stylistic or minor improvement; ignorable in a small PR.
+## Severity
 
-Be concrete. Quote line numbers. Quote glossary entries when they're the
-source of truth.
+- **must-fix**: code dishonest about what it represents — anemic aggregate with rules outside, repository for a
+  non-aggregate, cross-context import past the boundary. Always must-fix, whatever a plan says:
+  - a rule over an aggregate's state decided outside it (use case, controller, query);
+  - a precondition the command does not check again after an earlier read (a choice shown on one request and acted
+    on by the next, a snapshot and its reload, a remote answer and the step that confirms it);
+  - a result encoding three or more outcomes as flags or nullables a caller must decode, an impossible combination
+    representable.
+- **should-fix**: name, shape or placement that will confuse; the code works.
+- **nit**: minor; ignorable in a small PR.
 
-## What you do NOT do
+## Not this perspective
 
-- You do not run code or tests. Static review only.
-- You do not refactor. You report.
-- You do not force the full tactical pattern set on every context. If a
-  pattern-selection decision record (or the designed map's subdomain type)
-  declares a context
-  as transaction-script/active-record style (supporting subdomain), anemic
-  models there are by design — review only structural boundaries.
-- You do not check Hexagonal-specific concerns (Port granularity, Adapter
-  direction). That's `review-hexagonal`'s job. If you notice one anyway,
-  you may mention it as `out-of-scope nit:`.
-- You do not check Clean-Code-specific concerns (function size, comment
-  smell). That's `review-clean-code`'s job.
-
-Stay in your lane. Three focused reports beat one diffuse one.
-
-Review default construction, deserialization and reconstitution at aggregate entry points; constructor
-validation alone may be bypassed. An external calculation receives immutable facts in a domain service. A
-lookup callback or resolver handed to an aggregate hides a dependency the aggregate should not own — review it
-as if it were a field.
+- A context declared transaction-script / active-record (pattern-selection decision record, or the map's subdomain
+  type): anemic models are by design — review structural boundaries only.
+- Port granularity, adapter direction → `review-hexagonal`; function size, comments → `review-clean-code`. Noticed
+  anyway → `out-of-scope nit:`.

@@ -1,14 +1,10 @@
 # An HTTP stub for integration tests
 
-What an integration test puts in place of an external system: a real HTTP server on a free port that
-answers what the test arranges. The adapter under test talks HTTP to it exactly as it talks to the real
-system, so the translation — the request it builds, the status and body it reads, a timeout — is what the
-test proves. A mock of the port proves everything except that; a shared or real instance makes the test
-pass or fail on another system.
+A real HTTP server on a free port answering what the test arranges; the adapter's translation (request, status,
+body, timeout) is what the test proves.
 
-Versions are looked up at setup time (Maven Central for `org.wiremock:wiremock-standalone`, NuGet for
-`WireMock.Net`) — the latest stable release, not a beta. The standalone WireMock artifact shades its Jetty,
-so it does not clash with the web server of the application.
+Versions looked up (Maven Central `org.wiremock:wiremock-standalone`, NuGet `WireMock.Net`), latest stable, no
+beta. Use the standalone artifact: it shades its Jetty, no clash with the application's web server.
 
 ## Java — WireMock (Gradle, Maven)
 
@@ -126,8 +122,5 @@ var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
 A refusal is an arranged status (`WithStatusCode(402)`), a timeout an arranged delay longer than the
 adapter's (`WithDelay(...)`).
 
-## Checked
-
-On a fresh Spring Boot 4 Gradle project (Java 21, `org.wiremock:wiremock-standalone` 3.13.2) and a fresh
-.NET 10 xUnit project (`WireMock.Net` 2.18.0): the smoke test green, red against a changed arranged
-answer, green again.
+Verified on Spring Boot 4 Gradle (Java 21, `wiremock-standalone` 3.13.2) and .NET 10 xUnit (`WireMock.Net`
+2.18.0).

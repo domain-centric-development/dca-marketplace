@@ -1,6 +1,6 @@
 # Words on the page
 
-The detail of the skill's section 12.
+Section 12.
 
 - **Plain language, in the user's words**: a label says what happens or what something is, not what the code calls
   it. A heading that needs a glossary is a rewrite.

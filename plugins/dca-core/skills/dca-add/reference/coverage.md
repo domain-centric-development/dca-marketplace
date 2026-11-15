@@ -1,23 +1,11 @@
 # Test coverage over every suite
 
-One report of line and branch coverage over the unit, integration and end-user suites together, and one per
-suite. A browser test drives the application in the test's own process, so the coverage agent sees the page's
-path as well; a report of the unit suite alone would call a use case untested that its port test runs.
+**No threshold**, no `violationRules`; the report task joins neither `check` nor any test command of a pipeline
+profile. An uncovered branch in an aggregate, entity or value object (a `null` guard, an untrimmed value, a
+range) goes back as an invariant with a unit test, never a test written to colour the line.
 
-Coverage is a reading, never a gate: **no threshold**. A number to reach invites tests written for the number.
-What the report is for is the gap it shows — and in a domain-centric project the gap that matters is in the
-domain: an uncovered branch in an aggregate, entity or value object is an invariant nobody named and nobody
-tested (a guard against `null`, an untrimmed value, a range). It goes back as an invariant with a unit test, not
-as a test written to colour the line.
-
-**Outside every build and test command.** The report task joins neither `check` nor a command a delivery
-pipeline's profile names as a test command, and no `violationRules` are configured: the gate runs those
-commands, and a story whose criteria are all green would fail on a number.
-
-Versions are looked up at setup time (Maven Central for `org.jacoco`, NuGet for `coverlet.collector` and
-`dotnet-reportgenerator-globaltool`) — the latest stable release. For JaCoCo the version must know the JDK's
-class file version (Java 25 needs 0.8.14 or later): an agent that cannot read the bytecode makes every test
-fail, and with it every gate.
+Versions looked up (Maven Central `org.jacoco`, NuGet `coverlet.collector`, `dotnet-reportgenerator-globaltool`),
+latest stable. JaCoCo must know the JDK's class file version (Java 25 needs 0.8.14+), else every test fails.
 
 ## Java — Gradle (JaCoCo)
 
@@ -86,11 +74,9 @@ numbers in `Summary.txt`.
 
 ## Shown to work
 
-A report that cannot show a gap proves nothing: run the coverage command once, open the report and find the
-domain's types in it with covered lines; then comment out one unit test of a value object's guard, run again,
-and see that guard's branch reported missed. Restore the test.
+Run once; the domain's types appear with covered lines. Comment out one unit test of a value object's guard, run
+again, that branch is missed. Restore.
 
 ## Recorded
 
-Two lines in `dca.profile.yaml` at the project root: `coverage: <the command>` and `coverageReport: <the
-report's path>`. There is no threshold, so no line names one. The general skills read them there.
+`dca.profile.yaml`: `coverage: <the command>`, `coverageReport: <the report's path>`. No threshold line.

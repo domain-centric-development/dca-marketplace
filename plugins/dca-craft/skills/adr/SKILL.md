@@ -11,27 +11,15 @@ disable-model-invocation: false
 
 # /adr — Architecture Decision Records
 
-ADRs capture *why* a non-trivial architectural choice was made — the context,
-the decision, the consequences. They're short, dated, numbered, and **once
-accepted, immutable**. Changes happen by writing a new ADR that supersedes
-the old one. That history is the reader's most valuable asset: every
-decision shows when it was made, what was known at the time, and why a later
-ADR changed it.
-
-Format: Michael Nygard's, lightly extended with `Date`, `Deciders`, `Tags`,
-and `References`.
+- Nygard format, extended with `Date`, `Deciders`, `Tags`, `References`.
+- **Accepted = immutable.** Change only by a new ADR that supersedes; the history is the point.
 
 ## Storage
 
-Default: `docs/adr/` at repo root.
-
-Files: `NNNN-kebab-case-title.md` (zero-padded to 4 digits), e.g.
-`0007-use-spring-modulith-instead-of-microservices.md`.
-
-Index: `docs/adr/README.md` — auto-regenerated table of all ADRs.
-
-An alternative path can be set in the configuration file the project instructions name (a
-``- configuration: `<file>` `` line in `AGENTS.md`).
+- Default `docs/adr/` at repo root; another path from the configuration file `AGENTS.md` names
+  (``- configuration: `<file>` ``).
+- Files: `NNNN-kebab-case-title.md`, 4-digit zero-padded — `0007-use-spring-modulith-instead-of-microservices.md`.
+- Index: `docs/adr/README.md`, regenerated.
 
 ## ADR template
 
@@ -74,50 +62,38 @@ Optional. Kurz die ernsthaft erwogenen Alternativen und warum verworfen.
 
 ### `/adr new "Titel"`
 
-1. Scan `docs/adr/` for the highest existing NNNN, take `NNNN+1`.
-2. Build kebab-case filename from the title.
-3. Search existing ADRs for related tags/keywords — surface them to the user
-   ("ADR-0003 also tagged 'persistence', wert zu verlinken?").
-4. Write the file with the template, `Status: Proposed`, `Date: <heute>`.
-5. Prompt the user to fill `Context`, `Decision`, `Consequences`. Do not
-   write placeholder prose; leave the sections empty (with a comment cue)
-   for the user to author. Architecture decisions are *theirs* to make —
-   the skill only structures.
-6. Update `docs/adr/README.md` index.
+1. No ADRs yet → offer the meta-ADR first (`reference/first-adr.md`).
+2. Next number: highest existing NNNN + 1; kebab-case filename from the title.
+3. Search existing ADRs for related tags/keywords, surface them ("ADR-0003 also tagged 'persistence', wert zu
+   verlinken?"). An active ADR on the same topic → warn; usually `supersede` is right.
+4. Write the template with `Status: Proposed`, `Date: <heute>`.
+5. Leave `Context`, `Decision`, `Consequences` empty with a comment cue — no placeholder prose; the user authors
+   them.
+6. Update the index.
 
 ### `/adr accept NNNN`
 
-1. Read the ADR. Confirm Status is `Proposed`.
-2. Validate the ADR has non-empty `Context`, `Decision`, `Consequences`.
-   If any is empty: refuse, list what's missing.
-3. Set Status → `Accepted`. Do not touch other fields.
-4. From this point, the file is **immutable** in this skill's operations —
-   only `supersede` or `deprecate` can change it further.
-
-Warn the user: "Once accepted, edit only by writing a new ADR. Are you sure?"
+1. Status must be `Proposed`.
+2. `Context`, `Decision`, `Consequences` all non-empty, else refuse and list what is missing.
+3. Warn: "Once accepted, edit only by writing a new ADR. Are you sure?"
+4. Set Status → `Accepted`, nothing else. From now on only `supersede` / `deprecate` change it.
 
 ### `/adr supersede NNNN "Titel des Nachfolgers"`
 
-1. Read ADR NNNN. Confirm Status is `Accepted` (you cannot supersede
-   `Proposed` or `Deprecated`).
-2. Create a new ADR (NNNN+k, following `new` logic) with:
-   - Title from the user
-   - Pre-filled `References` linking back to NNNN
-   - A `Supersedes NNNN (`NNNN-...md`)` note in `Context`
-3. On the **old** NNNN: change Status from `Accepted` to
-   `Superseded by NNNN+k (`NNNN+k-...md`)`. This is the *only* change
-   permitted on an accepted ADR.
+1. Old ADR must be `Accepted` (not `Proposed`, not `Deprecated`).
+2. New ADR via `new`, with `References` linking back to NNNN and a `Supersedes NNNN (`NNNN-...md`)` note in
+   `Context`.
+3. Old ADR: Status `Accepted` → `Superseded by NNNN+k (`NNNN+k-...md`)` — the only change permitted on an
+   accepted ADR.
 4. Update the index.
 
 ### `/adr deprecate NNNN`
 
-For decisions that no longer apply but have no successor (e.g. a feature
-was removed). Status: `Accepted` → `Deprecated`. No new ADR created.
+No longer applies, no successor (e.g. feature removed): `Accepted` → `Deprecated`. No new ADR.
 
 ### `/adr list [--status=...] [--tag=...]`
 
-Generates / regenerates `docs/adr/README.md` with a table of all ADRs
-sorted by number:
+Regenerates `docs/adr/README.md`, sorted by number:
 
 ```markdown
 # Architecture Decision Records
@@ -130,100 +106,38 @@ sorted by number:
 | ... | ... | ... | ... | ... |
 ```
 
-Filtering options:
-- `--status=Accepted` — only active decisions
-- `--status=Superseded` — historical, with `Superseded by` links
-- `--tag=persistence` — slice by tag
+Filters: `--status=Accepted` (active), `--status=Superseded` (historical, with `Superseded by` links),
+`--tag=persistence`.
 
 ### `/adr link NNNN <path:line>`
 
-Attach a code reference to an ADR's `References` section. Optionally — on
-user confirmation — insert `// ADR-NNNN: <title>` as a comment at the
-referenced line.
+Add the code reference to `References`. On user confirmation, also insert `// ADR-NNNN: <title>` at that line.
 
 ## Anti-patterns flagged
 
-- **Editing an Accepted ADR** (other than the status transitions
-  `supersede` / `deprecate`). Refuse and explain: "ADRs are immutable
-  history. Write a new ADR that supersedes this one."
-- **No Decision section.** Lots of context, no clear "we will do X" — not
-  yet an ADR; refine it.
-- **Implementation detail, not architecture.** "Rename `OrderHandler` to
-  `OrderUseCase`" is a code change, not an ADR. Architecture concerns
-  cross-cutting structural choices.
-- **Duplicate topic.** If a search of existing ADRs surfaces an active
-  decision on the same topic, warn before creating a new one — the right
-  move is usually `supersede`.
-- **Missing Consequences.** Every decision has trade-offs. An ADR without
-  trade-offs hides what was given up.
+- Editing an Accepted ADR beyond `supersede` / `deprecate` → refuse: "ADRs are immutable history. Write a new ADR
+  that supersedes this one."
+- No clear "we will do X" in `Decision` → not an ADR yet.
+- Implementation detail ("Rename `OrderHandler` to `OrderUseCase`") → a code change, not an ADR.
+- Duplicate topic → warn, suggest `supersede`.
+- No trade-offs in `Consequences`.
 
-## Relationship to other skills
+## When other skills suggest an ADR
 
-- **Architecture rules** — When the user wants to bend one of the
-  project's architecture rules (e.g. a framework annotation in the domain
-  for legacy compatibility), suggest `/adr new` to make the exception
-  explicit and traceable.
-- **`/context-map`** — Significant strategic changes (new context,
-  pattern shift Conformist → ACL, removing an integration) should be
-  recorded as ADRs.
-- **`/ubiquitous-language`** — Large domain renames (an aggregate or whole
-  concept being renamed) deserve an ADR explaining why.
-- **`/clean-code`** — Style decisions ("we prefer constructor injection
-  over field injection") are usually too small for ADRs. Reserve ADRs
-  for choices that affect architecture, not coding style.
-
-## First ADR: record the practice itself
-
-The very first ADR in any repo using this skill should be a meta-ADR:
-
-```
-# 0001. Record architecture decisions
-
-- Status: Accepted
-- Date: <today>
-- Tags: meta, process
-
-## Context
-Wir treffen regelmäßig architektonische Entscheidungen ohne strukturierte
-Dokumentation. Das macht es schwer für neue Teammitglieder zu verstehen,
-warum bestimmte Pfade gewählt wurden.
-
-## Decision
-Wir dokumentieren architektonische Entscheidungen mit Architecture Decision
-Records (ADRs) im Michael-Nygard-Format unter `docs/adr/`, verwaltet via
-`/adr`-Skill.
-
-## Consequences
-+ Nachvollziehbarkeit von Entscheidungen über die Zeit.
-+ Onboarding-Material entsteht als Nebeneffekt.
-- Disziplin erforderlich; ADRs verfallen, wenn nicht gepflegt.
-- Kleine Entscheidungen können nicht alle dokumentiert werden — Schwelle
-  setzen.
-
-## References
-- https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions
-```
-
-When `/adr new` is run for the first time in a repo with no existing ADRs,
-offer to generate this meta-ADR first.
+- Bending one of the project's architecture rules (e.g. a framework annotation in the domain for legacy
+  compatibility) → suggest `/adr new` to make the exception explicit.
+- `/context-map`: new context, pattern shift (Conformist → ACL), removed integration.
+- `/ubiquitous-language`: renaming an aggregate or a whole concept.
+- `/clean-code` style choices (constructor vs field injection) are too small for an ADR.
 
 ## Project conventions
 
-The configuration file the project instructions name (a ``- configuration: `<file>` `` line in
-`AGENTS.md`) may set:
+The configuration file `AGENTS.md` names may set: ADR path (`docs/decisions/`, …); required tags from a fixed
+vocabulary; approval workflow (e.g. a `Reviewer:` line in Status); language (German or English — the skill is
+language-agnostic).
 
-- Alternative ADR path (`docs/decisions/`, etc.)
-- Required tags (e.g. enforce a `Tags:` value from a fixed vocabulary)
-- Approval workflow (e.g. "Status must include a `Reviewer:` line")
-- Language (German vs. English; this skill is language-agnostic)
+## Not in scope
 
-## What this skill does NOT do
-
-- **Doesn't author the decision.** The user writes Context / Decision /
-  Consequences. The skill structures and indexes them.
-- **Doesn't enforce a review/approval process.** That's an organizational
-  practice on top.
-- **Doesn't auto-detect "this change deserves an ADR".** Other skills
-  (`context-map`, `ubiquitous-language`) *suggest* an
-  ADR at appropriate moments, but the decision to record stays with the
-  user.
+- Authoring the decision — the user writes Context / Decision / Consequences.
+- Enforcing a review/approval process.
+- Deciding that a change deserves an ADR — other skills suggest; the user decides.

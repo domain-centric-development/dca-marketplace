@@ -1,27 +1,23 @@
 # Port tests: the use case once, through its input port
 
-A port test runs one use case through its input port in the wired application: real outgoing adapters, the store
-as the project runs it in tests (its own database in a container, not an in-memory stand-in), an external system
-stubbed at the protocol. It asserts the scenario's business outcome — what is stored, refused, published,
-returned. It is the test of the use case, whichever adapter calls it.
+One use case through its input port in the wired application: real outgoing adapters, the store as the project
+runs it in tests (its own database in a container, not an in-memory stand-in), an external system stubbed at the
+protocol. Asserts what is stored, refused, published, returned.
 
 ## Rules
 
-- **Once per use case and scenario**, never once per incoming adapter that calls it.
-- **No mocked output port.** The output port's adapter is part of what the test proves; a mock proves the mock.
-  Where an output port has several adapters, each passes one contract test of what the port promises, and the
-  port test runs one of them.
-- **An external system is stubbed at the protocol** — a real HTTP server on a free port answering what the test
-  arranges (WireMock in Java, WireMock.Net in .NET). The stub's answer is the arrangement; the adapter builds its
-  request and reads the response exactly as in production. Never a shared or real instance of the other system.
-- **A clause about what is stored is asserted here** — through a query port or the repository the use case uses,
-  reading back what the use case wrote, never what the test wrote itself.
-- **A refusal is asserted as it leaves the use case**: the returned case with its values where the context returns
-  refusals, the exact failure type where it throws them. The adapter test of the same criterion stubs exactly that.
-- **A helper that runs a use case to arrange a state asserts that it succeeded.** An ignored result swallows a
-  refusal, and the test goes on from a state that never came about.
-- **An event or a message to an unmanaged system** is the one interaction asserted — through the stub's received
-  requests or the published event, not through a call on a mock.
+- **Once per use case and scenario**, never once per calling adapter.
+- **No mocked output port.** Several adapters behind one port: each passes one contract test; the port test runs
+  one of them.
+- **External system stubbed at the protocol**: a real HTTP server on a free port (WireMock in Java, WireMock.Net in
+  .NET) answering what the test arranges. Never a shared or real instance.
+- **Stored-state clauses are asserted here**, through a query port or the use case's repository, reading what the
+  use case wrote — never what the test wrote.
+- **A refusal as it leaves the use case**: the returned case with its values, or the exact failure type thrown. The
+  adapter test of the same criterion stubs exactly that.
+- **A helper running a use case to arrange a state asserts it succeeded.**
+- **An event or a message to an unmanaged system** is the one interaction asserted — via the stub's received
+  requests or the published event, not a mock call.
 
 ## Shape
 
@@ -49,5 +45,3 @@ public async Task CompletesAnOpenTask()
     Assert.True((await _tasks.FindById(id))!.IsDone);
 }
 ```
-
-The fixture is fresh: the task is this test's own, with a unique title, so the test runs beside every other one.

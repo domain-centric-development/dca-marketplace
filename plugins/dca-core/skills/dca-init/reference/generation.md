@@ -1,10 +1,7 @@
 # Phase 3 — Generation
 
-Part of the `dca-init` skill: what its *Phase 3 — Generation* step points to — the files written per language, step by step, and the `dca.profile.yaml` and `AGENTS.md` section both languages share.
-
-Only after Phase 2. Placeholders use `{{name}}`; `{{#if}}` / `{{#each}}` blocks are resolved by you. Before
-each write: if the target exists, ask *overwrite / skip / abort* (default skip). The skill changes no build
-file outside the DCA part: dependencies, the architecture source set or project, and nothing else.
+Files per language, step by step, then what both share. Build files change only in the DCA part:
+dependencies and the architecture source set or project.
 
 **Java**
 
@@ -96,25 +93,5 @@ file outside the DCA part: dependencies, the architecture source set or project,
   `{{reviewSkills}}` lists the installed ones of `review-ddd`, `review-hexagonal`, `review-clean-code` and
   `dca-audit`. The `- configuration:` and `- <role>:` lines are read by other tools (general skills find the
   configuration through them, a delivery pipeline its carrier names), so keep their form.
-- Why the section exists: a person developing by hand in a session has the same information and the same
-  means as a stage of a delivery pipeline — the conventions, the skill that carries each craft, the check.
-  The pipeline's own configuration is its view of the same installed skills, so the two never name
-  different skills.
 - Where the project keeps a `CLAUDE.md` without `@AGENTS.md`, say that Claude Code does not read the section
   then, and offer to add the `@AGENTS.md` line.
-
-## Phase 4 — Verification
-
-```bash
-./gradlew test-architecture          # Java, Gradle
-mvn test -Dtest='ArchitectureTest'   # Java, Maven
-dotnet test tests/<Solution>.ArchitectureTests   # .NET — Debug; the rules refuse Release builds
-```
-
-Report which rules passed and which failed. On a project without domain code two entries are expected and
-not failures: `DCA-STR-012` on `warn` (no layered module yet) and, with decision F, a
-`ContextMapDocumentationTest` that has just generated `{{contextMapPath}}` — skipped in Java, failed once with
-"commit it" in .NET (green from the second run on) — both named in the report. In a retrofit, failures are
-findings about the existing code, not bugs of this skill: point the user to `dca.rules.warn` or
-`dca-add freeze` for a staged adoption, `/dca-audit` to triage, `/dca-new` for new code that complies from
-the start.

@@ -1,25 +1,20 @@
 # The element modes — context, usecase, aggregate, store, domainservice
 
-Part of the `dca-new` skill: what its *Mode context* … *Mode domainservice* steps point to — the parameters, the
-placement, the generated files per language, the wiring and the decision tables of every code mode.
+Detail of `dca-new`'s code modes: parameters, placement, files per language, wiring, decision tables.
 
 ## Mode context
 
-**User intent:** "Add a new bounded context called `orders`."
-
-> Pattern choice per subdomain decides whether to lay out the full tactical structure — read the subdomain
-> type in the designed map (`domain:` in `dca.profile.yaml`, `product/domain.md` by default) and check for a
-> pattern-selection ADR (e.g. `docs/adr/`) before creating a full DDD context; supporting/generic subdomains
-> may warrant a simpler layout. A context the designed map does not carry is a question about the description
-> (`dca-describe`), not something to add silently.
+> Subdomain type in the designed map (`domain:` in `dca.profile.yaml`, `product/domain.md` by default) and a
+> pattern-selection ADR (e.g. `docs/adr/`) decide the full tactical structure; supporting/generic may get a
+> simpler layout. A context the map lacks → `dca-describe`, never added silently.
 
 ### Steps
 
-1. **Validate:** the context name must be lowercase, single word (no hyphens). E.g. `orders`, `inventory`. If hyphenated, the user means a multi-word concept — ask whether to use `customeraccount` (concatenated) or `customer-account` (Gradle module name) — these are different.
-2. **Decide install location.** Two common patterns:
+1. **Validate:** lowercase, single word (`orders`). Hyphenated → ask: `customeraccount` (package) or `customer-account` (Gradle module name) — they differ.
+2. **Decide install location:**
    - **Single-module project:** create the package directly under `src/main/java/{basePackage}/{context}/`
      (C#: the namespace `{rootNamespace}.{Context}` inside the existing project).
-   - **Multi-module Gradle:** create a new sub-project `{context}/` with its own `build.gradle.kts`. Ask the user which mode applies.
+   - **Multi-module Gradle:** a sub-project `{context}/` with its own `build.gradle.kts`. Ask which applies.
    - **.NET, one project per context** (the .NET reference layout): create `src/{rootNamespace}.{Context}/` from
      `templates/bounded-context/Context.csproj.tmpl`, add it with `dotnet sln add`.
 3. **Generate the directory tree** (per `templates/bounded-context/`):
@@ -55,23 +50,18 @@ placement, the generated files per language, the wiring and the decision tables 
    `product/spec/<context>/glossary.md` by default, `<context>` the context's name in lowercase, words joined by
    `-`), never beside the domain code — and replace the section with one line naming that file. Moved, not
    copied: one place per word.
-7. **Verify:** run the architecture tests if they exist. The new (empty) context should not break anything.
+7. **Verify:** run the architecture tests if they exist; the empty context must not break them.
 
 ---
 
 ## Mode usecase
 
-**User intent:** "Add a `placeOrder` use case to the `orders` context."
-
 ### Required parameters (ask if not given)
 
-- **Context** the use case lives in (e.g. `orders`)
-- **Use-case name** in lowerCamelCase (e.g. `placeOrder`, `getOrderById`)
-- **Type:** Command (write — modifies state) or Query (read — pure data fetch)
-- **Output ports needed:** which existing repositories/data ports does it need? Or create a fresh `*Repository` if a new aggregate is in play.
-- **Expected refusals:** which refusals can a caller answer — the thing does not exist, the caller may not act on
-  it, a business rule says no, a foreign system behind an output port refused or did not answer — each named after
-  the refusal (`OrderNotFound`, `OrderAlreadyShipped`, `PaymentProviderUnavailable`), or none. A foreign system is
+- **Context**; **name** in lowerCamelCase (`placeOrder`, `getOrderById`); **type** Command (writes) or Query (reads)
+- **Output ports:** existing repositories/ports, or a fresh `*Repository` for a new aggregate
+- **Expected refusals** a caller can answer — not found, may not act, a business rule says no, a foreign system
+  behind an output port refused or did not answer — each named after the refusal (`OrderNotFound`, `OrderAlreadyShipped`, `PaymentProviderUnavailable`), or none. A foreign system is
   one the context map declares as an external system; the own database or broker failing is never a refusal. A
   query that asks "which one, if any" has none for "there is none": it answers with an empty value in its result.
   "Not found" is a refusal only where the caller names a specific thing by its id.
@@ -79,10 +69,9 @@ placement, the generated files per language, the wiring and the decision tables 
 ### Refusals: thrown or returned
 
 The context's style is a line of the technical description (`product/tech.md`, or `tech:` in `dca.profile.yaml`):
-`Refusals (<context>): thrown | returned`, else `Refusals: thrown | returned`. Without a line, the context's existing
-use cases show it; a context with neither is a question to the person — both styles are equal, the template never
-picks one — and the answer is written as that line through `dca-describe`, never into this run alone. A context
-never mixes the two: the new use case takes the context's style.
+`Refusals (<context>): thrown | returned`, else `Refusals: thrown | returned`. No line → the context's existing
+use cases; neither → ask the person (both equal, the template never picks) and write the answer as that line via
+`dca-describe`, never into this run alone. A context never mixes styles.
 
 | | Thrown | Returned |
 |---|---|---|
@@ -98,9 +87,8 @@ never mixes the two: the new use case takes the context's style.
 `returnsRefusals` (`reference/placeholders.md`) is `true` only where the context returns **and** the use case has at
 least one expected refusal: a use case nobody can refuse gets the plain record in both styles. One that ends in
 several successes and no refusal (`Sent` | `AlreadySent`) may have a sealed result instead — written by hand, no
-case marked `Refusal`. A use-case exception
-of the throwing style is no template — its name and fields come from the refusal, like a domain failure's from
-`dca-modelling`; write it by hand beside the use case, the project's `failure_suffix` applied.
+case marked `Refusal`. A throwing-style use-case exception has no template: name and fields from the refusal,
+written by hand beside the use case, the project's `failure_suffix` applied.
 
 The adapter's translation, both forms (Java; the answers written once, in the context's adapter):
 
@@ -127,19 +115,16 @@ Before writing, look at the packages directly below `{context}/application/` (ig
 find src/main/java/{basePackage//.//}/{context}/application -mindepth 1 -maxdepth 1 -type d -not -name shared
 ```
 
-- If those folders contain use cases directly (`*InputPort`, `*UseCase` files) → the context is **flat**: the
-  new use case goes to `application/{usecasename}/`.
-- If they contain further folders which hold the use cases → the context is **grouped by feature**
-  (`application/{feature}/{usecasename}/`). A *feature* is an optional, domain-named group of related use cases —
-  a navigation boundary below the layer, not a module or aggregate owner. Ask the user which feature the new use
-  case belongs to (offer the existing ones); if none fits, take a new lowercase name **from the ubiquitous
-  language** (`cartrecovery`, `checkoutcompletion`). Reject technical buckets (`commands`, `queries`, `handlers`,
-  `services`, `utils`) and delivery mechanisms (`web`, `api`) as feature names.
-- Never mix: a flat use case in a grouped context (or vice versa) violates `DCA-USE-014`. If the user wants to
-  *introduce* features into a flat context, move **all** its use cases in one refactoring, not just the new one.
+- Folders hold use cases directly (`*InputPort`, `*UseCase`) → **flat**: `application/{usecasename}/`.
+- Folders hold folders of use cases → **grouped by feature**: `application/{feature}/{usecasename}/`. A feature is
+  an optional, domain-named group of use cases — a navigation boundary below the layer, not a module or aggregate
+  owner. Ask which feature (offer existing); none fits → a new lowercase name **from the ubiquitous language**.
+  Reject technical buckets (`commands`, `queries`, `handlers`, `services`, `utils`) and delivery mechanisms
+  (`web`, `api`).
+- Never mix (`DCA-USE-014`). Introducing features into a flat context moves **all** its use cases in one refactoring.
 - `application/shared/` stays context-wide in both forms — never create `application/{feature}/shared/`.
-- A vertical slice `{context}/{feature}/{domain,application,adapter}` is **not** a feature (the layer must stay
-  above the feature); refuse to create it and point to the context mode instead.
+- A vertical slice `{context}/{feature}/{domain,application,adapter}` is **not** a feature (layer stays above
+  feature); refuse, point to the context mode.
 
 ### Generated files
 
@@ -156,42 +141,31 @@ namespace segment) or `Application/{Feature}/{Name}/`.
 
 ### Wiring
 
-The implementation gets:
-- Constructor injection of all needed output ports (declared explicitly by the user or detected)
-- A `// TODO: implement` body — the skill doesn't try to write business logic; its steps name the context's
-  refusal style (return the case, or throw the use-case exception)
-- Proper imports (using project conventions: lombok `@RequiredArgsConstructor` if project uses lombok elsewhere; otherwise explicit constructor)
+- Constructor injection of every output port (named or detected)
+- A `// TODO: implement` body whose steps name the refusal style (return the case, or throw the use-case exception)
+- Lombok `@RequiredArgsConstructor` where the project uses lombok, else an explicit constructor
 - C#: add the `services.AddScoped<I{Name}InputPort, {Name}UseCase>()` line to the context's `Add{Context}Context()`
 
-If the user named output ports that don't exist yet, create them in `application/shared/` (`Application/Shared/`) as interfaces extending `Repository` or `OutputPort` (`IRepository` / `IOutputPort`, async methods) depending on intent.
+Named output ports that don't exist yet: create them in `application/shared/` (`Application/Shared/`) as interfaces extending `Repository` or `OutputPort` (`IRepository` / `IOutputPort`, async methods) depending on intent.
 
 ### Naming check
 
-If the user's name doesn't follow the project's verb pattern (`placeOrder` vs `orderPlace`), gently warn but proceed with what they asked for.
+Name outside the project's verb pattern (`placeOrder` vs `orderPlace`) → warn, proceed as asked.
 
 ### DTO mapping at the adapter boundary
 
-Use cases speak `Command`/`Query`/`Result` records. Adapter framework code speaks request DTOs, response DTOs,
-JPA `@Entity` types, Kafka records etc. Mapping happens **at the adapter boundary only** — never in the use
-case, never in the domain.
-
-Read `reference/dto-mapping.md` before writing an adapter's mapping: which adapter maps which direction,
-when to map inline and when a `*Converter` earns its file, an inbound and an outbound example, and the
-anti-patterns (the aggregate as the REST response, a `*Command` as a JPA entity, mapping in the use case).
+Use cases speak `Command`/`Query`/`Result`; adapters speak DTOs, `@Entity` types, messages. Map **at the adapter
+boundary only**. Read `reference/dto-mapping.md` before writing an adapter's mapping.
 
 ---
 
 ## Mode aggregate
 
-**User intent:** "Create an `Order` aggregate root in the `orders` context."
-
 ### Required parameters
 
-- **Context** (e.g. `orders`)
-- **Aggregate name** in PascalCase (e.g. `Order`) — a term of the context's glossary; a new term enters the
-  glossary through `ubiquitous-language` first
-- **ID type:** auto-generated UUID, sequence number, or natural key — ask
-- **Optional:** initial fields the user knows (e.g. `customerId`, `placedAt`)
+- **Context**; **name** in PascalCase, a glossary term (a new term enters via `ubiquitous-language` first)
+- **ID type** — UUID, sequence or natural key: ask
+- Optional initial fields
 
 ### Generated files
 
@@ -214,32 +188,26 @@ owner's id type, add `implements Owned<{OwnerId}>` / `, IOwned<{OwnerId}>` to th
 id and owner id on the repository (`Optional<{Name}> findByIdFor{Owner}({Name}Id id, {OwnerId} owner)` /
 `Task<{Name}?> FindByIdFor{Owner}Async(...)`) — `DCA-TAC-026` asks for it. If nobody owns it, generate neither.
 
-If the project uses lombok: use `@Getter`, `@AllArgsConstructor` etc. Otherwise explicit accessors.
+Lombok in the project → `@Getter`, `@AllArgsConstructor`; else explicit accessors.
 
 ### The domain type itself is `dca-modelling`'s
 
-The templates lay out the structure. The generated aggregate has:
-- A `create(...)` static factory that emits a `{Name}Created` event
-- Empty `domainEvents()` and `clearDomainEvents()` (or inherit from `BaseAggregateRoot` if present)
-- A `// TODO: invariants and business methods` placeholder
+Generated: a `create(...)` factory emitting `{Name}Created`; `domainEvents()`/`clearDomainEvents()` (inherited
+from `BaseAggregateRoot` if present); a `// TODO: invariants and business methods`.
 
-Where the user names the invariants and behaviour, call `dca-modelling` for them: it holds how an aggregate
-enforces an invariant, which events it registers at which transition, and how a refused rule gets its own
-named `DomainException` subtype beside the aggregate. This mode generates no business method, no setter and no
-exception type of its own — a failure's name has to come from the rule, not from a template.
+Named invariants and behaviour → call `dca-modelling` (invariants, events per transition, a named
+`DomainException` subtype per refused rule). This mode writes no business method, setter or exception type — a
+failure's name comes from the rule, not a template.
 
 ---
 
 ## Mode store
 
-**User intent:** "Add a `LoginProtection` store to the `customeraccount` context."
-
-A **Store** is the second persistence-shaped output port in DCA. Use this mode **instead of** the aggregate
-mode's Repository when the data being persisted has no aggregate lifecycle.
+Instead of a Repository when the persisted data has no aggregate lifecycle.
 
 ### Decision: Store or Repository?
 
-Before creating it, confirm with the user:
+Confirm with the user:
 
 | If the stored object… | Use |
 |---|---|
@@ -247,14 +215,12 @@ Before creating it, confirm with the user:
 | is appended/recorded; queried by aggregate (count, exists, sum) | **Store** (this mode) |
 | is a Value Object or `record` | almost always **Store** |
 
-Choose by lifecycle: an aggregate collection uses a Repository; operational records use a Store. Lookup by id does not decide between them.
+By lifecycle; lookup by id does not decide.
 
 ### Required parameters
 
-- **Context** (e.g. `customeraccount`)
-- **Store name** (e.g. `LoginProtection` — generates `LoginProtectionStore`)
-- **Stored type:** the value object / record / event being stored (e.g. `LoginAttempt`)
-- **Query methods:** what aggregate questions the Store answers (e.g. `countRecentFailures`, `isBlocked`)
+- **Context**; **store name** (`LoginProtection` → `LoginProtectionStore`); **stored type** (value object / record /
+  event, e.g. `LoginAttempt`); **query methods** — the aggregate questions it answers (`countRecentFailures`, `isBlocked`)
 
 ### Generated files
 
@@ -267,22 +233,19 @@ A Store may expose lookup by key (`findById` / `FindByIdAsync`). Do not generate
 
 ### Anti-pattern guard
 
-If the user names the new port `*Repository` but the stored type is a Value Object or record, point that out and recommend this mode instead. Likewise, if the user asks for a Store but names the stored type as an aggregate root, recommend the aggregate mode.
+`*Repository` for a value object or record → recommend this mode. A Store for an aggregate root → recommend the aggregate mode.
 
 ---
 
 ## Mode domainservice
 
-**User intent:** "Add a `TransferPolicy` domain service to the `accounts` context."
-
-A domain service is part of the domain: it lives in the domain layer, framework-free,
-named in the ubiquitous language. It exists for a rule that spans several aggregates, which no single aggregate
-may drive — so **the application calls it**, and it **takes the aggregates as parameters**, not values pulled out
-of them. Facts the domain does not own may be passed alongside.
+Domain layer, framework-free, ubiquitous-language name; for a rule spanning several aggregates that none may
+drive. **The application calls it**; it **takes the aggregates as parameters**, never values pulled out of them.
+Facts the domain does not own may be passed alongside.
 
 ### Decision: is it a domain service?
 
-Confirm with the user before creating it:
+Confirm with the user:
 
 | If the logic… | Then |
 |---|---|
@@ -291,14 +254,12 @@ Confirm with the user before creating it:
 | needs facts the model does not hold, and the domain itself must ask for them | a domain gateway beside the model — `dca-modelling`; it never writes to the outside |
 | exists only because a use case got long | no domain service; the use case is split instead |
 
-A service named `*Manager` or `*Helper` is a technical bucket, not ubiquitous language — ask for the domain's
-word. `*Service` is fine where the business says it (a pricing service).
+`*Manager`/`*Helper` is a technical bucket — ask for the domain's word. `*Service` is fine where the business
+says it.
 
 ### Required parameters
 
-- **Context** (e.g. `accounts`)
-- **Service name** in PascalCase, from the context's glossary (e.g. `TransferPolicy`); a new term enters the
-  glossary through `ubiquitous-language` first
+- **Context**; **name** in PascalCase from the glossary (a new term via `ubiquitous-language` first)
 - **The operation:** its name, **the aggregates it takes** (at least one aggregate or entity parameter), the
   facts passed alongside, and the result type (a value object or a result record, never a changed foreign
   aggregate)
@@ -316,15 +277,13 @@ The marker is the project's `DomainService` — `dev.domaincentric.dca.buildingb
 
 ### Wiring
 
-- **The use case calls it**, after loading the aggregates through their output ports and before saving them.
-  It obtains the service the way the project wires its other collaborators: constructed in the use case or
-  registered in configuration where the resolved preset has a container — never by annotating the service.
+- **The use case calls it**, after loading the aggregates, before saving them. Wired like the project's other
+  collaborators: constructed in the use case, or registered in configuration where the preset has a container —
+  never by annotating the service.
   C#: `services.AddSingleton<{Name}>()` in the context's `Add{Context}Context()`.
-- **No aggregate, entity or value object constructs or calls it.** Where the user asks for that, explain why and
-  place the call in the use case.
+- **No aggregate, entity or value object constructs or calls it.** Asked for → explain, place the call in the use case.
 
 ### The rule itself is `dca-modelling`'s
 
-The template lays out the type. Call `dca-modelling` for the operation's body: the rule across the aggregates,
-the named failure when it refuses, the events the aggregates register as a result. This mode writes no business
-logic of its own.
+Call `dca-modelling` for the body: the rule, the named failure on refusal, the events the aggregates register.
+No business logic here.

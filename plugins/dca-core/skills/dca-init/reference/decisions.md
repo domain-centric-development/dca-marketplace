@@ -1,21 +1,14 @@
 # Phase 2 — Decisions
 
-Part of the `dca-init` skill: what its *Phase 2 — Decisions* step points to — the knowledge behind every decision A–G; `reference/questions.md` holds the wording of the questions.
-
-`reference/questions.md` is the catalogue of every question this skill may ask, each with where its answer is
-looked up first and when it is asked at all. After the summary, look every answer up and ask **only the open
-ones — all at once, in catalogue order, word for word**, with the options and the default the catalogue gives;
-through a structured question tool where the harness has one, in prose otherwise. Ask nothing the catalogue
-does not list. Called by `dca-new`, take the answers it hands over; they were asked in its one pass. What the
-decisions below mean — the knowledge behind each question — follows; the catalogue holds the wording.
+What each decision A–G means; the wording of the questions is `reference/questions.md`.
 
 A. **Marker policy** (INIT-MARKERS) — per existing marker-like type:
    - `Migrate` — replace it with the package marker (`extends BaseAggregateRoot<T, ID>`, `implements Value`,
      …); mechanical, the old type is deleted.
    - `Alias` — keep the type, make it extend or implement the package marker
      (`interface Aggregate<T, ID> extends AggregateRoot<T, ID>`); existing code compiles unchanged and the
-     rules see every implementor. Recommend this for large code bases; note that the rules still report the
-     class by *its* markers, so an alias must carry the same generics.
+     rules see every implementor. Recommended for large code bases; an alias must carry the same generics
+     (rules report the class by *its* markers).
    - `Role` — keep the type, name it in the layout's marker roles (`reference/own-vocabulary.md`, with limits).
 
 B. **Layout** (INIT-LAYOUT where folders cannot be mapped) — every deviation from the DCA defaults becomes a `DcaLayout` builder call (Java / .NET):
@@ -45,15 +38,12 @@ C. **Rule sets** (INIT-RULES) — multi-select; the answer is the `dca.rules.set
    - **DDD-specific:** `tactical`, `strategic`, `contextmap`, `advanced`
    - **DCA-specific:** `usecase`, `errors`
    - **.NET only, always on the .NET branch:** `dotnet`
-   Share `reference/module-selection-guide.md` for the recommendation by project profile and subdomain type.
-   It is the one place for that knowledge: `dca-add rules` reads the same file when a set is added later.
-   Strictness varies by subdomain: core contexts run the full catalog, supporting and generic contexts may run
-   the structural baseline only — record that in a pattern-selection ADR. The subdomain types come from the
-   designed map (`domain:` in `dca.profile.yaml`, `product/domain.md` by default); where it
-   has none, ask. A single rule the team rejects
-   becomes `dca.rules.off` + `dca.rule.<id>.reason`; one they are working towards `dca.rules.warn`. Both stay
-   visible in the report — prefer that over a silent gap. Existing violations the team accepts as a baseline
-   are `dca-add freeze`, after this skill.
+   Recommendation by project profile and subdomain type: `reference/module-selection-guide.md` (the one place;
+   `dca-add rules` reads it too). Core contexts run the full catalog, supporting and generic may run the
+   structural baseline only — record it in a pattern-selection ADR. Subdomain types from the designed map
+   (`domain:` in `dca.profile.yaml`, default `product/domain.md`); none there → ask. Rejected rule →
+   `dca.rules.off` + `dca.rule.<id>.reason`; worked towards → `dca.rules.warn` — both visible in the report,
+   preferred over a silent gap. Accepted baseline → `dca-add freeze`, after this skill.
 
 D. **Suffix conventions** (INIT-SUFFIX where the code uses two) — DCA's defaults are `*UseCase` for the use-case class, `*InputPort` for its
    interface, `*Controller` for MVC (server-rendered) controllers and `*Resource` for REST adapters (.NET

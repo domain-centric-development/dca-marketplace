@@ -1,28 +1,25 @@
 # Unit tests: every invariant, its guards included
 
-A unit test drives one aggregate, entity, value object or domain service alone — no framework, no container, no
-database. It is the part of the suite that survives a rewrite of every adapter.
+One aggregate, entity, value object or domain service alone — no framework, container or database.
 
 ## What gets a unit test
 
-- **Every rule a domain type enforces is an invariant, and every invariant has its own test**: a task completed
-  twice, an order line with a negative quantity, a title longer than allowed.
-- **The guards are invariants too**: a value that is required, trimmed, within a range, unique within its aggregate.
-  A criterion rarely names them, because the page trims and the form requires — which is why they need their own
-  test: the next caller is not the page. A guard nobody named as an invariant is not written.
-- **A range is tested at both bounds**; a trimmed value is refused untrimmed or stored trimmed, whichever the rule says.
-- **A use case gets no unit test.** Its port test runs it in the wired application; a second test of the same path
-  with doubles proves the doubles.
+- **Every rule a domain type enforces has its own test** (completed twice, negative quantity, title too long).
+- **Guards are invariants too** — required, trimmed, in range, unique within the aggregate — and need their own test
+  even when the page trims and the form requires: the next caller is not the page. A guard nobody named as an
+  invariant is not written.
+- **A range at both bounds**; a trimmed value refused untrimmed or stored trimmed, as the rule says.
+- **No unit test for a use case** — its port test runs it.
 
-A unit test is never a criterion's test. It stands in the `Invariants` table, one row per rule.
+Never a criterion's test; it stands in the `Invariants` table, one row per rule.
 
 ## How
 
-- Construct the type with the values the rule is about, visible in the test; a builder gives the rest.
-- Assert the outcome — the refusal and its type, the new state — never a private field or a call.
-- A refusal is asserted as the exact failure type or the exact returned case, with its values.
-- Time and chance come in as parameters or injected sources: a fixed clock, a seeded source.
-- Never double a value object; build the real one.
+- Construct with the rule's values visible in the test; a builder gives the rest.
+- Assert the outcome — the exact failure type or returned case with its values, the new state — never a private
+  field or a call.
+- Time and chance as parameters or injected sources (fixed clock, seeded source).
+- Never double a value object.
 
 ```java
 @Test
@@ -44,10 +41,9 @@ public void RefusesATitleLongerThanAllowed()
 }
 ```
 
-The `repeat` builds the input, not the expected value; the rule against logic in a test is about what is asserted.
+`repeat` builds the input, not the expected value — allowed.
 
 ## A rule the code already has
 
-A test of a rule the code does not have yet is red before the rule is built — that is its proof. A test of a rule
-that exists already is green at once. Break it: change the production code minimally so the rule is gone, see the
-test turn red, revert. A test that stays green under its break does not guard the rule.
+The test is green at once. Break the rule minimally in production code, see red, revert. Green under its break =
+does not guard the rule.

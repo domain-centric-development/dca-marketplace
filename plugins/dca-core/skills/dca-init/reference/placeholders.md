@@ -1,7 +1,6 @@
 # Template placeholders
 
-Part of the `dca-init` skill: the placeholders its templates carry, where each value comes from, and an
-example.
+The templates' placeholders, their source, an example.
 
 | Placeholder | Source | Example |
 |---|---|---|

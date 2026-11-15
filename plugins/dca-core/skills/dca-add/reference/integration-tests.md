@@ -1,16 +1,12 @@
 # An integration level
 
-An integration test has two shapes. The **port test** runs a use case through its input port in the wired
-application: the real outgoing adapters, persistence as the project runs it in tests, an external system stubbed
-at the protocol (`http-stub`) — the use case tested once, however many adapters call it. The **adapter test**
-runs one incoming adapter against a stubbed input port: the request it turns into a command, the page or
-response it makes of the result and of each refusal. It sits between a unit test, which proves one type, and an end-user test, which drives the
-running application from outside. A delivery pipeline puts every scenario but a story's happy path here, so a
-project without this level has nowhere to put them.
+Two shapes. **Port test**: a use case through its input port in the wired application — real outgoing adapters,
+persistence as the project runs it in tests, external systems stubbed at the protocol (`http-stub`); the use case
+tested once, however many adapters call it. **Adapter test**: one incoming adapter against a stubbed input port —
+the command it makes of the request, the page or response it makes of the result and each refusal.
 
-The level is its own source set or test project, with its own command: a unit-test run stays fast, and a
-check can tell which command runs a given test by where the test lives. Versions are looked up (Maven
-Central, NuGet), never recalled.
+Own source set or test project, own command (unit runs stay fast; a check tells the command from the test's
+path). Versions looked up (Maven Central, NuGet).
 
 ## Java — Gradle
 
@@ -121,11 +117,9 @@ abstract class IntegrationTest {
 }
 ```
 
-This is how tests here start clean — **not** `@DirtiesContext` per test method, which rebuilds the whole
-Spring context for every test and makes the level slow for nothing, and not a random schema per test.
-Write the convention into the skeleton with the smoke test, even before there is a table: a test stage
-follows the layout it finds, and a project without a reset convention gets whichever one the first
-story's author reaches for.
+**Not** `@DirtiesContext` per test method (rebuilds the context per test), not a random schema per test.
+Write the convention into the skeleton with the smoke test, even before there is a table — a test stage follows
+the layout it finds.
 
 ## The two shapes (Java, Spring)
 

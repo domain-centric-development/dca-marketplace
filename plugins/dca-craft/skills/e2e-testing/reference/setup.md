@@ -1,24 +1,15 @@
 # Setting up a browser runner
 
-A project that shows a page needs a way to test it in a browser before its first story. Otherwise every
-test of that page falls back to reading markup or script text, which proves the wording but not the
-behaviour. Setting the runner up is a stack decision, taken once — by a person, by the skill that sets the
-project up, or by a scoping step — never inside a story. This page is how to take it: Playwright, headless, started from the
-build, writing a test report a CI job or a gate can read.
+A stack decision, taken once — by a person, the project's setup skill or a scoping step — never inside a story.
+Playwright, headless, started from the build, writing a report a CI job or gate can read.
 
-Four things make a browser suite usable from the first day:
-
-1. **The application starts inside the test**, on a free port. Nothing has to be running first, so the
-   suite runs the same on a laptop, in CI and in an agent's shell, and a red test means the page, never
-   "nothing answered". What the application needs comes with it: an external system as a stub the suite
-   starts first (below), a database as the test instance the application's tests already use. A base-URL
-   property may point the same tests at a deployment; without it, the suite starts its own.
-2. **The browser is installed by the build**, once per machine, before the first test.
-3. **Time is controlled.** A page that counts, polls or expires is tested with a fake clock that moves
-   only when the test moves it — five minutes of waiting become one call.
-4. **Browser permissions are controlled.** Notifications, geolocation or the clipboard are replaced before
-   the page loads, with the answer the test chooses, so "the user allowed it" and "the user refused it"
-   are two tests, not a manual click.
+- **The app starts inside the test** on a free port, with an external system as a stub started first and the
+  database the app's tests already use. A base-URL property may point the tests at a deployment; without it the
+  suite starts its own.
+- **The build installs the browser**, once per machine.
+- **Time is controlled**: a fake clock that moves only when the test moves it.
+- **Browser permissions are controlled**: notifications, geolocation, clipboard replaced before load, answered as
+  the test chooses ("allowed" and "refused" are two tests).
 
 ## Gradle (Java or Kotlin) — verified
 
@@ -92,10 +83,9 @@ abstract class BrowserTest {
 }
 ```
 
-`classes =` names the `@SpringBootApplication` class. Without it the test finds its configuration only when
-that class sits in the test's package or above it — a main class in `<base>.infrastructure`, the composition
-root, is below the base package, and the suite fails before its first test with "Unable to find a
-@SpringBootConfiguration". `START` is a constant of the base class, e.g. `"2026-01-05T08:00:00Z"`.
+`classes =` names the `@SpringBootApplication` class — required when it sits below the test's package (e.g. a
+main class in `<base>.infrastructure`), else "Unable to find a @SpringBootConfiguration". `START` is a base-class
+constant, e.g. `"2026-01-05T08:00:00Z"`.
 
 Without Spring Boot, start the application's server on port 0 in `@BeforeAll` and read the port it bound.
 
@@ -120,10 +110,9 @@ packages `Microsoft.Playwright` and `Microsoft.AspNetCore.Mvc.Testing`:
 </ItemGroup>
 ```
 
-The web project ends `Program.cs` with `public partial class Program;` so the factory can name it. The browser
-must reach a real port, and `WebApplicationFactory`'s default server is in-memory, so the factory hosts
-Kestrel (`UseKestrel(0)`, new in ASP.NET Core 10) on a free port. The browser is installed through the
-package's own entry point, once per test run — no PowerShell needed:
+The web project ends `Program.cs` with `public partial class Program;`. `WebApplicationFactory`'s default server
+is in-memory; the browser needs a real port, so host Kestrel with `UseKestrel(0)` (ASP.NET Core 10). The browser is
+installed through the package's own entry point, once per run — no PowerShell:
 
 ```csharp
 public abstract class BrowserTest : IAsyncLifetime
@@ -174,10 +163,8 @@ application is started by the config's `webServer` entry. Not verified in this f
 
 ## External systems: a stub the suite owns
 
-The application the suite starts calls an external system — a payment provider, a mail service — through
-an adapter whose base URL is configuration. The suite starts an HTTP stub on a free port **before** the
-application and hands the stub's URL to it; each test arranges the stub's answer. The stub is the suite's,
-started once with the application, so every test in the run sees the same address.
+The app reaches an external system through an adapter whose base URL is configuration. The suite starts an HTTP
+stub on a free port **before** the app, once, and hands its URL in; each test arranges the stub's answer.
 
 Java, Spring Boot (the stub on a free port, its URL a property of the application under test):
 
@@ -205,24 +192,21 @@ factory.UseKestrel(0);
 factory.StartServer();
 ```
 
-A test that needs the real system does not belong in this suite; a test against a deployment points the
-base-URL property at it and arranges nothing.
+A test needing the real system does not belong here; a test against a deployment sets the base-URL property and
+arranges nothing.
 
 ## A suite that needs a running application
 
-An existing suite reads its base URL from a property or an environment variable and fails, or skips, when
-nothing answers there. It is converted in its base test alone: without the property, the base starts the
-application itself on a free port — once per run, shared by every test class — and returns that address;
-with the property, it keeps pointing at the application named. Skip conditions that only asked "is the base
-URL set?" are removed, since the suite now always has an application. The tests themselves do not change.
-Run the whole suite afterwards with nothing started beforehand: green, the same count of tests as before.
+Convert the base test alone: without the base-URL property it starts the app on a free port — once per run,
+shared by every test class — and returns that address; with it, it keeps the named app. Remove skip conditions
+that only asked "is the base URL set?". Tests unchanged. Then run the whole suite with nothing started: green, same
+test count as before.
 
 ## Time: the fake clock
 
-Install the clock before the page loads, at a fixed time, and **pause** it there. `install()` alone only
-replaces the clock: `Date.now()` and every interval go on running at real speed (measured: one second of
-real time moved `Date.now()` by 1,010 ms and fired a 100 ms interval ten times), so a countdown test
-depends on how fast the machine is. After `pauseAt`, nothing moves until the test moves it:
+Install before load at a fixed time and **pause** there. `install()` alone keeps `Date.now()` and intervals
+running at real speed (measured: 1 s real moved `Date.now()` 1,010 ms, fired a 100 ms interval ten times). After
+`pauseAt` nothing moves until the test moves it:
 
 ```java
 page.clock().install(new Clock.InstallOptions().setTime("2026-01-05T08:00:00Z"));
@@ -233,14 +217,13 @@ page.clock().runFor(3_000);                       // three seconds of timers fir
 assertThat(page.locator("[data-test='remaining']")).hasText("04:57");
 ```
 
-`runFor` fires every timer due in that span, in order, so a countdown ticks as it would in real time. A test
-of something that happens after an hour takes milliseconds. The .NET calls are the same with `Async`:
+`runFor` fires every timer due in that span, in order. .NET: the same with `Async`:
 `Page.Clock.InstallAsync(new() { TimeString = … })`, `PauseAtAsync(…)`, `RunForAsync(…)`.
 
 ## Permissions: a stand-in, chosen by the test
 
-For notifications, replace the browser's `Notification` before any page script runs. It then records what
-would have been shown and answers the permission question the way the test chose:
+Replace `Notification` before any page script runs; it records what would be shown and answers permission as the
+test chose:
 
 ```java
 page.addInitScript("""
@@ -254,24 +237,20 @@ page.addInitScript("""
     """.formatted("denied"));
 ```
 
-`page.evaluate("() => window.__notifications")` then lists what the page announced. The same pattern holds
-for any browser API whose answer is the user's: replace it before the page loads, record what it is asked,
-and answer as the test decides. Playwright's own `context.grantPermissions(...)` sets the permission, but
-headless browsers show no notification, so a stand-in is what makes the notification itself observable.
+`page.evaluate("() => window.__notifications")` lists what the page announced. Same pattern for any browser API
+whose answer is the user's. `context.grantPermissions(...)` alone is not enough: headless browsers show no
+notification, so only a stand-in makes it observable.
 
 ## Proving the runner works
 
-Before the first story, one smoke test proves that the browser reaches the application.
+One smoke test before the first story.
 
-- **The page it opens exists without code.** A new project has no controller yet, and it should not get
-  one just to be tested — a controller needs a place in the architecture that no feature has decided.
-  A static start page does the job: `src/main/resources/static/index.html` with Spring Boot, which serves
-  it at `/` by itself; `wwwroot/index.html` with ASP.NET Core and `UseDefaultFiles()` + `UseStaticFiles()`;
-  the start page of a JavaScript app. Give it a `<title>`. The first feature that maps `/` takes over, and
-  the placeholder can go.
-- **It asserts what every start page keeps:** the page loads and its title is not empty — never the
-  placeholder's text. The first real page then leaves the smoke test green, instead of turning it into a
-  test the first story has to change.
+- **The page exists without code** — no controller just to be tested. A static start page with a `<title>`:
+  `src/main/resources/static/index.html` (Spring Boot serves it at `/`); `wwwroot/index.html` with
+  `UseDefaultFiles()` + `UseStaticFiles()` (ASP.NET Core); a JavaScript app's start page. The first feature mapping
+  `/` replaces it.
+- **Assert what every start page keeps**: it loads, title not empty — never the placeholder's text, so the first
+  real page leaves it green.
 
 ```java
 @Test                                     // with Maven: in a class named `*IT`
@@ -282,5 +261,4 @@ void theStartPageOpensInTheBrowser() {
 }
 ```
 
-Then empty the title on purpose and watch the test fail, and restore it. A browser suite that stays green
-while the page is broken is not testing the page.
+Then empty the title, see it fail, restore it.

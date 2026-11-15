@@ -12,43 +12,28 @@ disable-model-invocation: false
 
 # /ubiquitous-language — Domain glossary per bounded context
 
-The Ubiquitous Language is DDD's most underused tool. This skill keeps it
-**alive**: a maintained glossary per bounded context, plus checks that the
-code agrees with the glossary.
-
-When the glossary and the code disagree, one of them is wrong. The skill
-surfaces the mismatch; the user (or domain expert) decides which side moves.
-
-This skill is the one place the glossary's location and format are described.
-A skill that builds domain types, or a delivery pipeline's document stage,
-enters a term through it rather than writing its own entry shape.
+- The one place the glossary's location and format are defined. A skill that builds domain types, or a delivery
+  stage, enters a term through this skill, never with an entry shape of its own.
+- Glossary and code disagree → surface it; the user / domain expert decides which side moves.
 
 ## Glossary location
-
-One `glossary.md` per bounded context, in the project's living spec beside the context's scenarios:
 
 ```
 {spec}/{context}/glossary.md        # default: product/spec/{context}/glossary.md
 ```
 
-`{spec}` is the `spec:` key of the configuration file the project instructions name (a
-``- configuration: `<file>` `` line in `AGENTS.md`), `product/spec` where the file or the key is absent.
-`{context}` is the context's name in lowercase, words joined by `-` (`Product Catalog` →
-`product-catalog`). The glossary is the one file of the spec a skill writes; the context's scenarios
-beside it change only through a delivery. A project that names its own glossary place in that
-configuration keeps it. Where glossaries still stand beside the domain code, a migration moves them —
-the delivery pipeline's update where the project has one, by hand with `git mv` otherwise; never start
-a second glossary beside one.
-
-A shared kernel — the model several contexts share, the same in each — has a glossary of its own beside
-them, `{spec}/shared-kernel/glossary.md`, in the same format. It is no context: no scenarios, no features.
-A context names a shared term where it uses it — an aggregate's `**Identity:**` line names its shared id —
-and does not define it again; the definition has its one place in the shared kernel's glossary.
-
-A project may describe its designed contexts before they have code, with a section of words per context.
-Until the context's glossary file exists, that section is its glossary. The first entry written to the
-file takes the section's rows with it and leaves one line there naming the file — moved, not copied: the
-words of one context have one place.
+- `{spec}`: the `spec:` key of the configuration file `AGENTS.md` names (``- configuration: `<file>` ``);
+  `product/spec` where file or key is absent. A project naming its own glossary place there keeps it.
+- `{context}`: context name lowercased, words joined by `-` (`Product Catalog` → `product-catalog`).
+- The glossary is the one spec file a skill writes; the scenarios beside it change only through a delivery.
+- Glossaries still beside the domain code: move them (the delivery pipeline's update where there is one, else
+  `git mv`). Never start a second glossary beside one.
+- **Shared kernel** (model several contexts share identically): `{spec}/shared-kernel/glossary.md`, same format;
+  no context — no scenarios, no features. A context names a shared term where it uses it (an aggregate's
+  `**Identity:**` line names its shared id) and never defines it again.
+- **Designed context without a glossary file:** its section of words in the project description is its glossary.
+  The first entry written to the file moves the section's rows with it and leaves one line naming the file —
+  moved, not copied.
 
 ## Glossary entry format
 
@@ -76,126 +61,64 @@ früheren Iterationen im Umlauf, sind aber abgelöst.
 ausliefern (`fulfill`)
 ```
 
-Required fields: `Definition`, `Type`; `Operations` as well for every term of the domain that has operations a
-person of the domain names.
+- Required: `Definition`, `Type`; `Operations` too for every domain term with operations a person of the domain
+  names. Optional: `Identity`, `Synonyms (avoid)`, `Related terms`, `Notes`.
+- `Type` is one of: `Aggregate Root`, `Entity`, `Value Object`, `Domain Event`, `Integration Event`,
+  `Domain Service`, `Specification`, `Feature`, `Use Case`, `Concept` (anything else).
+- Heading: the term as its owners say it, plus the code's word in parentheses where it differs —
+  `### Titel (TaskTitle)`. Readers and checks find it by either word; code word alone = a glossary of the code.
 
 ### What a glossary covers
 
-A context's glossary describes its **domain** and its **application**:
-
-- **Domain:** the aggregates, entities and value objects that carry the domain's meaning — each with its
-  operations — and the events: the domain events, and the integration events other contexts read.
-- **Application:** the features and the use cases.
-
-`Operations` lists what a person of the domain names as something done with or asked of the term: the commands, and
-the queries too (*is it available*, *does it match*). Not entered: constructors and conversions (`of`, `fromHash`),
-getters, and objects that are only technical. The test for an operation and for a term is the same — would a person
-of the domain name it?
-
-A **feature** is a term as well — `**Type:** Feature`: a part of the context's behaviour its people name, which groups
-use cases and, in a project with a living spec, a folder of what holds (`<spec>/<context>/<feature>/scenarios.md`).
-The heading carries the term and, in parentheses, the name as a code package spells it — `### Produktdetails
-(productdetails)` —; the definition says what it groups, `Related terms` its use cases where the code mirrors them.
-Optional: `Identity`, `Synonyms (avoid)`, `Related terms`, `Notes`.
-
-The heading carries the term as the people who own it say it, and — where the code's word differs —
-that word in parentheses: `### Titel (TaskTitle)`. Whoever looks a term up, a reader or a delivery
-pipeline's check, finds it by either word; a heading with only the code's word is a glossary of the
-code, not of the domain.
+- **Domain:** aggregates, entities, value objects carrying meaning (each with its operations); domain events and
+  the integration events other contexts read.
+- **Application:** features and use cases.
+- **Feature** = a term, `**Type:** Feature`: behaviour its people name; groups use cases and, with a living spec,
+  a folder `<spec>/<context>/<feature>/scenarios.md`. Heading carries the package spelling:
+  `### Produktdetails (productdetails)`. Definition says what it groups; `Related terms` its use cases where the
+  code mirrors them.
+- Test for a term and an operation alike: would a person of the domain name it? Not entered: constructors and
+  conversions (`of`, `fromHash`), getters, purely technical objects.
 
 ### Operations are entered like terms
 
-An operation is the verb the people who own the domain use for what happens to the term: the domain's
-word, and the code's word in parentheses where it differs — `anlegen (create)`, `erledigen (complete)`.
-Where the domain's word could name more than one operation, add one line that says which it is.
-
-A verb is a modelling decision, not a translation. One domain word can name operations with different
-effects, and the effect says which object holds the rules: *anlegen* covers *create* (the thing comes
-into existence) and *add* (an existing thing goes into a collection); *löschen* covers *delete* (gone)
-and *cancel* or *archive* (kept, with a state). Whoever writes the code and translates it picks one, the next writer may
-pick the other; where the glossary gives the code word, both use it. So the code word of an operation
-is asked, never chosen while translating.
-
-Ask in the grammar of Event Storming, without the workshop:
-
-1. **The event first** — what happened, in the past tense, in the domain's words. People agree on a
-   fact more readily than on a procedure, and the participle fixes the verb.
-2. **The command** that caused it — the operation, with its code word.
-3. **The aggregate** that accepts the command and holds the rules — the term the operation is entered on.
-   The effect decides it: "What exists before this step and after it, and whose state changes?"
-4. **The read model** a person looks at to decide — a term of its own, **and the verb for looking at
-   it**. A read changes nothing, so no event names it and step 1 never reaches its verb: ask it
-   directly — "What do you call looking at this?" — and enter it like any operation, with its code
-   word (`anzeigen (list)` or `anzeigen (show)`, not both). Two writers who translate a read alone
-   pick different verbs for it.
-5. **Policies** ("whenever this happens, do that") — an operation that an event triggers.
-6. **Hot spots** — what nobody can answer yet. A hot spot stays an open question; it is not entered.
-
-### Look up how the field names it — per bounded context
-
-Before asking, and where the session can search, look up how the field of **this** context names its
-operations. The same word means different things in different contexts — *cancel* an authorization in
-payment, *cancel* an order in ordering — so the lookup is per context, never for the product as a whole:
-
-1. **A published standard** for the context's subdomain, where one exists (healthcare, payments,
-   logistics have them). Offer it first.
-2. **The vocabulary of widely used systems** of that subdomain — their APIs and documentation.
-3. **The operations they keep apart that look alike** — two verbs with different effects, such as holding
-   an amount and collecting it. These are the most useful finding: each is a question the person answers.
-
-Offer what you find per operation as options, each with its source; where the sources disagree, show
-the disagreement, it is a decision for the context. Nothing found enters the glossary unconfirmed. How
-far to follow the field depends on the subdomain: a **generic** context usually adopts the established
-vocabulary (it often conforms to a product it integrates); a **core** context keeps its own language and
-uses the lookup for the distinctions, not for the words. Without a search, ask as below.
-
-Names in the code then follow from the entry: the operation's code word names the method, the command
-and whatever the code calls the operation, and the event is the term plus the past participle
-(`OrderPlaced` for `place`).
-
-`Type` is one of: `Aggregate Root`, `Entity`, `Value Object`, `Domain Event`,
-`Integration Event`, `Domain Service`, `Specification`, `Feature`, `Use Case`, `Concept` (anything else).
+- `Operations` lists commands and queries (*is it available*, *does it match*) a domain person names.
+- Domain verb, code word in parentheses where it differs: `anlegen (create)`, `erledigen (complete)`. Where the
+  domain word could name more than one operation, add one line saying which.
+- The code word is a modelling decision, asked, never chosen while translating: *anlegen* = *create* (comes into
+  existence) or *add* (goes into a collection); *löschen* = *delete* (gone) or *cancel*/*archive* (kept, with a
+  state). The effect decides which object holds the rules.
+- How to ask (event first, Event-Storming grammar) and how to look up the field's vocabulary per context:
+  read `reference/entering-operations.md` before entering an operation.
+- Code names follow the entry: the code word names method, command and whatever calls the operation; the event is
+  term + past participle (`OrderPlaced` for `place`).
 
 ## Operations
 
 ### `/ubiquitous-language add <Term>`
 
-1. Determine which context the term belongs to. If unclear, ask.
-2. Check whether the term already exists in this context's glossary →
-   refuse with "already defined, did you mean update?".
-3. Check whether the term exists in **other** contexts → warn, propose a
-   cross-reference. Same word in two contexts is OK (DDD allows it), but
-   surface it so the user is conscious of it.
-4. Check whether the term appears in code as a different word (e.g. user
-   says "Order", but code uses "Purchase") → suggest renaming the code or
-   adding the code term as a synonym.
-5. For an operation: look up how the context's field names it, where the session can search
-   (*Look up how the field names it*); then ask for the event first, then the code word, and where the
-   word could name more than one effect, ask which (see *Operations are entered like terms*). Enter it on the term it
-   acts on, never as a heading of its own.
-6. Write the entry. Add cross-references in related entries.
+1. Determine the context; unclear → ask.
+2. Term already in this context's glossary → refuse: "already defined, did you mean update?".
+3. Term in **other** contexts → warn, propose a cross-reference (allowed, but make it conscious).
+4. Term in code under another word (user says "Order", code "Purchase") → suggest renaming the code or adding the
+   code term as a synonym.
+5. For an operation: follow `reference/entering-operations.md` (lookup, then event, then code word, then which
+   effect). Enter it on the term it acts on, never as a heading of its own.
+6. Write the entry; add cross-references in related entries.
 
 ### `/ubiquitous-language check [path]`
 
-Default scope: changed files (git diff). Optional explicit path.
+Scope: changed files (git diff) by default, or the path. Per source file (`*.java`, `*.cs`): context from the
+path, read its `glossary.md`, extract class/method/field identifiers:
 
-For each source file (`*.java`, `*.cs`):
+- in the glossary → silent pass
+- near-miss synonym (`OrderItem` vs `OrderLine`) → finding
+- names an operation by a verb the term's `Operations` lack (`addEntry` where the glossary says `create`) → finding
+- generic technical name (`*Helper`, `*Util`, `*Data`, `*Info`) → finding, suggest a domain name. `*Manager` is
+  domain vocabulary when the glossary says so (`PortfolioManager`)
+- absent and domain-significant → suggest `add`
 
-1. Determine the context (from path).
-2. Read the context's `glossary.md`.
-3. Extract identifiers (class names, method names, field names).
-4. For each identifier:
-   - Is it in the glossary? ✓ silent pass.
-   - Is it a near-miss synonym (`OrderItem` vs glossary's `OrderLine`)? → finding.
-   - Does it name an operation by a verb the term's `Operations` do not carry (`addEntry` where the
-     glossary says `create`)? → finding.
-   - Is it a generic technical name (`*Helper`, `*Util`, `*Data`, `*Info`)? →
-     finding (suggests a domain name). `*Manager` is domain vocabulary when the
-     glossary says so (`PortfolioManager`), not a technical suffix.
-   - Is it absent from glossary entirely (and looks domain-significant)? →
-     suggest adding to glossary.
-
-Output: report grouped by file, with severity:
+Report grouped by file:
 
 - **must-fix:** identifier is a deprecated synonym (struck-through in glossary)
 - **should-fix:** near-miss spelling or generic technical name
@@ -203,75 +126,44 @@ Output: report grouped by file, with severity:
 
 ### `/ubiquitous-language rename <Old> <New>`
 
-1. Confirm both terms — read glossary to see if `Old` exists.
-2. Show plan: code files affected, glossary entries to update, related
-   contexts that reference `Old` and need updating.
-3. Mark `Old` as superseded in the glossary (`Synonyms (avoid)` of `New`).
-4. On user confirmation: perform the rename via search-and-replace **with
-   the user reviewing each change** (don't auto-apply across the whole repo).
-5. Suggest `/adr new "Rename {Old} to {New} in {Context} context"` if the
-   rename is substantial.
+1. Read the glossary: does `Old` exist?
+2. Show plan: affected code files, glossary entries, other contexts referencing `Old`.
+3. Mark `Old` superseded (`Synonyms (avoid)` of `New`).
+4. On confirmation: search-and-replace with the user reviewing each change — never auto-apply repo-wide.
+5. Substantial rename → suggest `/adr new "Rename {Old} to {New} in {Context} context"`.
 
 ### `/ubiquitous-language audit`
 
-Cross-context audit:
-
-- Find terms that appear in two+ glossaries → list as "polysemous" (might
-  be fine, might need an ACL).
-- Find glossary entries that no longer appear in code → propose Cleanup
-  (delete or mark deprecated).
-- Find code identifiers that look domain-significant but aren't in any
-  glossary → propose `add`.
+- Term in 2+ glossaries → list as "polysemous" (fine, or needs an ACL).
+- Glossary entry no longer in code → propose cleanup (delete or mark deprecated).
+- Domain-significant code identifier in no glossary → propose `add`.
 
 ## Anti-patterns flagged
 
-- **Technical-prefix names in domain:** `OrderDto`, `OrderEntity`,
-  `OrderHelper`, `OrderManager` inside `domain/`. DTOs live in adapters;
-  Entities are the domain (no need for the suffix); helpers/managers betray
-  procedural thinking, not DDD.
-- **Domain-foreign vocabulary:** `processItem`, `executeAction`,
-  `handleRequest`. The Ubiquitous Language has *verbs from the business*,
-  not from the implementation.
-- **Same term, two contexts, no acknowledgment:** `Customer` in `sales` and
-  `Customer` in `support` may legitimately mean different things. If both
-  glossaries define it without referencing each other, the team is at risk
-  of confusion. Suggest making the polysemy explicit.
-- **Glossary as documentation of code:** entries that just describe what a
-  class does ("OrderRepository is a Spring Data interface...") miss the
-  point. The glossary is about the **business term**, independent of code.
+- `OrderDto`, `OrderEntity`, `OrderHelper`, `OrderManager` inside `domain/` (DTOs belong in adapters; entity
+  needs no suffix).
+- Implementation verbs: `processItem`, `executeAction`, `handleRequest`.
+- Same term in two contexts, glossaries not referencing each other → suggest making the polysemy explicit.
+- Entry describing a class ("OrderRepository is a Spring Data interface…") instead of the business term.
 
-## Relationship to other skills
+## Related skills
 
-- **`/clean-code`** — Clean Code says "names should reflect intent". This
-  skill provides the *agreed-on* intent. Together: clean code uses the
-  glossary's words; this skill keeps the glossary accurate.
-- **Bounded-context isolation** — the same term in two contexts is allowed,
-  but the *code* must not couple them. This skill makes that polysemy
-  visible; the project's architecture rules keep the code apart.
-- **`/context-map`** — If two contexts share a term in their glossaries and
-  also have a code-level relationship in the context map, this skill nudges
-  you toward an Anti-Corruption Layer or Published Language.
-- **`/adr`** — Substantial language changes (renaming an aggregate, retiring
-  a concept) deserve an ADR for posterity.
+- `/clean-code` uses the glossary's words; this skill keeps them accurate.
+- Same term in two contexts is allowed; the project's architecture rules keep the code apart.
+- `/context-map`: shared term + a code-level relationship → nudge toward ACL or Published Language.
+- `/adr`: substantial language changes (renaming an aggregate, retiring a concept).
 
 ## Project conventions
 
-Read the configuration file the project instructions name (a ``- configuration: `<file>` `` line in
-`AGENTS.md`), or `AGENTS.md` itself, for:
+From the configuration file `AGENTS.md` names (``- configuration: `<file>` ``), or `AGENTS.md` itself:
 
-- Custom glossary location (the `spec:` key, or a place of its own instead
-  of `{spec}/{context}/glossary.md`)
-- Custom glossary format (e.g. mandatory `Examples:` section)
-- Project-wide forbidden suffixes beyond the defaults
+- glossary location (`spec:`, or a place of its own instead of `{spec}/{context}/glossary.md`)
+- format extensions (e.g. mandatory `Examples:` section)
+- forbidden suffixes beyond the defaults
 
-## What this skill does NOT do
+## Not in scope
 
-- **Doesn't auto-generate definitions.** The user / domain expert writes
-  the *Definition* prose. Claude can suggest, but the human ratifies.
-- **Doesn't translate.** If the project's Ubiquitous Language is in German
-  (e.g. `Bestellung`, `Auftrag`), keep it German. Don't anglicize. Where the
-  code is written in another language, the code's word stands beside the
-  domain's word in the entry — decided by the people who own the domain,
-  never picked by translating.
-- **Doesn't enforce length.** A glossary entry can be one sentence or one
-  paragraph. The point is shared meaning, not exhaustive docs.
+- Writing definitions: suggest, the human ratifies.
+- Translating: keep the language's own words (`Bestellung`, `Auftrag`); where code is in another language, the
+  code word stands beside the domain word, decided by the domain's owners.
+- Entry length: one sentence or a paragraph.

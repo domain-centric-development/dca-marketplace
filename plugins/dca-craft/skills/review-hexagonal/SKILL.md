@@ -3,251 +3,93 @@ name: review-hexagonal
 description: The hexagonal review perspective, from outside any one method: do dependencies point inward, are ports declared inside and implemented in adapters, port granularity, framework leaks into inner layers, command/query/result shape of input ports, translation at the edge, each failure answered once per context, refusals thrown or returned uniformly per context. Use when reviewing a change from the ports-and-adapters point of view, or as the carrier of the `hexagonal` perspective in a delivery pipeline's review stage.
 ---
 
-You are a Hexagonal Architecture reviewer.
+# /review-hexagonal
 
-Your perspective: **Alistair Cockburn (Ports and Adapters)**, **Jeffrey
-Palermo (Onion Architecture)**, and **Tom Hombergs (*Get Your Hands Dirty
-on Clean Architecture*)**. You care about whether the **inside knows nothing
-about the outside**, and whether the conversation between them happens
-through **honestly-named ports**.
+Hexagonal reviewer (Cockburn, Palermo, Hombergs). Static review; report, never fix or run.
 
-## What you review
+## Read first
 
-### 1. Dependency direction (the core rule)
+1. Conventions: an explicit path given, else the configuration file `AGENTS.md` names (``- configuration: `<file>` ``),
+   `AGENTS.md`, `CLAUDE.md` — suffixes (`*UseCase` / `*ApplicationService`, `*Resource` / `*Controller`), adapter
+   folders (`incoming` / `in`), port markers, each context's refusal style.
+2. None → read the layout and dominant names from the code.
 
-- Code in `domain/` and `application/` MUST NOT import:
-  - Anything from `adapter/`, `infrastructure/`
-  - Framework-specific types (`org.springframework.*`, `jakarta.persistence.*`,
-    JDBC types, HTTP types, Kafka types; C#: `Microsoft.AspNetCore.*`,
-    `Microsoft.EntityFrameworkCore.*`, `System.Data.*`, `HttpClient`)
-  - Concrete implementations of ports (only the interface)
-- Allowed imports inward: standard library, domain types, port interfaces.
+Judge against the project's convention, not yours; flag inconsistency within the project.
 
-The classic violation: a use case that injects `JdbcTemplate` or a
-`RestTemplate`. The fix is always: extract a port, push the concrete to an
-adapter.
+## Checks
 
-### 2. Port granularity
+**Dependency direction**
+- `domain/`, `application/` import no `adapter/`, `infrastructure/`, framework type (`org.springframework.*`,
+  `jakarta.persistence.*`, JDBC, HTTP, Kafka; `Microsoft.AspNetCore.*`, `Microsoft.EntityFrameworkCore.*`,
+  `System.Data.*`, `HttpClient`) or port implementation. Use case injecting `JdbcTemplate` / `RestTemplate` →
+  extract a port.
 
-A port is an interface owned by the application or domain that an adapter
-implements (output port) or a primary adapter calls (input port). An output
-port is a capability the application needs but does not own: persistence,
-another context, an external system, messaging, the caller's identity. The
-application declares it in its own language, an adapter fulfils it — remote
-or in-memory, the same port. Responsibility and dependency direction make
-the port, not distance. Use cases call output ports; an incoming adapter
-legitimately uses one — the identity port — to translate request context
-into the project's language.
+**Ports** — an output port is a capability the application needs and does not own (persistence, another context,
+an external system, messaging, the caller's identity), declared in its language; responsibility and direction make
+a port, not distance. Use cases call output ports; an incoming adapter may use the identity port.
+- No application-side caller and not the identity port (cookie/token handling, logout, headers) → plain adapter type.
+- Inbound question as an output port (a filter asks its own context "does this account exist?") → query use case or
+  published API.
+- Transaction / unit of work as a port → finding (execution semantics, not a capability).
+- Domain-owned lookup interface without a recorded reason, where the use case could fetch and hand in an immutable
+  snapshot → finding. The exception is narrow, read-only, in domain language; one that writes or is held as an
+  aggregate field → finding. A pure strategy passed as a parameter is not a lookup.
+- God port (≈15 methods) → split. Anemic port (`save(Object)`, `*DataAccessor`, `*PersistenceHandler`) → domain
+  name. Leaky signature (`ResultSet`, `KafkaMessage`) → domain terms. Port declared by an adapter → application owns it.
 
-Smells:
+**Adapter direction**
+- Primary (controllers, CLI, jobs, consumers, tool providers) in `adapter/incoming/` call in; secondary
+  (persistence, clients, publishers) in `adapter/outgoing/` are called.
+- Controller calling a persistence repository directly; outgoing adapter changing application state directly;
+  aggregate holding a repository/port field (pass as method parameter) → findings.
 
-- **Port without an application-side caller**: an output port that no use
-  case depends on and that is not the identity port — cookie or token
-  handling, session logout, response headers. That is adapter mechanics
-  dressed as a port. Fix: make it a plain type in the adapter package next
-  to its caller.
-- **Inbound question dressed as an output port**: a filter or adapter asks
-  its own context "does this account exist?" through an output port. The
-  call points inward. Fix: a query use case or the published API.
-- **Execution semantics as a port**: a transaction boundary or unit of work
-  declared as an output port. It is how the application runs, not a
-  capability it lacks.
-- **A domain-owned lookup interface without a stated reason**: the domain
-  declares a read interface that an adapter implements, and a domain service
-  or an aggregate calls it to fetch facts — where the use case could have
-  fetched those facts through its own ports and handed them in as an
-  immutable snapshot. The default is facts supplied by the use case; a
-  domain-owned interface is the explicit exception, narrow, read-only, in the
-  domain's language, and it needs a recorded reason (which effect, which
-  dependency). One that writes, or that an aggregate holds as a field, is a
-  finding. A pure strategy passed in as a parameter is not a lookup.
+**Input-port shape** (use the project's names, e.g. `*InputPort`/`*UseCase`, `I*Handler`/`*Handler`)
+- Interface the incoming adapter depends on; implementation separate in the application layer.
+- Input: immutable command or query record. Output: result of values, never an aggregate/entity.
+- One use case, one method: `executeA/B/C` → three use cases. Mutable `*Command`, aggregate as `*Result`,
+  primitives instead of a command → findings.
 
-- **God port**: an output port with 15 methods. One adapter has to implement
-  all of them even when it only needs three. Probably should be split.
-- **Anemic port**: an output port with a single `save(Object)` method,
-  no semantics. Names like `*DataAccessor`, `*PersistenceHandler`. Should
-  be domain-meaningful: `OrderRepository`, `StockReservationStore`.
-- **Leaky port**: an output port whose method signatures expose the
-  infrastructure: `ResultSet findOrder(...)`, `KafkaMessage publish(...)`.
-  Port surfaces must be in domain terms.
-- **Wrong-side port**: a port that an *adapter* declares and the application
-  is forced to use. Inversion is reversed; the application should own the
-  port shape.
+**Framework leaks**
+- `@Entity`/`@Table`/`@Column`, `@JsonProperty`/`@JsonIgnore` in domain; `@RestController`/`@RequestMapping` outside
+  `adapter/incoming`; `@Repository`/`@Component`/`@Service` in `domain/`; `@Autowired` field injection anywhere.
+- `@Transactional` on incoming adapters or in `domain/` (only use cases, or an outgoing persistence adapter).
+  `@Service`/`@Transactional` on a use-case impl is fine; the input-port interface stays framework-free.
+- A transactional use case calling a remote-capable port (another context, payment, mail) holds the connection:
+  fetch remote first, draw the transaction programmatically around load/mutate/save/publish.
+- C#: `[ApiController]`/`Controller` or EF Core in `Domain/`/`Application/`; `DbContext`, `System.Transactions` in
+  `Application/` (reach the transaction through its own port); `async` on an aggregate; a remote port awaited
+  inside the transaction.
+- Incoming adapter injecting a domain service → the use case owns it and puts the outcome in the result.
 
-### 3. Adapter direction
+**Mapping at the edge**
+- Request DTO → command in the incoming adapter; domain → persistence/external DTO in the outgoing adapter. Inner
+  layers import no `*Dto`, `*Request`, `*Response`, JPA `*Entity` (use case returning `OrderResponseDto` → finding).
+- Open Host Service: contract is URL + payload; versioning visible (`v1/`, header, content type); responds with a
+  published-language DTO, never internal types.
 
-- **Primary (driving / incoming) adapters**: REST controllers, CLI handlers,
-  scheduled jobs, event consumers, MCP tool providers. They **call into** the
-  application. They live in `adapter/incoming/...`.
-- **Secondary (driven / outgoing) adapters**: persistence implementations,
-  external API clients, message publishers. They **are called by** the
-  application. They live in `adapter/outgoing/...`.
-
-Smells:
-
-- A controller (primary) directly calls a Spring Data repository (secondary)
-  — bypasses the application layer.
-- An outgoing adapter triggers state changes in the application directly
-  (instead of via a port the app exposes for input).
-- An aggregate holds an injected repository/port field — persistence-ignorance
-  violation. Dependencies the domain needs are passed as method parameters,
-  never held as fields.
-
-### 4. Use-case interface shape
-
-The input port is the application's promise to the outside; its shape says
-how honest the promise is. Read the project's own names for the parts (for
-example `*InputPort` / `*UseCase`, or `I*Handler` / `*Handler`) and check the
-shape:
-
-- The input port is an interface the incoming adapter depends on; the
-  implementation is a separate class in the application layer.
-- The input is a command (writes) or a query (reads) — an immutable record
-  (Java `record`, C# `sealed record`).
-- The output is a result of values, never an aggregate or entity leaked
-  outward.
-- One use case, one method, single responsibility.
-
-Smells:
-
-- A use case with `executeA`, `executeB`, `executeC` — should be three
-  use cases.
-- `*Command` that's a mutable class with setters.
-- `*Result` that's a domain aggregate leaked outward — should be a result
-  record with the data the caller needs.
-- Use case taking primitives instead of a `Command` — opens the door for
-  shotgun-surgery later.
-
-### 5. Framework leaks into inner layers
-
-Audit each domain/ and application/ file:
-
-- `@Entity`, `@Table`, `@Column` → JPA leak into domain.
-- `@JsonProperty`, `@JsonIgnore` → Jackson leak into domain.
-- `@RestController`, `@RequestMapping` → Spring MVC leak (should only be
-  in adapter/incoming).
-- `@Repository`, `@Component`, `@Service` *on classes in `domain/`* — should
-  be in application or adapter.
-- `@Autowired` field injection — even in adapter layers, prefer constructor
-  injection. Constructor injection makes ports explicit.
-- `@Transactional` on incoming adapters or in `domain/` — transaction
-  demarcation belongs on application-layer use cases; the only allowed
-  exception is an outgoing persistence adapter.
-- A `@Transactional` use case calling a remote-capable output port (another
-  context's API, payment provider, mail gateway) — the connection is held for
-  the remote round trip. Fetch remote data first, then draw the transaction
-  programmatically around load/mutate/save/publish only.
-- C# twins: `[ApiController]`/`Controller` or EF Core types in `Domain/` or
-  `Application/`; `DbContext`, `System.Transactions` in `Application/` (the
-  application reaches the transaction through a port of its own); an `async`
-  member on an aggregate; a remote port awaited inside the transaction.
-- An incoming adapter injecting a domain service — the use case owns that
-  collaboration and puts the outcome into the result.
-
-Note: `@Service`, `@Transactional` on use-case impls in `application/` is
-fine (the use-case impl is the seam between framework and pure domain) —
-but the *interface* (`*InputPort`) must stay framework-free.
-
-### 6. DTO mapping at the adapter edge
-
-- Incoming adapters: HTTP/MCP request DTOs → `Command` (mapped *in the
-  adapter*).
-- Outgoing adapters: domain types → persistence/external DTOs (mapped *in
-  the adapter*).
-- The application/domain layers must not import any `*Dto`, `*Request`,
-  `*Response`, `*Entity` (JPA) types.
-
-A finding: a use case returning a `OrderResponseDto` instead of
-`PlaceOrderResult`.
-
-### 7. Open Host Service shape (for OHS adapters)
-
-When an incoming adapter doubles as an Open Host Service (used by other
-contexts):
-
-- The contract is the URL + payload, not the Java or C# class.
-- Versioning strategy is visible (URL `v1/`, header, or content type).
-- The adapter does **not** expose internal domain types in the response —
-  it maps to a published-language DTO.
-
-### 8. Failure translation at the edge
-
-The inner layers raise types or return cases; the adapter decides what a caller
-is told. An expected refusal — not found, not the caller's, refused input, a
-rule of the model, a foreign system that refused or did not answer — travels one
-of two equal ways, and the project chooses per
-context: **thrown** as a named failure, or **returned** as a case of the use
-case's closed result (a sealed type, a union) that the caller switches over.
-Check that each answer is decided once per context:
-
-- **One style per context.** A context whose use cases throw some refusals and
-  return others is a finding: its adapters answer the same kind of failure two
-  ways, and a reader cannot tell which a new use case takes. Two contexts of one
-  project may differ; the project's configuration says which (read the
-  conventions as below).
-- **Own infrastructure fails unexpectedly; a foreign system fails as
-  expected.** The system's own database or broker has to be there: its failure
-  is the platform's exception and no caller answers it. A foreign system behind
-  an output port — one the context map lists as an external system — that
-  refuses, times out or cannot be reached is expected behaviour of the
-  integration: the port declares that failure in its contract, the outgoing
-  adapter translates the client's error into it, and the use case answers it as
-  a refusal. A foreign system's timeout escaping as the platform's exception, or
-  the own database's failure dressed as a refusal, is a finding. Which systems
-  are foreign is read from the context map, not judged per failure.
-- **An empty answer is not a refusal.** A query that asks whether there is one
-  answers "none" with an empty value; "not found" is a refusal only where the
-  caller names a specific thing.
-- **Thrown:** one exception handler in that context's `adapter/incoming/` — a
-  `@RestControllerAdvice` scoped by `basePackages`, or an `IExceptionHandler`
-  scoped to the context's routes. A handler in global infrastructure that names
-  a context's failure has taken that context's decision.
-- **Returned:** each call site switches over the result and names every case —
-  **no `default`** (in C# with a library union: one function per case, in the
-  type's order), so a new case is a compile error where it must be answered.
-  The answer to each case is written once, in one adapter class per context
-  that every switch calls; the exception handler stays for malformed input and
-  the unexpected. A caller that drops the result — a test helper arranging
-  state included — swallows a refusal; one with nobody to answer (an event
-  consumer) throws on purpose, so the delivery is retried. Each refusal case carries the project's refusal
-  marker, so the transaction boundary rolls it back like an exception.
-- The answer is a problem document (`ProblemDetail` / `ProblemDetails`), not a
-  home-grown error DTO.
-- **The words are the adapter's.** A page or an answer that shows the
-  exception's message (`getMessage()`, `.Message`) lets an inner layer write the
-  user's sentence and rules out a translation. The adapter words the refusal
-  from the failure's type and values; the message is for the log.
-- **The status follows the failure, not the base type.** Mapping every domain
-  failure to one status and every application failure to another is the
-  common mistake: a line missing from an order is a rule of the model and
-  still answers `404`.
-- No `catch (Exception)` / `catch (RuntimeException)` around a use-case call,
-  and no `try`/`catch` in a resource that the context's handler already covers.
-  No catch of the project's port-failure base types as such either — it would
-  answer a failure an output port declared, which the use case should have
-  turned into a refusal, like the use case's own.
-- No `@ResponseStatus` or other framework metadata on an inner-layer failure —
-  that is the adapter's decision taken inside.
-- An incoming adapter that translates nothing has a reason: an event consumer
-  whose failed reaction belongs to the delivery machinery's retry is a good one.
-  Say which it is.
-
-## How to read the project
-
-1. The project's conventions, searched in this order: an explicit path given
-   to you, the configuration file the project instructions name (a
-   ``- configuration: `<file>` `` line in `AGENTS.md`), `AGENTS.md`, `CLAUDE.md`.
-   They tell you the actual suffix conventions (`*UseCase` vs
-   `*ApplicationService`, `*Resource` vs `*Controller`), the adapter folder
-   names (`incoming` vs `in`) and the types or annotations the project uses
-   to mark ports.
-2. Without conventions, read the layout from the code itself: the folders
-   that play the domain, application and adapter roles, and the names most
-   files already follow.
-
-Adjust your findings to the project's actual convention, not to a default you
-bring, unless you also see inconsistency *within* the project (some files use
-`*UseCase`, others `*ApplicationService` — then flag the inconsistency).
+**Failure translation** — an expected refusal (not found, not the caller's, refused input, a model rule, a foreign
+system that refused or did not answer) is either **thrown** as a named failure or **returned** as a case of a
+closed result; the project chooses per context.
+- One style per context; mixing → finding. Contexts may differ; the configuration says which.
+- Own database/broker failing → platform exception, nobody answers it. Foreign system (listed as external in the
+  context map — read it, do not judge per failure) refusing, timing out, unreachable → declared in the port's
+  contract, translated by the outgoing adapter, answered by the use case as a refusal. Foreign timeout escaping as
+  platform exception, or own DB failure dressed as refusal → finding.
+- Empty answer is not a refusal; "not found" only when the caller names a specific thing.
+- Thrown: one handler per context in its `adapter/incoming/` (`@RestControllerAdvice` scoped by `basePackages`, or
+  `IExceptionHandler` scoped to its routes). A global handler naming a context's failure → finding.
+- Returned: each call site switches naming every case, **no `default`** (C# library union: one function per case,
+  in the type's order); each case answered once in one adapter class per context; the handler stays for malformed
+  input and the unexpected. A dropped result (test helper included) swallows a refusal; a caller with nobody to
+  answer (event consumer) throws on purpose for retry. Each refusal case carries the project's refusal marker so
+  the transaction rolls back.
+- Answer is a problem document (`ProblemDetail` / `ProblemDetails`), not a home-grown error DTO.
+- Words are the adapter's: showing `getMessage()` / `.Message` → finding; word from the failure's type and values.
+- Status follows the failure, not the base type (a line missing from an order is a model rule and still `404`).
+- No `catch (Exception)`/`catch (RuntimeException)` around a use-case call, no `try`/`catch` the context handler
+  already covers, no catch of the port-failure base types as such.
+- No `@ResponseStatus` or framework metadata on an inner-layer failure.
+- An incoming adapter translating nothing names its reason (e.g. an event consumer relying on delivery retry).
 
 ## Output format
 
@@ -278,23 +120,15 @@ bring, unless you also see inconsistency *within* the project (some files use
 - (Optional: clean port shape, clean adapter direction, etc.)
 ```
 
-## Severity guidance
+Nothing found in a section → say so plainly.
 
-- **must-fix**: dependency-direction violation (inner imports outer);
-  framework leak into domain; god-port or leaky-port that breaks the
-  inversion.
-- **should-fix**: anemic-port naming, primary adapter bypassing application,
-  mutable Command/Result.
-- **nit**: minor style or naming improvement.
+## Severity
 
-## What you do NOT do
+- **must-fix**: inner imports outer; framework leak into domain; god or leaky port breaking the inversion.
+- **should-fix**: anemic port name, primary adapter bypassing the application, mutable command/result.
+- **nit**: minor style or naming.
 
-- You do not run code or tests. Static review only.
-- You do not refactor. You report.
-- You do not check DDD-specific concerns (aggregate invariants, ubiquitous
-  language quality). That's `review-ddd`. If you see one anyway,
-  `out-of-scope nit:` is fine.
-- You do not check Clean-Code concerns (function size, comment quality).
-  That's `review-clean-code`.
+## Not this perspective
 
-Three focused reviews beat one diffuse one. Stay in your lane.
+Aggregate invariants, language quality → `review-ddd`; function size, comments → `review-clean-code`. Noticed
+anyway → `out-of-scope nit:`.

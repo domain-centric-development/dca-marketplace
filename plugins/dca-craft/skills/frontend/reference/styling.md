@@ -1,7 +1,14 @@
 # The styling methods, in code
 
-The skill's section 3 names five methods; the description's `Styling:` line chooses one. The same card in each —
-a root, a title, a slot that may hold another component, a variant and a state.
+One card per method (section 3): root, title, slot for another component, variant, state.
+
+| Method | Spelling | Enforced by | Choose when |
+|---|---|---|---|
+| native scoping | `.card` root, local `.title`; `@scope (.card) to (.card-slot)`; `data-variant` | browser | current browsers only — default there |
+| BEM names | `block__element`, `block--modifier`, in layers | checks | older browsers — default there (no `@scope` = block dropped) |
+| framework scoped | style module / `<style scoped>`, plain names | build | React + CSS Modules, Vue, Svelte |
+| utility classes | Tailwind | build | project chose it |
+| component library | its components + theming API, nothing restyled | library | project named one |
 
 ## Native scoping (`@scope`, cascade layers, attributes)
 
@@ -23,8 +30,7 @@ a root, a title, a slot that may hold another component, a variant and a state.
 </article>
 ```
 
-`@scope` is Baseline since 2026: a browser without it drops the whole block, so the component stands unstyled.
-Serve it only where the description's `Browsers:` are current ones.
+`@scope` is Baseline since 2026; a browser without it drops the whole block. Only where `Browsers:` are current.
 
 ## BEM names, in cascade layers
 
@@ -37,8 +43,8 @@ Serve it only where the description's `Browsers:` are current ones.
 }
 ```
 
-The names carry what the browser cannot enforce in older versions: the owner (`card__`) and flat specificity. A
-check keeps them honest — every class a known block, element or modifier; no element of one block under another.
+Names carry owner (`card__`) and flat specificity. Check: every class a known block, element or modifier; no
+element of one block under another.
 
 ## The framework's scoped styles
 
@@ -56,8 +62,7 @@ check keeps them honest — every class a known block, element or modifier; no e
 </style>
 ```
 
-CSS Modules (`styles.title`) and Svelte work the same way. `:deep()`, `:global()` and `::part()` reach into
-another component — each is a reviewed exception.
+CSS Modules (`styles.title`) and Svelte alike. `:deep()`, `:global()`, `::part()` = reviewed exception.
 
 ## Utility classes
 
@@ -67,10 +72,10 @@ another component — each is a reviewed exception.
 </article>
 ```
 
-The tokens are the theme's variables (`@theme`); a repeated class list becomes a component of the stack, not a
-copy. State and variant stay attributes.
+Tokens = the theme's variables (`@theme`); a repeated class list becomes a component, not a copy. State and
+variant stay attributes.
 
 ## A component library
 
-Use its components and its theming API (its tokens, its variants). Nothing restyles a library component from
-outside; a look it does not offer is a request to the library's theme, or a component of the project's own.
+Its components and theming API (tokens, variants) only. Nothing restyles a library component from outside; a look
+it lacks → its theme, or a component of the project's own.

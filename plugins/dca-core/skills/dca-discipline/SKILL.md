@@ -12,269 +12,118 @@ disable-model-invocation: false
 
 # /dca-discipline — DCA invariants while writing code
 
-This skill is a **set of write-time guards**, not a review. Before every edit
-inside a DCA-shaped project, Claude checks the file's layer and applies the
-rules that apply to that layer.
+Write-time guards, not a review. Never rewrite silently past a violation. Unsure what DCA says → `/dca-knowledge`.
 
 ## The six invariants
 
 ### 1. No framework in domain
 
-Files under `**/domain/**` MUST NOT import:
-
-- `org.springframework.*`
-- `jakarta.persistence.*`, `jakarta.validation.*` (except Bean-Validation
-  annotations only if the project deliberately allows it — check conventions)
-- `org.hibernate.*`
-- `com.fasterxml.jackson.*`
-- Any other framework-specific package
-
-C# (`**/Domain/**`): no `Microsoft.AspNetCore.*`, `Microsoft.EntityFrameworkCore.*`, `System.Data.*`,
-`System.Transactions.*`, `System.Text.Json.Serialization` attributes, `Microsoft.Extensions.*` — and no
-`async` member: ports are async, the domain is not.
-
-**What to do when the user asks for a forbidden import:**
-
-> The annotation `@Component` would put framework code into the domain. The
-> DCA invariant is: domain is framework-free. Place this class in
-> `application/{usecase}/` (if it's a use case) or in `adapter/` (if it
-> integrates with a framework).
->
-> Want me to (a) move the class, or (b) keep it in domain *without* the
-> annotation, or (c) explicitly override the rule via an ADR?
-
-Don't silently rewrite; ask. The third option is rare but real — if the user
-chooses it, suggest `/adr new` to record the exception.
+- Java `**/domain/**` imports none of: `org.springframework.*`, `jakarta.persistence.*`, `jakarta.validation.*`
+  (unless the project's conventions allow Bean Validation), `org.hibernate.*`, `com.fasterxml.jackson.*`, any
+  other framework.
+- C# `**/Domain/**`: none of `Microsoft.AspNetCore.*`, `Microsoft.EntityFrameworkCore.*`, `System.Data.*`,
+  `System.Transactions.*`, `System.Text.Json.Serialization` attributes, `Microsoft.Extensions.*`; no `async`
+  member (ports are async, the domain is not).
+- Asked for one (`@Component` on a domain class) → offer: (a) move to `application/{usecase}/` or `adapter/`,
+  (b) keep in domain without it, (c) ADR exception (`/adr new`, rare).
 
 ### 2. Dependency inversion
 
-Code in `domain/` and `application/` may only depend on:
-
-- Other domain types
-- Output ports (interfaces) — never their implementations
-- Standard library and language
-
-It MAY NOT import:
-
-- Classes from `adapter/`, `infrastructure/`
-- Concrete clients (`RestTemplate`, `JdbcTemplate`, `KafkaProducer`, `HttpClient`, `DbContext`, etc.)
-- Framework annotations on the **API surface** of a use case (return types,
-  parameters)
-
-**What to do when a use-case impl needs new infrastructure:**
-
-1. Define an output port interface in `application/shared/` (or in the use
-   case's own folder if it's only used there — see the decision guide in
-   `dca-audit`'s reference `use-case-pattern.md`, section 3).
-2. Reference the port from the use case.
-3. Add an implementation in `adapter/outgoing/...`.
-
-If the user tries to inject a concrete adapter type, stop and suggest the
-port-first refactor.
+- `domain/` and `application/` depend only on domain types, output port interfaces, the standard library.
+- Never: classes from `adapter/`/`infrastructure/`, concrete clients (`RestTemplate`, `JdbcTemplate`,
+  `KafkaProducer`, `HttpClient`, `DbContext`…), framework types on a use case's API (parameters, return types).
+- Use case needs infrastructure, or someone injects a concrete adapter → port first: interface in
+  `application/shared/` (or the use case's folder if only it uses it — `dca-audit`'s `use-case-pattern.md`,
+  section 3), impl in `adapter/outgoing/…`.
 
 ### 3. Bounded-context isolation
 
-Direct imports from `{basePackage}.contextA.domain.*` into a file in
-`{basePackage}.contextB.*` are forbidden.
+No import of `{basePackage}.contextA.domain.*` from `{basePackage}.contextB.*`. Allowed channels:
 
-**Allowed cross-context channels:**
-
-| Channel | Where the dependency lives | Example |
+| Channel | Dependency | Example |
 |---|---|---|
-| Open Host Service (REST/MCP) | downstream calls upstream's incoming API | `Cart` reads `Catalog` via HTTP `/products/{id}` |
-| Integration event | downstream consumes upstream event | `Checkout` listens to `OrderPlacedEvent` |
-| Shared kernel value objects | both contexts import from `sharedkernel/` | `Money`, `ProductId` |
+| Open Host Service (REST/MCP) | downstream calls upstream's incoming API | Cart reads Catalog via `/products/{id}` |
+| Integration event | downstream consumes upstream event | Checkout listens to `OrderPlacedEvent` |
+| Shared kernel value objects | both import `sharedkernel/` | `Money`, `ProductId` |
 
-**What to do when you see a cross-context import:**
-
-> `cart.application.AddToCart` imports `catalog.domain.Product`. That couples
-> the contexts at the domain level. Options:
->
-> 1. Call Catalog's Open Host Service (REST) — recommended for read-time data.
-> 2. Listen to a Catalog integration event and project locally — recommended if
->    Cart needs to react to changes.
-> 3. Move `Product` into the shared kernel if it's truly universal (rare).
->
-> Which fits the use case?
+Seen a cross-context import → offer: (1) call the OHS (read-time data), (2) consume an integration event and
+project locally (react to changes), (3) move the type to the shared kernel (rare, truly universal).
 
 ### 4. Domain-event hygiene
 
-When a domain class registers events (`registerEvent(...)`), the calling use
-case must clear them after persistence or publication. Otherwise events
-accumulate on a long-lived aggregate and get re-emitted.
-
-**Checklist for use-case impls:**
-
-```java
-@Transactional
-public Result execute(Command cmd) {
-    var aggregate = repository.findById(cmd.id()).orElseThrow();
-    aggregate.doSomething(cmd.payload());    // registers event(s) internally
-    repository.save(aggregate);              // persist
-    eventPublisher.publishAndClearEvents(aggregate); // dispatch succeeds before clearing
-    return Result.of(aggregate);
-}
-```
-
-C# — the same discipline with the library's publisher, which clears after dispatching:
-
-```csharp
-public Task<Result> ExecuteAsync(Command cmd, CancellationToken ct = default) =>
-    _transaction.InTransactionAsync(async innerCt =>
-    {
-        var aggregate = await _repository.FindByIdAsync(new Id(cmd.Id), innerCt) ?? throw new ArgumentException(...);
-        aggregate.DoSomething(cmd.Payload);                       // registers event(s) internally
-        await _repository.SaveAsync(aggregate, innerCt);          // persist first
-        await _events.PublishAndClearEventsAsync(aggregate, innerCt);   // then publish + clear
-        return Result.From(aggregate);
-    }, ct);
-```
-
-Use the building-block publisher contract. Its implementation clears only after successful synchronous dispatch.
-Events are optional when no domain fact needs publication: an event-free aggregate needs no publisher dependency.
-The conservative USE-009 exemption requires a resolved, completely inspected aggregate hierarchy.
-
-An own-context outgoing adapter subscribes to the domain fact, translates to a contract in `{context}/events/`,
-and captures it inside the transaction. For Spring, the subscription can be a plain synchronous `@EventListener`:
-
-```java
-// Same context, adapter/outgoing/event; the publisher captures transactionally.
-@EventListener
-public void on(DocumentApproved fact) {
-    integrationEvents.publish(DocumentApprovedEvent.from(fact));
-}
-```
-
-In .NET the same adapter implements the local domain-event listener contract and awaits its integration publisher.
-Async consumers acknowledge per consumer/effect; bounded retry and intentional manual replay preserve the snapshot
-and stable event/consumer/effect key. Provider-supported idempotency is needed to suppress acceptance-before-ack duplicates.
-Synchronous remote effects cannot roll back with local state. Event snapshot policy does not decide template or recipient policy.
-
-**Event shape rules** (all four required):
-
-1. **Immutable**: Java record or immutable class / C# record or immutable class/readonly struct, no mutable instance fields or setters.
-2. **Past tense name**: `OrderPlaced`, not `PlaceOrder` or `OrderPlacement`.
-3. **`occurredOn` field** of type `Instant` / `DateTimeOffset` (or matching convention).
-4. **Carries IDs and value objects only**, no aggregate references.
-
-**Reacting to an event.** A listener that drives an input port runs after the commit, in its own transaction, from
-an outbox — `@ApplicationModuleListener` in Spring, the project's transactional listener type in .NET — for a
-foreign contract and for the context's own domain event alike. A synchronous listener (`@EventListener`, a plain
-listener) calls output ports only: the translator that captures an integration event, a metric.
+- Use case: load → behaviour (aggregate registers events) → save → `publishAndClearEvents` /
+  `PublishAndClearEventsAsync` (the building-block publisher; clears only after successful synchronous dispatch).
+  Java and C# shape → `reference/events-and-rules.md`.
+- Event-free aggregate → no publisher dependency (USE-009 exemption needs a resolved, fully inspected hierarchy).
+- Integration event: own-context `adapter/outgoing/event` subscribes to the domain fact, translates to a contract
+  in `{context}/events/`, captures it in the transaction (Spring: synchronous `@EventListener` →
+  `integrationEvents.publish(XEvent.from(fact))`; .NET: local domain-event listener awaiting its publisher).
+- Event shape, all four: immutable (record / immutable class / C# readonly struct); past tense (`OrderPlaced`);
+  `occurredOn` as `Instant` / `DateTimeOffset`; IDs and value objects only, no aggregate references.
+- Reacting: a listener that drives an input port runs after commit, own transaction, from an outbox —
+  `@ApplicationModuleListener` (Spring), the project's transactional listener type (.NET) — for foreign contracts
+  and own domain events alike. A synchronous listener (`@EventListener`, plain listener) calls output ports only
+  (the capturing translator, a metric).
+- Async delivery, idempotency, remote effects → the same reference.
 
 ### 5. Domain-model and transaction discipline
 
-When writing or editing domain model classes:
-
-- **Never add public setters.** State changes go through intention-revealing
-  ubiquitous-language methods (`confirm()`, `cancel(reason)`), not
-  `setStatus(...)`.
-- **An aggregate that belongs to someone is loaded through its owner.** It implements `Owned<OwnerId>`
-  (`IOwned<TOwnerId>`), its repository declares a lookup by id and owner id (`DCA-TAC-026`), and a use case
-  acting for a caller — or for an event that names the owner — calls that lookup, never `findById` and an `if`.
-- **Aggregates are persistence-ignorant.** No `Repository`, `Store`, or other
-  `OutputPort` fields on an aggregate — if domain logic needs one, pass it as
-  a method parameter.
-- **`@Transactional` only on application-layer use cases.** Outgoing
-  persistence adapters are an allowed exception; never on domain classes or
-  incoming adapters. C# has no such attribute: the boundary is
-  `ITransactionBoundary.InTransactionAsync` (or a decorator around `IUseCase`)
-  in the use case, and EF Core / `System.Transactions` stay out of
-  `Application/` (`DCA-NET-006`).
-- **No remote call inside the transaction.** A use case that calls a port
-  which may leave the process (another context's API, a payment provider)
-  drops the class-level annotation: remote reads first, then
-  `transactionBoundary.inTransaction(() -> { load; mutate; save; publish; })` — the `TransactionBoundary`
-  application-layer execution abstraction of the building blocks, not a port. Remote *effects* go after the commit,
-  as a reaction to an integration event.
+- No public setters; intention-revealing methods (`confirm()`).
+- Owned aggregate: implements `Owned<OwnerId>` / `IOwned<TOwnerId>`, repository declares lookup by id and owner id
+  (`DCA-TAC-026`); a use case acting for a caller, or for an event naming the owner, uses it — never `findById` + `if`.
+- Aggregates persistence-ignorant: no `Repository`/`Store`/`OutputPort` fields; pass as method parameter.
+- `@Transactional` only on application use cases (persistence adapters allowed), never domain or incoming
+  adapters. C#: `ITransactionBoundary.InTransactionAsync` (or a decorator around `IUseCase`) in the use case;
+  EF Core / `System.Transactions` stay out of `Application/` (`DCA-NET-006`).
+- No remote call inside the transaction: a use case calling a port that may leave the process drops the class
+  annotation — remote reads first, then `transactionBoundary.inTransaction(() -> { load; mutate; save; publish; })`
+  (`TransactionBoundary` = building-block execution abstraction, not a port). Remote effects after commit, as a
+  reaction to an integration event.
 
 ### 6. A failure has a type, and only the adapter answers it
 
-When writing or editing code that refuses:
+- Named failure from the building blocks: domain `DomainException`; application under `PortException` — use case's
+  own extends `UseCaseException` (never `InputPortException` directly); output port declares `OutputPortException`,
+  adapter throws, use case catches. Name = rule: `InsufficientStockException`, not `OrderError`.
+- Own DB/broker failing → platform exception. A foreign system behind an output port (external on the context map)
+  refusing / timing out / unreachable → its port's `OutputPortException`, thrown by the adapter, answered by the use
+  case as a refusal. A caller with nobody to answer throws the case back so delivery is retried.
+- "Which one, if any" → empty value; "not found" refuses only a caller naming a thing by id.
+- Whoever searches owns "not found": aggregate by id via repository → use case's refusal, never `DomainException`;
+  a part by local id inside the aggregate → model's `DomainException`, caught and answered by the use case.
+- Expected refusal thrown or returned, uniformly per context (style from the technical description, else the
+  context's use cases). Returned: case of a sealed result implementing `Refusal` / `IRefusal`, ids and figures, no
+  suffix; the model still throws, the use case catches each concrete exception once and returns its case. A sealed
+  result of successes only (`Sent` | `AlreadySent`) carries no `Refusal`; `DCA-ERR-008` lists those for
+  confirmation.
+- Decide, then write: every refusal before the first write (rollback of a returned `Refusal` is only a net).
+- Argument guard stays platform: `IllegalArgumentException` / `ArgumentException`, `ArgumentNullException`,
+  `ArgumentOutOfRangeException`. Cut = origin and name: a value object built from input refuses null and bounds with
+  its rule's named failure; a domain expert's word for the failure → domain exception with that word.
+- Rule on input checked once, in the value object; the incoming adapter checks shape, passes the raw value (absent
+  as absent) — no Bean Validation / DataAnnotations repeating it, no `defaultValue = ""`.
+- Who states it: "already confirmed" = aggregate; "no such order" = use case (never a domain exception it
+  constructs); store-detected failure = `OutputPortException` beside its port.
+- Never show `getMessage()` / `.Message` to a user: the incoming adapter words it from type and values (message
+  key); the message is for the log.
+- No transport in the type: no `@ResponseStatus`/framework metadata, no `Error`/`Fault`/`Failure` suffix, no
+  `Http`/`Status`/`Response` in the name (`DCA-ERR-004`, `DCA-ERR-005`).
+- Answer once per context in `adapter/incoming/`. Thrown: one handler per context — `@RestControllerAdvice` scoped
+  to its package / `IExceptionHandler` scoped to its routes — producing a problem document. Returned: each call site
+  switches without `default` (OneOf: `Match`, in type order), answers in one adapter class the switches call;
+  handler stays for the unexpected. Status follows the failure, not the base type. A page adapter turns a refusal
+  into its redirect in one method every handler calls.
+- Nobody drops a result: a test helper asserts success; an event consumer throws the case on purpose.
+- Never catch `Exception`/`RuntimeException` around a use-case call, nor `PortException`/`InputPortException` as
+  such (swallows an escaped `OutputPortException`). Inside a use case too: catch the rule's own type.
 
-- **A business rule raises a named failure** from the building blocks: in the
-  domain `DomainException`; in the application a port's, under `PortException` —
-  a use case's own extends `UseCaseException` (never `InputPortException`
-  directly), one an output port declares `OutputPortException`, thrown by the
-  adapter and caught by the use case. The name is the rule:
-  `InsufficientStockException`, not `OrderError`.
-- **Own infrastructure throws; a foreign system's failure is a refusal.** The
-  own database or broker timing out stays the platform's exception. A foreign
-  system behind an output port — an external system on the context map — that
-  refuses, times out or cannot be reached is expected: its port declares an
-  `OutputPortException`, the adapter throws it, the use case answers it as a
-  refusal in the context's style. A caller with nobody to answer throws the
-  case back, so the delivery is retried.
-- **"Which one, if any" answers none with an empty value.** Not a refusal; "not
-  found" refuses only a caller that names a specific thing by its id.
-- **Whoever searches owns the "not found".** The use case looks an aggregate up
-  by its id through the repository, so a missing aggregate is the use case's
-  refusal — never a `DomainException`. The aggregate searches its own parts, so
-  a missing part (an entity named by its local id) is the model's
-  `DomainException`, caught and answered by the use case.
-- **An expected refusal is thrown or returned, uniformly per context** — the
-  style the technical description records (below), else what the context's
-  use cases show. Returned: a case of the sealed result implementing `Refusal`
-  (`IRefusal`), ids and figures, no suffix; the model still throws, and the use
-  case catches each concrete exception it can raise, once, and returns its case.
-  Not every case refuses: a sealed result of successes alone (`Sent` |
-  `AlreadySent`) is correct and carries no `Refusal`; `DCA-ERR-008` lists
-  such results so someone confirms none of their outcomes refuses.
-- **Decide, then write.** Every refusal comes before the first write; the
-  boundary rolls a returned `Refusal` back — a net, not a licence.
-- **An argument guard stays the platform's own exception.** A null check or a
-  range check on a value only code passes is a caller contract, not a business
-  rule: `IllegalArgumentException` / `ArgumentException`,
-  `ArgumentNullException`, `ArgumentOutOfRangeException`. The cut is the origin
-  and the name — a value object built from input refuses null and its bounds
-  with its rule's named failure; otherwise, if a domain expert has a word for
-  the failure, it is a domain exception with that word in it.
-- **A rule on input is checked once, in the value object.** The incoming
-  adapter checks shape (does it parse) and passes the raw value on, absent as
-  absent — no Bean Validation / DataAnnotations repeating a value object's rule,
-  no `defaultValue = ""` turning a missing field into an empty one.
-- **Ask who can state the failure.** "Already confirmed" is the aggregate's;
-  "no such order" the use case's — never a domain exception it constructs. A
-  failure the store detects, and a foreign system's expected failure, is an
-  `OutputPortException` declared beside its port and raised by the adapter.
-- **Never show the exception's message.** The failure carries the rule and
-  its values; the sentence a page or an answer shows is the incoming
-  adapter's, from the type and the values (a text per failure, a message key
-  its translations resolve). `getMessage()` / `.Message` passed to a page or a
-  problem document ties the user's language to the domain's and rules out a
-  translation; the message is for the log.
-- **Never put a transport decision in the type.** No `@ResponseStatus` or other
-  framework metadata on the exception, and no `Error`/`Fault`/`Failure` suffix,
-  no `Http`/`Status`/`Response` in the name (`DCA-ERR-004`, `DCA-ERR-005`).
-- **Each refusal's answer is written once per context**, in `adapter/incoming/`.
-  Thrown: one handler per context — a `@RestControllerAdvice` scoped to its
-  package, or an `IExceptionHandler` scoped to its routes — producing a problem
-  document. Returned: each call site switches without a `default` (OneOf:
-  `Match`, in the type's order), the answers in one adapter class the switches
-  call; the handler stays for the unexpected. The status follows the failure,
-  not the base type. A page adapter turns a refusal into its redirect in one
-  method every handler calls.
-- **Nobody drops a result.** A test helper asserts the success case; a caller
-  with nobody to answer (an event consumer) throws the case on purpose.
-- **Never catch `Exception` or `RuntimeException` around a use-case call**, nor
-  `PortException` / `InputPortException` as such — it swallows an escaped
-  `OutputPortException`. Inside a use case too: catch the rule's own type.
-
-> **Note:** invariant strictness follows the context's declared pattern style
-> (see the project's pattern-selection ADR, if any). Contexts implemented as
-> transaction script (supporting subdomains) get structural rules only —
-> invariants 1–3 apply, the tactical rules in 4–5 may be relaxed.
+Strictness follows the context's pattern style (pattern-selection ADR): transaction script (supporting subdomain)
+→ 1–3 hold, 4–5 may relax.
 
 ## How this skill operates
 
-Before any write or edit, Claude:
-
-1. Looks at the target path. Classifies the layer (`domain` / `application` /
-   `adapter/incoming` / `adapter/outgoing` / `infrastructure`).
-2. Applies the rules that match that layer (see table).
-3. Cross-checks imports the edit would introduce.
-4. If a violation is about to happen, stops and surfaces the choice to the
-   user (using the exact phrasing from the invariant sections above).
+Classify the target path, apply its rules, cross-check the imports the edit introduces; violation ahead → stop, offer
+the invariant's options.
 
 | Layer | Rules applied |
 |---|---|
@@ -285,93 +134,36 @@ Before any write or edit, Claude:
 | `adapter/outgoing/` | 3 (must implement a port, not introduce new domain concepts); `@Transactional` allowed on persistence adapters |
 | `infrastructure/` | — (framework code belongs here; C#: DI registration `Add{Context}Context()`) |
 
-The same table applies to the C# folders in PascalCase (`Domain/`, `Application/{UseCase}/`,
-`Adapter/Incoming/`, `Adapter/Outgoing/`, `Infrastructure/`).
+C# PascalCase folders (`Domain/`, `Application/{UseCase}/`, `Adapter/Incoming/`…) take the same rules. Operation boundaries (`DCA-USE-016`, `DCA-USE-017`, `DCA-NET-003`), ACL
+evidence (`DCA-MAP-008`) and modelling edge cases → `reference/events-and-rules.md`, read when editing a use case's
+public surface, a coordinator, an ACL adapter, or when one of those rules fails.
 
 ## Project configuration
 
-Read `dca.profile.yaml` at the project root (the `AGENTS.md` line ``- configuration: `dca.profile.yaml` `` points at it) — flat `key: value` lines, every key optional — for:
+`dca.profile.yaml` at the root (`AGENTS.md` line ``- configuration: `dca.profile.yaml` ``), flat `key: value`, every
+key optional:
 
-- The actual base package / root namespace; markers come from the library
-  (`dev.domaincentric.dca.buildingblocks.…` / `DomainCentric.BuildingBlocks.…`)
-- Whether the project's layer folders use the DCA defaults (`incoming` /
-  `outgoing`) or alternatives (`in` / `out`) — also readable from the
-  `DcaLayout` builder in the architecture test
-- The naming suffixes the architecture suite holds the project to (`use_case_suffix:`,
-  `input_port_suffix:`, `repository_suffix:`, `controller_suffix:`, `rest_controller_suffix:`),
-  and the failure suffix the project chose (`failure_suffix:`)
-- Each context's refusal style is in the technical description (`tech:`,
-  `product/tech.md`): `Refusals (<context>): thrown | returned`, else
-  `Refusals: …`; a context with neither line nor use case: ask
-- Project-specific exceptions (e.g. "Bean Validation annotations allowed in
-  domain")
+- base package / root namespace (markers: `dev.domaincentric.dca.buildingblocks.…` / `DomainCentric.BuildingBlocks.…`)
+- layer folders `incoming`/`outgoing` or `in`/`out` (also in the test's `DcaLayout` builder)
+- suffixes: `use_case_suffix:`, `input_port_suffix:`, `repository_suffix:`, `controller_suffix:`,
+  `rest_controller_suffix:`, `failure_suffix:`
+- project exceptions (e.g. Bean Validation allowed in domain)
 
-Where the file is missing or a key is absent: the DCA defaults the guide's rules state (`dca-knowledge` cites them).
+Refusal style per context: technical description (`tech:`, `product/tech.md`) line
+`Refusals (<context>): thrown | returned`, else `Refusals: …`; neither line nor use case → ask.
+Missing file or key → the guide's DCA defaults (`dca-knowledge` cites them).
 
-**Experimental rules bind only where the project opted in.** A rule whose catalog node says
-`maturity: experimental` is a guard here only when the architecture test calls
-`withExperimental()` / `WithExperimental()` on its rule selection or `dca-archunit.properties` sets
-`dca.rules.experimental = true`. Without that opt-in, mention it as information at most — never
-change code for it and never stop an edit over it.
+Experimental rules (`maturity: experimental` in the catalog node) bind only with `withExperimental()` /
+`WithExperimental()` in the architecture test or `dca.rules.experimental = true` in `dca-archunit.properties`.
+Otherwise information at most; never change code or stop an edit for one.
 
 ## What this skill does NOT do
 
-- **Doesn't audit existing code.** That's `dca-audit` and the reviewer agents.
-- **Doesn't lay out new code.** That's `dca-new`; the domain types themselves are `dca-modelling`'s.
-- **Doesn't enforce naming.** That's `/clean-code` and `/ubiquitous-language`.
-- **Doesn't run ArchUnit.** ArchUnit is the safety net *after* this skill;
-  if `dca-discipline` does its job, ArchUnit stays green.
+- Audit existing code → `dca-audit`, the reviewer agents.
+- Lay out new code → `dca-new`; domain types → `dca-modelling`; naming → `/clean-code`, `/ubiquitous-language`.
+- Run ArchUnit — the net after this skill.
 
 ## Anti-pattern: silently bypassing the rule
 
-If the user insists on a violation ("just add `@Entity` to the aggregate"),
-do NOT silently comply. Either:
-
-1. Refuse and explain the alternative (port + adapter, ACL, etc.).
-2. Ask the user to record the exception via `/adr new` so future readers
-   understand why the rule was bent here.
-
-The point of the skill is to make the discipline visible, not to make the
-user's life harder. When the rule's cost outweighs its benefit (legacy
-integration, framework-mandated annotation), an ADR makes the exception
-explicit — and that's a successful outcome.
-
-Domain vocabulary may include `Manager`. Repository and Store ports may be local to
-one use case; reused ports belong in application/shared. Store lookup by key is valid;
-aggregate save/delete semantics require a Repository. Response types may belong to
-incoming or outgoing adapters. Review entity constructor callers for the domain
-invariant boundary, rather than demanding private constructors. Configured operation
-containers do not alter the flat/grouped consistency requirement.
-
-### Operation boundaries and ACL evidence
-
-Ordinary use cases do not invoke other use cases, whether directly, through an
-input port, or through an application helper. Shared collaborators that do not call
-operations remain valid. `DCA-USE-016` follows dependencies within the module's
-application layer and reports `Caller -> Target [via Helper]`. Explicit coordination
-uses a caller-side exception, for example
-`dca.rule.DCA-USE-016.ignore=^com\.example\.module\.application\.coordinate\.CoordinatorUseCase -> `.
-This permits the coordinator to invoke operations; it does not permit an operation
-to invoke the coordinator, and `DCA-CYC-005` still detects coordination cycles,
-including two operations inside the same feature. No coordinator marker is implied.
-When a reliable exception cannot be expressed, use WARN with a recorded reason and
-review the coordinator's transaction boundaries and partial-failure semantics manually.
-Reflection, container lookups and calls through interfaces outside the InputPort
-hierarchy also require manual review.
-
-The input port describes the complete effective public instance surface (`DCA-USE-017`).
-Declared and inherited business methods, unrelated-interface methods and public
-properties/getters/setters must be in the input-port contract. Constructors, Object
-members and compiler-generated members are exempt; a property accessor is not exempt
-merely because it has a special runtime name. Ordinary, inherited and explicit
-input-port implementations are valid. In .NET, `DCA-NET-003` separately validates
-`IUseCase<TIn,TOut>.ExecuteAsync(input, CancellationToken)` returning `Task<T>` through
-the interface map; it does not count declared public methods.
-
-For every declared ACL interaction, the matching adapter must contain a class that
-uses that upstream's channel contract and the declaring context's own domain or
-application model (`DCA-MAP-008`). Two translators for different upstreams may share
-an adapter package. Evidence for one upstream does not satisfy another interaction.
-This identifies a structural translation site, without proving translation quality.
-
-Validate invariants again at aggregate entry points when default construction, deserialization or reconstitution can bypass a value constructor. Retrieve external facts in the use case and supply immutable snapshots to domain services; do not hide lookup in aggregate callbacks. TAC-002 checks fields, so semantic callback review remains manual.
+User insists ("just add `@Entity` to the aggregate") → refuse with the alternative (port + adapter, ACL…) or record
+the exception via `/adr new` — an ADR exception (legacy, framework-mandated annotation) is a successful outcome.

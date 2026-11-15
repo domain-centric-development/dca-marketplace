@@ -1,7 +1,6 @@
 # DTO mapping at the adapter boundary
 
-Part of the `dca-new` skill (mode `usecase`): who maps what at the adapter boundary, inline or with a
-converter, examples in and out, and the anti-patterns.
+`dca-new` mode `usecase`: who maps what at the adapter boundary, inline or with a converter.
 
 ## Responsibility ownership
 
@@ -53,33 +52,9 @@ record PlaceOrderRequest(String customerId, List<LineItemDto> items, AddressDto 
 record PlaceOrderResponse(UUID orderId, Instant placedAt, BigDecimal totalAmount) {}
 ```
 
-This is the throwing style: the call maps the success, and the context's exception handler answers each refusal.
-Where the context returns its refusals, the same method switches over the closed result without a `default` and
-maps only the success case to the response; each refusal arm returns the answer the context writes once
-(`reference/element-modes.md` § Refusals: thrown or returned).
-
-## Example: REST inbound with a dedicated converter
-
-```java
-@RestController
-class OrderResource {
-    private final PlaceOrderInputPort placeOrder;
-    private final PlaceOrderRequestConverter converter;
-
-    @PostMapping("/orders")
-    PlaceOrderResponse place(@RequestBody @Valid PlaceOrderRequest req) {
-        var result = placeOrder.execute(converter.toCommand(req));
-        return converter.toResponse(result);
-    }
-}
-
-// adapter/incoming/api/PlaceOrderRequestConverter.java
-@Component
-class PlaceOrderRequestConverter {
-    PlaceOrderCommand toCommand(PlaceOrderRequest req) { ... }
-    PlaceOrderResponse toResponse(PlaceOrderResult result) { ... }
-}
-```
+Throwing style: the call maps the success, the context's exception handler answers each refusal. Returning style:
+switch over the closed result without a `default`, map only the success case; each refusal arm returns the answer
+the context writes once (`reference/element-modes.md` § Refusals: thrown or returned).
 
 ## Example: outbound (repository implementation)
 
@@ -110,11 +85,11 @@ class OrderEntity { /* JPA fields, accessors, @Id, @Column ... */ }
 
 ## Anti-patterns
 
-- **The aggregate as the REST response** — leaks the domain's shape to clients (`Order` as the JSON answer). Always map to a `*Response` record in the adapter.
-- **`*Command`/`*Query`/`*Result` as a JPA `@Entity`** — breaks the framework-free domain and application and mixes two lifecycles (use-case input and persistence row).
-- **Mapping logic in the use case** — when `PlaceOrderUseCase` constructs a `PlaceOrderRequest` or builds a `*Response`, the boundary has moved. Mappers belong in `adapter/`.
-- **One `*Dto` shared by request *and* persistence** — the same record serves two roles; every change on one side forces the other. Prefer two separate records with explicit mapping.
-- **A mapper in `application/` or `domain/`** — mapping is an adapter concern.
+- **The aggregate as the REST response** — map to a `*Response` record in the adapter.
+- **`*Command`/`*Query`/`*Result` as a JPA `@Entity`** — mixes use-case input and persistence row.
+- **Mapping in the use case** (building a `*Request` or `*Response`) — mappers belong in `adapter/`.
+- **One `*Dto` for request *and* persistence** — two records, explicit mapping.
+- **A mapper in `application/` or `domain/`**.
 - **A domain event as the Kafka payload** — domain events stay inside the context. Across contexts it is an `*IntegrationEvent` (schema version in `IntegrationEventType`; a business `version` stays allowed), mapped in the `adapter/outgoing/event/` publisher.
 
 The complete wiring picture is `dca-audit`'s reference `use-case-pattern.md` (section 4, "Adapter wiring: who calls
