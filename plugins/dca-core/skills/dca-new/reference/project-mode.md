@@ -1,13 +1,12 @@
 # Mode project — the steps
 
-Part of the `dca-new` skill: what its *Mode project* step list points to — the decisions from the description, the
-generator, git, `dca-init`, the formatter, the browser runner, the integration level, the proof and the report.
+`dca-new` *Mode project*, step by step.
 
 ## 1. The decisions come from the project description
 
 Read the technical and the product description where `dca.profile.yaml` puts them (`tech:`, `overview:`;
-`product/tech.md` and `product/overview.md` by default, also where the file is missing). Where there is none, its entries are all open and asked in the one pass below; `dca-describe` then
-writes the description from those answers and never invents one. Take from it:
+`product/tech.md` and `product/overview.md` by default, also where the file is missing). None → all its entries are open, asked in the one pass below; `dca-describe` writes the description from the
+answers, never invents one. Take from it:
 
 - **the stack** — Spring Boot (Gradle or Maven, the Java line) or .NET (the SDK line);
 - **the frontend approach** — server-rendered pages, a client application, or none;
@@ -21,9 +20,8 @@ needs — the description's open entries (`dca-describe`'s catalogue), this mode
 style, browser runner, selector attribute) and `dca-init`'s entries
 that apply to an empty directory — each with where its answer is looked up first. Look every answer up, then
 ask **only the open ones — all at once, before the generator runs, in catalogue order, word for word**, with
-the options and the default the catalogue gives; through a structured question tool where the harness has
-one, in prose otherwise. Ask nothing the catalogue does not list, and nothing later in the run: a question
-halfway stops the run with a skeleton on disk.
+the catalogue's options and default; structured question tool where the harness has one, else prose. Nothing the
+catalogue does not list, nothing later (a question halfway stops the run with a skeleton on disk).
 
 An answer goes where the catalogue says: a description entry into the description through `dca-describe`;
 the formatter and browser answers to `dca-add formatter` and `dca-add browser`, which record them in the build
@@ -31,8 +29,7 @@ file and `dca.profile.yaml`; the rule sets to `dca-init`.
 
 ## 2. The skeleton comes from a generator
 
-Versions, dependency ids and project layout come from the generator, never from memory — training data is
-older than the current releases.
+Versions, dependency ids and layout from the generator, never from memory.
 
 - **Spring Boot — Spring Initializr.** Read the metadata first: `curl -s -H 'Accept:
   application/vnd.initializr.v2.2+json' https://start.spring.io` lists the current Boot versions (take the
@@ -81,20 +78,17 @@ start.
 
 ## 5. The formatter: `dca-add formatter`
 
-Every project gets its formatter now, while the code base is only the skeleton — the one formatting run is
-then trivial, and every later change touches only what it wrote.
+Every project, now, while the code base is only the skeleton (the one formatting run stays trivial).
 
 ## 6. The browser runner: `dca-add browser`
 
-When the product description names a surface with pages (server-rendered or a client application), run
-`dca-add browser`. It sets up the runner and one smoke test on the start page before the first feature, so the
-first story's end-user test has something to run on.
+When the product names a surface with pages (server-rendered or client application): runner + one smoke test on
+the start page, before the first feature.
 
 ## 6a. The integration level: `dca-add integration-tests`
 
-Every project gets it, as it gets a formatter: a story's scenarios other than its happy path run at the
-integration level, and a project without one stops at its first plan. It is set up now, on the skeleton, with
-one smoke test that starts the application.
+Every project, now, with one smoke test that starts the application — non-happy-path scenarios run at this
+level; without it a project stops at its first plan.
 
 ## 7. Proof
 
@@ -107,13 +101,12 @@ The project is done when all three hold — show each:
   of a project without domain code — `DCA-STR-012` on `warn`, a freshly generated context map — are named,
   not hidden.
 - **The browser smoke test can fail.** Empty the start page's `<title>`, run the browser suite, see it red,
-  restore the title, see it green. A browser suite that stays green while the page is broken tests nothing.
+  restore the title, see it green.
 
 ## Report
 
-The report is read from the disk, so it has the same sections and fields every time — Stack · Generator ·
-DCA part · Formatter · Browser runner · Proof · Git · Open. Run `dca-init`'s report script from the project
-root, with the generator you used and the result of each proof step:
+Read from the disk (sections: Stack · Generator · DCA part · Formatter · Browser runner · Proof · Git · Open). Run
+`dca-init`'s report script from the project root with the generator and each proof result:
 
 ```bash
 python3 <dca-init skill folder>/scripts/dca-report.py --mode new --generator "start.spring.io" \

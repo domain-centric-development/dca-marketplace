@@ -16,87 +16,60 @@ description: |
 
 # dca-audit
 
-Audits code for **DCA compliance** — a diff, a bounded context or the whole project — focusing on
-issues that ArchUnit rules can't detect because they are semantic, not structural, and on the rules
-the project could enforce next. It is the method's audit, run by a person: the entry point for a
-brownfield project after `dca-init` installed the rules ("where does this code stand against the
-method, and which rules can we switch on?"), and the reader of a change before it is committed.
+The method's audit, run by a person: a diff, a context or the whole project — the semantic issues ArchUnit
+cannot see, and the rules the project could enforce next. Brownfield entry after `dca-init`; also the reader of
+a change before commit.
 
-It assumes `dca-init` may or may not have run. If it ran, the review reads the project's `DcaLayout`
-from the architecture test and the naming conventions from `dca.profile.yaml` at the project root
-(the `AGENTS.md` line ``- configuration: `dca.profile.yaml` ``, which `dca-init` writes, points at it);
-where it is missing or a key is absent, the defaults. Java and C# are reviewed against the same checklist —
-`reference/naming-conventions.md` carries the language mapping.
-
-This file is the router: the scope, the five phases in order, the shape of the answer and the hard rules; for
-every phase the reference to read before it. The detail is in `reference/`.
+- Conventions: the project's `DcaLayout` (architecture test) and `dca.profile.yaml` at the root (the `AGENTS.md`
+  line ``- configuration: `dca.profile.yaml` `` points at it); absent file or key → DCA defaults.
+- Java and C# against the same checklist; `reference/naming-conventions.md` maps the languages.
+- Where a checklist item cites a rule id (incl. the semantic ones `DCA-USE-015/016/017`, `DCA-HEX-012`,
+  `DCA-TAC-021`, `DCA-MAP-008`), confirm only what that rule cannot see — never repeat it.
 
 ## The method's view beside the general ones
 
-This is the one DCA reviewer: it checks conformance with the method — use-case shape, port hierarchy,
-marker contracts, the failure-translation site, context isolation, naming — where the rules cannot.
-Its checklist is its own. The general perspectives `review-ddd`, `review-hexagonal` and
-`review-clean-code` (in `dca-craft`) give the outside view — Evans/Vernon, Cockburn, Martin/Fowler —
-without knowing the markers or the rules. The overlap is intended: where the two views disagree about
-the same code, that is a finding to report, not a drift to reconcile.
-
-**Where it runs, and where not.** A person runs it: on a brownfield project, on a context, on a branch.
-A delivery pipeline's judge runs the three general perspectives and the project's rule suite on every
-story; this audit is not one of its defaults — the rules it would confirm already run as ArchUnit in
-every gate, and its anti-patterns that neither the suite nor the general reviews catch are few. It is
-not a judge perspective at all: a person runs it to examine a project by hand.
-
-Where ArchUnit ends and this audit begins — the table of what each checks — opens
-`reference/audit-phases.md`. The rule suite has grown into semantic territory (`DCA-USE-015/016/017`,
-`DCA-HEX-012`, `DCA-TAC-021`, `DCA-MAP-008`). Where the checklist cites a rule id, the review confirms what
-that rule cannot see — it does not repeat the rule.
+- This is the one DCA reviewer: use-case shape, port hierarchy, marker contracts, failure-translation site,
+  context isolation, naming. Its checklist is its own.
+- `review-ddd`, `review-hexagonal`, `review-clean-code` (dca-craft) give the outside view without markers or
+  rules. Overlap is intended: where the two views disagree on the same code, report it as a finding.
+- A person runs it. Not a judge perspective and not a pipeline default: the judge runs the three general
+  perspectives and the rule suite on every story.
 
 ## Workflow
 
-Read `reference/audit-phases.md` before the first phase: it carries each phase below in full, and before them
-*Reading the project's DCA setup* — the `DcaLayout` builder chain as the convention list, the rule sets
-switched off in `dca-archunit.properties`, the designed map and the glossaries, and `dca-knowledge` for the
-doctrine behind a finding. This makes the review match the project's actual conventions, not DCA defaults.
+Read `reference/audit-phases.md` before Phase 1: where ArchUnit ends, *Reading the project's DCA setup*
+(`DcaLayout` chain, sets off in `dca-archunit.properties`, designed map, glossaries, `dca-knowledge` for
+doctrine), then each phase in full.
 
-1. **Phase 1: Scope** — the argument (`/dca-audit <scope>`): nothing, or `project` — every source file under
-   the base package or namespace, the brownfield audit, the default, reported per bounded context in the
-   order the designed map lists them; a context name or a path — that context's files; `diff` — what changed
-   on this branch (the git commands are in the reference), user-specified paths instead where given. Without
-   a repository or a diff, `diff` falls back to the whole project and says so.
-2. **Phase 2: Layer classification** — each file's DCA layer from its path, by the classification table in
-   the reference (`domain.model` … `published.events`, `infrastructure`), through the project's `DcaLayout`
-   segments, C# in PascalCase matched case-insensitively; files outside the patterns are "uncategorized".
-3. **Phase 3: Apply review checks per layer** — `reference/checklist.md` for the per-layer checklist, run
-   only the checks that apply to each file's layer; `reference/use-case-pattern.md` for application-layer
-   files; `reference/anti-patterns.md` for the findings catalogue, each with symptoms and the reason. For each
-   finding capture file + line, severity (`must-fix` violates a DCA invariant, `should-fix` an anti-pattern,
-   `nit` style), rule, why, suggested fix.
-4. **Phase 4: The structure, rule by rule** — Block A: where the code stands against the rule suite of
-   `reference/archunit-rule-catalog.md`, whether the suite is installed or not — read against each rule's
-   *Selects* and *Checks* by default, taken from the suite's last report where one is younger than the newest
-   source file, never by running the build; what counts follows the suite's configuration (sets on `off`,
-   `warn`, frozen rules, experimental rules only with the opt-in); a set opens to its failing rules. Then the
-   two lists: the rules the project does not enforce yet and could, and the patterns the suite has no rule for.
-   The detail of the reading, the run, what counts and the two lists is in the reference.
+1. **Phase 1: Scope** — `/dca-audit <scope>`: none or `project` (default; every source file under the base
+   package/namespace, reported per bounded context in the designed map's order); a context name or path (that
+   context); `diff` (this branch's changes; user-given paths instead where passed). No repository or no diff →
+   whole project, and say so.
+2. **Phase 2: Layer classification** — each file's layer from its path via the reference's table and the
+   project's `DcaLayout` segments; C# PascalCase, case-insensitive; else "uncategorized".
+3. **Phase 3: Apply review checks per layer** — `reference/checklist.md`, only the checks of the file's layer;
+   `reference/use-case-pattern.md` for application files; `reference/anti-patterns.md` for the findings catalogue.
+   Per finding: file + line, severity (`must-fix` DCA invariant, `should-fix` anti-pattern, `nit` style), rule,
+   why, suggested fix.
+4. **Phase 4: The structure, rule by rule** — Block A against `reference/archunit-rule-catalog.md`, installed or
+   not: read against each rule's *Selects*/*Checks*, or from the suite's last report if younger than the newest
+   source file; never run the build. The suite's configuration decides what counts (`off`, `warn`, frozen,
+   experimental only with opt-in); a set opens to its failing rules. Then the two lists: rules not yet enforced
+   that could be, patterns the suite has no rule for.
 5. **Phase 5: Output** — the report below.
 
 ## Phase 5: Output — the shape of the answer
 
-Produce a structured report. It **leads with the standing**: how far the code fits the method, so a reader
-sees it before the findings — that is what an audit is for. Two blocks, kept apart, because they answer
-different questions and a red cell in one must not hide a green one in the other:
+Lead with the standing, in two blocks kept apart (a red cell in one must not hide a green one in the other):
 
-- **Block A — Structure** (Phase 4): what the rule suite checks, a row per rule set, opened to the rule where
-  one fails.
-- **Block B — Review**: what only a reader sees, a row per section of `reference/checklist.md` that applies to
-  the scope, a column per bounded context in scope (one column for a single context or a diff). A cell counts
-  the **must-fix and should-fix** findings of that section: `✓` none, `✗ n` that many, `–` no files of the
-  layer. **Nits do not colour a cell** — they are listed below with the findings, and a cell may read `✓ · 2 nits`.
-  A check the checklist marks with a rule id is Block A's; Block B confirms only what that rule cannot see.
+- **Block A — Structure** (Phase 4): a row per rule set, opened to the rule where one fails.
+- **Block B — Review**: a row per applicable section of `reference/checklist.md`, a column per bounded context
+  (one column for a single context or a diff). Cell = must-fix + should-fix count of that section: `✓` none,
+  `✗ n`, `–` no files of the layer. Nits never colour a cell (`✓ · 2 nits`). A check marked with a rule id is
+  Block A's.
 
-Findings outside the checklist — a security flaw, a runtime defect, a broken contract with a client — are
-reported in their own section, **Outside the method**, with the same severities; they do not enter either
-block's standing. Say so rather than stretching a checklist section to hold them.
+Security flaws, runtime defects, broken client contracts → **Outside the method**, same severities, in neither
+block's standing. Never stretch a checklist section to hold them.
 
 ```
 ## DCA Audit
@@ -157,49 +130,34 @@ block's standing. Say so rather than stretching a checklist section to hold them
 - Output ports are interfaces in application, shared when reused and local when owned by one operation ✓
 ```
 
-Every `✗ n` has its `n` places below — Block A's in the rule rows (the violating classes, grouped), Block B's
-in the findings, file and line each. A `✓` is a claim about every file of that layer in that context, so say
-in one line how many files each block ran over. Run the audit again after the fixes: the two blocks are what
-a team compares between two runs.
+- Every `✗ n` has its `n` places below: Block A's in the rule rows (violating classes, grouped), Block B's in
+  the findings, file and line each.
+- A `✓` claims every file of that layer in that context: say in one line how many files each block ran over.
+- Re-run after fixes; the two blocks are what a team compares between runs.
 
-## Anti-patterns this review catches
+## Boundaries
 
-The catalogue is `reference/anti-patterns.md`, each entry with symptoms and the reason — anemic aggregate, god
-use case, leaky output port, port without an application-side caller, cookies of one exchange with different
-policies, the domain-event contract, setters, injected dependency in an aggregate, a business rule as an
-argument exception, a blanket catch, a failure translated in more than one place, status derived from the base
-type, a foreign system's failure thrown as the unexpected, "none" refused on a "which one, if any" query,
-a domain gateway without a rationale, transaction and controller placement, technical names and framework
-annotations in the domain, cross-context imports, naming, DTOs and mutable messages, repository versus store.
-Document each so the user understands.
-
-## Things this review does NOT do
-
-- **Doesn't run code or tests.** Static review only — Block A is read against the rule catalog; where the
-  suite is installed it may take the suite's last report instead (Phase 4), and it never starts the build.
-- **Doesn't refactor.** It reports — the user fixes.
-- **Doesn't catch business-logic bugs.** It only flags structural/conceptual issues.
-- **Doesn't enforce a single style.** If the project's convention is `*ApplicationService` and
-  it's consistent, that's not a finding.
-- **Doesn't force the full pattern set on every context.** Pattern choice follows subdomain
-  type: a supporting context whose ADR declares transaction-script/active-record style is not
-  an anemic-model finding — only the structural baseline applies there (layer dependencies,
-  no cycles, context isolation). Check `docs/architecture/adr/` for a pattern-selection ADR
-  before flagging tactical-DDD violations in simple contexts.
-
-## Reference
-
-- `reference/audit-phases.md` — where ArchUnit ends, reading the project's DCA setup, and Phases 1–4 in full
-- `reference/checklist.md` — the complete per-layer checklist (includes Output Port Granularity section)
-- `reference/anti-patterns.md` — the findings catalogue: symptoms and the reason behind each anti-pattern
-- `reference/use-case-pattern.md` — central reference for use-case folder structure, file roles, shared-vs-local output-port decision guide, ArchUnit rules
-- `reference/naming-conventions.md` — extracted from the guide's package-structure chapter
-- `reference/archunit-rule-catalog.md` — every rule of both libraries, set by set, with what it selects and checks;
-  generated (`scripts/render-rule-catalog.py`), the same text as `dca-init`'s — Block A reads it
+- Static only: never runs code, tests or the build (a fresh suite report may replace the reading).
+- Reports; never refactors. Business-logic bugs are out of scope.
+- A consistent project convention (e.g. `*ApplicationService`) is not a finding.
+- Pattern choice follows subdomain type: a supporting context whose ADR declares transaction-script/active-record
+  is not an anemic-model finding — only the structural baseline applies (layer dependencies, no cycles, context
+  isolation). Check `docs/architecture/adr/` for a pattern-selection ADR before flagging tactical-DDD violations.
+- Explain each finding so the user understands it (reason from `reference/anti-patterns.md`).
 
 ## Twin implementation checkpoint
 
-When the project has a twin — the same system in a second language or stack — a behaviour change is reviewed
-together with its counterpart: the same use case, the same event contracts (`events/` schemas, wire JSON), the
-same ubiquitous language. An intentional difference needs a recorded compatibility note in the project; the review
-does not let the two silently fork. Without a twin this section does not apply.
+Where the project has a twin (same system, second language or stack), review a behaviour change with its
+counterpart: same use case, same event contracts (`events/` schemas, wire JSON), same ubiquitous language. An
+intentional difference needs a recorded compatibility note; never let the two fork silently. No twin → skip.
+
+## Reference
+
+| File | Read |
+|---|---|
+| `reference/audit-phases.md` | before Phase 1 — ArchUnit vs audit, reading the setup, Phases 1–4 in full |
+| `reference/checklist.md` | Phase 3 — the per-layer checklist (incl. output-port granularity) |
+| `reference/anti-patterns.md` | Phase 3 — the findings catalogue: symptoms and reason |
+| `reference/use-case-pattern.md` | Phase 3, application files — folder structure, file roles, shared-vs-local ports |
+| `reference/naming-conventions.md` | naming checks, Java/C# mapping |
+| `reference/archunit-rule-catalog.md` | Phase 4 — every rule of both libraries, set by set; generated (`scripts/render-rule-catalog.py`), same text as `dca-init`'s |

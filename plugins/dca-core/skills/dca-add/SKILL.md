@@ -18,253 +18,146 @@ description: |
 
 # dca-add
 
-One capability into a project that already builds — usually one `dca-init` has set up, and the one `dca-new`
-calls it for. Each capability below is a procedure with its own knowledge; nothing else is done in the same
-run.
+One capability per run, into a project that builds (usually set up by `dca-init`; `dca-new` calls this). The
+list holds only capabilities with knowledge beyond the tool's docs or that a delivery pipeline needs; anything
+else is ordinary work — do it, don't add it here.
 
-**What belongs on this list:** a capability carries knowledge beyond the tool's own documentation, or a
-delivery pipeline needs it. Everything else is ordinary work without a skill — do it, but do not add it here.
-Today the list is eight entries:
-
-| Capability | Does | The knowledge lives in |
+| Capability | Does | Knowledge in |
 |---|---|---|
 | `rules <set>` | one more rule set in `dca-archunit.properties` | `dca-init`'s reference `module-selection-guide.md` |
-| `freeze` | today's violations become the baseline; only new ones fail | this skill |
-| `formatter` | a formatter in the build, one run over the whole code base, the check and fix commands | this skill |
-| `browser` | a browser runner and one smoke test on the start page | `e2e-testing`'s setup mode |
-| `integration-tests` | an integration source set or test project, its command, one smoke test shown to fail | `reference/integration-tests.md` |
-| `http-stub` | an HTTP stub for integration tests, on a free port, and one smoke test shown to fail | `reference/http-stub.md` |
-| `coverage` | line and branch coverage over every suite together and per suite, one report, no threshold | `reference/coverage.md` |
-| `event-delivery` | an outbox under the transactional listeners, the rule's roles, one test shown to fail | `reference/event-delivery.md` |
+| `freeze` | today's violations become the baseline; only new ones fail | `reference/freeze.md` |
+| `formatter` | formatter in the build, one run over the whole code base, check and fix commands | `reference/formatter.md` |
+| `browser` | browser runner, one smoke test on the start page | `e2e-testing`'s setup mode |
+| `integration-tests` | integration source set or test project, its command, one smoke test shown to fail | `reference/integration-tests.md` |
+| `http-stub` | HTTP stub on a free port for integration tests, one smoke test shown to fail | `reference/http-stub.md` |
+| `coverage` | line + branch coverage over all suites together and per suite, one report, no threshold | `reference/coverage.md` |
+| `event-delivery` | outbox under the transactional listeners, the rule's roles, one test shown to fail | `reference/event-delivery.md` |
+
+Read a capability's reference when running it. Versions (plugins, packages): look up, latest stable, never from
+memory.
 
 ## Before any capability
 
 1. **The project.** Build system (`build.gradle(.kts)`, `pom.xml`, `*.sln` / `*.slnx` / `*.csproj`), the
    architecture test (`extends DcaArchitectureTest` / `: DcaArchitectureTest`) and its
-   `dca-archunit.properties`, and `dca.profile.yaml` at the project root (the `AGENTS.md` line
-   ``- configuration: `dca.profile.yaml` `` points at it) — flat `key: value` lines, where this skill records
-   what it adds; a missing file is created with the first line. A directory without a build file: stop and
-   point to `dca-new`.
-2. **Already there?** A capability that is present is not added twice: report what is there and stop.
-3. **Never overwrite a file.** A target that exists is edited in place — the lines the capability needs,
-   nothing else — or, where that is not possible, the user decides *overwrite / skip / abort* (default skip).
+   `dca-archunit.properties`, `dca.profile.yaml` at the root (named by the `AGENTS.md` line
+   ``- configuration: `dca.profile.yaml` ``) — flat `key: value` lines where this skill records; missing →
+   create with the first line. No build file → stop, point to `dca-new`.
+2. **Already there?** Report what is there, stop.
+3. **Never overwrite a file.** Edit in place (only the lines needed); impossible → user picks *overwrite /
+   skip / abort* (default skip).
 
 ## `rules <set>`
 
-One more set of the DCA rule catalog into an existing architecture test.
+1. Read `dca.rules.sets`. No key → whole catalog already runs; say so. Valid names (unknown fails the run):
+   `cycles`, `layered`, `onion`, `hexagonal`, `naming`, `tactical`, `strategic`, `contextmap`, `advanced`,
+   `usecase`, `errors`; .NET `dotnet` (always on).
+2. Check the prerequisite in `module-selection-guide.md` ("Common reasons to leave a set out", "Order of
+   strictness") — the one place for it. Typical: `tactical` needs classes implementing the markers;
+   `strategic`/`contextmap` more than one declared context; `naming` the suffixes configured in `DcaLayout`.
+3. Append the set; run `./gradlew test-architecture` / `mvn test -Dtest='ArchitectureTest'` /
+   `dotnet test tests/<Solution>.ArchitectureTests` (Debug).
+4. Violations are findings, not a failed step. User picks per rule: fix now, `dca.rules.warn` (or
+   `dca.rules.warn.sets = <set>`), or `freeze`. Rejected rule → `dca.rules.off` + `dca.rule.<id>.reason` (stays
+   in the report).
 
-1. Read `dca.rules.sets` in `dca-archunit.properties`. Without the key the whole catalog already runs — there is
-   nothing to add; say so. An unknown set name fails the run, so take the name from the catalog: `cycles`,
-   `layered`, `onion`, `hexagonal`, `naming`, `tactical`, `strategic`, `contextmap`, `advanced`, `usecase`,
-   `errors`, and on .NET `dotnet` (always on).
-2. Check the set's prerequisite with the rule-set selection guide — `dca-init`'s reference
-   `module-selection-guide.md` ("Common reasons to leave a set out", "Order of strictness"). It is the one place
-   for that knowledge; this skill does not repeat it. Typical: `tactical` needs classes that implement the
-   markers, `strategic` and `contextmap` need more than one declared context, `naming` needs the project's
-   suffixes configured in `DcaLayout` first.
-3. Append the set to the line and run the architecture test (`./gradlew test-architecture`,
-   `mvn test -Dtest='ArchitectureTest'`, `dotnet test tests/<Solution>.ArchitectureTests` in Debug).
-4. Violations are findings about the existing code, not a failed step. Offer the three staged forms and let the
-   user pick per rule: fix now, `dca.rules.warn` (or `dca.rules.warn.sets = <set>` for the whole set, reported
-   but not failing), or `freeze` below. A rule the team rejects is `dca.rules.off` with a
-   `dca.rule.<id>.reason` — it stays in the report with the reason.
-
-Spring Modulith's verification is not a rule set: it is a second test class and a dependency, `dca-init`'s
-decision E.
+Spring Modulith verification is no rule set: `dca-init` decision E.
 
 ## `freeze`
 
-Accept the violations an existing code base has today, so that the rules fail only on what is broken from now
-on. For projects that adopt DCA late; a new project has nothing to freeze.
-
-1. Run the architecture test and list the failing rules with their violation count.
-2. Per rule, with the user: freeze, ignore by pattern, lower to `warn`, or fix now. Record why in
-   `dca.rule.<id>.reason` either way.
-3. Write the choice into `dca-archunit.properties`:
-
-   **A baseline** — the same keys in Java and .NET:
-
-   ```properties
-   dca.rules.freeze        = DCA-ONI-002,DCA-HEX-003
-   dca.rules.freeze.store  = arch/frozen
-   ```
-
-   The first run records the current violations in the store directory and passes; every later run fails only
-   on a violation the store does not hold, and a fixed violation leaves the store. **Commit the store** with the
-   change — without it the next checkout records a new baseline and hides everything. The same in code:
-   `DcaRuleSelection.all().frozen(...).withFreezeStore(Path.of(...))` in `additionalSelection()` (C#:
-   `.Frozen(...).WithFreezeStore(...)`); the file form is preferred because the report shows it. The store is per
-   language: Java keeps ArchUnit's text store, .NET a JSON file (`FrozenRules.json`) — a project with both stacks
-   keeps two. Only the rules marked `"freezable": true` in the library's `rules.json` can be frozen, the same ids in
-   both libraries: the context-map set and the rules that iterate over bounded contexts fail with a message naming
-   them — lower those to `warn` or ignore by pattern instead.
-
-   **An ignore pattern** over what is already broken, one regular expression per key:
-
-   ```properties
-   dca.rule.DCA-ONI-002.ignore   = .*\.Legacy\..*
-   dca.rule.DCA-ONI-002.ignore.1 = .*ReportExporter.*
-   ```
-
-   The value is **one** expression, commas included; a second one goes into `.ignore.1`, `.ignore.2`, …. The
-   rule then reports only what the pattern does not cover. `ignore` works for every rule — the documented
-   exception a reviewer can read; the baseline is the quick start that shrinks on its own.
-4. Run the architecture test again: green, with the frozen, ignored and lowered rules named in the report.
+Read `reference/freeze.md`: list failing rules, decide per rule with the user (freeze, ignore by pattern, `warn`,
+fix), write `dca.rules.freeze` / `dca.rules.freeze.store` or `dca.rule.<id>.ignore[.n]`, re-run green. **Commit
+the store.**
 
 ## `formatter`
 
-A formatter in the build, **one formatting run over the whole code base when it is set up**, and the two
-commands a person and a delivery pipeline use from then on. No ratchet to changed files: after the one run,
-the formatter only touches what is unformatted — which is exactly what the last change wrote. That is what lets
-a delivery stage, which may touch only its own files, run the fix command without changing anyone else's.
-
-1. **Pick the formatter with the user.** An existing configuration (`.editorconfig`, an IDE formatter profile,
-   a checkstyle file) decides the style where there is one; a style the caller hands over, agreed with the
-   person (`dca-new` asks it before the skeleton exists), is that answer — do not ask again.
-   - **Gradle — Spotless** (`com.diffplug.spotless`, the version from the Gradle Plugin Portal, looked up — never
-     from memory): `spotless { java { <style>(); removeUnusedImports(); trimTrailingWhitespace(); endWithNewline() } }`
-     with the style the user picks (`googleJavaFormat()`, `palantirJavaFormat()`, `eclipse()`). `spotlessCheck`
-     joins `check` by itself. Do **not** set `ratchetFrom`.
-   - **Maven — Spotless** (`com.diffplug.spotless:spotless-maven-plugin`, version looked up) with the same
-     `<java>` steps; `check` bound to the `verify` phase where the user wants the build to fail on it.
-   - **.NET — `dotnet format`**, part of the SDK; its rules come from `.editorconfig` (`dotnet new editorconfig`
-     where there is none — then review its severities with the user, they decide what `--verify-no-changes`
-     reports).
-2. **Format everything once**, before any other change: `./gradlew spotlessApply`, `./mvnw spotless:apply`,
-   `dotnet format`. Build and run every suite afterwards — a formatter must not change behaviour. The result is
-   one commit of its own that holds nothing but formatting (the person commits it), so a later review or
-   `git blame` can skip it. Where the repository has a `.git-blame-ignore-revs`, add the commit there.
-3. **The two commands:**
-
-   | Build | Check (`format:`) | Fix (`formatFix:`) |
-   |---|---|---|
-   | Gradle | `./gradlew spotlessCheck` | `./gradlew spotlessApply` |
-   | Maven | `./mvnw spotless:check` | `./mvnw spotless:apply` |
-   | .NET | `dotnet format --verify-no-changes` | `dotnet format` |
-
-   Record both in `dca.profile.yaml`, as `format:` and `formatFix:` lines, where the general skills look for
-   the formatter. A delivery pipeline's profile carries the same two keys: the gate and the commit hook run the
-   check, the stages that write code run the fix before they finish.
+Read `reference/formatter.md`: Spotless (Gradle, Maven) or `dotnet format`, **no ratchet**, one formatting run
+over the whole code base as a commit of its own, `format:` / `formatFix:` in `dca.profile.yaml`.
 
 ## `browser`
 
-A browser runner and one smoke test, set up before the first feature needs them. The knowledge is not here:
-run `e2e-testing` in its setup mode — it holds the setup for Gradle, Maven and .NET in its
-`reference/setup.md` (Playwright, the application started inside the test on a free port, the browser installed
-by the build, a fake clock and permission stand-ins, a static start page instead of a controller). Where
-`e2e-testing` is not installed, say so and stop; do not improvise a setup.
+Run `e2e-testing` in setup mode (its `reference/setup.md`: Playwright, app started in the test on a free port,
+browser installed by the build, fake clock, permission stand-ins, static start page). Not installed → say so,
+stop; never improvise. An existing suite gets no second one; if it needs an app started beforehand, setup mode
+changes its base test to start the app on a free port.
 
-A project that already has a browser suite gets no second one. Where its suite drives an application
-someone has to start first, `e2e-testing`'s setup mode changes the suite's base test so it starts the
-application itself on a free port — the one change that makes the suite usable by an automated check.
+Check afterwards:
 
-What this skill checks afterwards, because a runner that cannot fail is worse than none:
-
-- the whole suite runs green with nothing started beforehand;
-
-- the smoke test is green;
-- it fails when the start page's `<title>` is emptied — try it once, then restore the title;
-- `dca.profile.yaml` records the three answers, one line each, where the report and the general skills
-  read them: `browser:` (the runner), `selector:` (the stable-selector attribute) and `appStart: started by
-  the suite on a free port`;
-- the `AGENTS.md` section of `dca-init` names `e2e-testing` for browser tests; where it does not, run
-  `dca-init` again to refresh the section (or add the line in its form: ``- browser tests: `e2e-testing` ``).
+- whole suite green with nothing started beforehand; smoke test green;
+- smoke test fails with the start page's `<title>` emptied — try once, restore;
+- `dca.profile.yaml`: `browser:` (runner), `selector:` (stable-selector attribute), `appStart: started by the
+  suite on a free port`;
+- the `dca-init` `AGENTS.md` section names `e2e-testing` for browser tests; if not, re-run `dca-init` (or add
+  ``- browser tests: `e2e-testing` ``).
 
 ## `integration-tests`
 
-The level between a unit test and an end-user test: a use case through its input port in the wired application,
-real outgoing adapters, an external system stubbed at the protocol — and each incoming adapter's translation
-against a stubbed input port. A delivery pipeline puts every scenario but a story's happy path
-here, so a project without it stops at its first story's plan. The setup per stack is in
-`reference/integration-tests.md`.
+Port tests (use case through its input port, wired app, real outgoing adapters, external systems stubbed at the
+protocol) and adapter tests (incoming adapter against a stubbed input port). A pipeline puts every scenario but
+the happy path here; without it the first story's plan stops.
 
-1. **Already there?** A `src/test-integration` source set or a `*.IntegrationTests` project: report it and
-   stop. A context test in the unit source set is not one, and it stays where it is.
-2. **Its own source set or project, its own command** — `./gradlew test-integration`, `./mvnw test` over the
-   added test source, `dotnet test tests/<Name>.IntegrationTests` — so a unit-test run stays fast and a check
-   can tell from a test's path which command runs it.
-3. **One smoke test** that starts the wired application. Run it green, break it the way the reference says, see it red (the context does not start),
-   restore it, see it green.
-4. **Record it** in `dca.profile.yaml`: `integration:` (the source set or project), `integrationTest:` (its
-   command) and `reset:` (how a test starts clean).
+1. **Already there?** `src/test-integration` or `*.IntegrationTests` → report, stop. A context test in the unit
+   source set is not one; it stays.
+2. **Own source set/project, own command**: `./gradlew test-integration`, `./mvnw test` over the added test
+   source, `dotnet test tests/<Name>.IntegrationTests`.
+3. **One smoke test** starting the wired app: green, break it as the reference says, red, restore, green.
+4. **Record** in `dca.profile.yaml`: `integration:`, `integrationTest:`, `reset:`.
 
 ## `http-stub`
 
-An integration test runs a use case through the wired application; an external system it calls is
-stubbed **at the protocol** — a real HTTP server on a free port that answers what the test arranges —
-never by a mock of the port whose adapter is under test, and never against a shared or real instance.
-The setup per stack is in `reference/http-stub.md`: WireMock for Java (Gradle, Maven), WireMock.Net for
-.NET.
+Stub external systems **at the protocol** (real HTTP server, free port) — never mock the port whose adapter is
+under test, never a shared or real instance. WireMock (Java), WireMock.Net (.NET).
 
-1. **Where the integration tests live.** The integration source set or test project (`src/test-integration`,
-   `*.IntegrationTests`) takes the dependency; where there is none, add it first (`integration-tests` above).
-2. **The version is looked up** (Maven Central, NuGet), never recalled; take the latest stable release, not
-   a beta.
-3. **One smoke test** in that source set: the stub started on a free port, one answer arranged, one call,
-   the answer asserted. Run it green, then change the arranged answer, see it red, restore it, see it green.
-   A stub test that stays green against a wrong answer proves nothing.
-4. **The adapter's base URL comes from configuration**, so an integration test points the application at
-   the stub: a property set from the stub's URL (`@DynamicPropertySource` in Spring, the
-   `WebApplicationFactory` configuration in ASP.NET Core). The reference shows both; no adapter is written
-   here.
-5. **Record it**: `http.stub: wiremock` / `wiremock-net` in `dca.profile.yaml`, where the general skills
-   and a delivery pipeline's profile read it.
+1. Dependency in the integration source set/project; none → `integration-tests` first.
+2. Version looked up (Maven Central, NuGet), latest stable, no beta.
+3. **One smoke test**: stub on a free port, one arranged answer, one call, assert. Green; change the arranged
+   answer, red; restore, green.
+4. Adapter base URL from configuration (`@DynamicPropertySource` / `WebApplicationFactory` configuration). No
+   adapter written here.
+5. **Record**: `http.stub: wiremock` / `wiremock-net` in `dca.profile.yaml`.
 
 ## `coverage`
 
-One report of line and branch coverage over the unit, integration and end-user suites together, and one per
-suite — the browser suite included, since it drives the application in the test's own process. The setup per
-stack is in `reference/coverage.md`: JaCoCo for Gradle and Maven, coverlet with ReportGenerator for .NET.
+JaCoCo (Gradle, Maven), coverlet + ReportGenerator (.NET).
 
-1. **Already there?** A JaCoCo plugin, a `coverlet` collector with a report step: report it and stop.
-2. **Every suite the project has**, not the unit suite alone: a report of one suite calls a use case untested
-   that its port test runs.
-3. **No threshold.** Coverage is a reading, never a check that fails the build: a number to reach invites tests
-   written for the number. The gap that matters is in the domain — an uncovered branch in an aggregate, entity
-   or value object is an invariant nobody named; it goes back as an invariant with a unit test.
-   **Outside every build and test command:** the report task joins neither `check` nor a test command a
-   delivery pipeline's profile names (`test:`, `test.<name>:`, `e2eTest:`) — a story whose criteria are all
-   green must never fail on a number.
-4. **Shown to work:** the domain's types in the report with covered lines; one unit test of a guard commented
-   out shows that branch missed; the test restored.
-5. **Record it** in `dca.profile.yaml`: `coverage:` (the command) and `coverageReport:` (the report's path).
+1. **Already there?** JaCoCo plugin, or `coverlet` collector with a report step → report, stop.
+2. **Every suite** (unit, integration, end-user — the browser suite runs in the test's process), together and per
+   suite.
+3. **No threshold**, never a failing check. An uncovered branch in an aggregate, entity or value object goes back
+   as an invariant with a unit test. The report task joins neither `check` nor any test command a pipeline
+   profile names (`test:`, `test.<name>:`, `e2eTest:`).
+4. **Shown to work**: domain types in the report with covered lines; comment out one guard's unit test, branch
+   missed; restore.
+5. **Record**: `coverage:` (command), `coverageReport:` (path) in `dca.profile.yaml`.
 
 ## `event-delivery`
 
-A reaction to an event — the context's own domain event or another context's contract — drives a use case after the
-commit, in a transaction of its own, from a publication captured in the publishing transaction. The libraries ship no
-runtime for that; this capability puts the outbox into the project. The forms, their configuration and the parts
-every form has are in `reference/event-delivery.md`.
+A reaction to an event (own domain event or another context's contract) drives a use case after commit, in its
+own transaction, from a publication captured in the publishing transaction. The libraries ship no runtime.
 
-1. **Already there?** Spring Modulith's events starter with a publication registry, an outbox table with a worker,
-   Wolverine's durable local queues: report what is there — and which of the parts it lacks (a staleness monitor,
-   bounded retry) — and stop.
-2. **The form, by the person's choice:** Spring Modulith where Spring is the framework (the default); an outbox table
-   and a worker without it; in .NET, Wolverine or an own outbox. An in-memory outbox is a stand-in for a sample: say
-   so when the project has no database.
-3. **Two listener kinds.** The synchronous kind runs in the publishing transaction and calls output ports only; the
-   transactional kind drives an input port and is delivered from the outbox. Existing listeners that drive an input
-   port move to the transactional kind; a translator stays synchronous. Ask before moving one that a test expects to
-   run inside the transaction.
-4. **The rule's roles** (`DCA-HEX-017`, experimental): Spring needs nothing; another Java framework sets
-   `withTransactionalEventListener(...)`; .NET names the project's listener types in `EventListenerTypes` and
-   `TransactionalEventListenerTypes`. Switch the rule on by id or with the experimental rules.
-5. **One integration test**, shown to fail: the reaction is not called before the commit, called once after it, never
-   after a rollback; make the listener synchronous and see it red; restore it.
-6. **Record it**: `event.delivery: modulith` / `outbox` / `wolverine` in `dca.profile.yaml`.
+1. **Already there?** Modulith events starter with publication registry, outbox table + worker, Wolverine durable
+   local queues → report it and which parts it lacks (staleness monitor, bounded retry), stop.
+2. **Form, the person's choice:** Spring Modulith where Spring is the framework (default); else outbox table +
+   worker; .NET Wolverine or own outbox. In-memory outbox = sample stand-in; say so when there is no database.
+3. **Two listener kinds.** Synchronous: in the publishing transaction, output ports only. Transactional: drives an
+   input port, delivered from the outbox. Move listeners that drive an input port to transactional; translators
+   stay synchronous. Ask before moving one a test expects inside the transaction.
+4. **Rule roles** (`DCA-HEX-017`, experimental): Spring nothing; other Java framework
+   `withTransactionalEventListener(...)`; .NET `EventListenerTypes` and `TransactionalEventListenerTypes`. Switch
+   on by id or with the experimental rules.
+5. **One integration test**, shown to fail: not called before commit, once after, never after rollback; make the
+   listener synchronous → red; restore.
+6. **Record**: `event.delivery: modulith` / `outbox` / `wolverine` in `dca.profile.yaml`.
 
 ## After each capability
 
-**Record it in the technical description.** A capability is a technical decision the person took with you, so
-the project's technical description follows it: one line under its `## Stack` heading — the capability in the
-person's words, then the tool and its version, e.g. `Browser tests: Playwright 1.56` — in the file
-`dca.profile.yaml` names as `tech:` (by default `<root>/tech.md`, `root:` by default `product/`). A line that
-is already there is updated, not repeated. Where the description says something the capability contradicts — "no
-end-user tests", another formatter — ask which is right and change the description through `/dca-describe`
-instead of writing over it. Where the project has no technical description yet, write none and say that
-`/dca-describe` writes it.
+**Technical description:** one line under `## Stack` — capability in the person's words, tool and version (e.g.
+`Browser tests: Playwright 1.56`) — in the file `dca.profile.yaml` names as `tech:` (default `<root>/tech.md`,
+`root:` default `product/`). Existing line → update, don't repeat. Description contradicts the capability ("no
+end-user tests", another formatter) → ask which is right, change it through `/dca-describe`. No description →
+write none; say `/dca-describe` writes it.
 
-Report what was added, the commands to run it, and what the user commits:
+Report:
 
 ```
 ✓ Added {capability}
@@ -273,16 +166,14 @@ Report what was added, the commands to run it, and what the user commits:
   - Commit: {what, and — for formatter — the one formatting commit on its own}
 ```
 
-Where the project has a delivery pipeline (`.agents/factory/`), hint that `factory.sh setup --check` proposes
-the profile lines the new capability needs (`format:` / `formatFix:`, `browser:` / `e2eTest:`,
-`test.integration:`, `http.stub:`). This skill does not write the
-profile and does not depend on the pipeline.
+With a delivery pipeline (`.agents/factory/`): hint that `factory.sh setup --check` proposes the profile lines
+(`format:` / `formatFix:`, `browser:` / `e2eTest:`, `test.integration:`, `http.stub:`). This skill never writes
+that profile and does not depend on the pipeline.
 
-## Anti-patterns
+## Don't
 
-- **Don't** add a capability that is not on the list. Setting up a tool the documentation already explains is
-  ordinary work.
-- **Don't** set up a formatter with a ratchet, and don't mix the one formatting run with any other change.
-- **Don't** delete a failing rule to get green. `warn`, `freeze`, `ignore` and `off` keep the decision visible.
-- **Don't** freeze without committing the store.
-- **Don't** take a plugin or package version from memory.
+- add a capability not on the list.
+- use a formatter ratchet, or mix the formatting run with any other change.
+- delete a failing rule to get green — `warn`, `freeze`, `ignore`, `off` keep it visible.
+- freeze without committing the store.
+- take a plugin or package version from memory.

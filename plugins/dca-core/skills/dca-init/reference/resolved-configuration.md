@@ -1,8 +1,8 @@
 # Resolved configuration shared by dca-init and dca-new
 
 `dca-init` writes the resolved configuration as flat `key: value` lines into `dca.profile.yaml` at the
-project root for every project, including projects using the vendored catalog. The file is harness-neutral,
-which is why every skill reads it; every key is optional and an absent one takes its default. `dca-new` reads
+project root for every project, including projects using the vendored catalog. Every key is optional; an
+absent one takes its default. `dca-new` reads
 these keys and the current architecture test and properties before rendering. Keep every other line of the
 file. If dependencies or overrides changed, refresh these keys from the actual resolved preset report; never
 infer Spring from Java alone.
@@ -17,8 +17,8 @@ The suffixes are the ones the architecture test holds the project to — `use_ca
 `repository_suffix`, `controller_suffix`, `rest_controller_suffix` — taken from decision D on a fresh install and
 from the existing `DcaLayout`'s `with*Suffix(...)` / `With*Suffix(...)` calls on a retrofit; without a call, the
 library's default (`UseCase`, `InputPort`, `Repository`, `Controller`, `Resource`; .NET `Controller` for both
-controller kinds). They are written here so that a plan, a modelling skill or a delivery stage names a new element
-correctly before the architecture suite runs — the suite is the check, these keys are what the writer reads.
+controller kinds). A plan, a modelling skill or a delivery stage reads them to name a new element before the suite
+runs.
 
 Beside them, `failure_suffix:` holds what no suite resolves (`Exception` by default, or `none`):
 the suffix of every domain and use-case failure, whose name is the rule it breaks. Keep a value the team set.

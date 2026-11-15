@@ -1,8 +1,6 @@
 # Phase 1 — Inspection
 
-Part of the `dca-init` skill: what its *Phase 1 — Inspection* step points to — what to determine about the project, in order, before any question is asked, and the summary shown before asking.
-
-Use `Glob`, `Read`, `Grep` and `Bash` to determine:
+What to determine, in order, before any question; then the summary.
 
 1. **Language and build system.** `build.gradle(.kts)` / `pom.xml` → Java branch; `*.sln` / `*.csproj` → .NET
    branch. Read the Java version (`toolchain`, `sourceCompatibility`, `<java.version>`), Spring Boot version,
@@ -11,7 +9,7 @@ Use `Glob`, `Read`, `Grep` and `Bash` to determine:
    repository (`git rev-parse --is-inside-work-tree`); this skill creates none, and the report says so where
    it is missing.
 
-2. **Versions — look them up, never recall them.** Package versions go stale in training data. Resolve:
+2. **Versions — look them up, never recall them.** Resolve:
    - `{{dcaJavaVersion}}` — the latest release of `dev.domaincentric:dca-archunit` (Maven Central search or
      mvnrepository via `WebFetch`). The four Java artifacts are versioned independently: look up
      `dca-building-blocks` (`{{dcaBuildingBlocksVersion}}`), `dca-spring` (`{{dcaSpringVersion}}`) and

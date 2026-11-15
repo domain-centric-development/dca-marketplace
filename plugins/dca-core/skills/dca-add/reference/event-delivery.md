@@ -1,11 +1,7 @@
 # Event delivery: an outbox for transactional listeners
 
-A reaction to an event — a domain event of the context or a contract from another — drives a use case after the
-publishing transaction committed, in a transaction of its own, from a publication captured in that transaction. The
-DCA libraries ship no runtime for it: the building blocks name the `DomainEventPublisher` port, the rules check the
-listener's kind, and the outbox is the project's. This page sets one up.
-
-Every form has the same parts, and the setup is done when each one is there:
+The building blocks name the `DomainEventPublisher` port, the rules check the listener's kind, the outbox is the
+project's. Every form has these parts; the setup is done when each is there:
 
 | Part | What it means |
 |---|---|
@@ -16,9 +12,9 @@ Every form has the same parts, and the setup is done when each one is there:
 | bounded retry | backoff up to a limit; a terminal failure stays for inspection and a deliberate replay |
 | at least once | the same publication can arrive twice; the use case is idempotent per event id and listener |
 
-Two listener kinds sit on top of it. A **synchronous** listener runs inside the publishing transaction and calls
-output ports only — the translator that captures an integration event, a metric. A **transactional** listener
-drives an input port and is delivered from the outbox. Versions are looked up at setup time, never recalled.
+Listener kinds: **synchronous** (in the publishing transaction, output ports only — the translator capturing an
+integration event, a metric); **transactional** (drives an input port, delivered from the outbox). Versions looked
+up.
 
 ## Java — Spring Modulith (the default where Spring is the framework)
 

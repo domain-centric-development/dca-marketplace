@@ -1,9 +1,6 @@
 # Transactions in an in-memory start
 
-Part of the `dca-init` skill (Phase 3, Java step 1): what a Spring project without a data starter needs so
-that `@Transactional` and after-commit listeners work, and where the placeholder bean lives.
-
-**Transactions in an in-memory start:** without a data starter there is no `PlatformTransactionManager` and
+`dca-init` Phase 3, Java step 1. Without a data starter there is no `PlatformTransactionManager` and
 not even Boot's `TransactionAutoConfiguration` (`spring-boot-transaction`); `@Transactional` is then
 silently inert and after-commit listeners never fire while every rule stays green. Add
 `org.springframework.boot:spring-boot-transaction`, a small `PlatformTransactionManager` bean **in the

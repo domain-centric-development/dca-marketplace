@@ -1,34 +1,29 @@
 # Anti-patterns this review catches
 
-Part of the `dca-audit` skill: what its *Phase 3* step points to beside `reference/checklist.md` — the findings
-catalogue, each with its symptoms and the reason, so the user understands a finding. Where the checklist already
-carries the symptom and the fix, the entry names the section instead of repeating it.
-
-These are project-experience-derived. Document each so the user understands.
+`dca-audit` Phase 3, beside `reference/checklist.md`: symptoms and the reason, to explain each finding. Where the
+checklist carries symptom and fix, the entry names its section.
 
 ### Anemic aggregate
 Symptoms: aggregate is mostly getters/setters; business logic lives in use case.
-Why: aggregates should *protect invariants* — if they don't, they're just data containers.
+Why: aggregates protect invariants.
 
 ### God use case
 Review prompts, not numerical thresholds: a use case with more than five output ports, a long method, or multiple
 nested if-blocks.
-Why: a use case should be one cohesive operation. Big ones suggest missing domain service or
-mis-bounded context.
+Why: one cohesive operation; big ones suggest a missing domain service or a mis-bounded context.
 
 ### Leaky output port
 Symptoms: an output port name reveals the implementation (`*JdbcRepository`, `*RestClient`,
 `*KafkaPublisher`).
-Why: ports are technology-agnostic by definition. Implementation details belong in the adapter.
+Why: ports are technology-agnostic.
 
 ### Port without an application-side caller
 Symptoms: an `OutputPort` subtype that no use case depends on and that is not the identity port —
 cookie or token handling, session logout (adapter mechanics); or a filter asking its own context
 whether an account exists through an output port (an inbound question).
-Why: an output port is a capability the application needs but does not own, fulfilled by an adapter
-(in-memory or remote). Adapter mechanics stay in
-the adapter without a marker; a question into the own context is a query use case or the
-published API. The identity port is legitimate: the caller's identity comes from an identity system.
+Why: an output port is a capability the application needs but does not own. Adapter mechanics stay in the
+adapter without a marker; a question into the own context is a query use case or the published API. The identity
+port is legitimate: identity comes from an identity system.
 
 ### Cookies of one exchange with different policies
 Symptoms: the identity cookie is configured (`SameSite`, `Secure`) while the CSRF/antiforgery cookie keeps the
@@ -40,26 +35,22 @@ policy a site question.
 
 ### Domain event without identity or timestamp
 Symptoms: a `DomainEvent` record without `eventId()` / `occurredOn()` (C#: `EventId` / `OccurredOn`).
-Why: events are causal records; without an id they cannot be deduplicated, without time you can't
-reason about ordering. Both members are the marker's contract, not a project convention — do not
-suggest other spellings (`occurredAt`, `timestamp`).
+Why: dedup and ordering. Both members are the marker's contract — never suggest other spellings (`occurredAt`,
+`timestamp`).
 
 ### Domain event with mutable field
-Why: events are facts about the past — facts don't change.
 
 ### Setter on value object
-Why: value objects are immutable by definition.
 
 ### Public setter on entity or aggregate
 Symptoms: `setX(...)` on a domain model class, even when it validates internally.
-Why: state changes go through intention-revealing methods from the ubiquitous language
-(`adjustStockTo`, not `setAvailableQuantity`). A setter name hides the business operation.
+Why: state changes go through intention-revealing methods of the ubiquitous language (`adjustStockTo`, not
+`setAvailableQuantity`).
 
 ### Injected dependency in aggregate
 Symptoms: an aggregate holds a `*Repository`, output port, or service as a field (`DCA-TAC-002`).
-Why: aggregates are persistence-ignorant — dependencies are loaded by the use case and
-passed as method parameters. Moving the lookup behind a callback or resolver parameter does not change
-who owns the calculation; review such parameters manually.
+Why: the use case loads dependencies and passes them as method parameters. A callback or resolver parameter does
+not change who owns the calculation; review such parameters manually.
 
 ### Business rule as an argument exception
 Symptoms: a state transition or a cross-field invariant refuses with `IllegalStateException` /
@@ -137,17 +128,16 @@ multi-statement atomicity — joins the caller's transaction.)
 
 ### Controller reaching past the use case
 Symptoms: a `*Controller`/`*Resource` injects a `*Repository`.
-Why: incoming adapters drive the application through input ports only — direct repository
-access bypasses transactions, authorization, and orchestration.
+Why: incoming adapters drive the application through input ports only.
 
 ### Technical names in the domain
 Symptoms: `*Helper`/`*Util`/`*Impl`/`*Implementation` classes in `domain/` (`DCA-NAM-010`), or bucket packages
 like `entities/`, `valueobjects/`, `helpers/`, `util/` (`DCA-NAM-009`). A term the ubiquitous language uses
 (`PortfolioManager`, `PriceCalculator`) is not a technical name, whatever its suffix looks like.
-Why: technical names signal a missing domain concept; packages are named by domain concept.
+Why: a missing domain concept; packages are named by domain concept.
 
 ### Spring annotation on domain class
-Why: domain stays framework-free (DCA invariant). The C# twin: an ASP.NET, EF Core (`[Table]`, `DbContext`)
+Why: framework-free domain. C# twin: an ASP.NET, EF Core (`[Table]`, `DbContext`)
 or `System.Text.Json` attribute on a class in `Domain/`, or an `async` member on an aggregate — the .NET
 catalog keeps the domain synchronous and framework-free (`DCA-NET-00x`).
 
@@ -160,27 +150,21 @@ The consuming use case sees its own output port (`*DataPort`); the outgoing adap
 ### Use-case naming mismatch
 Symptoms: class name doesn't match the action it performs (`OrderHandler` instead of
 `PlaceOrderUseCase`; or use case named for the output, not the verb).
-Why: use cases are named for user intent, not technical mechanism.
+Why: named for user intent, not mechanism.
 
 ### DTO in domain or application
-Why: DTOs are an adapter concern. If domain or application has a `*Dto`, a transformation
-boundary is misplaced.
+Why: DTOs are an adapter concern; the transformation boundary is misplaced.
 
 ### Mutable Result/Command/Query
-Why: messages are immutable. Java records make this trivial.
 
 ### Repository for non-aggregate
 Symptoms: a `*Repository` exists for an Entity that isn't an AggregateRoot.
-Why: only aggregate roots have repositories — non-root entities are loaded through their
-aggregate.
+Why: non-root entities load through their aggregate.
 
 ### Repository vs. Store mismatch
 Symptoms and fix: `reference/checklist.md` § *Repository vs. Store correctness* (a `*Store` exposing `save`/`delete`,
 or a `*Repository` whose stored type is a Value Object / record without aggregate lifecycle).
-Why: DCA distinguishes Repository (for Aggregate Roots — collection-like, identity-based) from
-Store (for operational data — record/count/exists). Confusing them breaks the Ubiquitous
-Language: a reader can no longer tell from the port name what kind of data it manages. The difference is
-lifecycle, not lookup.
-Note: the Store half is now mechanical — ArchUnit checks the marker, both placements, and the
-forbidden `save`/`delete` method names (`DCA-TAC-021`). What remains for review is the direction
-ArchUnit cannot see: a `*Repository` whose stored type has no aggregate lifecycle.
+Why: Repository = aggregate roots (collection-like, identity); Store = operational data (record/count/exists). The
+difference is lifecycle, not lookup.
+The Store half is `DCA-TAC-021` (marker, placements, no `save`/`delete`); review only the other direction: a
+`*Repository` whose stored type has no aggregate lifecycle.

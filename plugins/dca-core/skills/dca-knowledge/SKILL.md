@@ -14,52 +14,34 @@ disable-model-invocation: false
 
 # /dca-knowledge — Grounded Q&A over the OKF catalog
 
-The OKF bundle is the **canonical, machine-readable DCA knowledge base**: several hundred atomic
-markdown nodes, each with typed frontmatter and bundle-relative cross-links forming a
-graph. Two zones:
+The catalog: atomic markdown nodes with typed front matter and bundle-relative links. Zones: **generated** (guide
+docs and sections, markers, rules, process, references) and **extensible** (`recipe/`, `decision/`, `pitfall/`,
+`template/`, `note/` — authored, kept across regeneration, may be empty). Self-contained: a citation needs no path
+outside it.
 
-- **Generated** (implementation-guide docs and sections, marker contracts,
-  architecture rules, process and API references) — derived from the sources.
-- **Extensible** (`recipe/`, `decision/`, `pitfall/`, `template/`, `note/`) — authored
-  by a human or an LLM, preserved across regeneration. May be empty until populated.
-
-This skill answers DCA questions **from that bundle** — not from the model's own
-memory — and **cites** the node path for every claim. The bundle is
-self-contained: nodes carry the marker signature, the rule expression and the guide
-text themselves, so a citation needs no path outside the catalog.
-
-> **Grounding rule (non-negotiable):** Answer only from nodes you actually read in the
-> bundle. If the bundle doesn't cover it, say so — don't fill the gap from general DDD
-> knowledge. Mark any such supplement explicitly as *outside the catalog*.
+> **Grounding rule (non-negotiable):** answer only from nodes you read. Not covered → say so; never fill from
+> general DDD knowledge. Mark any supplement *outside the catalog*.
 
 ## Locating the bundle
 
-Resolve the catalog path in this order; stop at the first that exists:
+First that exists wins:
 
 1. `catalog_path:` in `dca.profile.yaml` at the project root (the `AGENTS.md` line
-   ``- configuration: `dca.profile.yaml` `` points at it). An explicit override wins.
-2. **The `catalog/` folder beside this skill file** — the copy that ships with the skill and travels with it:
-   `${CLAUDE_PLUGIN_ROOT}/skills/dca-knowledge/catalog/` for a plugin install, `.claude/skills/dca-knowledge/catalog/`
-   (or `.codex/skills/…`, `.opencode/skills/…`) where the skill was copied or linked into the project. This is
-   the path in every consuming project; do not search for a `bundle/` folder, there is none here.
-3. `.agents/dca/catalog/`, then `.claude/dca/catalog/` — a copy the project vendored by hand.
-4. `dca-knowledge-catalog/bundle/` beside the repository root — only in the checkout that generates the
-   catalog; it is fresher than a shipped copy and is preferred where both exist.
+   ``- configuration: `dca.profile.yaml` `` points at it).
+2. **`catalog/` beside this skill file** — `${CLAUDE_PLUGIN_ROOT}/skills/dca-knowledge/catalog/`, or
+   `.claude/skills/dca-knowledge/catalog/` (`.codex/skills/…`, `.opencode/skills/…`) when copied or linked. The
+   path in every consuming project; there is no `bundle/` folder here, do not search for one.
+3. `.agents/dca/catalog/`, then `.claude/dca/catalog/` — vendored by hand.
+4. `dca-knowledge-catalog/bundle/` beside the repository root — only in the generating checkout; fresher, preferred.
 
-> **No book, no ADRs.** The catalog is built from the implementation guide plus the
-> reference implementation's marker interfaces and ArchUnit rules. The DCA book is not a
-> source (it is not public), and neither are the sample's ADRs: an ADR records a decision
-> *one* project made, so citing "ADR-030" would point at a file the user does not have.
-> Answer from the `guide/` sections and the skeleton — and if the question is really about
-> a decision the catalog does not carry, say so rather than reconstructing it.
+None → say the catalog is not present; it ships with this skill, a project keeping its own copy vendors it into
+`.agents/dca/catalog/` and sets `catalog_path`.
 
-If none is found, say so: the catalog is not present. It ships with this skill; a project that keeps its
-own copy vendors one into `.agents/dca/catalog/` and sets `catalog_path`.
+**No book, no ADRs.** Sources are the guide plus the markers and rules. Never cite the DCA book (not public) or
+a sample ADR ("ADR-030" is a file the user lacks). A decision the catalog does not carry → say so, do not
+reconstruct it.
 
 ## Node types & typed edges
-
-The bundle is a graph. Knowing the node types and edge labels lets you traverse it
-without reading everything.
 
 | Node `type` | Lives in | Carries | Key outgoing edges |
 |---|---|---|---|
@@ -68,45 +50,33 @@ without reading everything.
 | `Marker` | `marker/<cat>/` | interface signature, `extends`, methods | `## Extends`, `## Governed by` (rules), `## Related mentions in guides (heuristic)` (sections) |
 | `Rule` | `rule/<cat>/` | Java/ArchUnit or C#/ArchUnitNET evidence, `enforced_by`, `status`, `maturity` | `## Applies to markers` |
 | `Process` | `process/` | how-to (e.g. writing an ADR) | → any |
-| `Reference` | `reference/` | `DcaLayout` (settings, defaults, patterns, framework names) and `DcaArchitecture` (how contexts and module roots are discovered, every query the rules select through) — Java and .NET | ← every rule ("Configured by") |
-| `Recipe`/`Decision`/`Pitfall`/`Template`/`Note` | `recipe/` … `note/` (**extensible zone**) | authored playbooks, design-fork guides, anti-patterns, code skeletons, saved query answers | links into the skeleton |
+| `Reference` | `reference/` | `DcaLayout` (settings, defaults, patterns, framework names) and `DcaArchitecture` (context and module-root discovery, every query the rules select through) — Java and .NET | ← every rule ("Configured by") |
+| `Recipe`/`Decision`/`Pitfall`/`Template`/`Note` | `recipe/` … `note/` (**extensible zone**) | playbooks, design-fork guides, anti-patterns, code skeletons, saved answers | links into the skeleton |
 
-**Link format:** bundle-relative, leading `/`, `.md` suffix — e.g. `/marker/port-in/usecase.md`.
-Resolve against the bundle root, not the current file.
-
-**Frontmatter as filter:** `type`, `tags`, `category`, `status` (rules:
-`enforced`/`informational`/`disabled`), `maturity` (rules: `released`/`experimental`). Use these to
-narrow before reading bodies.
-
-**An experimental rule binds only where the project opted in.** Before you answer "this is enforced" or
-"this is not allowed" from a `maturity: experimental` node, check the project's opt-in —
-`withExperimental()` / `WithExperimental()` in its architecture test, or `dca.rules.experimental = true`
-in `dca-archunit.properties`. Without it, cite the rule as information, say it is experimental, and do not
-present it as a reason to change code.
-
-**Reserved files** (`index.md`, `log.md`) are navigation, not knowledge — read them to
-route, don't cite them as answers.
+- **Links:** bundle-relative, leading `/`, `.md` — `/marker/port-in/usecase.md`. Resolve against the catalog root.
+- **Front matter filters:** `type`, `tags`, `category`, `status` (rules: `enforced`/`informational`/`disabled`),
+  `maturity` (rules: `released`/`experimental`). Narrow before reading bodies.
+- **Experimental binds only on opt-in.** Before "enforced" / "not allowed" from a `maturity: experimental` node,
+  check `withExperimental()` / `WithExperimental()` in the architecture test or `dca.rules.experimental = true` in
+  `dca-archunit.properties`. Without it: cite as information, say experimental, never a reason to change code.
+- **Reserved files** `index.md`, `log.md`: route with them, never cite them.
+- A large rule node keeps selection and check; its ArchUnit code (Java, C#, helpers) is in evidence slices linked
+  at its end.
 
 ## Traversal protocol
 
-Don't grep-and-dump. Walk the graph like a researcher:
+No grep-and-dump.
 
-1. **Enter** — read `bundle/index.md` (node-type counts + links to category indices).
-2. **Route** — pick the category whose `type` fits the question:
-   - "what/why/how concept" → `guide/` section
-   - "what's the contract / interface" → `marker/`
-   - "what's enforced / is this allowed" → `rule/`
-   - "why this rule exists" → the `rule/` node's `rule:` rationale, then the guide
-     section that discusses the marker it applies to
-3. **Locate** — read the category `index.md`, pick candidate node(s) by title/slug.
-4. **Read** — read the node body + frontmatter.
-5. **Expand** — follow typed edges that the question needs:
-   - marker → `Governed by` to get its enforced rules
-   - marker → `Discussed in` for the guide sections that explain it
-   - section → `Related markers` to jump from prose to contract
-6. **Cite** — answer with the node path(s) you read.
+1. **Enter** — `index.md` at the catalog root.
+2. **Route** — concept what/why/how → `guide/`; contract/interface → `marker/`; enforced/allowed → `rule/`; why a
+   rule exists → the rule's `rule:` rationale, then the guide section on the marker it applies to.
+3. **Locate** — the category `index.md`; pick nodes by title/slug.
+4. **Read** — body + front matter.
+5. **Expand** — only edges the question needs: marker → `Governed by` (rules); marker → guide mentions
+   (sections); section → related mentions (markers).
+6. **Cite** — the node paths read.
 
-Stop expanding once the question is answered. Prefer 2–4 precise node reads over a bulk dump.
+Stop once answered; 2–4 precise reads over a bulk dump.
 
 ## Operations
 
@@ -120,7 +90,8 @@ Stop expanding once the question is answered. Prefer 2–4 precise node reads ov
 | `build <thing>` | the build loop: recipe → decision → template → the recipe's rules → the architecture suite |
 | `save <type> <title>` | propose a new authored node to the catalog's owner — never written into the shipped copy |
 
-Each operation in full, with examples, the build loop's steps and the `save` workflow: `reference/operations.md`.
+Read `reference/operations.md` for an operation's detail, the build loop, `save`, token discipline, a stale
+catalog, retrieval order.
 
 ## Citation format
 
@@ -132,27 +103,20 @@ Every substantive claim ends with its provenance:
     enforced_by: TacticalPatternRules#DCA-TAC-003 (status: enforced)
 ```
 
-For "show me the real code", quote the node itself: a `rule` node carries its ArchUnit
-expression and `enforced_by` test name, a `marker` node its signature. Then point at the
-matching type in *the user's own* project — never at another repository.
+"Show me the real code" → quote the node (rule: ArchUnit expression + `enforced_by`; marker: signature), then point
+at the matching type in *the user's own* project, never another repository.
 
 ## Review status
 
-An authored node's `review:` says how far it has been checked: `reviewed` — cite it as the answer; `draft` (the
-majority) — use it and say once that the guidance is a draft, and never let it override a generated node; `superseded` — history, follow `superseded_by`;
-missing — read as `draft`. A generated node (rule, marker, guide, reference) wins over an authored one on every
-contradiction. More in `reference/operations.md`.
-
-A large rule node keeps what it selects and checks; its ArchUnit code — the Java expression, the C# expression,
-the helpers — is in its evidence slices, linked at the node's end.
+Authored node `review:`: `reviewed` → cite as the answer; `draft` (majority) → use, say once it is draft,
+never override a generated node; `superseded` → history, follow `superseded_by`; missing → `draft`. Generated nodes (rule,
+marker, guide, reference) win every contradiction.
 
 ## When in doubt
 
-- Planning a change — naming the elements it needs, not writing them — reads `digest/index.md` and the
-  digests of the kinds it plans (each recipe in a few lines, its templates by path), and cites the recipe node;
-  a full recipe only for a decision the digest leaves open, a template's code only when writing the code.
-- Lead with `index.md` files (small) before node bodies; filter on frontmatter before reading bodies;
-  read the one section, not the chapter. More in `reference/operations.md` (token discipline).
-- The shipped copy is read-only and may be older than the libraries the project uses: cite the node body,
-  say so when it looks out of date, never hand-edit it (`reference/operations.md`, "When the catalog looks stale").
-- It explains rules; it does not audit code against them — that is `/dca-audit`.
+- Planning a change (naming elements, not writing them) → `digest/index.md` and the digests of the kinds planned;
+  cite the recipe node. Full recipe only for a decision the digest leaves open; template code only when writing code.
+- `index.md` files before bodies; filter on front matter; one section, not the chapter.
+- The shipped copy is read-only and may lag the project's libraries: cite the node body, say when it looks
+  stale, never hand-edit (`reference/operations.md`, "When the catalog looks stale").
+- Explains rules; auditing code against them is `/dca-audit`.

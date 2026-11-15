@@ -1,8 +1,6 @@
 # The audit, phase by phase
 
-Part of the `dca-audit` skill: what its *Workflow* steps point to — where ArchUnit ends, reading the project's DCA
-setup, and the detail of Phase 1 (scope) to Phase 4 (the structure, rule by rule); the output shape of Phase 5 is
-the contract of the answer and stays in `SKILL.md`.
+`dca-audit` *Workflow* in full: where ArchUnit ends, reading the setup, Phases 1–4. Phase 5's shape is in `SKILL.md`.
 
 ## Where ArchUnit ends and dca-audit begins
 
@@ -16,8 +14,8 @@ the contract of the answer and stays in `SKILL.md`.
 | Records/finals on value objects | Whether value objects model the domain or just hold getters |
 | Failures extend the base type of their layer | Whether a refusal should have been a named failure at all, and whether an adapter catches too widely — a `throw` and a `catch` are not in the import model |
 
-The rule suite has grown into semantic territory (`DCA-USE-015/016/017`, `DCA-HEX-012`, `DCA-TAC-021`, `DCA-MAP-008`).
-Where the checklist cites a rule id, the review confirms what that rule cannot see — it does not repeat the rule.
+Semantic rules (`DCA-USE-015/016/017`, `DCA-HEX-012`, `DCA-TAC-021`, `DCA-MAP-008`): confirm only what the rule
+cannot see.
 
 ## Reading the project's DCA setup (if `dca-init` ran)
 
@@ -29,8 +27,7 @@ Find the architecture test (`grep -rn "DcaLayout\." --include='*.java' --include
 - `dca-archunit.properties`: rule sets switched off there mark patterns the project deliberately does not use
   (a context without `tactical` is not an anemic-model finding)
 The markers are the library's (`dev.domaincentric.dca.buildingblocks.…` / `DomainCentric.BuildingBlocks.…`).
-
-This makes the review match the project's actual conventions, not DCA defaults.
+Review against these conventions, not DCA defaults.
 
 **The designed map and the glossary.** The designed context map is where `dca.profile.yaml` puts it
 (`domain:`, by default `product/domain.md`), `docs/context-map.md` where neither exists; the glossaries are
@@ -46,7 +43,7 @@ never invent a DCA convention from memory.
 
 ## Phase 1: Scope
 
-Determine which files to audit. The scope is the argument (`/dca-audit <scope>`):
+The argument (`/dca-audit <scope>`):
 
 - nothing, or `project` — every source file under the base package or namespace: the brownfield audit,
   the default. Report per bounded context, contexts in the order the designed map lists them.
@@ -109,8 +106,7 @@ For each finding, capture:
 
 ## Phase 4: The structure, rule by rule
 
-Block A of the report: where the code stands against the rule suite, **whether the suite is installed or
-not**. On a brownfield project it is not — that is the point of the block: it shows what already holds and
+Block A: the code against the rule suite, **installed or not** — on a brownfield project it shows what holds and
 what would fail on the first run, before anyone adds a dependency. The rules are those of
 `reference/archunit-rule-catalog.md` (Java and .NET, generated from both rule libraries), grouped by its rule
 sets; the set names are the rows, the bounded contexts the columns.
@@ -118,9 +114,8 @@ sets; the set names are the rows, the bounded contexts the columns.
 **The reading — the default.** For every rule, its *Selects* and *Checks* columns say which classes it looks at
 and what it asserts; judge the code in scope against exactly that, with the layout the project actually has
 (Phase 2) — a project whose packages do not match the default layout is read through the `DcaLayout` options
-the rule catalog names, and the deviations are said once in the summary. A rule that selects nothing in a
-context is `–` there. Informational rules have no mark. The marks are the audit's reading, not a run: the
-summary line says so, and the first run of the suite confirms or corrects them.
+the rule catalog names, and the deviations are said once in the summary. Selects nothing in a context → `–`.
+Informational rules: no mark. The summary line says the marks are a reading, not a run.
 
 **The run — where the suite is installed.** A project with the architecture test (`dca-init` ran) may have its
 last result: the JUnit report (Java: `build/test-results/<task>/TEST-*.xml` of the task that runs the
@@ -147,8 +142,8 @@ Then two lists:
 
 1. **Rules of the suite the project does not enforce yet** and could: the sets and rules on `warn`, `off` or
    absent, each with the places that would fail today — from Block A, and from the findings of Block B a
-   rule would have caught statically. That is the adoption path: switch on what fails nowhere, freeze what
-   fails somewhere, and fix the frozen list story by story. The catalog's adoption tiers (`dca-knowledge`:
+   rule would have caught statically. Adoption path: switch on what fails nowhere, freeze what
+   fails somewhere, fix the frozen list story by story. The catalog's adoption tiers (`dca-knowledge`:
    `guide/archunit-governance/`) say the order.
 2. **Patterns the suite has no rule for** that *could* be enforced statically: propose one only for a
    structural property with named positive and negative fixtures and a clear selection scope. Past-tense
