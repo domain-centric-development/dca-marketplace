@@ -37,7 +37,7 @@ from ....domain.model.design_facts import (
     ChangedDomainType, ContextMapFacts, ElementName, ElementRules, InvariantFacts, InvariantRow, PortName, Rule)
 from ....domain.model.plan_facts import (
     AdoptRow, FileChange, HandOverName, HandOverSize, PlanAdoption, PlanLevels, PlannedDigest, PlannedFile,
-    PlannedTest, PlanOrigin)
+    PlannedTest, PlanOrigin, TestRename)
 from ....domain.model.profile_facts import (
     ByteSize, ContractNumber, GateRelease, InstructionFile, ModelKey, ProfileKey, ProfileText, UnknownKey)
 from ....domain.model.story_words import (
@@ -91,7 +91,7 @@ from .story_layout import file_digest
 from .guarded_files import announced_changes, guarded_set, story_changed
 from ....domain.model.guarded import GuardedFacts
 from .design_files import (
-    adapter_shapes, adapter_tests, asserts_at, locate_selector, MOCK_MARKERS, mocked_ports, PLAN_CHANGE_LINE, PLAN_FILE_LINE, plan_domain_elements,
+    adapter_shapes, adapter_tests, asserts_at, test_renames, locate_selector, MOCK_MARKERS, mocked_ports, PLAN_CHANGE_LINE, PLAN_FILE_LINE, plan_domain_elements,
     plan_invariants, read_clause_rows, read_invariant_rows, scenario_actions, scenario_clauses)
 from .run_marks import OWNED_CHANGED
 from .story_layout import EPIC_FILE, epic_folder, find_story
@@ -397,7 +397,9 @@ class StageEvidenceFiles(StageEvidence):
                           frozenset(ScenarioKey(k) for k in alone),
                           frozenset(ScenarioKey(k) for k in both),
                           tuple(PlannedTest(ScenarioKey(k), Selector(t) if t else None)
-                                for k, t in adapter_tests(self._runs, story.value)))
+                                for k, t in adapter_tests(self._runs, story.value)),
+                          tuple(TestRename(Selector(old), tuple(Selector(n) for n in new), Detail(why))
+                                for old, new, why in test_renames(self._runs, story.value)))
 
     def plan_origin(self, story: StoryId) -> PlanOrigin:
         return plan_origin(self._runs, story.value)

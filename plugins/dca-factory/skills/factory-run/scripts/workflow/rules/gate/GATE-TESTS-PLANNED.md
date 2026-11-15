@@ -22,3 +22,8 @@ The plan writes the adapter's test inside the shape: `integration (adapter: <Ada
 gate matches it against the criterion's rows of `gate:tests` by the class's simple name and the method; whether the
 method exists is `tests-exist`'s. What the name says is not checked — that it names the state shown and not the
 scenario's action is the plan's craft.
+
+A round may rename, split or drop a planned adapter test — a judge's finding asks for it. The test stage writes the
+change where every later change of the plan stands, in its own file: tests.md's `## Plan changes`,
+`- `<old Class#method>` → `<new Class#method>`[, `<new>`] — <why>` (`→ none` for one dropped); the criterion is then held
+to the new names and the gate notes the change for the judge. plan.md stays as its gate passed it (`plan-kept`).

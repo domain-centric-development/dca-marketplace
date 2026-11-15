@@ -5909,6 +5909,18 @@ def run_groups(args):
                              (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Acceptance criteria\n"
                               "- shows-the-thing  →  level: integration (adapter: WidgetPage, test: WidgetPageTest#showsOneThing)\n"
                               "- shows-nothing-when-empty  →  level: e2e\n")))),
+        # 0.188.3: a round renames a planned test in tests.md, never in plan.md
+        (Case("tests-planned: a planned test a round renamed under tests.md's `## Plan changes` is held to its new name",
+              "test", 0, text=("gate:note tests-planned", "WidgetPageTest#showsTheOldThing → WidgetPageTest#showsTheThing")),
+         dict(tests=TESTS.replace("| shows-the-thing | com.example.WidgetPageTest#showsTheThing |\n", "| shows-the-thing | com.example.WidgetPageTest#showsTheThing |\n") + "\n## Plan changes\n- `WidgetPageTest#showsTheOldThing` → `WidgetPageTest#showsTheThing` — the judge: named after what it shows\n",
+              extra_sources=(("src/test-pages/java/com/example/WidgetPageTest.java", "class WidgetPageTest { @MockitoBean private ShowWidgetInputPort port; @DisplayName(\"Shows the thing\") void showsTheThing() {} void showsOneThing() {} }\n"), (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Acceptance criteria\n- shows-the-thing  →  level: integration (adapter: WidgetPage, test: WidgetPageTest#showsTheOldThing)\n- shows-nothing-when-empty  →  level: e2e\n")))),
+        (Case("tests-planned: a planned test renamed without its line under `## Plan changes` is refused", "test", 1,
+              must_fail=("tests-planned",), text=("shows-the-thing (WidgetPageTest#showsTheOldThing)", "## Plan changes")),
+         dict(extra_sources=(("src/test-pages/java/com/example/WidgetPageTest.java", "class WidgetPageTest { @MockitoBean private ShowWidgetInputPort port; @DisplayName(\"Shows the thing\") void showsTheThing() {} void showsOneThing() {} }\n"), (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Acceptance criteria\n- shows-the-thing  →  level: integration (adapter: WidgetPage, test: WidgetPageTest#showsTheOldThing)\n- shows-nothing-when-empty  →  level: e2e\n")))),
+        (Case("tests-planned: a planned test a round split into two is held to both", "test", 0,
+              text=("gate:note tests-planned",)),
+         dict(tests=TESTS.replace("| shows-the-thing | com.example.WidgetPageTest#showsTheThing |\n", "| shows-the-thing | com.example.WidgetPageTest#showsTheThing |\n| shows-the-thing | com.example.WidgetPageTest#showsOneThing |\n") + "\n## Plan changes\n- `WidgetPageTest#showsTheOldThing` → `WidgetPageTest#showsTheThing`, `WidgetPageTest#showsOneThing` — split\n",
+              extra_sources=(("src/test-pages/java/com/example/WidgetPageTest.java", "class WidgetPageTest { @MockitoBean private ShowWidgetInputPort port; @DisplayName(\"Shows the thing\") void showsTheThing() {} void showsOneThing() {} }\n"), (".dca-factory/runs/STORY-1/plan.md", "# Plan\n\n## Acceptance criteria\n- shows-the-thing  →  level: integration (adapter: WidgetPage, test: WidgetPageTest#showsTheOldThing)\n- shows-nothing-when-empty  →  level: e2e\n")))),
         (Case("tests-planned: an older profile (contract 33) is not held to it", "test", 0,
               absent=("without naming its test",)),
          dict(profile=PROFILE + "contract: 33\n",

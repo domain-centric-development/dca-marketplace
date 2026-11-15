@@ -283,3 +283,21 @@ BREAK_IGNORE = (".git", "build", "bin", "obj", "target", "node_modules", ".gradl
 
 #: A statement that checks: an assertion library's call, a framework's expectation, a mock's verification.
 ASSERTION_STATEMENT = re.compile(r"\b(?:assert\w*|expect\w*|andExpect\w*|verify\w*|should\w*)\b", re.IGNORECASE)
+
+
+#: A line of tests.md's `## Plan changes`: a planned test renamed, split or dropped — `- `<old>` → `<new>`[, `<new>`]
+#: — <why>`, `→ none` for one dropped.
+TEST_RENAME = re.compile(r"^\s*[-*]\s*`([^`]+#[^`]+)`\s*(?:→|->)\s*(.+?)\s+[—–]\s*(.+?)\s*$")
+
+
+def test_renames(runs: str, story_id: str) -> typing.List[typing.Tuple[str, typing.List[str], str]]:
+    """(old, [new, …], why) for each planned test tests.md's `## Plan changes` renames, splits or drops."""
+    path = os.path.join(runs, story_id, "tests.md")
+    text = read_text(path) if os.path.isfile(path) else ""
+    found = []
+    for line in section_of(text, "plan changes") or []:
+        match = TEST_RENAME.match(line)
+        if match:
+            new = [n for n in re.findall(r"`([^`]+#[^`]+)`", match.group(2))]
+            found.append((match.group(1).strip(), new, match.group(3)))
+    return found

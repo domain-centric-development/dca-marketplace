@@ -21,15 +21,24 @@ class PlannedTest(Value):
     def found_in(self, selectors: typing.Iterable[Selector]) -> bool:
         """Whether one of the criterion's mapped tests is this one: the same method, in a class of the same simple
         name — the plan may name the class without its package."""
-        if self.test is None:
-            return False
-        cls, _, method = self.test.value.partition("#")
-        simple = cls.rsplit(".", 1)[-1]
-        for selector in selectors:
-            other, _, other_method = selector.value.partition("#")
-            if other_method == method and other.rsplit(".", 1)[-1] == simple:
-                return True
-        return False
+        return self.test is not None and any(same_test(self.test, selector) for selector in selectors)
+
+
+class TestRename(Value):
+    """A planned test a later stage renamed, split or dropped, and why — tests.md's `## Plan changes`,
+    `- `<old>` → `<new>`[, `<new>`] — <why>`, or `→ none`. The plan stays as its gate passed it."""
+
+    old: Selector
+    new: typing.Tuple[Selector, ...]
+    why: Detail
+
+
+def same_test(one: Selector, other: Selector) -> bool:
+    """The same test: the same method in a class of the same simple name — a row names the class with its package or
+    without."""
+    cls, _, method = one.value.partition("#")
+    other_cls, _, other_method = other.value.partition("#")
+    return method == other_method and cls.rsplit(".", 1)[-1] == other_cls.rsplit(".", 1)[-1]
 
 
 class PlanLevels(Value):
@@ -42,6 +51,19 @@ class PlanLevels(Value):
     adapter: typing.FrozenSet[ScenarioKey]
     both: typing.FrozenSet[ScenarioKey]
     named: typing.Tuple[PlannedTest, ...] = ()
+    renames: typing.Tuple[TestRename, ...] = ()
+
+    def held_names(self) -> typing.Tuple[PlannedTest, ...]:
+        """The adapter tests a criterion is held to: the plan's, each one a later stage renamed or split replaced by
+        its new names, one it dropped gone."""
+        held: typing.List[PlannedTest] = []
+        for planned in self.named:
+            rename = next((r for r in self.renames if planned.test is not None and same_test(planned.test, r.old)), None)
+            if rename is None:
+                held.append(planned)
+            else:
+                held.extend(PlannedTest(planned.key, new) for new in rename.new)
+        return tuple(held)
 
 
 class HandOverSize(Value):

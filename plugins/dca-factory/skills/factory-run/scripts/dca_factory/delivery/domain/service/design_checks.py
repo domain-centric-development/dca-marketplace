@@ -279,20 +279,27 @@ class DesignChecks(DomainService):
         if plan is None or not plan.named:
             return ()
         unnamed = sorted({p.key.value for p in plan.named if p.test is None})
+        held = plan.held_names()
         if unnamed:
             return (TESTS_PLANNED.fail(Said(
                 "the plan gives these criteria the adapter shape without naming its test — write "
                 "`integration (adapter: <Adapter>, test: <Class>#<method>)`, the method named after the state the "
                 "adapter shows: " + ", ".join(unnamed))),)
         missing = []
-        for planned in plan.named:
+        for planned in held:
             rows = [t.selector for t in tests if t.key == planned.key]
             if not planned.found_in(rows):
                 missing.append(f"{planned.key.value} ({planned.test.value if planned.test else ''})")
         if missing:
             return (TESTS_PLANNED.fail(Said(
                 "the adapter test the plan names is not among the criterion's tests in `gate:tests` — write it under "
-                "that name and map it, or plan again: " + "; ".join(missing))),)
+                "that name and map it; where a round renames, splits or drops it, write `- `<old>` → `<new>` — <why>` "
+                "under `## Plan changes` in tests.md — never change plan.md after its gate: " + "; ".join(missing))),)
+        renamed = [f"{r.old.value} → {', '.join(n.value for n in r.new) or 'none'} ({r.why.value})" for r in plan.renames]
+        if renamed:
+            return (TESTS_PLANNED.note(Said("every adapter test is mapped under the name the plan or a later stage gave "
+                                            "it — renamed in tests.md's `## Plan changes`, which the judge weighs: "
+                                            + "; ".join(renamed))),)
         return (TESTS_PLANNED.ok(Said(f"every adapter test the plan names is mapped to its criterion "
                                       f"({len(plan.named)})")),)
 

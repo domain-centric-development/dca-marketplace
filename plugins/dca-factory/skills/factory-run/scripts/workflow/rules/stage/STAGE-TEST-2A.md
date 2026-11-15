@@ -16,7 +16,7 @@ order: 3
    use case returns, stores or publishes; an external system stubbed at the protocol with the stub the profile
    names (`http.stub:`). `integration (adapter: <Adapter>, test: <Class>#<method>)`: that incoming adapter's
    translation against a stubbed input port that answers with the outcome — the test written under the name the
-   plan gave it, unchanged, and mapped to that criterion (`tests-planned`). A refusal its stub answers with is the
+   plan gave it, unchanged, and mapped to that criterion (`tests-planned`) — where a round renames, splits or drops it, write `- `<old>` → `<new>` — <why>` under `## Plan changes` in tests.md, never into plan.md. A refusal its stub answers with is the
    one the port test of the criterion proves, in the style the plan's `## Context` names (returned: the same case;
    thrown: the very failure type), and both tests stand in the criterion's rows. **A clause about what is
    stored** is never asserted at the adapter level — the gate refuses it (`clauses`); assert it through the input
