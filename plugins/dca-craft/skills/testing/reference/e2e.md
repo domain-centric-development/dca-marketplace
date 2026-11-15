@@ -24,6 +24,8 @@ no clicking preconditions through pages (slow, fails on pages it is not about).
 - Application running beside the test: the seeding entry (endpoint, command) lives in the test source set or a test
   profile, **never in production code**.
 - A session comes from an API or a token handed to the client; only the login test fills the login form.
+- **Assert every arrangement's result** (`Created`, `Completed`): a refused precondition — a returned refusal
+  ignored — leaves the test green on a state the scenario never had.
 
 ```java
 @Test
