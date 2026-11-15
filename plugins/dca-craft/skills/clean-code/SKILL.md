@@ -14,8 +14,8 @@ This skill is a **set of writing principles**, not a linter. It guides what
 Claude *types* — naming choices, function size, comment discipline. Formatters
 handle whitespace; this skill handles judgment.
 
-Sources: Bob Martin's *Clean Code*, Hunt/Thomas's *Pragmatic Programmer*,
-Fowler's *Refactoring* (smells + named techniques).
+Sources: Bob Martin's *Clean Code* and his *ub-mode* principles, Hunt/Thomas's
+*Pragmatic Programmer*, Fowler's *Refactoring* (smells + named techniques).
 
 ## Names
 
@@ -118,6 +118,25 @@ shape:
 
 - Good: `validateOrderPlaceable(order)`
 - Bad: `helper1(order)`, `commonChecks(order)`
+
+## One decision in one place
+
+DRY is about code; this is about decisions. A question the code answers — is the list empty, may this order be
+cancelled, which price applies — is answered once, and every other place asks that one answer. Two places that each
+decide "empty" in their own way drift apart the first time one of them changes. ("One decision lives in one place",
+Robert C. Martin, *ub-mode*.)
+
+- A field or variable is named after **what it holds**: a sentence shown on the page is not a `count`, a piece of
+  wording is not `tasks`. One name never stands for two things in the same type.
+- A view or a template reads a decision the model made; it does not make it again.
+
+## Subtract before you add
+
+- **The smallest change that solves the problem.** Take complexity out before you put any in; a new requirement
+  bolted onto a design that did not foresee it is a sign to reshape the design first, then add.
+- **A guard that only hides a crash is not a fix.** Reproduce the failure, fix its cause. A value that must never be
+  illegal is made impossible to create — every way the type is made checks it, not one factory method beside an open
+  constructor.
 
 ## Code smells (from Fowler's *Refactoring*) — flag these
 

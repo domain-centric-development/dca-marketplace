@@ -76,7 +76,8 @@ Beck's *Test Desiderata*.
    action deleted does not name the action: an adapter test whose stub answers with the outcome is named after the
    state it shows, never after the change that led there.
 4. **A test can turn red.** Seen red before it is trusted, on its assertion — not on a missing class or a wiring
-   error. Ask of every assertion: with the behaviour absent, would it turn red? A stub returning the expected answer,
+   error. Ask of every assertion: with the behaviour absent, would it turn red? Robert C. Martin's short form: a test
+   that would still pass if every function under it returned nothing is thrown out. A stub returning the expected answer,
    an assertion inside an `if`, an absence checked before the page reacted, an assertion on a mechanism the code does
    not use — each is green whatever the code does. Where the behaviour exists already, break the production code
    minimally, see red, revert: mutation testing by hand.
@@ -107,7 +108,8 @@ Beck's *Test Desiderata*.
 - An output port mocked in a use case's test; an external system mocked at its port or called for real.
 - A use case tested once per adapter, or a scenario tested end to end that is not the happy path, without a reason.
 - A stored-state clause asserted in an adapter test; an adapter test named after the action it cannot perform.
-- Rows written with SQL as an end-to-end test's precondition; a seeding entry in production code.
+- Rows written with SQL as an end-to-end test's precondition; a seeding entry for tests in production code (a
+  product's own demo data is a feature, not a test fixture — a test does not read its exact values).
 - A loop, a condition or a sleep in a test; `now()` in the code under test.
 - A test green before the behaviour exists, a test never seen red, a retry that turns a flaky test green.
 - A criterion's key in a test name, display name or comment.

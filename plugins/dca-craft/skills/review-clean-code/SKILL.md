@@ -115,6 +115,11 @@ Flag findings only when:
 - The duplication has stable shape across ≥3 occurrences, AND
 - The extraction has an honest intent name available.
 
+A **decision made twice** is a finding from the second place, not the third: the same question (is the list empty,
+may this be cancelled) answered in two places, in two ways. So is a guard that hides a crash instead of fixing its
+cause, and a value checked by one factory method while another way of making the type skips the check
+(Robert C. Martin, *ub-mode*: "one decision lives in one place", "a guard that only hides the crash is not a fix").
+
 ### 7. Boy-Scout opportunities (gentle nits)
 
 For files in the diff, look for small mechanical improvements *adjacent
