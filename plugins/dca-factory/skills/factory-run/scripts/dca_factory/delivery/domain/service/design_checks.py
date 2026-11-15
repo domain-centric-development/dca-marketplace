@@ -49,6 +49,10 @@ FIELD_HOLDS = re.compile(
     r"enthält|enthalten|zeigt|zeigen|behält|behalten|hält|halten|steht|stehen)\b([^.;]*)", re.IGNORECASE)
 #: A word that says what the field holds is what was entered — "the 201 characters entered", "den eingegebenen Text".
 ENTERED = re.compile(r"\b(?:entered|typed|eingegeben\w*|eingetippt\w*|getippt\w*)\b", re.IGNORECASE)
+#: A word of a step, and the words that carry no content of their own.
+WORD = re.compile(r"[^\W\d_]{2,}")
+FILLER = {"the", "a", "an", "its", "his", "her", "their", "der", "die", "das", "den", "dem", "des", "ein", "eine",
+          "einen", "noch", "immer", "weiterhin", "still"}
 #: What a step names exactly: a quoted text or a number.
 NAMED = re.compile(r'„([^“”"\n]+)[“”]|“([^”\n]+)”|"([^"\n]+)"|‚([^‘’\n]+)[‘’]|«([^»\n]+)»|\b(\d+)\b')
 
@@ -75,7 +79,13 @@ def states_stored(clause: Clause, actions: typing.Tuple[Detail, ...]) -> bool:
         return False
     named = {next(g for g in m.groups() if g) for m in NAMED.finditer(held.group(1))}
     entered = {next(g for g in m.groups() if g) for action in actions for m in NAMED.finditer(action.value)}
-    return not (named and named <= entered)
+    if named:
+        return not named <= entered
+    # Nothing quoted or counted: what the field holds in words — "the three spaces" after "(three spaces)" in the
+    # `When` — is the input when every word of it stands in a `When` step.
+    words = {w.lower() for w in WORD.findall(held.group(1))} - FILLER
+    said = {w.lower() for action in actions for w in WORD.findall(action.value)}
+    return not (words and words <= said)
 
 
 class DesignChecks(DomainService):

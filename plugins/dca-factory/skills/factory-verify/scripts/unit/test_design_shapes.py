@@ -93,6 +93,13 @@ class StatesStored(unittest.TestCase):
         self.assertTrue(states_stored("And „Alpha“ still carries the button „201“", when))
 
 
+    def test_a_field_holding_in_words_what_the_when_entered_is_the_adapters_translation(self):
+        when = "When the person creates a thing with the name „   “ (three spaces)"
+        self.assertFalse(states_stored("And the field „Name“ still holds the three spaces", when))
+
+    def test_a_field_holding_in_words_what_the_when_did_not_enter_stays_a_state_clause(self):
+        self.assertTrue(states_stored("And the field „Name“ still holds the old name", "When the person reloads the page"))
+
 class PlanInvariants(unittest.TestCase):
 
     def test_none_with_a_colon_in_its_why_names_no_element(self):
