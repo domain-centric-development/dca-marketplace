@@ -610,7 +610,7 @@ the story's record.
 
 **Definition:** What a confirmed finding is, in the shape of Orthogonal Defect Classification's closer: what had to
 change (target — story, plan, code, test, docs, glossary, profile), the kind of correction (type — assignment,
-checking, algorithm, interface, relationship, timing, documentation, duplication, naming, dead-code, comment, and the
+checking, algorithm, interface, relationship, timing, documentation, duplication, naming, dead-code, comment, traceability, and the
 method's domain codes) and whether something was missing, wrong or too much (qualifier). Three closed lists the judge
 picks from; `GATE-JUDGE-CLASS` checks them (experimental), the lessons count them. A cell outside a list is no class.
 

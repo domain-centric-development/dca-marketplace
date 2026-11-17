@@ -343,7 +343,7 @@ Type | Qualifier | In plain words | Defect | Fix |`): one row per finding, `| # 
 Origin | Outcome | In plain words | Defect | Fix | Status | Target | Type | Qualifier |`, `Status` `open`; the class
 (contract 39) is the judge's, from three closed lists — target `story`, `plan`, `code`, `test`, `docs`, `glossary`,
 `profile`; type `assignment`, `checking`, `algorithm`, `interface`, `relationship`, `timing`, `documentation`,
-`duplication`, `naming`, `dead-code`, `comment`, `domain-concept`, `domain-boundary`, `domain-invariant`,
+`duplication`, `naming`, `dead-code`, `comment`, `traceability`, `domain-concept`, `domain-boundary`, `domain-invariant`,
 `domain-term`; qualifier `missing`, `incorrect`, `extraneous` (`finding_class.py`, `GATE-JUDGE-CLASS`, experimental);
 a file from before it reads with the three cells empty and gains them when the next row is added; `Origin` (contract 37) is the pipeline's — `introduced` where the story's diff
 adds or changes the row's line, `pre-existing` where it does not (such a row, a blocker or a major included, cost no

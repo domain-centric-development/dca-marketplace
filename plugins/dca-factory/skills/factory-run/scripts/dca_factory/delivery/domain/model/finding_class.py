@@ -35,7 +35,8 @@ class FindingTarget(enum.Enum):
 
 
 class FindingType(enum.Enum):
-    """The kind of correction: ODC's types, the maintainability types a review finds, and the method's domain codes."""
+    """The kind of correction: ODC's types, the maintainability types a review finds, traceability between test,
+    scenario and criterion, and the method's domain codes."""
 
     ASSIGNMENT = "assignment"
     CHECKING = "checking"
@@ -48,6 +49,9 @@ class FindingType(enum.Enum):
     NAMING = "naming"
     DEAD_CODE = "dead-code"
     COMMENT = "comment"
+    #: a test, a scenario and a criterion that do not lead to one another — a test title no scenario has, a scenario
+    #: no test proves
+    TRACEABILITY = "traceability"
     DOMAIN_CONCEPT = "domain-concept"
     DOMAIN_BOUNDARY = "domain-boundary"
     DOMAIN_INVARIANT = "domain-invariant"

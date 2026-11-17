@@ -13,7 +13,8 @@ order: 10
 6a. **Name the class, find every instance, judge what the round changed.** Each defect row names, from the lists,
    what has to change (`Target`: story, plan, code, test, docs, glossary, profile), the kind of correction (`Type`:
    assignment, checking, algorithm, interface, relationship, timing, documentation, duplication, naming, dead-code,
-   comment, domain-concept, domain-boundary, domain-invariant, domain-term) and `Qualifier` (missing, incorrect,
+   comment, traceability — test, scenario and criterion not leading to one another —, domain-concept, domain-boundary,
+   domain-invariant, domain-term) and `Qualifier` (missing, incorrect,
    extraneous) — the lessons count them (`GATE-JUDGE-CLASS`); `Defect` still opens with the class in a word or two
    (`unchecked null`, `refusal not translated`). Before the verdict, search the story's footprint for every further
    instance — all go into this round, never one per round. A defect on code the story did not write is a row
