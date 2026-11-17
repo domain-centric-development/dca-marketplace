@@ -62,6 +62,7 @@ ROWS = [
 SIGNALS = dict(stories=6, answered=3, asked=4, assumptions_answered=5, assumptions_open=1, plan_open=2,
                domain={"domain-model": 2, "domain-language": 1}, corrections={"domain-model": 1},
                findings={"ddd": 4, "hexagonal": 2, "clean-code": 1}, killed=9, red=11, survived=1, **{"no-break": 1},
+               classes={"test/duplication": 3, "code/naming": 2, "plan/checking": 1, "glossary/domain-term": 1},
                named=12, measured=5, not_measured=1, without_test=0, open=3,
                # the measures of WP-190, drawn since WP-206
                asked_acceptance=3, accepted=2, corrections_at_acceptance=1, waited=5400, rework=2,

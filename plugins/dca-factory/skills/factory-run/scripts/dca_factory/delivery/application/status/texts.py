@@ -143,7 +143,7 @@ def signal_totals(rows: typing.Sequence[Entry], perspectives: typing.Optional[ty
                         asked=0, answered=0, assumptions_open=0, assumptions_answered=0, plan_open=0, fresh=0, repeated=0, contradictions=0,
                         asked_acceptance=0, accepted=0, corrections_at_acceptance=0, waited=0, rework=0,
                         mutation_measured=0, mutation_skipped=0, mutation_median=None,
-                        findings={}, domain={}, corrections={},
+                        findings={}, domain={}, corrections={}, classes={},
                         judged_stories=0, first_pass=0, judge_rounds=0, outcomes={}, outcome_by={})
     scores: typing.List[float] = []
     for row in rows:
@@ -187,7 +187,7 @@ def signal_totals(rows: typing.Sequence[Entry], perspectives: typing.Optional[ty
             mine = total["outcome_by"].setdefault(name, {})
             for outcome, n in split.items():
                 mine[outcome] = mine.get(outcome, 0) + n
-        for key in ("findings", "domain", "corrections"):
+        for key in ("findings", "domain", "corrections", "classes"):
             for name, n in (signals.get(key) or {}).items():
                 if key == "findings" and perspectives is not None and name not in perspectives:
                     name = "other"

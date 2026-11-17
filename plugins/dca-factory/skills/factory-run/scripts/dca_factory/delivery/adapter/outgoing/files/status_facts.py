@@ -450,8 +450,12 @@ def story_signals(runs: str, story_id: str, records: typing.Sequence[typing.Any]
     judge = latest_signal(events, "judge", "finding")
     findings: typing.Dict[str, int] = {}
     domain: typing.Dict[str, int] = {}
+    classes: typing.Dict[str, int] = {}
     for perspective, fields in judge[1] if judge else []:
         findings[perspective] = findings.get(perspective, 0) + 1
+        if fields.get("target") and fields.get("type"):
+            kind = f"{fields['target']}/{fields['type']}"
+            classes[kind] = classes.get(kind, 0) + 1
         if fields.get("code"):
             domain[fields["code"]] = domain.get(fields["code"], 0) + 1
     verdicts = [e for e in events if e["kind"] == "signal" and e["name"] == "judge" and e["fields"].get("weighed")]
@@ -486,7 +490,7 @@ def story_signals(runs: str, story_id: str, records: typing.Sequence[typing.Any]
                 judged=len(verdicts) or None,
                 first_pass=(verdicts[0]["fields"]["weighed"] == "pass") if verdicts else None,
                 judge_rounds=sum(1 for e in verdicts if e["fields"]["weighed"] == "changes-requested") if verdicts else None,
-                outcomes=outcomes, outcome_by=outcome_by)
+                outcomes=outcomes, outcome_by=outcome_by, classes=classes if judge else None)
 
 
 def mutation_of(events: typing.Sequence[typing.Any]) -> typing.Optional[str]:

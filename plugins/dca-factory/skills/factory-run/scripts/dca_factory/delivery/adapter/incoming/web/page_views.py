@@ -523,9 +523,13 @@ function qualityCard(q, lessons) {
         title: `${q.fresh || 0} fresh after a repeated refusal · ${q.repeated || 0} stopped by repetition`}]},
   ];
   const found = Object.entries(q.findings || {}).sort((a, b) => b[1] - a[1]), most = found.length ? found[0][1] : 1;
+  // what the findings needed changed, by target and type — the class the judge gives each (ODC's process measure)
+  const classed = Object.entries(q.classes || {}).sort((a, b) => b[1] - a[1]), top = classed.length ? classed[0][1] : 1;
   return ui.card("Quality", "what the stages asked, what the judge confirmed, what a person corrected — counted over every story, never rated",
     ui.stats(groups)
     + (found.length ? ui.part("Findings the judge confirmed, by perspective", ui.bars(found.map(([name, n]) => [name, n, Math.round(100 * n / most)]))) : "")
+    + (classed.length ? ui.part("What the findings needed changed, by target and type",
+        ui.bars(classed.slice(0, 10).map(([kind, n]) => [kind.replace("/", " · "), n, Math.round(100 * n / top)]))) : "")
     + (Object.keys(q.outcome_by || {}).length ? ui.part("What became of the blocking findings, by perspective",
         ui.bars(Object.entries(q.outcome_by).map(([name, split]) => [name, Object.entries(split).map(([o, n]) => `${n} ${o}`).join(" · "),
           Math.round(100 * ((split.fixed || 0) + (split.repeated || 0)) / Math.max(1, sum(split)))]))) : ""));

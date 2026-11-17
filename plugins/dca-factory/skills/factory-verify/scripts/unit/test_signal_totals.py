@@ -27,6 +27,12 @@ class SignalTotalsTest(unittest.TestCase):
         self.assertEqual({"ddd": 2, "plan": 1, "clean-code / ddd": 1},
                          signal_totals([row(findings={"ddd": 2, "plan": 1, "clean-code / ddd": 1})])["findings"])
 
+    def test_findings_by_target_and_type_are_summed_over_the_stories(self):
+        first, second = row(), row()
+        first["signals"]["classes"] = {"test/duplication": 2, "code/naming": 1}
+        second["signals"]["classes"] = {"test/duplication": 1}
+        self.assertEqual({"test/duplication": 3, "code/naming": 1}, signal_totals([first, second, row()])["classes"])
+
 
 
 class CreatingActionTest(unittest.TestCase):
