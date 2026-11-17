@@ -199,13 +199,12 @@ async function press(button) {
   const action = ACTIONS[button.dataset.press];
   if (!action) return;
   const r = action.request, box = button.closest("[data-ask]"), fields = Object.assign({}, r.fields);
-  let words = r.words || "";
+  let words = r.words || "", files = [];
   if (box) {
     words = box.querySelector("[data-draft]").value.trim();
     const pick = box.querySelector("[data-ask-why]");
     if (pick && pick.value) fields.option = pick.value;
     if (!words) { toast(`${action.label}: ${action.text}`, true); return; }
-    var files = [];
     try { files = await handedData(box.dataset.hand); } catch (e) { toast(e.message, true); return; }
     if (r.prefix) words = `${r.prefix}\n\n${words}`;
     if (r.lead) words = `${r.lead} ${words}`;                 // the same line: `tech.md — Stack: <words>`
