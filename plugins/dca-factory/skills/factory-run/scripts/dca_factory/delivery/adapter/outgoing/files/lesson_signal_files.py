@@ -13,11 +13,14 @@ from .status_facts import correction_code
 from .story_layout import story_files, story_id_of
 from .....sharedkernel.adapter.outgoing.markdown.front_matter import MarkdownError, read_front_matter
 from .....sharedkernel.adapter.outgoing.markdown.sections import section_of
-from .....sharedkernel.adapter.outgoing.profile.profile_files import place
+from .....sharedkernel.adapter.outgoing.profile.profile_files import place, read_profile, resolve_profile
 from ....application.shared.front import is_acceptance
 from ....application.shared.lesson_signals import LessonSignals
 from ....domain.model.decision_record import DecisionState
-from ....domain.model.lesson import Decided, Evidence, LessonKind, LessonPlace, Signal, SignalKey
+from ....domain.model.finding_class import FindingClass
+from ....domain.model.lesson import (BACK_AFTER, Decided, Evidence, LessonKind, LessonPlace, OPEN_AT_ONCE, Signal,
+                                     SignalKey)
+from .journal_files import journal_events
 from ....domain.model.question_tag import QuestionTag
 from ....domain.model.story import Assumption, StoryId
 from ....domain.model.story_words import Count, Detail
@@ -27,21 +30,31 @@ from ....domain.model.story_words import Count, Detail
 RULE_ID = re.compile(r"\b[A-Z]{2,}(?:-[A-Z]{2,})+-\d+[A-Z]?\b")
 #: The domain code a judge's finding opens with (`domain-term: …`).
 DOMAIN_CODE = re.compile(r"^\s*`?(domain-(?:concept|boundary|invariant|term))`?\s*:", re.I)
+#: The source an answered line ends with — `(US-1-01)`, `(product/domain.md)` —: the same answer from two records is
+#: the same assumption.
+CITATION = re.compile(r"\s*\([^()]*\)\s*$")
 #: The first word in back ticks — the term a `domain-term` finding flags.
 TERM = re.compile(r"`([^`]{1,40})`")
 
 def finding_signals(story: StoryId, row: typing.Tuple[str, ...]) -> typing.List[Signal]:
-    """A finding row's signals: the finding under its perspective and the rule it names — else its domain code —,
-    and for a `domain-term` finding the term it flags. A finding that names neither is counted nowhere: what is the
-    same could not be told without guessing."""
+    """A finding row's signals, finest first: the rule it names under its perspective; its class (WP-221) as
+    `<perspective>/<target>/<type>/<qualifier>` within `<target>/<type>`; a row without a class its domain code; and for
+    a `domain-term` finding the term it flags. A finding that names none of them is counted nowhere: what is the same
+    could not be told without guessing."""
     n, perspective, defect = row[0], row[1], row[4]  # by place: the row grows columns at its end (`findings_rows`)
-    evidence = Evidence(story, Detail(f"{story.value}#{n}"))
+    outcome = row[9] if len(row) > 9 else ""
+    evidence = Evidence(story, Detail(f"{story.value}#{n}" + (f" ({outcome})" if outcome else "")))
     rule = RULE_ID.search(defect)
     code = DOMAIN_CODE.match(defect)
+    kind = FindingClass.written(Detail(row[10]), Detail(row[11]), Detail(row[12])) if len(row) > 12 else None
     found = []
-    if rule or code:
+    fine, coarse = kind.keys(Detail(perspective)) if kind is not None else (None, None)
+    if fine is not None and coarse is not None:
+        found.append(Signal(LessonKind.FINDING, SignalKey(coarse.value), evidence))
+        found.append(Signal(LessonKind.FINDING, SignalKey(fine.value), evidence, SignalKey(coarse.value)))
+    if rule or (code and kind is None):
         found.append(Signal(LessonKind.FINDING, SignalKey(f"{perspective}/{rule.group(0) if rule else code.group(1)}"),  # type: ignore[union-attr]
-                            evidence))
+                            evidence, SignalKey(fine.value) if fine is not None else None))
     if code and code.group(1).lower() == "domain-term":
         term = TERM.search(defect[code.end():])
         if term:
@@ -57,11 +70,25 @@ def assumption_signals(story: StoryId, body: str) -> typing.List[Signal]:
         if text and Assumption(line.strip()).marks_process:
             continue
         if text.lower().startswith("answered:"):
-            said = text[len("answered:"):].strip().rstrip(".")
+            said = CITATION.sub("", text[len("answered:"):].strip().rstrip(".")).strip().rstrip(".")
             if said:
                 found.append(Signal(LessonKind.ASSUMPTION, SignalKey(said),
                                     Evidence(story, Detail(f"{story.value} assumptions"))))
     return found
+
+
+def refusal_signals(story: StoryId, events: typing.Sequence[typing.Mapping[str, typing.Any]]) -> typing.List[Signal]:
+    """The checks a gate refused the story on, from its journal (`gate … exit=1 fail=<checks>`), each once — a line
+    that names no check counts nowhere."""
+    found: typing.Dict[str, Signal] = {}
+    for event in events:
+        fields = event.get("fields", {})
+        if event.get("kind") != "gate" or fields.get("exit") != "1":
+            continue
+        for check in (c for c in str(fields.get("fail", "")).split(",") if c.strip()):
+            found.setdefault(check.strip(), Signal(LessonKind.REFUSAL, SignalKey(check.strip()), Evidence(
+                story, Detail(f"{story.value} journal: {event.get('name', '')} gate refused {check.strip()}"))))
+    return list(found.values())
 
 
 class LessonSignalFiles(LessonSignals):
@@ -84,6 +111,10 @@ class LessonSignalFiles(LessonSignals):
             found += assumption_signals(story, body)
             for row in findings_rows(findings_path(path)):
                 found += finding_signals(story, row)
+        runs = place("runs")
+        runs = runs if os.path.isabs(runs) else os.path.join(self._cwd, runs)
+        for story_id in sorted(contexts):
+            found += refusal_signals(StoryId(story_id), journal_events(runs, story_id))
         for name, front, body, state, error, _path in decision_files(self._cwd, self._epics):
             story_word = str(front.get("story", "")).strip() if not error else ""
             if not story_word or str(front.get("request", "")).strip():
@@ -99,6 +130,16 @@ class LessonSignalFiles(LessonSignals):
                 found.append(Signal(LessonKind.QUESTION,
                                     SignalKey(f"{contexts.get(story_word, '-')}/{tag.value}"), Evidence(story, rid)))
         return found
+
+    def back_after(self) -> Count:
+        return self._count("lessons.backAfter", BACK_AFTER)
+
+    def open_at_once(self) -> Count:
+        return self._count("lessons.open", OPEN_AT_ONCE)
+
+    def _count(self, key: str, default: Count) -> Count:
+        said = str(read_profile(resolve_profile(None, self._cwd)).get(key) or "").strip()
+        return Count(int(said)) if said.isdigit() else default
 
     def decided(self) -> typing.Sequence[Decided]:
         found = []

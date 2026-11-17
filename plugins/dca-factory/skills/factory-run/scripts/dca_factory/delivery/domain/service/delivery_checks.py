@@ -13,6 +13,7 @@ from ..gateway.stage_evidence import StageEvidence
 from ..model.stage import HandOver, StageName, StoryKind
 from ..model.story import Story
 from ..model.plan_facts import PlannedDigest
+from ..model.finding_class import FindingClass, FindingQualifier, FindingTarget, FindingType
 from ..model.profile_facts import ContractNumber
 from ..model.verdict import CheckName, Findings, Said
 from ..model.judge_rows import pass_contradicted, weighed
@@ -23,6 +24,9 @@ DOCUMENTED = CheckName("documented")
 GLOSSARY = CheckName("glossary")
 REVIEWS = CheckName("reviews")
 JUDGE_PERSPECTIVE = CheckName("judge-perspective")
+JUDGE_CLASS = CheckName("judge-class")
+#: The contract from which a confirmed finding carries its class (WP-221).
+CLASS_CONTRACT = ContractNumber(39)
 PIPELINE = CheckName("pipeline")
 
 #: The contract that holds a delivered story to its outcome event.
@@ -181,6 +185,23 @@ class DeliveryChecks(DomainService):
                 f"{', '.join(u.value for u in facts.unknown)} — a finding names one of the review perspectives, so "
                 f"the figures per perspective stay whole")))
         return tuple(found)
+
+    @staticmethod
+    def finding_classes(story: Story, contract: ContractNumber, evidence: StageEvidence) -> Findings:
+        """Every confirmed finding names its target, type and qualifier from the lists (`finding_class.py`), so the
+        lessons count it. Experimental: said, never refused. Silent before contract 39."""
+        if contract.value < CLASS_CONTRACT.value:
+            return ()
+        rows = evidence.finding_classes(story.id)
+        unclassed = [r.where.value or "—" for r in rows
+                     if FindingClass.written(r.target, r.type, r.qualifier) is None]
+        if unclassed:
+            return (JUDGE_CLASS.note(Said(
+                f"{len(unclassed)} confirmed finding(s) without a listed target, type and qualifier: "
+                f"{', '.join(unclassed[:6])}{' …' if len(unclassed) > 6 else ''} — target "
+                f"{'/'.join(t.value for t in FindingTarget)}, type {'/'.join(t.value for t in FindingType)}, qualifier "
+                f"{'/'.join(q.value for q in FindingQualifier)}; a finding without them counts in no lesson")),)
+        return (JUDGE_CLASS.ok(Said(f"{len(rows)} confirmed finding(s), each with its class")),) if rows else ()
 
     @staticmethod
     def pipeline_untouched(story: Story, evidence: StageEvidence) -> Findings:

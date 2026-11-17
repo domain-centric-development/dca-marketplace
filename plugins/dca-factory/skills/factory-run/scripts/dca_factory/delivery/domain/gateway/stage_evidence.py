@@ -15,7 +15,8 @@ from ..model.story import Story
 from ..model.backlog_facts import DecidedRecord, DecisionsFacts, EpicFacts, OutcomeFacts, ProposalFacts, RowState
 from ..model.brief_facts import BriefFacts, OwnedFacts, RoundsRecord
 from ..model.delivery_facts import (
-    DocumentFacts, Integration, MainTests, PipelineFacts, ReviewFacts, StageChanges, StoryCommit, StoryPass)
+    ClassedFinding, DocumentFacts, Integration, MainTests, PipelineFacts, ReviewFacts, StageChanges, StoryCommit,
+    StoryPass)
 from ..model.guarded import GuardedFacts
 from ..model.design_facts import ChangedDomainType, ContextMapFacts, ElementRules, InvariantFacts, PortName
 from ..model.plan_facts import HandOverName, HandOverSize, PlanAdoption, PlanLevels, PlannedFile, PlanOrigin
@@ -211,6 +212,10 @@ class StageEvidence(DomainGateway, typing.Protocol):
         ...
 
     def reviews(self, story: StoryId) -> ReviewFacts:
+        ...
+
+    def finding_classes(self, story: StoryId) -> typing.Tuple[ClassedFinding, ...]:
+        """The judge's confirmed findings with their class cells, empty where the judge wrote none."""
         ...
 
     def pipeline(self, story: StoryId) -> PipelineFacts:

@@ -605,3 +605,30 @@ factory's own. The journal is what reads them today: a person, and the views ove
 the story's record.
 
 **Type:** Concept
+
+### Finding class (FindingClass) · Target (FindingTarget) · Type (FindingType) · Qualifier (FindingQualifier)
+
+**Definition:** What a confirmed finding is, in the shape of Orthogonal Defect Classification's closer: what had to
+change (target — story, plan, code, test, docs, glossary, profile), the kind of correction (type — assignment,
+checking, algorithm, interface, relationship, timing, documentation, duplication, naming, dead-code, comment, and the
+method's domain codes) and whether something was missing, wrong or too much (qualifier). Three closed lists the judge
+picks from; `GATE-JUDGE-CLASS` checks them (experimental), the lessons count them. A cell outside a list is no class.
+
+**Type:** Value Object
+
+### Lesson · Signal (Signal) · Candidate (Candidate) · Decided (Decided)
+
+**Definition:** A deviation that keeps coming back, proposed as a place for its correction. A signal is one counted
+occurrence — a tagged question, a confirmed finding (by its rule, else its class, on a hierarchy of keys), a gate
+refusal, a coded correction, an answered assumption, a flagged term — with the story it stands in. Grouped by key and
+counted per story, a signal at its kind's threshold is a candidate, drawn at the finest level that repeats, with its
+evidence, a contrast story and its places, the recommended one first. A candidate asked becomes a lesson record (a
+decision record of the project's own, `kind: lesson`); what a person answered is decided: `never` stops it, `not now`
+lets it back on more evidence, a place lets it back only when its signal returns — nothing decided is asked again
+otherwise. At most a set number stand open at a time. Counted, never guessed.
+
+**Type:** Concept
+
+**Operations:**
+- draw (`candidates`) — the candidates the signals make against what was decided;
+- bound (`bounded`) — the candidates written now, the most stories first.

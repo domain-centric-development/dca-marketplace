@@ -142,7 +142,7 @@ back: test                        (only when a confirmed defect is in a test —
 - <perspective>: reviews/<perspective>.md (<carrier>) | in-session — <why there was no file> | not covered — <why>
 
 ## Confirmed defects
-| Perspective | File:line | Severity | In plain words | Defect | Fix |
+| Perspective | File:line | Severity | Target | Type | Qualifier | In plain words | Defect | Fix |
 
 ## Considered and dropped
 - <finding>: <why it is not a defect>

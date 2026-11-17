@@ -6964,10 +6964,11 @@ def run_groups(args):
                               "| Perspective | File:line | Severity | In plain words | Defect | Fix |\n|---|---|---|---|---|---|\n"
                               "| hexagonal | src/main/Thing.java:5 | minor | the shop asks the database from the page | adapter call in the controller | go through the port |\n")),
               after=lambda root: (lambda text: [] if
-                                  "| # | Perspective | File:line | Severity | Origin | Outcome | In plain words | Defect | Fix | Status |\n|---|---|---|---|---|---|---|---|---|---|\n"
-                                  "| 1 | ddd | src/main/Old.java:1 | minor | introduced |  |  | an old defect | old fix | open |\n"
+                                  "| # | Perspective | File:line | Severity | Origin | Outcome | In plain words | Defect | Fix | Status "
+                                  "| Target | Type | Qualifier |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
+                                  "| 1 | ddd | src/main/Old.java:1 | minor | introduced |  |  | an old defect | old fix | open |  |  |  |\n"
                                   "| 2 | hexagonal | src/main/Thing.java:5 | minor |  |  | the shop asks the database from the page | "
-                                  "adapter call in the controller | go through the port | open |" in text
+                                  "adapter call in the controller | go through the port | open |  |  |  |" in text
                                   else [text[-500:]])(open(os.path.join(root, "product/epics/sample/STORY-1/findings.md"),
                                                            encoding="utf-8").read()))),
         # WP-81: one review file per perspective; a missing one is a note, a malformed one is refused.
@@ -6999,6 +7000,25 @@ def run_groups(args):
              (".dca-factory/runs/STORY-1/judge.md", "## Verdict\nverdict: pass\n\n## Confirmed defects\n"
               "| Perspective | File:line | Severity | In plain words | Defect | Fix |\n|---|---|---|---|---|---|\n"
               "| clean-code | src/main/Thing.java:5 | minor | a name that says nothing | a vague name | rename it |\n"),))),
+        # WP-221: a confirmed finding names its target, type and qualifier — experimental, a note; a listed class passes.
+        (Case("document: a confirmed finding without a listed class is a note, never a refusal", "document", 0,
+              text=("gate:note judge-class — 1 confirmed finding(s) without a listed target, type and qualifier: "
+                    "src/main/Thing.java:5",)),
+         dict(green=both_green, ledger=both_green, document=DOCUMENT, extra_sources=(
+             (".dca-factory/runs/STORY-1/judge.md", "## Verdict\nverdict: pass\n\n## Confirmed defects\n"
+              "| Perspective | File:line | Severity | Target | Type | Qualifier | In plain words | Defect | Fix |\n"
+              "|---|---|---|---|---|---|---|---|---|\n"
+              "| clean-code | src/main/Thing.java:5 | minor | tests | copy | extra | a fixture copied | duplicate | lift it |\n"
+              "| clean-code | src/main/Thing.java:9 | minor | test | duplication | extraneous | a fixture copied "
+              "| duplicate | lift it |\n"),))),
+        (Case("document: confirmed findings with a listed class pass the class check", "document", 0,
+              text=("gate:pass judge-class — 1 confirmed finding(s), each with its class",)),
+         dict(green=both_green, ledger=both_green, document=DOCUMENT, extra_sources=(
+             (".dca-factory/runs/STORY-1/judge.md", "## Verdict\nverdict: pass\n\n## Confirmed defects\n"
+              "| Perspective | File:line | Severity | Target | Type | Qualifier | In plain words | Defect | Fix |\n"
+              "|---|---|---|---|---|---|---|---|---|\n"
+              "| clean-code | src/main/Thing.java:9 | minor | Test | `duplication` | extraneous | a fixture copied "
+              "| duplicate | lift it |\n"),))),
         (Case("document: `reviews:` in the profile adds a perspective the check expects a file for", "document", 0,
               text=("gate:note reviews — no review file for security",)),
          dict(green=both_green, ledger=both_green, document=DOCUMENT, profile=PROFILE + "reviews: security\n",

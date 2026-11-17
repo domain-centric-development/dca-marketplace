@@ -19,7 +19,7 @@ from .round_questions import cited_places
 from .round_files import ROUNDS_RECORD
 from .story_layout import find_story
 from .diff_lines import added_texts, place_of
-from .findings_files import append_findings, confirmed_defects, findings_path, findings_rows
+from .findings_files import append_findings, confirmed_classes, confirmed_defects, findings_path, findings_rows
 from .journal_files import journal_events
 from .judge_rows_files import judge_rows
 from .run_marks import judged_of, verdict_in
@@ -73,12 +73,13 @@ def record_verdict(runs: str, story_id: str, answered_places: typing.AbstractSet
     cells = confirmed_defects(text)
     written = judged_of(verdict_in(text))
     items: typing.List[SignalItem] = []
-    for row, (perspective, where, severity, defect, _fix, _plain) in zip(rows, cells):
+    for row, (perspective, where, severity, defect, _fix, _plain), (target, kind, qualifier) in zip(
+            rows, cells, confirmed_classes(text)):
         code = DOMAIN_CODE.match(defect or "")
         items.append(("finding", perspective.lower(), dict(
             severity=severity.lower(), file=where, code=code.group(1).lower() if code else "",
             origin=row.origin.value, since=row.since.value, blocks="yes" if row.blocks() else "no",
-            line=line_hash(where, texts), defect=plain(defect))))
+            line=line_hash(where, texts), defect=plain(defect), target=target, type=kind, qualifier=qualifier)))
     now = {place_key(row.where.value) for row in rows}
     for perspective, fields in previous[1] if previous else []:
         if fields.get("blocks") != "yes":
@@ -90,7 +91,8 @@ def record_verdict(runs: str, story_id: str, answered_places: typing.AbstractSet
         closure = Closure.ANSWERED if key in answered_places else Closure.OPEN
         items.append(("outcome", perspective, dict(
             severity=fields.get("severity", ""), file=fields.get("file", ""), origin=fields.get("origin", ""),
-            outcome=outcome_of(seen, closure).value, defect=fields.get("defect", ""))))
+            outcome=outcome_of(seen, closure).value, defect=fields.get("defect", ""),
+            target=fields.get("target", ""), type=fields.get("type", ""), qualifier=fields.get("qualifier", ""))))
     journal_signal(runs, story_id, "judge", items, sha=sha, findings=len(rows), verdict=written.value,
                    weighed=weighed(written, rows).value)
 
@@ -144,7 +146,8 @@ def record_outcomes(story_path: str, story_id: str, front: typing.Mapping[str, t
             last[place_key(event["fields"].get("file", ""))] = (event["name"], event["fields"])
     have = {place_key(row[2]) for row in findings_rows(findings_path(story_path))}
     added = [(perspective, fields.get("file", ""), fields.get("severity", ""), fields.get("defect", ""), "", "",
-              fields.get("origin", ""), fields.get("outcome", ""))
+              fields.get("origin", ""), fields.get("outcome", ""), fields.get("target", ""), fields.get("type", ""),
+              fields.get("qualifier", ""))
              for key, (perspective, fields) in sorted(last.items())
              if key not in have and fields.get("outcome") != "repeated"]
     append_findings(story_path, story_id, front, added)

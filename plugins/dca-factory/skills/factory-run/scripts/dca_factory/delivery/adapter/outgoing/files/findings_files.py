@@ -27,15 +27,21 @@ PLAIN_COLUMN = "In plain words"
 #: both the pipeline's (contract 37); `Status` stays the person's.
 ORIGIN_COLUMN = "Origin"
 OUTCOME_COLUMN = "Outcome"
+#: A finding's class, ODC's closer in short (contract 39): what had to change, the kind of correction, and whether
+#: something was missing, wrong or too much — the judge's, read by the lessons (`finding_class.py`).
+CLASS_COLUMNS = ("Target", "Type", "Qualifier")
 FINDINGS_HEADER = (f"| # | Perspective | File:line | Severity | {ORIGIN_COLUMN} | {OUTCOME_COLUMN} | {PLAIN_COLUMN} | Defect "
-                   f"| Fix | Status |")
-FINDINGS_RULE = "|---|---|---|---|---|---|---|---|---|---|"
+                   f"| Fix | Status | Target | Type | Qualifier |")
+FINDINGS_RULE = "|---|---|---|---|---|---|---|---|---|---|---|---|---|"
+CLASSLESS_FINDINGS_HEADER = (f"| # | Perspective | File:line | Severity | {ORIGIN_COLUMN} | {OUTCOME_COLUMN} | "
+                             f"{PLAIN_COLUMN} | Defect | Fix | Status |")
 PLAIN_FINDINGS_HEADER = f"| # | Perspective | File:line | Severity | {PLAIN_COLUMN} | Defect | Fix | Status |"
 OLD_FINDINGS_HEADER = "| # | Perspective | File:line | Severity | Defect | Fix | Status |"
 #: The origin an old row reads with: before contract 37 every confirmed blocking defect sent the story back.
 OLD_ORIGIN = "introduced"
-#: judge.md's `## Confirmed defects` columns as the judge writes them; an older table lacks `In plain words`.
-JUDGE_COLUMNS = ("Perspective", "File:line", "Severity", PLAIN_COLUMN, "Defect", "Fix")
+#: judge.md's `## Confirmed defects` columns as the judge writes them; an older table lacks `In plain words` and,
+#: before contract 39, the class.
+JUDGE_COLUMNS = ("Perspective", "File:line", "Severity", *CLASS_COLUMNS, PLAIN_COLUMN, "Defect", "Fix")
 JUDGE_HEADER = "| " + " | ".join(JUDGE_COLUMNS) + " |"
 
 
@@ -69,18 +75,43 @@ def confirmed_defects(judge_text: str) -> typing.List[typing.Tuple[str, ...]]:
     return rows
 
 
+def confirmed_classes(judge_text: str) -> typing.List[typing.Tuple[str, str, str]]:
+    """The class cells of each confirmed defect, in `confirmed_defects`' order: (target, type, qualifier) as written,
+    empty where the table has no such column (before contract 39)."""
+    found: typing.List[typing.Tuple[str, str, str]] = []
+    inside = False
+    names = [c.lower() for c in JUDGE_COLUMNS if c != PLAIN_COLUMN and c not in CLASS_COLUMNS]
+    for line in judge_text.splitlines():
+        if line.startswith("## "):
+            inside = line[3:].strip().lower() == "confirmed defects"
+            continue
+        if not inside or not line.lstrip().startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if cells[0].lower() == "perspective":
+            names = [c.lower() for c in cells]
+            continue
+        if len(cells) < 5 or set(cells[0]) <= set("-: "):
+            continue
+        cell = dict(zip(names, cells))
+        found.append((cell.get("target", ""), cell.get("type", ""), cell.get("qualifier", "")))
+    return found
+
+
 def findings_cells(line: str) -> typing.Optional[typing.List[str]]:
     """A findings row's cells as written, or None for a line that is no row: seven cells before contract 23, eight
-    with `In plain words` after `Severity`, ten with `Origin` and `Outcome` before it (contract 37)."""
+    with `In plain words` after `Severity`, ten with `Origin` and `Outcome` before it (contract 37), thirteen with the
+    class at the end (contract 39)."""
     if not line.startswith("|"):
         return None
     cells = [c.strip() for c in line.strip().strip("|").split("|")]
-    return cells if len(cells) in (7, 8, 10) and cells[0].isdigit() else None
+    return cells if len(cells) in (7, 8, 10, 13) and cells[0].isdigit() else None
 
 
 def findings_rows(path: str) -> typing.List[typing.Tuple[str, ...]]:
-    """The rows of a findings file: (n, perspective, file:line, severity, defect, fix, status, plain, origin, outcome)
-    — `plain` empty in a file from before contract 23, `origin` `introduced` and `outcome` empty before 37."""
+    """The rows of a findings file: (n, perspective, file:line, severity, defect, fix, status, plain, origin, outcome,
+    target, type, qualifier) — `plain` empty in a file from before contract 23, `origin` `introduced` and `outcome`
+    empty before 37, the class empty before 39."""
     rows: typing.List[typing.Tuple[str, ...]] = []
     if not os.path.isfile(path):
         return rows
@@ -89,32 +120,37 @@ def findings_rows(path: str) -> typing.List[typing.Tuple[str, ...]]:
         if cells is None:
             continue
         if len(cells) == 7:
-            rows.append(tuple(cells) + ("", OLD_ORIGIN, ""))
+            rows.append(tuple(cells) + ("", OLD_ORIGIN, "", "", "", ""))
         elif len(cells) == 8:
             n, perspective, where, severity, plain, defect, fix, status = cells
-            rows.append((n, perspective, where, severity, defect, fix, status, plain, OLD_ORIGIN, ""))
+            rows.append((n, perspective, where, severity, defect, fix, status, plain, OLD_ORIGIN, "", "", "", ""))
         else:
-            n, perspective, where, severity, origin, outcome, plain, defect, fix, status = cells
-            rows.append((n, perspective, where, severity, defect, fix, status, plain, origin, outcome))
+            n, perspective, where, severity, origin, outcome, plain, defect, fix, status = cells[:10]
+            target, kind, qualifier = cells[10:13] if len(cells) == 13 else ("", "", "")
+            rows.append((n, perspective, where, severity, defect, fix, status, plain, origin, outcome, target, kind,
+                         qualifier))
     return rows
 
 
 def widen_findings(text: str) -> str:
-    """A findings file from before contract 37 in today's shape: the header, its rule and every row gain `Origin` —
-    `introduced`, as every blocking defect was read then — and an empty `Outcome` after `Severity`, and a file from
-    before contract 23 the empty `In plain words` cell, so the rows appended after them stand in one table."""
+    """A findings file from before contract 39 in today's shape: the header, its rule and every row gain `Origin` —
+    `introduced`, as every blocking defect was read then — and an empty `Outcome` after `Severity`, a file from
+    before contract 23 the empty `In plain words` cell, and every row the three empty class cells at its end, so the
+    rows appended after them stand in one table."""
     lines = text.split("\n")
     for index, line in enumerate(lines):
-        if line.strip() in (OLD_FINDINGS_HEADER, PLAIN_FINDINGS_HEADER):
+        if line.strip() in (OLD_FINDINGS_HEADER, PLAIN_FINDINGS_HEADER, CLASSLESS_FINDINGS_HEADER):
             lines[index] = FINDINGS_HEADER
             if index + 1 < len(lines) and set(lines[index + 1].strip()) <= set("|-: ") and lines[index + 1].strip():
                 lines[index + 1] = FINDINGS_RULE
             continue
         cells = findings_cells(line)
         if cells is not None and len(cells) == 7:
-            lines[index] = "| " + " | ".join(cells[:4] + [OLD_ORIGIN, "", ""] + cells[4:]) + " |"
+            lines[index] = "| " + " | ".join(cells[:4] + [OLD_ORIGIN, "", ""] + cells[4:] + ["", "", ""]) + " |"
         elif cells is not None and len(cells) == 8:
-            lines[index] = "| " + " | ".join(cells[:4] + [OLD_ORIGIN, ""] + cells[4:]) + " |"
+            lines[index] = "| " + " | ".join(cells[:4] + [OLD_ORIGIN, ""] + cells[4:] + ["", "", ""]) + " |"
+        elif cells is not None and len(cells) == 10:
+            lines[index] = "| " + " | ".join(cells + ["", "", ""]) + " |"
     return "\n".join(lines)
 
 
@@ -130,8 +166,9 @@ def record_findings(story_path: str, story_id: str, front: typing.Mapping[str, t
     diff_path = os.path.join(evidence_dir(runs, story_id), "story.diff")
     diff = read_text(diff_path) if os.path.isfile(diff_path) else None
     added_by = added_lines(diff) if diff is not None and not diff.startswith("# no diff") else None
-    new = [row + (origin_of(row[1], added_by).value if added_by is not None else "",)
-           for row in confirmed_defects(read_text(judge))]
+    text = read_text(judge)
+    new = [row + (origin_of(row[1], added_by).value if added_by is not None else "", "") + kind
+           for row, kind in zip(confirmed_defects(text), confirmed_classes(text))]
     path = findings_path(story_path)
     have = findings_rows(path)
     known = {FindingKey(Place(r[2]), Detail(r[4])) for r in have}
@@ -170,9 +207,10 @@ def append_finding_rows(path: str, head: str, added: typing.Sequence[typing.Tupl
         perspective, where, severity, defect, fix, plain = row[:6]
         origin = row[6] if len(row) > 6 else ""
         outcome = row[7] if len(row) > 7 else ""
+        target, kind, qualifier = row[8:11] if len(row) > 10 else ("", "", "")
         n += 1
         text += (f"| {n} | {perspective} | {where} | {severity} | {origin} | {outcome} | {plain} | {defect} | {fix} "
-                 f"| open |\n")
+                 f"| open | {target} | {kind} | {qualifier} |\n")
     with open(path, "w", encoding="utf-8") as handle:
         handle.write(text)
 
@@ -196,7 +234,7 @@ def finding_records(epics: str) -> typing.List[typing.Dict[str, typing.Any]]:
     found: typing.List[typing.Dict[str, typing.Any]] = []
 
     def add(owner: str, path: str, project: bool) -> None:
-        for n, perspective, where, severity, defect, fix, status, plain, origin, outcome in findings_rows(path):
+        for n, perspective, where, severity, defect, fix, status, plain, origin, outcome, *_kind in findings_rows(path):
             if status == OPEN_ROW.value and outcome in ("", "dropped"):
                 found.append(dict(owner=owner, row=f"{owner}#{n}", path=path, project=project, where=where,
                                   severity=severity, defect=defect, perspective=perspective, fix=fix, plain=plain,

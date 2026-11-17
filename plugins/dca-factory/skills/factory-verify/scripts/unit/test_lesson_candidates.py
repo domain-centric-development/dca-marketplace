@@ -12,7 +12,7 @@ from dca_factory.delivery.domain.model.story_words import Count, Detail
 
 KEYS = {LessonKind.QUESTION: "accounts/test-level", LessonKind.FINDING: "ddd/domain-concept",
         LessonKind.CORRECTION: "missing-case", LessonKind.ASSUMPTION: "prices are gross → yes",
-        LessonKind.TERM: "entry"}
+        LessonKind.TERM: "entry", LessonKind.REFUSAL: "tests-kept"}
 
 
 def drawn(items, decided=()):
@@ -41,7 +41,7 @@ class LessonCandidatesTest(unittest.TestCase):
                 self.assertEqual((LessonPlace.NOT_NOW, LessonPlace.NEVER), found[0].places[-2:])
 
     def test_the_thresholds_are_counts_a_question_and_a_finding_three_the_rest_two(self):
-        self.assertEqual({"question": 3, "finding": 3, "correction": 2, "assumption": 2, "term": 2},
+        self.assertEqual({"question": 3, "finding": 3, "correction": 2, "assumption": 2, "term": 2, "refusal": 3},
                          {k.value: c.value for k, c in THRESHOLDS.items()})
 
     def test_a_story_that_shows_a_signal_twice_counts_once(self):
@@ -61,8 +61,39 @@ class LessonCandidatesTest(unittest.TestCase):
         self.assertEqual((), drawn(signals(LessonKind.QUESTION, 9), (never,)))
         self.assertEqual((), drawn(signals(LessonKind.QUESTION, 3), (later,)))
         self.assertEqual(1, len(drawn(signals(LessonKind.QUESTION, 4), (later,))))
-        self.assertEqual((), drawn(signals(LessonKind.QUESTION, 9), (placed,)))
+        self.assertEqual((), drawn(signals(LessonKind.QUESTION, 5), (placed,)))
+        back = drawn(signals(LessonKind.QUESTION, 6), (placed,))           # placed, and back in three stories more
+        self.assertEqual(1, len(back))
+        self.assertIs(LessonPlace.DESCRIPTION, back[0].placed.place)
         self.assertEqual((), drawn(signals(LessonKind.QUESTION, 9), (waiting,)))
+
+    def test_a_finding_is_drawn_at_the_finest_level_that_repeats(self):
+        def classed(story, fine, coarse):
+            evidence = Evidence(StoryId(story), Detail(f"{story}#1"))
+            return [Signal(LessonKind.FINDING, SignalKey(coarse), evidence),
+                    Signal(LessonKind.FINDING, SignalKey(fine), evidence, SignalKey(coarse))]
+        same = sum((classed(f"s-{n}", "clean-code/test/duplication/extraneous", "test/duplication") for n in (1, 2, 3)), [])
+        found = drawn(same)
+        self.assertEqual(["clean-code/test/duplication/extraneous"], [c.key.value for c in found])
+        self.assertIs(LessonPlace.INSTRUCTIONS, found[0].recommended)          # the target test proposes the place
+        spread = (classed("s-1", "clean-code/test/duplication/extraneous", "test/duplication")
+                  + classed("s-2", "ddd/test/duplication/extraneous", "test/duplication")
+                  + classed("s-3", "clean-code/test/duplication/incorrect", "test/duplication"))
+        self.assertEqual(["test/duplication"], [c.key.value for c in drawn(spread)])  # no finer key repeats
+
+    def test_a_finding_candidate_names_a_story_of_its_target_without_it(self):
+        def one(story, key):
+            return Signal(LessonKind.FINDING, SignalKey(key), Evidence(StoryId(story), Detail(f"{story}#1")))
+        items = [one(f"s-{n}", "test/duplication") for n in (1, 2, 3)] + [one("s-4", "test/checking"),
+                                                                           one("s-5", "code/naming")]
+        self.assertEqual("s-4", drawn(items)[0].contrast.value)
+
+    def test_at_most_the_open_lessons_are_written_the_most_stories_first(self):
+        many = drawn(signals(LessonKind.QUESTION, 5) + signals(LessonKind.FINDING, 3)
+                     + signals(LessonKind.TERM, 4))
+        kept = Signals(()).bounded(many, Count(3), Count(5))
+        self.assertEqual(["question", "term"], [c.kind.value for c in kept])
+        self.assertEqual((), Signals(()).bounded(many, Count(5), Count(5)))
 
     def test_a_candidate_has_one_id_from_its_kind_and_key(self):
         self.assertEqual("lesson-question-accounts-test-level",
@@ -104,8 +135,30 @@ class LessonSignalReadingTest(unittest.TestCase):
                 out.write("| 1 | ddd | src/A.java:3 | minor | introduced | | plain words "
                           "| breaks DCA-HEX-014 | fix it | open |\n")
             rows = findings_rows(path)
-        self.assertEqual(10, len(rows[0]))
+        self.assertEqual(13, len(rows[0]))
         self.assertEqual(["ddd/dca-hex-014"], [s.key.value for s in finding_signals(StoryId("s-1"), rows[0])])
+
+    def test_a_findings_class_counts_on_two_levels_and_a_rule_within_it(self):
+        from dca_factory.delivery.adapter.outgoing.files.lesson_signal_files import finding_signals
+        row = ("2", "clean-code", "src/A.java:3", "minor", "duplicate fixture, breaks DCA-HEX-014", "fix", "open", "",
+               "introduced", "fixed", "test", "duplication", "extraneous")
+        found = finding_signals(StoryId("s-1"), row)
+        self.assertEqual([("test/duplication", None),
+                          ("clean-code/test/duplication/extraneous", "test/duplication"),
+                          ("clean-code/dca-hex-014", "clean-code/test/duplication/extraneous")],
+                         [(s.key.value, s.within.value if s.within else None) for s in found])
+        self.assertEqual("s-1#2 (fixed)", found[0].evidence.source.value)
+        unlisted = finding_signals(StoryId("s-1"), row[:10] + ("tests", "duplication", "extraneous"))
+        self.assertEqual([("clean-code/dca-hex-014", None)],                 # a word outside the lists is no class
+                         [(s.key.value, s.within.value if s.within else None) for s in unlisted])
+
+    def test_a_check_the_gate_refused_counts_once_per_story(self):
+        from dca_factory.delivery.adapter.outgoing.files.lesson_signal_files import refusal_signals
+        events = [dict(kind="gate", name="test", fields={"exit": "1", "fail": "tests-kept,clauses"}),
+                  dict(kind="gate", name="build", fields={"exit": "1", "fail": "tests-kept"}),
+                  dict(kind="gate", name="build", fields={"exit": "1"}),
+                  dict(kind="gate", name="tidy", fields={"exit": "0"})]
+        self.assertEqual(["tests-kept", "clauses"], [s.key.value for s in refusal_signals(StoryId("s-1"), events)])
 
     def test_a_release_and_the_plans_adoption_are_no_answered_assumption(self):
         from dca_factory.delivery.adapter.outgoing.files.lesson_signal_files import assumption_signals
@@ -116,7 +169,7 @@ class LessonSignalReadingTest(unittest.TestCase):
                 "- answered: every scenario holds on today's code, and no delivered story carries it — the plan "
                 "adopted the story: S-1 by ATest#a (plan-adopt)\n")
         said = [s.key.value for s in assumption_signals(StoryId("s-1"), body)]
-        self.assertEqual(["leeren (clear) — every task leaves the list (product/domain.md)"], said)
+        self.assertEqual(["leeren (clear) — every task leaves the list"], said)
         self.assertFalse(Assumption("- answered: leeren (clear)").marks_process)
 
 
