@@ -4832,9 +4832,11 @@ def verify_setup(runner, verbose=False):
     # every flag the README shows on a command line is one its program accepts
     argparse_flags = lambda text: {flag for call in re.findall(r"add_argument\(([^)]*)", text)
                                    for flag in re.findall(r'"(--[\w-]+)"', call)}
-    # the cli is delivery's command line and the rulebook's (`--rules`), one entry point across them
+    # the cli is delivery's command line, the rulebook's (`--rules`) and learning's (`--lessons`), one entry point
     rules_module = "rulebook/adapter/incoming/cli/rules_command"
-    rules_cli = package_text(runner, (rules_module,))[rules_module]
+    lessons_module = "learning/adapter/incoming/cli/lessons_command"
+    rules_cli = package_text(runner, (rules_module, lessons_module))[rules_module] \
+        + package_text(runner, (lessons_module,))[lessons_module]
     feature_clis = package_text(runner, CLI_FEATURES)
     accepted = {"gate": argparse_flags(modules[GATE_MODULE]),
                 "cli": argparse_flags(modules[CLI_MODULE]) | argparse_flags(rules_cli)
@@ -7296,7 +7298,7 @@ def run_groups(args):
         brief = cli_text(root, "--stage-brief", "STORY-9", "plan")
         expectations.append(("lessons: a place is written by the skill that owns it — the inbox says whom an answered "
                              "lesson waits for, then links what was written, and the next story's plan brief reads it",
-                             "description, not written yet: waits for the description skill" in " ".join(waiting.split())
+                             "description, not written yet: waits for `/dca-describe`" in " ".join(waiting.split())
                              and "written: product/tech.md" in linked and "product/tech.md" in brief
                              and line in read_or_empty(os.path.join(root, "product/tech.md")),
                              (waiting[-400:], linked[-400:], "product/tech.md" in brief)))

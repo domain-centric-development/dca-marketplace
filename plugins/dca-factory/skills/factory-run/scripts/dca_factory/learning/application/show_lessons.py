@@ -5,10 +5,10 @@ from __future__ import annotations
 import dataclasses
 import typing
 
-from ....building_blocks import UseCase
-from ...domain.model.lesson import Candidate, LessonKind, Signals, THRESHOLDS
-from ...domain.model.story_words import Count
-from ..shared.lesson_signals import LessonSignals
+from ...building_blocks import UseCase
+from ..domain.model.lesson import Candidate, LessonKind, Signals, THRESHOLDS
+from ..domain.model.words import Count
+from .shared.lesson_signals import LessonSignals
 
 Model = typing.Dict[str, typing.Any]
 

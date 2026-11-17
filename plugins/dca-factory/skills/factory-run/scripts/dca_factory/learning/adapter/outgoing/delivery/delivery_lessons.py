@@ -1,17 +1,17 @@
-"""The lesson records as files: `<product>/decisions/<id>.md`, a record of the project's own with `kind: lesson`."""
+"""The lesson records, filed in delivery's decision inbox through its api: `<product>/decisions/<id>.md`, a record of
+the project's own with `kind: lesson`. Learning writes the text; delivery files it and keeps the answer."""
 
 from __future__ import annotations
 
-import os
 import string
 import typing
 
-from .decision_record_files import LESSON_KIND, project_decisions_dir
-from .....sharedkernel.adapter.outgoing.profile.profile_files import read_profile, resolve_profile, shown
+from .....delivery.api import learning as delivery
+from .....delivery.api.learning import LESSON_KIND
+from .....sharedkernel.adapter.outgoing.profile.profile_files import read_profile, resolve_profile
 from ....application.shared.lesson_records import LessonRecords
-from ....domain.model.decision_record import RecordId
 from ....domain.model.lesson import Candidate, LessonKind, LessonPlace, Owner
-from ....domain.model.moment import Moment
+from ....domain.model.words import Moment, RecordId
 
 #: What repeated, as the record's title says it.
 TITLES = {
@@ -90,22 +90,15 @@ def lesson_text(record: RecordId, candidate: Candidate, asked: Moment, profile: 
     return "\n".join(lines)
 
 
-class LessonRecordFiles(LessonRecords):
-    """The lesson records of the project <cwd>."""
+class DeliveryLessons(LessonRecords):
+    """The lesson records of the project <cwd>, in delivery's decision inbox."""
 
     def __init__(self, cwd: str) -> None:
         self._cwd = cwd
 
-    def _path(self, record: RecordId) -> str:
-        return os.path.join(self._cwd, project_decisions_dir(), record.value + ".md")
-
     def taken(self, record: RecordId) -> bool:
-        return os.path.exists(self._path(record))
+        return delivery.lesson_taken(self._cwd, record.value)
 
     def write(self, record: RecordId, candidate: Candidate, asked: Moment) -> str:
-        path = self._path(record)
-        os.makedirs(os.path.dirname(path), exist_ok=True)
         profile = read_profile(resolve_profile(None, self._cwd))
-        with open(path, "x", encoding="utf-8") as handle:
-            handle.write(lesson_text(record, candidate, asked, profile))
-        return shown(path)
+        return delivery.ask_lesson(self._cwd, record.value, lesson_text(record, candidate, asked, profile))

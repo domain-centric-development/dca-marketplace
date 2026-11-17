@@ -12,9 +12,13 @@ import re
 import typing
 
 from ....building_blocks import Id, Value
-from .finding_class import FindingTarget
-from .story import StoryId
-from .story_words import Count, Detail
+from .words import Count, Detail, StoryId
+
+
+class Target(Value):
+    """What had to change to correct a finding — a target of delivery's finding class, as its api publishes it."""
+
+    value: str
 
 
 class LessonKind(enum.Enum):
@@ -126,14 +130,14 @@ PLACES: typing.Mapping[LessonKind, typing.Tuple[LessonPlace, ...]] = {
 
 #: Where a finding's correction goes first, by what had to change (its class's target, WP-221): the recommendation,
 #: never the answer.
-TARGET_PLACES: typing.Mapping[FindingTarget, LessonPlace] = {
-    FindingTarget.STORY: LessonPlace.CRITERION,
-    FindingTarget.PLAN: LessonPlace.DESCRIPTION,
-    FindingTarget.CODE: LessonPlace.PROJECT_RULE,
-    FindingTarget.TEST: LessonPlace.INSTRUCTIONS,
-    FindingTarget.DOCS: LessonPlace.DESCRIPTION,
-    FindingTarget.GLOSSARY: LessonPlace.GLOSSARY,
-    FindingTarget.PROFILE: LessonPlace.PROFILE_CHECK,
+TARGET_PLACES: typing.Mapping[Target, LessonPlace] = {
+    Target("story"): LessonPlace.CRITERION,
+    Target("plan"): LessonPlace.DESCRIPTION,
+    Target("code"): LessonPlace.PROJECT_RULE,
+    Target("test"): LessonPlace.INSTRUCTIONS,
+    Target("docs"): LessonPlace.DESCRIPTION,
+    Target("glossary"): LessonPlace.GLOSSARY,
+    Target("profile"): LessonPlace.PROFILE_CHECK,
 }
 
 
@@ -175,12 +179,12 @@ class SignalKey(Value):
     def __post_init__(self) -> None:
         object.__setattr__(self, "value", " ".join(self.value.lower().split()))
 
-    def target(self) -> typing.Optional[FindingTarget]:
+    def target(self) -> typing.Optional[Target]:
         """The target a finding's class key names — `<perspective>/<target>/<type>/<qualifier>` or `<target>/<type>`
         —, None for a key that names none."""
         parts = self.value.split("/")
         word = parts[1] if len(parts) == 4 else (parts[0] if len(parts) == 2 else "")
-        return FindingTarget.written(Detail(word))
+        return Target(word) if Target(word) in TARGET_PLACES else None
 
 
 class Evidence(Value):

@@ -1,4 +1,4 @@
-"""The cli's command line across the contexts: the rulebook's `--rules`, the spec's `--spec`, everything else
+"""The cli's command line across the contexts: the rulebook's `--rules`, learning's `--lessons`, the spec's `--spec`, everything else
 delivery's. Each command line and the composition root it builds its use cases from are imported for the command
 that is given, and only then: the runner calls the cli many times per story, and a call loads what it asks for."""
 
@@ -19,13 +19,15 @@ def wire() -> None:
     from ..delivery.adapter.incoming.runner import run_command
     from ..delivery.adapter.incoming.web import service as web_service
     from ..rulebook.adapter.incoming.cli import rules_command
+    from ..learning.adapter.incoming.cli import lessons_command
     from ..spec.adapter.incoming.cli import spec_command
     from ..delivery.adapter.incoming.cli import question_command
-    from . import delivery, questions, rulebook, runner, spec
+    from . import delivery, learning, questions, rulebook, runner, spec
     question_command.wire(questions)
     cli_root.wire(delivery)
     run_command.wire(runner)
     rules_command.wire(rulebook)
+    lessons_command.wire(learning)
     spec_command.wire(spec)
     web_service.wire(delivery)
 
@@ -39,6 +41,11 @@ def main(argv: typing.Sequence[str]) -> int:
         from . import rulebook
         rules_command.wire(rulebook)
         return rules_command.main(argv)
+    if "--lessons" in argv:
+        from ..learning.adapter.incoming.cli import lessons_command
+        from . import learning
+        lessons_command.wire(learning)
+        return lessons_command.main(argv)
     if "--spec" in argv:
         from ..spec.adapter.incoming.cli import spec_command
         from . import spec

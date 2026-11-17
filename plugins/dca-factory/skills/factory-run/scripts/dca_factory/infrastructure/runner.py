@@ -39,7 +39,7 @@ from ..sharedkernel.adapter.outgoing.profile.profile_files import (
     resolve_profile,
     set_places,
 )
-from . import delivery
+from . import delivery, learning
 from . import requests
 from .workflow import load_workflow
 
@@ -70,7 +70,7 @@ class RunnerCases:
     def run_backlog(self, run: Run, tool: str, slots: int, watch: bool, interval: int, dry: bool) -> int:
         backlog = RunnerBacklog(run, tool)
         return RunBacklogUseCase(backlog, backlog, backlog, self.queue(run), ConsoleLines(),
-                                 delivery.lesson_proposals(run.home), stamp_utc).execute(
+                                 learning.propose_lessons(run.home), stamp_utc).execute(
             RunBacklogCommand(slots, watch, interval, dry, run.keep_going, run.stay, run.lane))
 
     def queue(self, run: Run) -> RequestQueue:

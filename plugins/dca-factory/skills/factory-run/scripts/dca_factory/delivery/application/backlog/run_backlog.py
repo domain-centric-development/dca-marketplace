@@ -10,7 +10,9 @@ from ....building_blocks import UseCase
 from ..requests.request_queue import RequestQueue, RunAsked
 from ..shared.backlog_schedule import BacklogSchedule, ScheduleRead
 from ..shared.backlog_worker import BacklogCheckout, BacklogWorker, Child
-from ..shared.lesson_records import LessonProposals
+#: What the run calls when nothing more can run: the lessons a moment proposes — [(record id, kind, where)]; the
+#: composition root hands learning's (delivery knows no lesson).
+ProposeLessons = typing.Callable[[str], typing.List[typing.Tuple[str, str, str]]]
 from ...domain.model.moment import Moment
 from ..shared.requests import RequestFacts, stories_of
 from ..shared.run_lines import RunLines
@@ -40,7 +42,7 @@ class RunBacklogUseCase(RunBacklogInputPort):
     stop concerns the whole run."""
 
     def __init__(self, schedule: BacklogSchedule, checkout: BacklogCheckout, worker: BacklogWorker,
-                 queue: RequestQueue, lines: RunLines, lessons: typing.Optional[LessonProposals] = None,
+                 queue: RequestQueue, lines: RunLines, lessons: typing.Optional[ProposeLessons] = None,
                  now: typing.Optional[typing.Callable[[], str]] = None) -> None:
         self._lessons = lessons
         self._now = now
@@ -280,8 +282,8 @@ class RunBacklogUseCase(RunBacklogInputPort):
         """What repeats across the stories becomes a lesson in decide, beside the stories — none waits for it."""
         if self._lessons is None or self._now is None:
             return
-        for rid, kind, where in self._lessons.propose(Moment(self._now())):
-            self._lines.out(f"factory: a lesson waits in decide — the same {kind.value} in several stories ({where}); "
+        for rid, kind, where in self._lessons(self._now()):
+            self._lines.out(f"factory: a lesson waits in decide — the same {kind} in several stories ({where}); "
                             f"/factory-decisions {rid}")
 
     def _nothing_more(self, schedule: ScheduleRead, watch: bool) -> None:

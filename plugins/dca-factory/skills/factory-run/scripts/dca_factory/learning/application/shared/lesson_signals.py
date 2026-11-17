@@ -6,7 +6,7 @@ import typing
 
 from ....building_blocks import OutputPort
 from ...domain.model.lesson import Decided, Signal
-from ...domain.model.story_words import Count
+from ...domain.model.words import Count
 
 
 class LessonSignals(OutputPort, typing.Protocol):

@@ -616,19 +616,11 @@ picks from; `GATE-JUDGE-CLASS` checks them (experimental), the lessons count the
 
 **Type:** Value Object
 
-### Lesson · Signal (Signal) · Candidate (Candidate) · Decided (Decided)
+### Lesson record
 
-**Definition:** A deviation that keeps coming back, proposed as a place for its correction. A signal is one counted
-occurrence — a tagged question, a confirmed finding (by its rule, else its class, on a hierarchy of keys), a gate
-refusal, a coded correction, an answered assumption, a flagged term — with the story it stands in. Grouped by key and
-counted per story, a signal at its kind's threshold is a candidate, drawn at the finest level that repeats, with its
-evidence, a contrast story and its places, the recommended one first. A candidate asked becomes a lesson record (a
-decision record of the project's own, `kind: lesson`); what a person answered is decided: `never` stops it, `not now`
-lets it back on more evidence, a place lets it back only when its signal returns — nothing decided is asked again
-otherwise. At most a set number stand open at a time. Counted, never guessed.
+**Definition:** A decision record of the project's own with `kind: lesson`, filed by learning through delivery's api
+(`ask_lesson`) and answered in the inbox like any record. Delivery keeps its answer and raises `LessonAnswered`; what a
+lesson means — its kind, key, places — is learning's (`docs/glossary/learning.md`). `not-now` and `never` settle without
+a skill (`SETTLES_ALONE`).
 
 **Type:** Concept
-
-**Operations:**
-- draw (`candidates`) — the candidates the signals make against what was decided;
-- bound (`bounded`) — the candidates written now, the most stories first.

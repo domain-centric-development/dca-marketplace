@@ -8,8 +8,7 @@ import typing
 
 from ....building_blocks import Value
 from .lesson import LessonKind, LessonPlace, SignalKey
-from .question_tag import QuestionTag
-from .story_words import Count, Detail
+from .words import Count, Detail
 
 #: The perspectives a review stage knows by default — a perspective of the project's own is not named.
 GENERAL_PERSPECTIVES = ("ddd", "hexagonal", "clean-code", "plan", "security", "frontend", "test")
@@ -71,9 +70,8 @@ class MaintainerIssue(Value):
         parts = self.key.value.split("/")
         said: typing.List[Detail] = []
         if self.kind is LessonKind.QUESTION:
-            tag = QuestionTag.written(Detail(parts[-1]))
-            if tag is not None:
-                said.append(Detail(f"question tag: `{tag.value}`"))
+            # the tag is one of delivery's list — the api publishes no other
+            said.append(Detail(f"question tag: `{parts[-1]}`"))
         elif self.kind is LessonKind.FINDING and len(parts) == 2:
             perspective, what = parts
             said.append(Detail(f"perspective: `{perspective}`" if perspective in GENERAL_PERSPECTIVES

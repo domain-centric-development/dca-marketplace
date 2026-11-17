@@ -5,10 +5,19 @@ import unittest
 
 import support  # noqa: F401 — puts the package on the path
 
-from dca_factory.delivery.domain.model.lesson import (Decided, Evidence, LessonId, LessonKind, LessonPlace, Signal,
+from dca_factory.learning.domain.model.lesson import (Decided, Evidence, LessonId, LessonKind, LessonPlace, Signal,
                                                       SignalKey, Signals, THRESHOLDS)
-from dca_factory.delivery.domain.model.story import StoryId
-from dca_factory.delivery.domain.model.story_words import Count, Detail
+from dca_factory.learning.domain.model.words import Count, Detail, StoryId
+
+SIGNALS = "dca_factory.learning.adapter.outgoing.delivery.delivery_signals"
+
+
+def published(row):
+    """A findings row as delivery's api publishes it."""
+    n, perspective, _where, _severity, defect, _fix, _status, _plain, _origin, outcome, *kind = row
+    target, kind_, qualifier = kind if kind else ("", "", "")
+    return dict(n=n, perspective=perspective, defect=defect, outcome=outcome, target=target, type=kind_,
+                qualifier=qualifier)
 
 KEYS = {LessonKind.QUESTION: "accounts/test-level", LessonKind.FINDING: "ddd/domain-concept",
         LessonKind.CORRECTION: "missing-case", LessonKind.ASSUMPTION: "prices are gross → yes",
@@ -111,15 +120,15 @@ class LessonSignalReadingTest(unittest.TestCase):
     """What the files make a signal of: a finding by the rule it names, else its domain code; a story id is no rule."""
 
     def test_a_finding_is_counted_under_its_rule_else_its_code_and_a_flagged_term_on_its_own(self):
-        from dca_factory.delivery.adapter.outgoing.files.lesson_signal_files import finding_signals
+        from dca_factory.learning.adapter.outgoing.delivery.delivery_signals import finding_signals
         story = StoryId("s-1")
 
         def row(defect):
             return ("2", "hexagonal", "src/A.java:3", "minor", defect, "fix", "open", "", "introduced", "")
         self.assertEqual(["hexagonal/dca-hex-014"],
-                         [s.key.value for s in finding_signals(story, row("breaks DCA-HEX-014 as US-3 asked"))])
-        self.assertEqual([], finding_signals(story, row("stale comment, see US-3")))
-        found = finding_signals(story, row("domain-term: `Entry` is called `Item` here"))
+                         [s.key.value for s in finding_signals(story, published(row("breaks DCA-HEX-014 as US-3 asked")))])
+        self.assertEqual([], finding_signals(story, published(row("stale comment, see US-3"))))
+        found = finding_signals(story, published(row("domain-term: `Entry` is called `Item` here")))
         self.assertEqual([("finding", "hexagonal/domain-term"), ("term", "entry")],
                          [(s.kind.value, s.key.value) for s in found])
         self.assertEqual("s-1#2", found[0].evidence.source.value)
@@ -128,7 +137,7 @@ class LessonSignalReadingTest(unittest.TestCase):
         import os
         import tempfile
         from dca_factory.delivery.adapter.outgoing.files.findings_files import findings_rows
-        from dca_factory.delivery.adapter.outgoing.files.lesson_signal_files import finding_signals
+        from dca_factory.learning.adapter.outgoing.delivery.delivery_signals import finding_signals
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "findings.md")
             with open(path, "w", encoding="utf-8") as out:
@@ -136,40 +145,38 @@ class LessonSignalReadingTest(unittest.TestCase):
                           "| breaks DCA-HEX-014 | fix it | open |\n")
             rows = findings_rows(path)
         self.assertEqual(13, len(rows[0]))
-        self.assertEqual(["ddd/dca-hex-014"], [s.key.value for s in finding_signals(StoryId("s-1"), rows[0])])
+        self.assertEqual(["ddd/dca-hex-014"], [s.key.value for s in finding_signals(StoryId("s-1"), published(rows[0]))])
 
     def test_a_findings_class_counts_on_two_levels_and_a_rule_within_it(self):
-        from dca_factory.delivery.adapter.outgoing.files.lesson_signal_files import finding_signals
+        from dca_factory.learning.adapter.outgoing.delivery.delivery_signals import finding_signals
         row = ("2", "clean-code", "src/A.java:3", "minor", "duplicate fixture, breaks DCA-HEX-014", "fix", "open", "",
                "introduced", "fixed", "test", "duplication", "extraneous")
-        found = finding_signals(StoryId("s-1"), row)
+        found = finding_signals(StoryId("s-1"), published(row))
         self.assertEqual([("test/duplication", None),
                           ("clean-code/test/duplication/extraneous", "test/duplication"),
                           ("clean-code/dca-hex-014", "clean-code/test/duplication/extraneous")],
                          [(s.key.value, s.within.value if s.within else None) for s in found])
         self.assertEqual("s-1#2 (fixed)", found[0].evidence.source.value)
-        unlisted = finding_signals(StoryId("s-1"), row[:10] + ("tests", "duplication", "extraneous"))
-        self.assertEqual([("clean-code/dca-hex-014", None)],                 # a word outside the lists is no class
+        unlisted = finding_signals(StoryId("s-1"), published(row[:10] + ("", "", "")))   # the api publishes no class
+        self.assertEqual([("clean-code/dca-hex-014", None)],                 # outside delivery's lists
                          [(s.key.value, s.within.value if s.within else None) for s in unlisted])
 
     def test_a_check_the_gate_refused_counts_once_per_story(self):
-        from dca_factory.delivery.adapter.outgoing.files.lesson_signal_files import refusal_signals
-        events = [dict(kind="gate", name="test", fields={"exit": "1", "fail": "tests-kept,clauses"}),
-                  dict(kind="gate", name="build", fields={"exit": "1", "fail": "tests-kept"}),
-                  dict(kind="gate", name="build", fields={"exit": "1"}),
-                  dict(kind="gate", name="tidy", fields={"exit": "0"})]
-        self.assertEqual(["tests-kept", "clauses"], [s.key.value for s in refusal_signals(StoryId("s-1"), events)])
+        from dca_factory.learning.adapter.outgoing.delivery.delivery_signals import refusal_signals
+        refused = [dict(stage="test", check="tests-kept"), dict(stage="test", check="clauses"),
+                   dict(stage="build", check="tests-kept")]
+        self.assertEqual(["tests-kept", "clauses"], [s.key.value for s in refusal_signals(StoryId("s-1"), refused)])
 
     def test_a_release_and_the_plans_adoption_are_no_answered_assumption(self):
-        from dca_factory.delivery.adapter.outgoing.files.lesson_signal_files import assumption_signals
+        from dca_factory.learning.adapter.outgoing.delivery.delivery_signals import assumption_signals
         from dca_factory.delivery.domain.model.story import Assumption
-        body = ("## Assumptions\n"
-                "- answered: leeren (clear) — every task leaves the list (product/domain.md).\n"
-                "- answered: the story is released for building (request R-9, Ann, 2026-11-17T14:46:59Z).\n"
-                "- answered: every scenario holds on today's code, and no delivered story carries it — the plan "
-                "adopted the story: S-1 by ATest#a (plan-adopt)\n")
-        said = [s.key.value for s in assumption_signals(StoryId("s-1"), body)]
-        self.assertEqual(["leeren (clear) — every task leaves the list"], said)
+        said = [s.key.value for s in assumption_signals(
+            StoryId("s-1"), ["leeren (clear) — every task leaves the list (product/domain.md)."])]
+        self.assertEqual(["leeren (clear) — every task leaves the list"], said)   # the source it cites aside
+        self.assertTrue(Assumption("- answered: the story is released for building (request R-9, Ann, "
+                                   "2026-11-17T14:46:59Z).").marks_process)       # delivery's api leaves these out
+        self.assertTrue(Assumption("- answered: every scenario holds on today's code — the plan adopted the story "
+                                   "(plan-adopt)").marks_process)
         self.assertFalse(Assumption("- answered: leeren (clear)").marks_process)
 
 
@@ -178,6 +185,7 @@ class LessonRecordTest(unittest.TestCase):
     goes through the decisions skill, which has the owning skill write it. Its answer changes no story."""
 
     def lesson(self):
+        from dca_factory.delivery.domain.model.story_words import Detail
         from dca_factory.delivery.domain.model.decision_record import (
             ANSWER_FIELDS, Asker, DecisionRecord, DecisionState, OptionKey, OptionLine, RecordContent, RecordId,
             RecordKind)

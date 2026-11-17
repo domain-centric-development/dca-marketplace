@@ -1,0 +1,1 @@
+"""Learning's model, flat."""

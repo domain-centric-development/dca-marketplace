@@ -5,10 +5,8 @@ from __future__ import annotations
 import typing
 
 from ....building_blocks import OutputPort
-from ...domain.model.decision_record import RecordId
 from ...domain.model.lesson import Candidate, LessonKind, Signals
-from ...domain.model.story_words import Count
-from ...domain.model.moment import Moment
+from ...domain.model.words import Count, Moment, RecordId
 from .lesson_signals import LessonSignals
 
 
