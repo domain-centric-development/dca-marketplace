@@ -34,7 +34,7 @@ def finding_signals(story: StoryId, row: typing.Tuple[str, ...]) -> typing.List[
     """A finding row's signals: the finding under its perspective and the rule it names — else its domain code —,
     and for a `domain-term` finding the term it flags. A finding that names neither is counted nowhere: what is the
     same could not be told without guessing."""
-    n, perspective, _where, _severity, defect, _fix, _status, _plain = row
+    n, perspective, defect = row[0], row[1], row[4]  # by place: the row grows columns at its end (`findings_rows`)
     evidence = Evidence(story, Detail(f"{story.value}#{n}"))
     rule = RULE_ID.search(defect)
     code = DOMAIN_CODE.match(defect)

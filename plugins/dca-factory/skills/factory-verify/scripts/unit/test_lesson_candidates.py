@@ -84,7 +84,7 @@ class LessonSignalReadingTest(unittest.TestCase):
         story = StoryId("s-1")
 
         def row(defect):
-            return ("2", "hexagonal", "src/A.java:3", "minor", defect, "fix", "open", "")
+            return ("2", "hexagonal", "src/A.java:3", "minor", defect, "fix", "open", "", "introduced", "")
         self.assertEqual(["hexagonal/dca-hex-014"],
                          [s.key.value for s in finding_signals(story, row("breaks DCA-HEX-014 as US-3 asked"))])
         self.assertEqual([], finding_signals(story, row("stale comment, see US-3")))
@@ -92,6 +92,20 @@ class LessonSignalReadingTest(unittest.TestCase):
         self.assertEqual([("finding", "hexagonal/domain-term"), ("term", "entry")],
                          [(s.kind.value, s.key.value) for s in found])
         self.assertEqual("s-1#2", found[0].evidence.source.value)
+
+    def test_a_finding_is_read_from_a_findings_file_in_todays_shape(self):
+        import os
+        import tempfile
+        from dca_factory.delivery.adapter.outgoing.files.findings_files import findings_rows
+        from dca_factory.delivery.adapter.outgoing.files.lesson_signal_files import finding_signals
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "findings.md")
+            with open(path, "w", encoding="utf-8") as out:
+                out.write("| 1 | ddd | src/A.java:3 | minor | introduced | | plain words "
+                          "| breaks DCA-HEX-014 | fix it | open |\n")
+            rows = findings_rows(path)
+        self.assertEqual(10, len(rows[0]))
+        self.assertEqual(["ddd/dca-hex-014"], [s.key.value for s in finding_signals(StoryId("s-1"), rows[0])])
 
 
 class LessonRecordTest(unittest.TestCase):
