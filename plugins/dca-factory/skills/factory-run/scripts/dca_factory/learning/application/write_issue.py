@@ -6,11 +6,11 @@ from __future__ import annotations
 import dataclasses
 import typing
 
-from ....building_blocks import UseCase
-from ...domain.model.decision_record import RecordId
-from ...domain.model.maintainer_issue import IssueTarget, MaintainerIssue
-from ..shared.lesson_issues import LessonIssues
-from ..shared.outcomes import NeedsSkill
+from ...building_blocks import UseCase
+from ..domain.model.words import RecordId
+from ..domain.model.maintainer_issue import IssueTarget, MaintainerIssue
+from .shared.lesson_issues import LessonIssues
+from .shared.lesson_issues import NeedsSkill
 
 
 @dataclasses.dataclass(frozen=True)

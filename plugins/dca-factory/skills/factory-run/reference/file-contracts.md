@@ -338,9 +338,14 @@ A repeat round writes new files; the old ones are not kept. `--contract review` 
 ## Findings — `<story>/findings.md`, in the story's folder
 
 The judge's confirmed defects that did not block the story — its minors — written by the document gate when it
-delivers the story, from `judge.md`'s `## Confirmed defects` table (`| Perspective | File:line | Severity | In plain
-words | Defect | Fix |`): one row per finding, `| # | Perspective | File:line | Severity | Origin | Outcome | In plain words |
-Defect | Fix | Status |`, `Status` `open`; `Origin` (contract 37) is the pipeline's — `introduced` where the story's diff
+delivers the story, from `judge.md`'s `## Confirmed defects` table (`| Perspective | File:line | Severity | Target |
+Type | Qualifier | In plain words | Defect | Fix |`): one row per finding, `| # | Perspective | File:line | Severity |
+Origin | Outcome | In plain words | Defect | Fix | Status | Target | Type | Qualifier |`, `Status` `open`; the class
+(contract 39) is the judge's, from three closed lists — target `story`, `plan`, `code`, `test`, `docs`, `glossary`,
+`profile`; type `assignment`, `checking`, `algorithm`, `interface`, `relationship`, `timing`, `documentation`,
+`duplication`, `naming`, `dead-code`, `comment`, `domain-concept`, `domain-boundary`, `domain-invariant`,
+`domain-term`; qualifier `missing`, `incorrect`, `extraneous` (`finding_class.py`, `GATE-JUDGE-CLASS`, experimental);
+a file from before it reads with the three cells empty and gains them when the next row is added; `Origin` (contract 37) is the pipeline's — `introduced` where the story's diff
 adds or changes the row's line, `pre-existing` where it does not (such a row, a blocker or a major included, cost no
 round), empty where the row names no line; `Outcome` is the pipeline's too, `Status` stays the person's; a row already there (same file:line and defect) is not written twice. `In plain
 words` is the one sentence a person reads first — the status JSON's `plain`, which the inbox leads with; a judge
@@ -475,16 +480,23 @@ the story like any open record and is stamped applied by the request's next run.
 ### A lesson — `product/decisions/lesson-<kind>-<key>.md`
 
 What repeats across the stories, counted and never guessed: a stage's question of the same `tag:` in the same context
-in three stories, a judge's finding under the same perspective and rule id (else domain code) in three, the same coded
-correction at acceptance, the same answered assumption or the same flagged term in two (`lesson.py`, `THRESHOLDS`).
+in three stories; a judge's finding in three, on a hierarchy of keys — `<perspective>/<rule id>` within
+`<perspective>/<target>/<type>/<qualifier>` within `<target>/<type>` (a row without a class: its rule id, else domain
+code) —, drawn at the finest level that repeats; a gate's refusal of the same check in three (the stories' journals);
+the same coded correction at acceptance, the same answered assumption (its trailing citation `(…)` aside) or the same
+flagged term in two (`lesson.py`, `THRESHOLDS`). A finding's recommended place follows its target (`TARGET_PLACES`); its
+evidence names each row's outcome and one contrast — the last story with a finding of the same target and none under
+this key.
 `factory.sh lessons` shows the candidates; the backlog run writes each one nobody was asked yet when nothing more can
 run or the schedule changes while it waits (`factory.sh lessons --write` by hand). Front matter `kind: lesson`,
-`lesson:` (question, finding, correction, assumption, term), `key:`, `stories:` (counted when asked) and `asked:`;
+`lesson:` (question, finding, correction, assumption, term, refusal), `key:`, `stories:` (counted when asked) and `asked:`;
 `## Evidence` names the stories and the records, finding rows or lines; `## Options` the places, the recommended one
 first, each with the skill that writes it, then `not-now` and `never`. It is answered like any record and holds no
 story back. `never` stops the same candidate for good; `not now` lets it back under the next free id
-(`<id>-2`) once its evidence holds more stories than `stories:`; a place is written by the skill that owns it, never
-by the factory.
+(`<id>-2`) once its evidence holds more stories than `stories:`; a place lets it back once its signal came back in
+`lessons.backAfter` stories more (profile, default 3) — the record says where it was placed and that it came back; a
+place is written by the skill that owns it, never by the factory. At most `lessons.open` lesson records (profile,
+default 5) stand open at a time, the most stories first; `factory.sh lessons` names how many `wait`.
 
 ### An issue text for the maintainers — `.dca-factory/issues/<target>-<signal>-<digest>.md`
 

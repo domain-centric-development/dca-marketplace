@@ -6,6 +6,7 @@ import typing
 
 from ....building_blocks import OutputPort
 from ...domain.model.lesson import Decided, Signal
+from ...domain.model.words import Count
 
 
 class LessonSignals(OutputPort, typing.Protocol):
@@ -20,4 +21,12 @@ class LessonSignals(OutputPort, typing.Protocol):
     def decided(self) -> typing.Sequence[Decided]:
         """Every lesson record: its kind and key, the place its answer named (None while it waits), and the stories
         its evidence held when it was asked."""
+        ...
+
+    def back_after(self) -> Count:
+        """How many stories a placed lesson's signal may come back in before it is asked again."""
+        ...
+
+    def open_at_once(self) -> Count:
+        """How many lesson records stand open at a time."""
         ...

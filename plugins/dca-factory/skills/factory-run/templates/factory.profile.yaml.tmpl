@@ -191,6 +191,8 @@
 #              the status. Informational, never a gate. `./gradlew pitest -PtargetClasses={classes}` (the build
 #              hands the property to `pitest { targetClasses }`), `dotnet stryker --mutate {files}`. Without it
 #              the measure is skipped and named
+# lessons.backAfter  stories a placed lesson's signal may come back in before it is asked again (default 3)
+# lessons.open lesson records standing open at a time, the most stories first (default 5)
 # rules.deleteAfter  stories delivered after a factory rule was disabled (`state: disabled`) before
 #              `factory.sh rules --check` names it ready to delete (default 20)
 # ablate       a bench's switch, never a project's: the told-rule groups every stage brief leaves out, comma-
@@ -205,7 +207,7 @@
 # Which gate file contract this profile is written for. The gate refuses a run when the number is
 # higher than the gate it is asked to run against — the project would be relying on keys that copy
 # of the script does not know, and a key ignored in silence is a check that has quietly gone.
-contract: 38
+contract: 39
 
 release: required
 compile: {{COMPILE_COMMAND}}

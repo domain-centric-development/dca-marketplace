@@ -5,9 +5,8 @@ from __future__ import annotations
 import typing
 
 from ....building_blocks import OutputPort
-from ...domain.model.decision_record import RecordId
 from ...domain.model.lesson import Candidate, LessonKind, Signals
-from ...domain.model.moment import Moment
+from ...domain.model.words import Count, Moment, RecordId
 from .lesson_signals import LessonSignals
 
 
@@ -26,7 +25,8 @@ class LessonRecords(OutputPort, typing.Protocol):
 
 class LessonProposals:
     """Every candidate the signals make that nobody was asked yet becomes an open lesson record, beside the stories;
-    no story waits for it. A candidate asked again after `not now` takes the next free id (`<id>-2`, …)."""
+    no story waits for it — at most `open_at_once` records open at a time, the most stories first. A candidate asked
+    again (after `not now`, or placed and back) takes the next free id (`<id>-2`, …)."""
 
     def __init__(self, signals: LessonSignals, records: LessonRecords) -> None:
         self._signals = signals
@@ -35,7 +35,11 @@ class LessonProposals:
     def propose(self, at: Moment) -> typing.List[typing.Tuple[str, LessonKind, str]]:
         """[(record id, kind, where)] of each record written now."""
         written = []
-        for candidate in Signals(tuple(self._signals.signals())).candidates(self._signals.decided()):
+        signals = Signals(tuple(self._signals.signals()))
+        decided = self._signals.decided()
+        waiting = Count(sum(1 for d in decided if d.place is None))
+        drawn = signals.candidates(decided, self._signals.back_after())
+        for candidate in signals.bounded(drawn, waiting, self._signals.open_at_once()):
             record, n = RecordId(candidate.id.value), 1
             while self._records.taken(record):
                 n += 1

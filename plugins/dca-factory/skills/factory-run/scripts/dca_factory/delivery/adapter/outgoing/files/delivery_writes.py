@@ -57,7 +57,7 @@ def close_findings(result: typing.Any, front: Front) -> None:
         for index, line in enumerate(lines):
             cells = findings_cells(line)
             if cells and cells[0] == row[0]:
-                cells[-1] = DONE_ROW.value
+                cells[9 if len(cells) == 13 else -1] = DONE_ROW.value
                 lines[index] = "| " + " | ".join(cells) + " |"
         with open(path, "w", encoding="utf-8") as handle:
             handle.write("\n".join(lines) + "\n")

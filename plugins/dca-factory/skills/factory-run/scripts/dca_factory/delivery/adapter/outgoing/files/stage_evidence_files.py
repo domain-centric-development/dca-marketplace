@@ -31,8 +31,8 @@ from ....domain.model.backlog_facts import (
     ProposalFacts, RowState)
 from ....domain.model.brief_facts import BriefFacts, OwnedFacts, OwnedPart, RoundsRecord
 from ....domain.model.delivery_facts import (
-    DocumentFacts, Integration, MainTestLines, MainTests, PassGap, PipelineFacts, ReviewFacts, StageChanges,
-    StoryCommit, StoryPass, Unobserved)
+    ClassedFinding, DocumentFacts, Integration, MainTestLines, MainTests, PassGap, PipelineFacts, ReviewFacts,
+    StageChanges, StoryCommit, StoryPass, Unobserved)
 from ....domain.model.design_facts import (
     ChangedDomainType, ContextMapFacts, ElementName, ElementRules, InvariantFacts, InvariantRow, PortName, Rule)
 from ....domain.model.plan_facts import (
@@ -56,7 +56,7 @@ from .decision_record_files import (
     record_of,
     decisions_store, needs_human_ids, read_decisions, record_path)
 from .epic_files import epic_dependency_problem
-from .findings_files import confirmed_defects, findings_path, findings_rows, project_findings_path
+from .findings_files import confirmed_classes, confirmed_defects, findings_path, findings_rows, project_findings_path
 from .owned_files import owned_changes, regard_gate_line
 import glob
 from .delivery_files import (
@@ -886,6 +886,14 @@ class StageEvidenceFiles(StageEvidence):
         unknown = sorted({n or "—" for n in named if n not in known})
         return ReviewFacts(tuple(Detail(r) for r in read), tuple(Detail(m) for m in missing),
                            tuple(Detail(m) for m in malformed), tuple(Detail(u) for u in unknown))
+
+    def finding_classes(self, story: StoryId) -> typing.Tuple[ClassedFinding, ...]:
+        judge = os.path.join(self._runs, story.value, "judge.md")
+        if not os.path.isfile(judge):
+            return ()
+        text = read_text(judge)
+        return tuple(ClassedFinding(Detail(row[1]), Detail(target), Detail(kind), Detail(qualifier))
+                     for row, (target, kind, qualifier) in zip(confirmed_defects(text), confirmed_classes(text)))
 
     def pipeline(self, story: StoryId) -> PipelineFacts:
         records = sorted(glob.glob(os.path.join(evidence_dir(self._runs, story.value), "changed-*.txt")))

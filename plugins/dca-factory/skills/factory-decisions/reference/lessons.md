@@ -2,15 +2,18 @@
 
 A lesson is a decision record of its own kind (`kind: lesson`), a record of the project's own at
 `product/decisions/lesson-<kind>-<key>.md`. The factory wrote it because something repeated across the stories —
-counted, never guessed: the same kind of question (`tag:`) in the same context, the same judge finding under one
-perspective and rule, the same coded correction at acceptance, the same answered assumption, the same flagged term.
+counted, never guessed: the same kind of question (`tag:`) in the same context, the same judge finding — by its rule,
+else its class (target · type · qualifier), at the finest level that repeats —, the same gate refusal, the same coded
+correction at acceptance, the same answered assumption, the same flagged term. A record that says the lesson was
+placed before and came back: the place did not hold it — say so, and weigh another place.
 `factory.sh lessons` lists the candidates with their counts; `factory-run/reference/file-contracts.md`, *A lesson*,
 holds the record's shape.
 
 ## Explain it
 
 Read the record's `## Evidence` and open what it names — the stories' decision records, the finding rows in
-`<story>/findings.md`, the `## Assumptions` lines. Say what repeated, in how many stories, and what each place would
+`<story>/findings.md` (with the row's outcome), the journal's refusals, the `## Assumptions` lines, and the
+`contrast:` story — the same target done without this finding, what right looks like. Say what repeated, in how many stories, and what each place would
 mean for the next story. The recommendation is the factory's count, marked as such; it is never the answer.
 
 ## Take the answer

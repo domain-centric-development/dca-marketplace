@@ -12,8 +12,13 @@ import re
 import typing
 
 from ....building_blocks import Id, Value
-from .story import StoryId
-from .story_words import Count, Detail
+from .words import Count, Detail, StoryId
+
+
+class Target(Value):
+    """What had to change to correct a finding — a target of delivery's finding class, as its api publishes it."""
+
+    value: str
 
 
 class LessonKind(enum.Enum):
@@ -24,6 +29,7 @@ class LessonKind(enum.Enum):
     CORRECTION = "correction"
     ASSUMPTION = "assumption"
     TERM = "term"
+    REFUSAL = "refusal"
 
 
 class Owner(enum.Enum):
@@ -119,7 +125,31 @@ PLACES: typing.Mapping[LessonKind, typing.Tuple[LessonPlace, ...]] = {
     LessonKind.CORRECTION: (LessonPlace.DESCRIPTION, LessonPlace.CRITERION, LessonPlace.FACTORY),
     LessonKind.ASSUMPTION: (LessonPlace.DESCRIPTION, LessonPlace.INSTRUCTIONS),
     LessonKind.TERM: (LessonPlace.GLOSSARY, LessonPlace.DESCRIPTION, LessonPlace.KNOWLEDGE_CATALOG),
+    LessonKind.REFUSAL: (LessonPlace.FACTORY, LessonPlace.PROFILE_CHECK, LessonPlace.INSTRUCTIONS),
 }
+
+#: Where a finding's correction goes first, by what had to change (its class's target, WP-221): the recommendation,
+#: never the answer.
+TARGET_PLACES: typing.Mapping[Target, LessonPlace] = {
+    Target("story"): LessonPlace.CRITERION,
+    Target("plan"): LessonPlace.DESCRIPTION,
+    Target("code"): LessonPlace.PROJECT_RULE,
+    Target("test"): LessonPlace.INSTRUCTIONS,
+    Target("docs"): LessonPlace.DESCRIPTION,
+    Target("glossary"): LessonPlace.GLOSSARY,
+    Target("profile"): LessonPlace.PROFILE_CHECK,
+}
+
+
+def places_of(kind: LessonKind, key: SignalKey) -> typing.Tuple[LessonPlace, ...]:
+    """The places a candidate offers, the recommended one first: a finding counted by its class recommends the place
+    its target names; `not-now` and `never` close every list."""
+    places = PLACES[kind]
+    target = key.target() if kind is LessonKind.FINDING else None
+    if target is not None:
+        first = TARGET_PLACES[target]
+        places = (first,) + tuple(p for p in places if p is not first)
+    return places + (LessonPlace.NOT_NOW, LessonPlace.NEVER)
 
 #: How many stories a signal repeats in before it is a candidate — counts, written here and nowhere else. A question
 #: or a finding is a pattern from its third story on; a correction, an answer to the same assumption and a flagged
@@ -130,7 +160,13 @@ THRESHOLDS: typing.Mapping[LessonKind, Count] = {
     LessonKind.CORRECTION: Count(2),
     LessonKind.ASSUMPTION: Count(2),
     LessonKind.TERM: Count(2),
+    LessonKind.REFUSAL: Count(3),
 }
+
+#: How many stories a placed lesson's signal may come back in before it is asked again, and how many lesson records
+#: stand open at a time — the profile's `lessons.backAfter` and `lessons.open` where it names them.
+BACK_AFTER = Count(3)
+OPEN_AT_ONCE = Count(5)
 
 
 class SignalKey(Value):
@@ -143,6 +179,13 @@ class SignalKey(Value):
     def __post_init__(self) -> None:
         object.__setattr__(self, "value", " ".join(self.value.lower().split()))
 
+    def target(self) -> typing.Optional[Target]:
+        """The target a finding's class key names — `<perspective>/<target>/<type>/<qualifier>` or `<target>/<type>`
+        —, None for a key that names none."""
+        parts = self.value.split("/")
+        word = parts[1] if len(parts) == 4 else (parts[0] if len(parts) == 2 else "")
+        return Target(word) if Target(word) in TARGET_PLACES else None
+
 
 class Evidence(Value):
     """Where a signal was seen: the story, and the record, finding row or line that carries it."""
@@ -152,11 +195,13 @@ class Evidence(Value):
 
 
 class Signal(Value):
-    """One counted occurrence of a kind of deviation."""
+    """One counted occurrence of a kind of deviation; a finding counted on several levels names the coarser key its
+    key belongs to (`within`), so a candidate is drawn at the finest level that repeats."""
 
     kind: LessonKind
     key: SignalKey
     evidence: Evidence
+    within: typing.Optional[SignalKey] = None
 
 
 class LessonId(Id):
@@ -178,6 +223,10 @@ class Candidate(Value):
     key: SignalKey
     evidence: typing.Tuple[Evidence, ...]
     places: typing.Tuple[LessonPlace, ...]
+    #: the lesson it was placed as before — drawn again because its signal came back after the answer
+    placed: typing.Optional[Decided] = None
+    #: a story of the same target without this finding — what right looks like, chosen by order, never by likeness
+    contrast: typing.Optional[StoryId] = None
 
     @property
     def id(self) -> LessonId:
@@ -201,9 +250,19 @@ class Decided(Value):
     place: typing.Optional[LessonPlace]
     stories: Count
 
-    def lets_back(self, stories: Count) -> bool:
-        """Only a `not now` lets its candidate come back, and only on more evidence than it was answered on."""
-        return self.place is LessonPlace.NOT_NOW and stories.value > self.stories.value
+    def lets_back(self, stories: Count, back_after: Count = BACK_AFTER) -> bool:
+        """A `not now` lets its candidate come back on more evidence than it was answered on; a place, once its signal
+        came back in <back_after> stories more — the place did not hold it; `never` and an open record never."""
+        if self.place is LessonPlace.NOT_NOW:
+            return stories.value > self.stories.value
+        if self.place is None or self.place is LessonPlace.NEVER:
+            return False
+        return stories.value >= self.stories.value + back_after.value
+
+    @property
+    def placed(self) -> bool:
+        """Answered with a place — neither waiting, nor `not now`, nor `never`."""
+        return self.place not in (None, LessonPlace.NOT_NOW, LessonPlace.NEVER)
 
 
 class Signals(Value):
@@ -211,25 +270,60 @@ class Signals(Value):
 
     items: typing.Tuple[Signal, ...]
 
-    def candidates(self, decided: typing.Iterable[Decided]) -> typing.Tuple[Candidate, ...]:
+    def candidates(self, decided: typing.Iterable[Decided],
+                   back_after: Count = BACK_AFTER) -> typing.Tuple[Candidate, ...]:
         """A signal that repeats in as many stories as its kind's threshold is one candidate, with the evidence it was
-        drawn from — one item per story, the first seen. Below the threshold nothing is drawn. A candidate already
-        asked is not drawn again while its record waits or after a person placed it; `never` stops it for good; `not
-        now` lets it back once its evidence holds more stories than when it was asked."""
+        drawn from — one item per story, the first seen. Below the threshold nothing is drawn. A finding counted on
+        several levels is drawn at the finest that repeats: a coarser key only where no key within it was drawn. A
+        candidate already asked is not drawn again while its record waits; `never` stops it for good; `not now` lets
+        it back once its evidence holds more stories than when it was asked; a placed one once its signal came back
+        in <back_after> stories more."""
         grouped: typing.Dict[typing.Tuple[LessonKind, SignalKey], typing.List[Evidence]] = {}
+        within: typing.Dict[typing.Tuple[LessonKind, SignalKey], SignalKey] = {}
         for signal in self.items:
             found = grouped.setdefault((signal.kind, signal.key), [])
             if all(e.story != signal.evidence.story for e in found):
                 found.append(signal.evidence)
+            if signal.within is not None:
+                within[(signal.kind, signal.key)] = signal.within
+        repeating = {k for k, evidence in grouped.items() if len(evidence) >= THRESHOLDS[k[0]].value}
+        covered: typing.Set[typing.Tuple[LessonKind, SignalKey]] = set()
+        for kind, key in repeating:
+            parent = within.get((kind, key))
+            while parent is not None:
+                covered.add((kind, parent))
+                parent = within.get((kind, parent))
         last = {(d.kind, d.key): d for d in decided}
         drawn = []
         for (kind, key), evidence in grouped.items():
-            before = last.get((kind, key))
-            if len(evidence) < THRESHOLDS[kind].value or (before is not None
-                                                          and not before.lets_back(Count(len(evidence)))):
+            if (kind, key) not in repeating or (kind, key) in covered:
                 continue
-            drawn.append(Candidate(kind, key, tuple(evidence), PLACES[kind] + (LessonPlace.NOT_NOW, LessonPlace.NEVER)))
+            before = last.get((kind, key))
+            if before is not None and not before.lets_back(Count(len(evidence)), back_after):
+                continue
+            drawn.append(Candidate(kind, key, tuple(evidence), places_of(kind, key),
+                                   before if before is not None and before.placed else None,
+                                   self.contrast(kind, key)))
         return tuple(sorted(drawn, key=lambda c: (c.kind.value, c.key.value)))
+
+    def contrast(self, kind: LessonKind, key: SignalKey) -> typing.Optional[StoryId]:
+        """For a finding counted by its class: the last story that had a finding of the same target and none under
+        this key — what right looks like for that target. None for any other key."""
+        target = key.target() if kind is LessonKind.FINDING else None
+        if target is None:
+            return None
+        with_key = {s.evidence.story for s in self.items if s.kind is kind and s.key == key}
+        same_target = [s.evidence.story for s in self.items
+                       if s.kind is kind and s.key.target() == target and s.evidence.story not in with_key]
+        return same_target[-1] if same_target else None
+
+    def bounded(self, candidates: typing.Sequence[Candidate], open_now: Count,
+                at_once: Count = OPEN_AT_ONCE) -> typing.Tuple[Candidate, ...]:
+        """The candidates written now when <open_now> lesson records wait already: at most <at_once> open at a time,
+        the most stories first; the rest wait, counted, and come in as one is answered."""
+        room = max(0, at_once.value - open_now.value)
+        ranked = sorted(candidates, key=lambda c: (-c.stories.value, c.kind.value, c.key.value))
+        return tuple(ranked[:room])
 
     def count(self, kind: LessonKind) -> Count:
         return Count(sum(1 for s in self.items if s.kind is kind))

@@ -6,10 +6,9 @@ import dataclasses
 import typing
 
 from ....building_blocks import OutputPort
-from ...domain.model.decision_record import RecordId
 from ...domain.model.lesson import LessonKind, LessonPlace, SignalKey
 from ...domain.model.maintainer_issue import MaintainerIssue
-from ...domain.model.story_words import Count, Detail
+from ...domain.model.words import Count, Detail, RecordId
 
 
 @dataclasses.dataclass(frozen=True)
@@ -20,6 +19,13 @@ class AnsweredLesson:
     key: SignalKey
     stories: Count
     place: typing.Optional[LessonPlace]
+
+
+@dataclasses.dataclass(frozen=True)
+class NeedsSkill:
+    """Nothing written: why, in a sentence a person reads."""
+
+    why: str
 
 
 class LessonIssues(OutputPort, typing.Protocol):

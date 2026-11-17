@@ -94,6 +94,15 @@ class ReviewFacts(Value):
     unknown: typing.Tuple[Detail, ...] = ()
 
 
+class ClassedFinding(Value):
+    """A confirmed finding's place and its three class cells as the judge wrote them — any word, the check reads it."""
+
+    where: Detail
+    target: Detail
+    type: Detail
+    qualifier: Detail
+
+
 class PipelineFacts(Value):
     """The installed pipeline's folder, and the files of it a stage changed — None where no stage left a record."""
 

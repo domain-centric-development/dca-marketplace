@@ -4,9 +4,9 @@ import unittest
 
 import support  # noqa: F401 — puts the package on the path
 
-from dca_factory.delivery.domain.model.lesson import LessonKind, LessonPlace, SignalKey
-from dca_factory.delivery.domain.model.maintainer_issue import IssueTarget, MaintainerIssue
-from dca_factory.delivery.domain.model.story_words import Count, Detail
+from dca_factory.learning.domain.model.lesson import LessonKind, LessonPlace, SignalKey
+from dca_factory.learning.domain.model.maintainer_issue import IssueTarget, MaintainerIssue
+from dca_factory.learning.domain.model.words import Count, Detail
 
 
 def issue(kind, key, place=LessonPlace.FACTORY):

@@ -605,3 +605,22 @@ factory's own. The journal is what reads them today: a person, and the views ove
 the story's record.
 
 **Type:** Concept
+
+### Finding class (FindingClass) · Target (FindingTarget) · Type (FindingType) · Qualifier (FindingQualifier)
+
+**Definition:** What a confirmed finding is, in the shape of Orthogonal Defect Classification's closer: what had to
+change (target — story, plan, code, test, docs, glossary, profile), the kind of correction (type — assignment,
+checking, algorithm, interface, relationship, timing, documentation, duplication, naming, dead-code, comment, and the
+method's domain codes) and whether something was missing, wrong or too much (qualifier). Three closed lists the judge
+picks from; `GATE-JUDGE-CLASS` checks them (experimental), the lessons count them. A cell outside a list is no class.
+
+**Type:** Value Object
+
+### Lesson record
+
+**Definition:** A decision record of the project's own with `kind: lesson`, filed by learning through delivery's api
+(`ask_lesson`) and answered in the inbox like any record. Delivery keeps its answer and raises `LessonAnswered`; what a
+lesson means — its kind, key, places — is learning's (`docs/glossary/learning.md`). `not-now` and `never` settle without
+a skill (`SETTLES_ALONE`).
+
+**Type:** Concept

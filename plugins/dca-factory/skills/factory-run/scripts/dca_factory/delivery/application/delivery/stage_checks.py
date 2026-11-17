@@ -329,6 +329,7 @@ def _plan(run: Run) -> None:
     "GATE-GLOSSARY",
     "GATE-REVIEWS",
     "GATE-JUDGE-PERSPECTIVE",
+    "GATE-JUDGE-CLASS",
 ))
 def _document(run: Run) -> None:
     passed = DeliveryChecks.story_pass(run.story, run.evidence, workflow().hand_over(workflow().role(Role.JUDGES)))
@@ -339,6 +340,7 @@ def _document(run: Run) -> None:
     run.result.take(DeliveryChecks.documented(run.story, run.evidence))
     run.result.take(DeliveryChecks.proposals_landed(run.story, run.evidence))
     run.result.take(DeliveryChecks.reviews(run.story, run.evidence))
+    run.result.take(DeliveryChecks.finding_classes(run.story, run.contract, run.evidence))
 
 
 @check("integrate", stages=("integrate",), rule=(

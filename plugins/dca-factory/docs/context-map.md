@@ -1,6 +1,6 @@
 # Context map — the factory
 
-The factory's package (`skills/factory-run/scripts/dca_factory/`) is built the way it teaches: four bounded contexts,
+The factory's package (`skills/factory-run/scripts/dca_factory/`) is built the way it teaches: five bounded contexts,
 each in DCA layers, a shared kernel, the building blocks outside them and a composition root; the page that shows every
 context is delivery's incoming adapter (`delivery/adapter/incoming/web/`), given its use cases by the root.
 
@@ -11,6 +11,8 @@ flowchart LR
     spec -. "query: is journey X there and proven?" .-> delivery
     spec -. "future: delivered, unguarded → a new discovery" .-> discovery
     delivery -- "published: the registered rules and the workflow's stages" --> rulebook["rulebook<br/>(supporting)"]
+    delivery -- "published: findings with their class, records, refusals, assumptions" --> learning["learning<br/>(supporting)"]
+    learning -. "files a lesson in the decision inbox" .-> delivery
 ```
 
 | Context | Subdomain | Language | Glossary |
@@ -19,6 +21,7 @@ flowchart LR
 | **delivery** | core | epic, story, decision record, stage, brief, gate, journal, usage — features: backlog, decisions, delivery, description, cost | [glossary/delivery.md](glossary/delivery.md) |
 | **spec** | core | criterion, rule, scenario, feature, test line, journey, delta | [glossary/spec.md](glossary/spec.md) |
 | **rulebook** | supporting | rule, rule id, enforcement, part, outcome, flow, marker, citation | [glossary/rulebook.md](glossary/rulebook.md) |
+| **learning** | supporting | signal, signal key, threshold, candidate, lesson, place, owner, decided, back after, contrast | [glossary/learning.md](glossary/learning.md) |
 
 ## Relationships
 
@@ -38,6 +41,16 @@ whether a journey is there and proven; "delivered, unguarded" is delivery's stat
 `@decides(…)` — and publishes them with the workflow's stages as plain data; the rulebook takes them as delivery says them
 and adds the rules the skills mark in their text. Delivery knows no rulebook. A *rule* there is the factory's; a *rule*
 in spec is a `### Rule:` that groups criteria — two words, two contexts.
+
+**delivery → learning — Open Host Service and Published Language, learning Conformist, through delivery's
+`api/learning.py`.** Delivery publishes, as plain data, each story's findings with their class (target, type,
+qualifier — delivery's: the judge writes it, the gate checks it), its answered assumptions without the factory's own
+process marks, its gate refusals from the journal, the decision records' tags and the acceptances' correction codes,
+and the lesson records with their answers. Learning counts what repeats in them and remembers what was decided. The
+one write runs the same way: learning hands delivery a lesson record's text (`ask_lesson`), delivery files it in its
+decision inbox and keeps the answer and `LessonAnswered`; that a lesson's `not-now` or `never` settles without a skill
+is the one word delivery reads of it. Delivery knows no lesson: the backlog run calls a function the composition root
+hands it when nothing more can run, and the root hands learning's.
 
 **In the code**, each context declares the contexts whose `api` it uses as `__dca__ = BoundedContext(upstreams=…)` in
 its package, the shared kernel `__dca__ = SharedKernel()`; the rule suite of DCA-Python holds the imports to them.

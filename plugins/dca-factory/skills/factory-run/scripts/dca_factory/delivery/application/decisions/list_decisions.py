@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import re
 import typing
 
 from ....building_blocks import UseCase
@@ -12,8 +13,7 @@ from ..shared.requests import PENDING, RequestStore, place_of
 from ..shared.story_repository import StoryRepository
 from ..shared.actions import Action, make_action, NamesStory, offered
 from ..status.texts import parse_time
-from ...domain.model.decision_record import DecisionState
-from ...domain.model.lesson import LessonPlace, Owner
+from ...domain.model.decision_record import DecisionState, SETTLES_ALONE
 from ...domain.model.story_words import Detail
 
 Model = typing.Dict[str, typing.Any]
@@ -84,22 +84,25 @@ class ListDecisionsUseCase(ListDecisionsInputPort):
                     store=self._inbox.where(), how=how)
 
 
-#: Who writes a lesson's place, as the inbox names them.
-OWNER_WORDS = {Owner.DESCRIBE: "the description skill", Owner.GLOSSARY: "the glossary skill",
-               Owner.METHOD: "the method's skills", Owner.SETUP: "/factory-setup", Owner.BACKLOG: "/factory-backlog",
-               Owner.MAINTAINERS: "an issue text a person sends"}
+#: Whom a lesson's place waits for, as its option says it: `(written by <skill>)`, or an issue text a person sends.
+WRITTEN_BY = re.compile(r"\(written by ([^)]*)\)")
 
 
 def lesson_written(options: typing.Sequence[Facts], answer: typing.Mapping[str, str]) -> str:
-    """What an answered lesson left: the file its owning skill wrote (`written:`), or whom it still waits for — the
-    record links what was written; the factory writes none of it."""
+    """What an answered lesson left: the file its owning skill wrote (`written:`), or whom it still waits for, as the
+    chosen option names it — the record links what was written; the factory writes none of it."""
     given = str(answer.get("answer", "")).strip().lower()
     line = next((o["text"] for o in options if o["key"].lower() == given), given)
-    place = LessonPlace.named(Detail(line))
-    if place is None or place.owner is Owner.NOBODY:
+    words = line.strip().strip("`*").split()
+    place = words[0].strip("`*").lower() if words else ""
+    if not place or place in SETTLES_ALONE:
         return ""
     written = str(answer.get("written", "")).strip()
-    return f" — written: {written}" if written else f" — {place.value}, not written yet: waits for {OWNER_WORDS[place.owner]}"
+    if written:
+        return f" — written: {written}"
+    by = WRITTEN_BY.search(line)
+    who = by.group(1).strip() if by else "an issue text a person sends" if "sent by a person" in line else "its skill"
+    return f" — {place}, not written yet: waits for {who}"
 
 
 def record_actions(record: Facts, names_story: NamesStory) -> typing.List[Action]:
