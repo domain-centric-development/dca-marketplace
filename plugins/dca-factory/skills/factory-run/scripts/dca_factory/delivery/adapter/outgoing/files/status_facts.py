@@ -32,6 +32,7 @@ from ..process.factory_process import ended, worker
 from .epic_files import epic_files
 from .story_files import names_story
 from ....domain.model.correction import REASON_CODES
+from ....domain.model.story import Assumption
 from .....sharedkernel.adapter.outgoing.markdown.sections import section_of
 from .signals import latest_signal
 from .journal_files import journal_events
@@ -471,7 +472,8 @@ def story_signals(runs: str, story_id: str, records: typing.Sequence[typing.Any]
     tested = any(e["kind"] == "gate" and e["name"] in red for e in events)
     return dict(tested=tested, asked=len(questions), answered=sum(1 for _f, st in questions if DecisionState(st).answered),
                 assumptions_open=sum(1 for l in lines if l.startswith("open:")),
-                assumptions_answered=sum(1 for l in lines if l.startswith("answered:")),
+                assumptions_answered=sum(1 for l in lines if l.startswith("answered:")
+                                         and not Assumption(l).marks_process),
                 plan_open=int(plan[0].get("open", 0)) if plan else None,
                 rules=rules if rules_group else None,
                 findings=findings if judge else None, domain=domain if judge else None,

@@ -19,7 +19,7 @@ from ....application.shared.lesson_signals import LessonSignals
 from ....domain.model.decision_record import DecisionState
 from ....domain.model.lesson import Decided, Evidence, LessonKind, LessonPlace, Signal, SignalKey
 from ....domain.model.question_tag import QuestionTag
-from ....domain.model.story import StoryId
+from ....domain.model.story import Assumption, StoryId
 from ....domain.model.story_words import Count, Detail
 
 #: A rule id as a finding names it: two or more upper-case words and a number — `DCA-HEX-014`, `STAGE-PLAN-9B`; a
@@ -54,6 +54,8 @@ def assumption_signals(story: StoryId, body: str) -> typing.List[Signal]:
     found = []
     for line in section_of(body, "assumptions") or []:
         text = line.strip().lstrip("-*").strip()
+        if text and Assumption(line.strip()).marks_process:
+            continue
         if text.lower().startswith("answered:"):
             said = text[len("answered:"):].strip().rstrip(".")
             if said:

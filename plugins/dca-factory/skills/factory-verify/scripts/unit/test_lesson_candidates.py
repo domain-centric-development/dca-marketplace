@@ -107,6 +107,18 @@ class LessonSignalReadingTest(unittest.TestCase):
         self.assertEqual(10, len(rows[0]))
         self.assertEqual(["ddd/dca-hex-014"], [s.key.value for s in finding_signals(StoryId("s-1"), rows[0])])
 
+    def test_a_release_and_the_plans_adoption_are_no_answered_assumption(self):
+        from dca_factory.delivery.adapter.outgoing.files.lesson_signal_files import assumption_signals
+        from dca_factory.delivery.domain.model.story import Assumption
+        body = ("## Assumptions\n"
+                "- answered: leeren (clear) — every task leaves the list (product/domain.md).\n"
+                "- answered: the story is released for building (request R-9, Ann, 2026-11-17T14:46:59Z).\n"
+                "- answered: every scenario holds on today's code, and no delivered story carries it — the plan "
+                "adopted the story: S-1 by ATest#a (plan-adopt)\n")
+        said = [s.key.value for s in assumption_signals(StoryId("s-1"), body)]
+        self.assertEqual(["leeren (clear) — every task leaves the list (product/domain.md)"], said)
+        self.assertFalse(Assumption("- answered: leeren (clear)").marks_process)
+
 
 class LessonRecordTest(unittest.TestCase):
     """A lesson is a decision record of its own kind: the factory writes `not now` and `never` from a press; a place

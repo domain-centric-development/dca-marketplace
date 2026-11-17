@@ -85,9 +85,18 @@ class Assumption(Value):
         """An assumption settled: `- answered: <sentence> (<what it cites>)`."""
         return cls(f"- answered: {sentence.value} ({cites.value})")
 
+    @property
+    def marks_process(self) -> bool:
+        """A line the factory writes for a step of its own — a release, the plan's adoption —, not a question a person
+        settled: never counted as an answered assumption, never a lesson."""
+        said = self.value.strip().lstrip("-*").strip()
+        return said.startswith(f"answered: {RELEASED}") or said.rstrip(".").endswith(f"({PLAN_ADOPT.value})")
+
 
 #: What the plan's own adoption cites in the answered line it leaves: no decision record, the plan's `## Adopt`.
 PLAN_ADOPT = Detail("plan-adopt")
+#: How a release is kept in the story: `- answered: <this> (request <id>, <who>, <when>).`
+RELEASED = "the story is released for building"
 
 
 class DeliveredOn(Value):
@@ -413,7 +422,7 @@ class Story(AggregateRoot[StoryId]):
             raise NotADraft(self._id, self._status)
         self._status = StoryStatus.APPROVED
         self._marked = True
-        self._assumptions.append(Assumption(f"- answered: the story is released for building (request "
+        self._assumptions.append(Assumption(f"- answered: {RELEASED} (request "
                                             f"{request.value}, {by.value}, {at.value})."))
         self.register_event(StoryReleased(self._id, by, at))
 
