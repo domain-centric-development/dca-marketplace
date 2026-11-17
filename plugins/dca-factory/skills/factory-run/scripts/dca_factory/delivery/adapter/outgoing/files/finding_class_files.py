@@ -13,7 +13,7 @@ from .....sharedkernel.adapter.outgoing.profile.profile_files import findings_di
 from ....application.shared.finding_classes import ClassFill, UnclassedFindings
 from ....domain.model.finding_class import FindingClass
 from ....domain.model.story_words import Count, Detail
-from .findings_files import FINDINGS_FILE, findings_cells, findings_path, findings_rows, widen_findings
+from .findings_files import FINDINGS_FILE, findings_cells, findings_path, findings_rows, row_class, widen_findings
 from .story_layout import story_files
 
 #: What a classifier writes where no value of a list fits.
@@ -36,7 +36,7 @@ def findings_files(cwd: str) -> typing.List[str]:
 
 def classed(row: typing.Sequence[str]) -> bool:
     """A findings row (as `findings_rows` reads it) with a listed class."""
-    return len(row) > 12 and FindingClass.written(Detail(row[10]), Detail(row[11]), Detail(row[12])) is not None
+    return row_class(row) is not None
 
 
 def none_fits(word: str) -> bool:

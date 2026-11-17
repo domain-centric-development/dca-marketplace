@@ -14,13 +14,12 @@ from ...sharedkernel.adapter.outgoing.markdown.sections import section_of
 from ...sharedkernel.adapter.outgoing.profile.profile_files import place, shown
 from ..adapter.outgoing.files.decision_record_files import (
     decision_files, decision_state, is_lesson, project_decision_files, project_decisions_dir, record_of)
-from ..adapter.outgoing.files.findings_files import findings_path, findings_rows
+from ..adapter.outgoing.files.findings_files import findings_path, findings_rows, row_class
 from ..adapter.outgoing.files.journal_files import journal_events
 from ..adapter.outgoing.files.status_facts import correction_code
 from ..adapter.outgoing.files.story_layout import story_files, story_id_of
 from ..application.shared.front import is_acceptance
 from ..domain.model.decision_record import DecisionState
-from ..domain.model.finding_class import FindingClass
 from ..domain.model.question_tag import QuestionTag
 from ..domain.model.story import Assumption
 from ..domain.model.story_words import Detail
@@ -54,7 +53,7 @@ def stories(cwd: str, epics: typing.Optional[str] = None) -> typing.List[Publish
             answered.append(text[len("answered:"):].strip())
         rows = []
         for row in findings_rows(findings_path(path)):
-            kind = FindingClass.written(Detail(row[10]), Detail(row[11]), Detail(row[12]))
+            kind = row_class(row)
             rows.append(dict(n=row[0], perspective=row[1], defect=row[4], outcome=row[9],
                              target=kind.target.value if kind else "", type=kind.type.value if kind else "",
                              qualifier=kind.qualifier.value if kind else ""))

@@ -77,8 +77,8 @@ class ClassFillTest(unittest.TestCase):
             finally:
                 os.chdir(cwd)
 
-    def test_a_story_judged_before_the_classes_counts_its_backfilled_rows_on_the_quality_card(self):
-        from dca_factory.delivery.adapter.outgoing.files.status_facts import backfilled_classes
+    def test_the_quality_card_counts_a_storys_classes_from_its_findings_file_alone(self):
+        from dca_factory.delivery.adapter.outgoing.files.status_facts import story_classes
         with tempfile.TemporaryDirectory() as root:
             folder = os.path.join(root, "product", "epics", "e-1", "S-1")
             os.makedirs(folder)
@@ -89,10 +89,18 @@ class ClassFillTest(unittest.TestCase):
             cwd = os.getcwd()
             os.chdir(root)
             try:
-                self.assertEqual({"test/duplication": 1}, backfilled_classes("S-1"))   # the `—` row counts nowhere
-                self.assertEqual({}, backfilled_classes("S-9"))
+                self.assertEqual({"test/duplication": 1}, story_classes("S-1"))   # the `—` row counts nowhere
+                self.assertEqual({}, story_classes("S-9"))
             finally:
                 os.chdir(cwd)
+
+    def test_every_reader_takes_a_rows_class_one_way(self):
+        from dca_factory.delivery.adapter.outgoing.files.findings_files import row_class
+        row = ("1", "ddd", "a:1", "minor", "d", "f", "open", "", "introduced", "", "test", "Duplication", "`extraneous`")
+        self.assertEqual("test/duplication/extraneous",
+                         "/".join(v.value for v in (row_class(row).target, row_class(row).type, row_class(row).qualifier)))
+        self.assertIsNone(row_class(row[:10] + ("—", "—", "—")))
+        self.assertIsNone(row_class(row[:10]))
 
     def test_the_request_kind_runs_the_decisions_skill_and_names_nothing(self):
         kind = KIND["classify-findings"]

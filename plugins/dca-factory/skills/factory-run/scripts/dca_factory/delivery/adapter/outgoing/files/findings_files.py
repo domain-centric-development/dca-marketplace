@@ -13,6 +13,7 @@ from .story_layout import story_files, story_folder, story_id_of
 from .diff_lines import added_lines, origin_of
 from ....domain.model.backlog_facts import FindingKey, OPEN_ROW
 from ....domain.model.story_words import Place
+from ....domain.model.finding_class import FindingClass
 from ....domain.model.story_state import Detail
 
 
@@ -106,6 +107,22 @@ def findings_cells(line: str) -> typing.Optional[typing.List[str]]:
         return None
     cells = [c.strip() for c in line.strip().strip("|").split("|")]
     return cells if len(cells) in (7, 8, 10, 13) and cells[0].isdigit() else None
+
+
+def row_class(row: typing.Sequence[str]) -> typing.Optional[FindingClass]:
+    """A findings row's class — the one way every reader takes it (the status, learning, the classify request): the three
+    cells at its end, each of its list; None for a row without one, or `—` where no value fitted."""
+    return FindingClass.written(Detail(row[10]), Detail(row[11]), Detail(row[12])) if len(row) > 12 else None
+
+
+def classed_rows(path: str) -> typing.List[typing.Tuple[typing.Tuple[str, ...], FindingClass]]:
+    """The rows of a findings file that carry a class, with it."""
+    found = []
+    for row in findings_rows(path):
+        kind = row_class(row)
+        if kind is not None:
+            found.append((row, kind))
+    return found
 
 
 def findings_rows(path: str) -> typing.List[typing.Tuple[str, ...]]:

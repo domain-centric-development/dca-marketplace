@@ -12,9 +12,7 @@ import re
 import typing
 
 from ..pipeline.stage_rows import all_stages, stage_course, stage_windows, stage_order
-from .findings_files import finding_records, findings_path, findings_rows, FINDINGS_FILE
-from ....domain.model.finding_class import FindingClass
-from ....domain.model.story_words import Detail
+from .findings_files import classed_rows, finding_records, findings_path, FINDINGS_FILE
 from .story_layout import delivered_on, find_story, story_kind
 from .....sharedkernel.adapter.outgoing.profile.profile_files import evidence_dir, place, read_profile, resolve_profile, shown
 from .decision_record_files import decision_files, records_of
@@ -452,20 +450,13 @@ def story_signals(runs: str, story_id: str, records: typing.Sequence[typing.Any]
     judge = latest_signal(events, "judge", "finding")
     findings: typing.Dict[str, int] = {}
     domain: typing.Dict[str, int] = {}
-    classes: typing.Dict[str, int] = {}
-    judged_classes = False
     for perspective, fields in judge[1] if judge else []:
         findings[perspective] = findings.get(perspective, 0) + 1
-        if fields.get("target") and fields.get("type"):
-            judged_classes = True
-            kind = f"{fields['target']}/{fields['type']}"
-            classes[kind] = classes.get(kind, 0) + 1
         if fields.get("code"):
             domain[fields["code"]] = domain.get(fields["code"], 0) + 1
-    if not judged_classes:
-        # a story judged before the classes: the class its findings rows carry — a request that classified them once
-        # (WP-223), counted as the judge's would be
-        classes = backfilled_classes(story_id)
+    # the classes as the story's findings.md keeps them — the judge's from delivery, a request's once (WP-223):
+    # the one place every reader takes them from
+    classes = story_classes(story_id)
     verdicts = [e for e in events if e["kind"] == "signal" and e["name"] == "judge" and e["fields"].get("weighed")]
     outcomes: typing.Dict[str, int] = {}
     outcome_by: typing.Dict[str, typing.Dict[str, int]] = {}
@@ -498,11 +489,11 @@ def story_signals(runs: str, story_id: str, records: typing.Sequence[typing.Any]
                 judged=len(verdicts) or None,
                 first_pass=(verdicts[0]["fields"]["weighed"] == "pass") if verdicts else None,
                 judge_rounds=sum(1 for e in verdicts if e["fields"]["weighed"] == "changes-requested") if verdicts else None,
-                outcomes=outcomes, outcome_by=outcome_by, classes=classes if judge or classes else None)
+                outcomes=outcomes, outcome_by=outcome_by, classes=classes or None)
 
 
-def backfilled_classes(story_id: str) -> typing.Dict[str, int]:
-    """{target/type: rows} of the story's findings.md rows with a listed class — none where the story has none."""
+def story_classes(story_id: str) -> typing.Dict[str, int]:
+    """{target/type: rows} of the story's findings.md rows with a class — none where the story has none."""
     epics = place("epics")
     try:
         path = find_story(epics, story_id)
@@ -511,11 +502,9 @@ def backfilled_classes(story_id: str) -> typing.Dict[str, int]:
     if not path:
         return {}
     found: typing.Dict[str, int] = {}
-    for row in findings_rows(findings_path(path)):
-        kind = FindingClass.written(Detail(row[10]), Detail(row[11]), Detail(row[12])) if len(row) > 12 else None
-        if kind is not None:
-            name = f"{kind.target.value}/{kind.type.value}"
-            found[name] = found.get(name, 0) + 1
+    for _row, kind in classed_rows(findings_path(path)):
+        name = f"{kind.target.value}/{kind.type.value}"
+        found[name] = found.get(name, 0) + 1
     return found
 
 
