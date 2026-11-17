@@ -77,6 +77,23 @@ class ClassFillTest(unittest.TestCase):
             finally:
                 os.chdir(cwd)
 
+    def test_a_story_judged_before_the_classes_counts_its_backfilled_rows_on_the_quality_card(self):
+        from dca_factory.delivery.adapter.outgoing.files.status_facts import backfilled_classes
+        with tempfile.TemporaryDirectory() as root:
+            folder = os.path.join(root, "product", "epics", "e-1", "S-1")
+            os.makedirs(folder)
+            with open(os.path.join(folder, "story.md"), "w", encoding="utf-8") as out:
+                out.write("---\nid: S-1\nepic: e-1\nstatus: delivered\n---\n\n# S-1\n")
+            with open(os.path.join(folder, "findings.md"), "w", encoding="utf-8") as out:
+                out.write(classified())
+            cwd = os.getcwd()
+            os.chdir(root)
+            try:
+                self.assertEqual({"test/duplication": 1}, backfilled_classes("S-1"))   # the `—` row counts nowhere
+                self.assertEqual({}, backfilled_classes("S-9"))
+            finally:
+                os.chdir(cwd)
+
     def test_the_request_kind_runs_the_decisions_skill_and_names_nothing(self):
         kind = KIND["classify-findings"]
         self.assertEqual(("factory-decisions", (), "none"), (kind.skill, kind.keys, kind.words))
