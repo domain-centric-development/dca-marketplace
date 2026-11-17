@@ -68,6 +68,9 @@ KINDS = (
     Kind("accept", keys=("story",), skill="factory-decisions", about="accept a story that waits for a person's look"),
     Kind("correct", keys=("story",), words="required", option=True, skill="factory-decisions",
          about="a correction of a story at its acceptance or after its delivery — `option:` the reason code"),
+    Kind("classify-findings", skill="factory-decisions",
+         about="give every findings row from before contract 39 its class once — target, type, qualifier from the "
+               "judge's lists; nothing else of the rows changes"),
     Kind("run", keys=("story",), about="run a story now — from where its files say, or `from:` a stage"),
     Kind("stop", about="the factory ends after the running stage"),
 )

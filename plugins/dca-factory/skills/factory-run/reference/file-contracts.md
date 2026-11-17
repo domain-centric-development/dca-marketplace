@@ -345,7 +345,10 @@ Origin | Outcome | In plain words | Defect | Fix | Status | Target | Type | Qual
 `profile`; type `assignment`, `checking`, `algorithm`, `interface`, `relationship`, `timing`, `documentation`,
 `duplication`, `naming`, `dead-code`, `comment`, `traceability`, `domain-concept`, `domain-boundary`, `domain-invariant`,
 `domain-term`; qualifier `missing`, `incorrect`, `extraneous` (`finding_class.py`, `GATE-JUDGE-CLASS`, experimental);
-a file from before it reads with the three cells empty and gains them when the next row is added; `Origin` (contract 37) is the pipeline's — `introduced` where the story's diff
+a file from before it reads with the three cells empty and gains them when the next row is added — or once, by the
+request `classify-findings` (`factory.sh update` names it while rows wait), which fills only those cells, from the lists
+or `—` in all three where none fits, and marks the file `classes: backfilled <date> by request <id> (<n> rows, <m>
+without a fitting value)` in its front matter; `Origin` (contract 37) is the pipeline's — `introduced` where the story's diff
 adds or changes the row's line, `pre-existing` where it does not (such a row, a blocker or a major included, cost no
 round), empty where the row names no line; `Outcome` is the pipeline's too, `Status` stays the person's; a row already there (same file:line and defect) is not written twice. `In plain
 words` is the one sentence a person reads first — the status JSON's `plain`, which the inbox leads with; a judge

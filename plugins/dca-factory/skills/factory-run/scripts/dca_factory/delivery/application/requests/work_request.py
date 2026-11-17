@@ -10,6 +10,7 @@ from ....building_blocks import DomainEventPublisher, TransactionBoundary, UseCa
 from ...domain.model.decision_record import DecisionState, RecordId
 from ...domain.model.moment import Moment
 from ...domain.model.stage import StageName
+from ..shared.finding_classes import ClassFill
 from ..shared.decision_record_repository import DecisionRecordRepository
 from ..shared.backlog_changes import BacklogChanges
 from ..shared.request_records import RequestRecords
@@ -58,7 +59,9 @@ class WorkRequestUseCase(WorkRequestInputPort):
     def __init__(self, store: RequestStore, records: RequestRecords, changes: BacklogChanges, skill: RequestSkill,
                  settlement: RequestSettlement, now: typing.Callable[[], str], files: HandedFileStore, *,
                  answers: DecisionRecordRepository, events: DomainEventPublisher,
-                 transactions: TransactionBoundary, requests: RequestRepository) -> None:
+                 transactions: TransactionBoundary, requests: RequestRepository,
+                 fill: typing.Optional[ClassFill] = None) -> None:
+        self._fill = fill
         self._answers = answers
         self._events = events
         self._transactions = transactions
@@ -164,6 +167,15 @@ class WorkRequestUseCase(WorkRequestInputPort):
             return RequestWorked(3, said, commit)
         self._apply_answers(request["id"])
         wrote = self._writes.wrote(request, before)
+        if kind.name == "classify-findings" and self._fill is not None:
+            # what a classifier wrote is held to what it may change, never trusted (WP-223)
+            refused = self._fill.refused(wrote.split())
+            if refused is not None:
+                self._fill.restore(wrote.split())
+                self._fail(life, f"it changed more than the class cells — {refused.value}; put back")
+                self._store.journal("request-end", kind.name, request["id"], "exit=1", "state=failed", refused.value)
+                return RequestWorked(1, [("err", f"factory: request {request['id']} changed more than the class "
+                                                 f"cells — {refused.value}; put back")])
         if kind.name in ("wish", "stories"):
             self._records.questioned(wrote.split(), request["id"])
         # gone before its commit: a crash between the two leaves what it wrote uncommitted — never a request that

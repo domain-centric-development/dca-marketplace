@@ -130,6 +130,8 @@ class RunnerRequestSkill(RequestSkill):
             given = option or words
             why = f" — rationale: {words}" if option and words else ""
             return f"{story + ' ' if story else ''}{record}: answer {given}{why}"
+        if kind == "classify-findings":
+            return "findings classify"
         if kind == "accept":
             return f"{story} {record}: answer accepted"
         if kind == "correct":

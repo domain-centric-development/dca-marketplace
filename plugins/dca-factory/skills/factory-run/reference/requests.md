@@ -85,6 +85,7 @@ archived is history, not inventory
   | `epic-from` | a topic and its proposal | `factory-backlog epic <proposal> --from <report>` |
   | `answer` | a record, an option or words | `factory-decisions <story> <record>: answer …` |
   | `accept`, `correct` | a story (correct: the words, `option:` the code) | `factory-decisions` on its acceptance |
+  | `classify-findings` | — | `factory-decisions findings classify` — the findings rows from before contract 39 get their class once; what it wrote is held to the empty class cells and the `classes:` mark, else put back and failed |
   | `run` | a story, `from:` a stage | the runner: the story starts next |
   | `stop` | — | the runner: nothing more starts |
 

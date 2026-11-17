@@ -1,6 +1,6 @@
 ---
 name: factory-decisions
-description: The decision inbox of a delivery run, questions, acceptances and lessons alike — lists the questions stages could not answer, the delivered stories that wait for a human's look and the lessons (what repeats across the stories, and where its correction belongs), explains one from its record and the story it blocks, and writes the human's answer into the record on their explicit confirmation (an acceptance delivers the story, a correction goes back into it); for a structural question (a new bounded context, a new relationship, a surface an actor lacks) it also brings the designed context map and the product description in line. Use when a run stopped with needs-human, when someone asks what is waiting on them, to answer a question from a second session, or on "/factory-decisions". Answers nothing itself and implements nothing.
+description: The decision inbox of a delivery run, questions, acceptances and lessons alike, and the one-time class of the findings from before the classes — lists the questions stages could not answer, the delivered stories that wait for a human's look and the lessons (what repeats across the stories, and where its correction belongs), explains one from its record and the story it blocks, and writes the human's answer into the record on their explicit confirmation (an acceptance delivers the story, a correction goes back into it); for a structural question (a new bounded context, a new relationship, a surface an actor lacks) it also brings the designed context map and the product description in line. Use when a run stopped with needs-human, when someone asks what is waiting on them, to answer a question from a second session, or on "/factory-decisions". Answers nothing itself and implements nothing.
 license: PolyForm-Shield-1.0.0 — complete terms in LICENSE.md, what is yours in NOTICE.md
 ---
 
@@ -168,6 +168,12 @@ skills for a project rule or node, `/factory-setup` for a profile check, `/facto
 the lesson's evidence; you write none of it yourself. The answer block then carries `written: <file>` so the record
 links what was written. The table of places and owners, and what goes up to the maintainers:
 `reference/lessons.md`, beside this file.
+
+## Findings without a class
+
+`/factory-decisions findings classify` (also the request `classify-findings`): give every findings row from before
+contract 39 its class once — the stories' `findings.md` and `product/findings/`. How, and what the factory checks
+afterwards: `reference/classify-findings.md`, beside this file.
 
 ## Run for a request
 

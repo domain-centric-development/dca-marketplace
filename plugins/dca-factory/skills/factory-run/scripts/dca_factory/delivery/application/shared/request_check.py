@@ -12,6 +12,7 @@ from ...domain.model.story import StoryId, StoryStatus
 from ...domain.model.words import Words, WordsRefused
 from .decision_record_repository import DecisionRecordRepository, RecordNotFound
 from .discovery_reports import DiscoveryReports
+from .finding_classes import UnclassedFindings
 from .epic_catalog import EpicCatalog
 from .requests import DuplicateRequest, ID_WORD, KIND, PENDING, RequestFacts, RequestRefused, written_keys
 from .stage_table import StageTable
@@ -27,7 +28,9 @@ class RequestCheck:
     malformed request never reaches the factory."""
 
     def __init__(self, stories: StoryRepository, epics: EpicCatalog, records: DecisionRecordRepository,
-                 reports: DiscoveryReports, stages: StageTable) -> None:
+                 reports: DiscoveryReports, stages: StageTable,
+                 unclassed: typing.Optional[UnclassedFindings] = None) -> None:
+        self._unclassed = unclassed
         self._stories = stories
         self._epics = epics
         self._records = records
@@ -79,6 +82,8 @@ class RequestCheck:
             self.acceptance(kind.name, fields)
         if kind.name == "epic-from":
             self.proposal(fields)
+        if kind.name == "classify-findings" and self._unclassed is not None and not self._unclassed.count().value:
+            raise RequestRefused("every findings row has its class already — nothing to classify")
         if kind.name == "run":
             fields["story"] = self.story(fields["story"]).id.value
             names = self._stages.names()

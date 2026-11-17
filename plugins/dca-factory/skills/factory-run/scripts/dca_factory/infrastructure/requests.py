@@ -12,6 +12,7 @@ from ..delivery.adapter.outgoing.files.handed_files import HandedFileFolder
 from ..delivery.adapter.outgoing.files.request_files import PlacedRequests, RequestFiles, stamp_utc
 from ..delivery.adapter.outgoing.files.scheduled_starts import ScheduledStarts
 from ..delivery.adapter.outgoing.git.backlog_changes import BacklogChangeFiles
+from ..delivery.adapter.outgoing.files.finding_class_files import FindingClassFiles
 from ..delivery.adapter.outgoing.process.console_lines import ConsoleLines
 from ..delivery.application.requests.check_request import CheckRequestCommand
 from ..delivery.application.requests.request_queue import RequestQueue
@@ -57,7 +58,7 @@ def work_request(home: str, runs: str, profile: typing.Callable[[], typing.Any],
     store, changes, settlement = RequestFiles(home), BacklogChangeFiles(home, runs, profile, lock), HeldRequests(home, runs)
     return WorkRequestUseCase(store, RequestRecordFiles(home), changes, skill, settlement, stamp_utc, HandedFileFolder(),
                               answers=DecisionRecordFiles(home), events=JournalEventPublisher(runs),
-                              transactions=FileTransactions(), requests=store)
+                              transactions=FileTransactions(), requests=store, fill=FindingClassFiles(home))
 
 
 def settle_request(home: str, runs: str, profile: typing.Callable[[], typing.Any],

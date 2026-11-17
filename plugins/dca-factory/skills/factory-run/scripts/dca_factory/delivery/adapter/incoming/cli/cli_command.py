@@ -597,6 +597,9 @@ def main(argv: typing.Sequence[str]) -> int:
                              "with --stages: every row of the table, the steps after the run order too; "
                              "with --status: every story by epic, with times and tokens, instead of the short view")
     parser.add_argument("--epic", help="with --status: one epic — its fields, its text, its stories with their state")
+    parser.add_argument("--unclassed-findings", action="store_true",
+                        help="how many findings rows carry no class — those from before contract 39 (`factory.sh update` "
+                             "names the request that classifies them)")
     parser.add_argument("--backfill-created", action="store_true",
                         help="write `created:` into every story and epic without one, from the commit that added the "
                              "file — once, never over a value there (`factory.sh update` runs it)")
@@ -874,6 +877,9 @@ def main(argv: typing.Sequence[str]) -> int:
         return checkout_commands.take_checkout(cwd, args.runs, args.claim)
     if args.release is not None:
         return checkout_commands.give_checkout_back(cwd, args.runs, args.release or None)
+    if args.unclassed_findings:
+        print(root.wiring.unclassed_findings(cwd).count().value)
+        return 0
     if args.backfill_created:
         return backfill_created(cwd, args.epics)
     if args.ignore_journals:

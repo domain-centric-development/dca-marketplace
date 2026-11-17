@@ -352,8 +352,19 @@ class PipelineInstaller(PipelineInstall):
         for line in self.cli(["--schedule"], False)[1].splitlines():
             if line.startswith("layout: "):
                 warn("factory: " + line[len("layout: "):])
+        self.unclassed_hint(after_contract)
         print("factory: review and commit the changed files — the update commits nothing. 'factory.sh setup --check'")
         print("factory:   names what the project gained since, as profile lines to confirm; the update writes none.")
+
+    def unclassed_hint(self, contract: str) -> None:
+        """The findings rows from before contract 39, without a class: named with the request that classifies them —
+        never queued, a request that costs money is the person's to start (WP-223)."""
+        if not contract.isdigit() or int(contract) < 39:
+            return
+        said = self.cli(["--unclassed-findings"], False)[1].strip()
+        if said.isdigit() and int(said):
+            print(f"factory: {said} findings without a class (from before contract 39) — classify them once: "
+                  "factory.sh request classify-findings")
 
     def check_detected(self, proposal: Proposal) -> ProfileOutcome:
         brief = proposal is Proposal.BRIEF
@@ -374,6 +385,8 @@ class PipelineInstaller(PipelineInstall):
             print(f"factory: no stack profile at {PROFILE} — 'factory.sh update' writes one from detection")
             return ProfileOutcome.LACKS
         code = self.presets(folder, "check", PROFILE, *(["brief"] if brief else []))
+        if not brief:
+            self.unclassed_hint(gate_field(GATE, "CONTRACT") or "")
         return ProfileOutcome.HOLDS if code == 0 else ProfileOutcome.LACKS
 
     def write_detected(self, key: typing.Optional[str]) -> ProfileOutcome:

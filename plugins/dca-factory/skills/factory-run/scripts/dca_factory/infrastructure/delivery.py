@@ -109,13 +109,18 @@ from ..delivery.application.delivery.deliver_by_hand import DeliverByHandUseCase
 from ..delivery.application.delivery.prove_delivery import ProveDeliveryUseCase
 from ..delivery.application.delivery.reopen_story import ReopenStoryUseCase
 from ..delivery.application.status.show_help import ShowHelpUseCase
+from ..delivery.adapter.outgoing.files.finding_class_files import FindingClassFiles
 from ..delivery.application.status.show_status import ShowStatusUseCase
 from ..delivery.application.status.show_story import ShowStoryUseCase
 
 
+def unclassed_findings(cwd: str) -> FindingClassFiles:
+    return FindingClassFiles(cwd)
+
+
 def request_check(cwd: str) -> RequestCheck:
     return RequestCheck(StoryFiles(cwd), EpicFiles(cwd), DecisionRecordFiles(cwd), DiscoveryReportFiles(cwd),
-                        ContractStages())
+                        ContractStages(), unclassed=FindingClassFiles(cwd))
 
 
 def show_project_file(cwd: str) -> ShowProjectFileUseCase:
