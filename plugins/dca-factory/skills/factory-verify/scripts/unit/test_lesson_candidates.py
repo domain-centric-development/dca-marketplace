@@ -164,7 +164,7 @@ class LessonSignalReadingTest(unittest.TestCase):
     def test_a_check_the_gate_refused_counts_once_per_story(self):
         from dca_factory.learning.adapter.outgoing.delivery.delivery_signals import refusal_signals
         refused = [dict(stage="test", check="tests-kept"), dict(stage="test", check="clauses"),
-                   dict(stage="build", check="tests-kept")]
+                   dict(stage="build", check="tests-kept"), dict(stage="plan", check="decisions")]   # a question
         self.assertEqual(["tests-kept", "clauses"], [s.key.value for s in refusal_signals(StoryId("s-1"), refused)])
 
     def test_a_release_and_the_plans_adoption_are_no_answered_assumption(self):

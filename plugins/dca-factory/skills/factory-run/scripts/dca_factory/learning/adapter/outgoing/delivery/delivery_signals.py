@@ -85,11 +85,17 @@ def assumption_signals(story: StoryId, answered: typing.Sequence[str],
     return found
 
 
+#: The check a gate refuses on while a question waits for a person — the question itself, counted as its own kind.
+ASKING_CHECKS = frozenset({"decisions"})
+
+
 def refusal_signals(story: StoryId, refusals: typing.Sequence[Published]) -> typing.List[Signal]:
-    """The checks a gate refused the story on, each once."""
+    """The checks a gate refused the story on, each once; the check that stops for a question left out."""
     found: typing.Dict[str, Signal] = {}
     for refusal in refusals:
         check = refusal["check"]
+        if check in ASKING_CHECKS:
+            continue
         found.setdefault(check, Signal(LessonKind.REFUSAL, SignalKey(check), Evidence(
             story, Detail(f"{story.value} journal: {refusal['stage']} gate refused {check}"))))
     return list(found.values())
