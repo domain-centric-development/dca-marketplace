@@ -493,8 +493,10 @@ this key.
 `factory.sh lessons` shows the candidates; the backlog run writes each one nobody was asked yet when nothing more can
 run or the schedule changes while it waits (`factory.sh lessons --write` by hand). Front matter `kind: lesson`,
 `lesson:` (question, finding, correction, assumption, term, refusal), `key:`, `stories:` (counted when asked) and `asked:`;
-`## Evidence` names the stories and the records, finding rows or lines; `## Options` the places, the recommended one
-first, each with the skill that writes it, then `not-now` and `never`. It is answered like any record and holds no
+`## Evidence` names the stories and the records, finding rows or lines (an assumption: `answered in <source>`, one
+count per source); `## Draft` (assumption) the sentence as answered; `## Options` the places, the recommended one
+first, each with the skill that writes it — the description with its file where the questions' tag names one —, then
+`not-now` and `never`. A question lesson keyed `<context>/pipeline` offers `factory` alone. It is answered like any record and holds no
 story back. `never` stops the same candidate for good; `not now` lets it back under the next free id
 (`<id>-2`) once its evidence holds more stories than `stories:`; a place lets it back once its signal came back in
 `lessons.backAfter` stories more (profile, default 3) — the record says where it was placed and that it came back; a

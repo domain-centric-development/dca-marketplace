@@ -117,9 +117,10 @@ class LessonCandidatesTest(unittest.TestCase):
 
 
 class LessonSignalReadingTest(unittest.TestCase):
-    """What the files make a signal of: a finding by the rule it names, else its domain code; a story id is no rule."""
+    """What the files make a signal of: a finding by its class or the rule it names, never its domain code alone; a
+    story id is no rule."""
 
-    def test_a_finding_is_counted_under_its_rule_else_its_code_and_a_flagged_term_on_its_own(self):
+    def test_a_finding_is_counted_under_its_rule_never_its_code_alone_and_a_flagged_term_on_its_own(self):
         from dca_factory.learning.adapter.outgoing.delivery.delivery_signals import finding_signals
         story = StoryId("s-1")
 
@@ -129,8 +130,7 @@ class LessonSignalReadingTest(unittest.TestCase):
                          [s.key.value for s in finding_signals(story, published(row("breaks DCA-HEX-014 as US-3 asked")))])
         self.assertEqual([], finding_signals(story, published(row("stale comment, see US-3"))))
         found = finding_signals(story, published(row("domain-term: `Entry` is called `Item` here")))
-        self.assertEqual([("finding", "hexagonal/domain-term"), ("term", "entry")],
-                         [(s.kind.value, s.key.value) for s in found])
+        self.assertEqual([("term", "entry")], [(s.kind.value, s.key.value) for s in found])   # a code alone: no key
         self.assertEqual("s-1#2", found[0].evidence.source.value)
 
     def test_a_finding_is_read_from_a_findings_file_in_todays_shape(self):
@@ -211,3 +211,73 @@ class LessonRecordTest(unittest.TestCase):
         record.choose(OptionKey("g"), Person("the-lead"), Moment("2026-11-10T10:00:00Z"))
         self.assertFalse(record.backs_change())
         self.assertEqual([LessonAnswered], [type(e) for e in record.domain_events()])
+
+
+class HonestCountTest(unittest.TestCase):
+    """WP-224: one decision copied into several stories is one answer; a question about the pipeline is the factory's;
+    a finding's place follows its class; a lesson no longer drawn is withdrawn."""
+
+    def test_one_source_in_several_stories_is_one_answer_two_sources_a_candidate(self):
+        from dca_factory.learning.adapter.outgoing.delivery.delivery_signals import assumption_signals
+        copied = [s for n in range(1, 5) for s in assumption_signals(
+            StoryId(f"s-{n}"), ["every refusal names its field (the person, WP-7 decision 4)"])]
+        self.assertEqual((), drawn(copied))
+        twice = copied + assumption_signals(StoryId("s-9"), ["every refusal names its field (s-9-01)"])
+        found = drawn(twice)
+        self.assertEqual(1, len(found))
+        self.assertEqual("every refusal names its field", found[0].said.value)
+        self.assertEqual("answered in s-9-01", found[-1].evidence[-1].source.value)
+
+    def test_the_questions_tag_names_the_description_file(self):
+        from dca_factory.learning.adapter.outgoing.delivery.delivery_signals import assumption_signals
+        found = assumption_signals(StoryId("s-1"), ["prices are gross (s-1-01)"], {"s-1-01": "failure"})
+        self.assertEqual("tech.md", found[0].file.value)
+        self.assertIsNone(assumption_signals(StoryId("s-1"), ["prices are gross"])[0].file)
+
+    def test_a_wrapped_assumption_is_one_line_and_a_pipeline_answer_is_left_out(self):
+        from dca_factory.delivery.api.learning import assumption_items, cites
+        self.assertEqual(["- answered: every refusal names its field (WP-7 decision 4)", "- answered: b (x)"],
+                         assumption_items(["", "- answered: every refusal names", "  its field (WP-7 decision 4)",
+                                           "- answered: b (x)"]))
+        self.assertTrue(cites("run the stage again as it is (s-1-02).", {"s-1-02"}))
+        self.assertFalse(cites("run the stage again as it is (s-1-021)", {"s-1-02"}))
+        self.assertFalse(cites("prices are gross (WP-7 decision 4)", {"s-1-02"}))
+
+    def test_a_question_about_the_pipeline_goes_to_the_factory_alone(self):
+        found = drawn(signals(LessonKind.QUESTION, 3, key="accounts/pipeline"))
+        self.assertEqual((LessonPlace.FACTORY, LessonPlace.NOT_NOW, LessonPlace.NEVER), found[0].places)
+
+    def test_an_assumption_offers_the_description_and_the_factory(self):
+        found = drawn(signals(LessonKind.ASSUMPTION, 2))
+        self.assertEqual((LessonPlace.DESCRIPTION, LessonPlace.FACTORY, LessonPlace.NOT_NOW, LessonPlace.NEVER),
+                         found[0].places)
+
+    def test_a_findings_place_follows_its_class(self):
+        from dca_factory.learning.domain.model.lesson import places_of
+        def first(key):
+            return places_of(LessonKind.FINDING, SignalKey(key))
+        self.assertEqual(LessonPlace.GLOSSARY, first("ddd/code/domain-term/incorrect")[0])
+        self.assertEqual(LessonPlace.CRITERION, first("story/traceability")[0])
+        self.assertEqual(LessonPlace.INSTRUCTIONS, first("clean-code/code/comment/incorrect")[0])
+        self.assertEqual((LessonPlace.PROJECT_RULE, LessonPlace.RULE_LIBRARY, LessonPlace.FACTORY),
+                         first("clean-code/code/dead-code/extraneous")[:3])
+        self.assertNotIn(LessonPlace.RULE_LIBRARY, first("clean-code/code/comment/incorrect"))
+
+    def test_a_waiting_lesson_no_longer_drawn_is_stale_an_answered_one_never(self):
+        key = SignalKey(KEYS[LessonKind.ASSUMPTION])
+        waiting = Decided(LessonKind.ASSUMPTION, key, None, Count(2), Detail("lesson-a"))
+        answered = Decided(LessonKind.ASSUMPTION, SignalKey("other"), LessonPlace.NEVER, Count(2), Detail("lesson-b"))
+        none = Signals(())
+        self.assertEqual((waiting,), none.stale([waiting, answered]))
+        self.assertEqual((), Signals(tuple(signals(LessonKind.ASSUMPTION, 2))).stale([waiting]))
+
+    def test_the_record_shows_the_draft_and_names_the_file(self):
+        from dca_factory.learning.adapter.outgoing.delivery.delivery_lessons import lesson_text
+        from dca_factory.learning.adapter.outgoing.delivery.delivery_signals import assumption_signals
+        from dca_factory.learning.domain.model.words import Moment, RecordId
+        found = drawn([s for n, src in ((1, "s-1-01"), (2, "s-2-01")) for s in assumption_signals(
+            StoryId(f"s-{n}"), [f"Prices are gross ({src})"], {src: "failure"})])
+        text = lesson_text(RecordId(found[0].id.value), found[0], Moment("2026-11-18T10:00:00Z"), {})
+        self.assertIn("## Draft\n> Prices are gross", text)
+        self.assertIn("- a: description — keep the draft below once in `product/tech.md`", text)
+        self.assertIn("- b: factory —", text)

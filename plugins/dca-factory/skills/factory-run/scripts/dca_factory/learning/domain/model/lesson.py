@@ -123,7 +123,7 @@ PLACES: typing.Mapping[LessonKind, typing.Tuple[LessonPlace, ...]] = {
     LessonKind.FINDING: (LessonPlace.PROJECT_RULE, LessonPlace.PROFILE_CHECK, LessonPlace.KNOWLEDGE_NODE,
                          LessonPlace.RULE_LIBRARY, LessonPlace.FACTORY),
     LessonKind.CORRECTION: (LessonPlace.DESCRIPTION, LessonPlace.CRITERION, LessonPlace.FACTORY),
-    LessonKind.ASSUMPTION: (LessonPlace.DESCRIPTION, LessonPlace.INSTRUCTIONS),
+    LessonKind.ASSUMPTION: (LessonPlace.DESCRIPTION, LessonPlace.FACTORY),
     LessonKind.TERM: (LessonPlace.GLOSSARY, LessonPlace.DESCRIPTION, LessonPlace.KNOWLEDGE_CATALOG),
     LessonKind.REFUSAL: (LessonPlace.FACTORY, LessonPlace.PROFILE_CHECK, LessonPlace.INSTRUCTIONS),
 }
@@ -142,14 +142,34 @@ TARGET_PLACES: typing.Mapping[Target, LessonPlace] = {
 
 
 def places_of(kind: LessonKind, key: SignalKey) -> typing.Tuple[LessonPlace, ...]:
-    """The places a candidate offers, the recommended one first: a finding counted by its class recommends the place
-    its target names; `not-now` and `never` close every list."""
+    """The places a candidate offers, the recommended one first; `not-now` and `never` close every list. A question
+    about the pipeline goes to the factory alone. A finding counted by its class offers the place its class names,
+    the rule suite where a rule could check its type, and the factory."""
     places = PLACES[kind]
+    if kind is LessonKind.QUESTION and key.value.endswith("/" + PIPELINE_TAG):
+        places = (LessonPlace.FACTORY,)
     target = key.target() if kind is LessonKind.FINDING else None
     if target is not None:
-        first = TARGET_PLACES[target]
-        places = (first,) + tuple(p for p in places if p is not first)
+        checkable = key.finding_type() in CHECKABLE
+        places = (class_place(target, key.finding_type()),) + ((LessonPlace.RULE_LIBRARY,) if checkable else ()) \
+            + (LessonPlace.FACTORY,)
     return places + (LessonPlace.NOT_NOW, LessonPlace.NEVER)
+
+
+def class_place(target: Target, kind: Detail) -> LessonPlace:
+    """The place a finding's class names: a word that drifts the glossary, code a rule only where a rule could
+    check its type, else the line that tells the build stage first; every other target its own place."""
+    if kind == Detail("domain-term"):
+        return LessonPlace.GLOSSARY
+    if target == Target("code"):
+        return LessonPlace.PROJECT_RULE if kind in CHECKABLE else LessonPlace.INSTRUCTIONS
+    return TARGET_PLACES[target]
+
+#: The tag of a question about the pipeline — the factory's to correct, never the project's.
+PIPELINE_TAG = "pipeline"
+
+#: The finding types a rule could check from the code alone — the rest a rule cannot see.
+CHECKABLE = frozenset({Detail("dead-code"), Detail("relationship"), Detail("domain-boundary")})
 
 #: How many stories a signal repeats in before it is a candidate — counts, written here and nowhere else. A question
 #: or a finding is a pattern from its third story on; a correction, an answer to the same assumption and a flagged
@@ -186,6 +206,11 @@ class SignalKey(Value):
         word = parts[1] if len(parts) == 4 else (parts[0] if len(parts) == 2 else "")
         return Target(word) if Target(word) in TARGET_PLACES else None
 
+    def finding_type(self) -> Detail:
+        """The type a finding's class key names, empty for a key that names none."""
+        parts = self.value.split("/")
+        return Detail(parts[2] if len(parts) == 4 else (parts[1] if len(parts) == 2 else ""))
+
 
 class Evidence(Value):
     """Where a signal was seen: the story, and the record, finding row or line that carries it."""
@@ -202,6 +227,10 @@ class Signal(Value):
     key: SignalKey
     evidence: Evidence
     within: typing.Optional[SignalKey] = None
+    #: the words as written, where the key lowered them — an answered assumption's sentence
+    said: typing.Optional[Detail] = None
+    #: the file of the project description the asking question's tag points to, where one does
+    file: typing.Optional[Detail] = None
 
 
 class LessonId(Id):
@@ -227,6 +256,10 @@ class Candidate(Value):
     placed: typing.Optional[Decided] = None
     #: a story of the same target without this finding — what right looks like, chosen by order, never by likeness
     contrast: typing.Optional[StoryId] = None
+    #: the words a place would keep, as first written — an answered assumption's sentence
+    said: typing.Optional[Detail] = None
+    #: the file of the project description they would go to, where the questions named one
+    file: typing.Optional[Detail] = None
 
     @property
     def id(self) -> LessonId:
@@ -249,6 +282,8 @@ class Decided(Value):
     key: SignalKey
     place: typing.Optional[LessonPlace]
     stories: Count
+    #: the record it was asked in
+    record: typing.Optional[Detail] = None
 
     def lets_back(self, stories: Count, back_after: Count = BACK_AFTER) -> bool:
         """A `not now` lets its candidate come back on more evidence than it was answered on; a place, once its signal
@@ -277,7 +312,8 @@ class Signals(Value):
         several levels is drawn at the finest that repeats: a coarser key only where no key within it was drawn. A
         candidate already asked is not drawn again while its record waits; `never` stops it for good; `not now` lets
         it back once its evidence holds more stories than when it was asked; a placed one once its signal came back
-        in <back_after> stories more."""
+        in <back_after> stories more. An answered assumption copied from one decision into several stories is one
+        answer: it counts its different sources, not its stories."""
         grouped: typing.Dict[typing.Tuple[LessonKind, SignalKey], typing.List[Evidence]] = {}
         within: typing.Dict[typing.Tuple[LessonKind, SignalKey], SignalKey] = {}
         for signal in self.items:
@@ -286,7 +322,7 @@ class Signals(Value):
                 found.append(signal.evidence)
             if signal.within is not None:
                 within[(signal.kind, signal.key)] = signal.within
-        repeating = {k for k, evidence in grouped.items() if len(evidence) >= THRESHOLDS[k[0]].value}
+        repeating = {k for k, evidence in grouped.items() if self._weight(k[0], evidence).value >= THRESHOLDS[k[0]].value}
         covered: typing.Set[typing.Tuple[LessonKind, SignalKey]] = set()
         for kind, key in repeating:
             parent = within.get((kind, key))
@@ -301,10 +337,24 @@ class Signals(Value):
             before = last.get((kind, key))
             if before is not None and not before.lets_back(Count(len(evidence)), back_after):
                 continue
+            first = [s for s in self.items if s.kind is kind and s.key == key]
             drawn.append(Candidate(kind, key, tuple(evidence), places_of(kind, key),
                                    before if before is not None and before.placed else None,
-                                   self.contrast(kind, key)))
+                                   self.contrast(kind, key),
+                                   next((s.said for s in first if s.said is not None), None),
+                                   next((s.file for s in first if s.file is not None), None)))
         return tuple(sorted(drawn, key=lambda c: (c.kind.value, c.key.value)))
+
+    @staticmethod
+    def _weight(kind: LessonKind, evidence: typing.Sequence[Evidence]) -> Count:
+        """How often a pattern repeats: its stories; an assumption its different sources."""
+        return Count(len({e.source for e in evidence}) if kind is LessonKind.ASSUMPTION else len(evidence))
+
+    def stale(self, decided: typing.Sequence[Decided]) -> typing.Tuple[Decided, ...]:
+        """The lessons still waiting whose candidate the signals no longer draw — counted wrongly before, or no longer
+        repeating: withdrawn, never answered for the person."""
+        holding = {(c.kind, c.key) for c in self.candidates([d for d in decided if d.place is not None])}
+        return tuple(d for d in decided if d.place is None and (d.kind, d.key) not in holding)
 
     def contrast(self, kind: LessonKind, key: SignalKey) -> typing.Optional[StoryId]:
         """For a finding counted by its class: the last story that had a finding of the same target and none under

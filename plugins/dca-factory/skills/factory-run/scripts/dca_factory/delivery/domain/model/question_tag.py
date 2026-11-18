@@ -25,6 +25,8 @@ class QuestionTag(enum.Enum):
     INTEGRATION = "integration"
     DEPENDENCY = "dependency"
     MERGE_ORDER = "merge-order"
+    #: the pipeline or its environment kept the stage from going on — not a question about the project
+    PIPELINE = "pipeline"
     OTHER = "other"
 
     @classmethod

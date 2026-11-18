@@ -4,7 +4,12 @@ A lesson is a decision record of its own kind (`kind: lesson`), a record of the 
 `product/decisions/lesson-<kind>-<key>.md`. The factory wrote it because something repeated across the stories —
 counted, never guessed: the same kind of question (`tag:`) in the same context, the same judge finding — by its rule,
 else its class (target · type · qualifier), at the finest level that repeats —, the same gate refusal, the same coded
-correction at acceptance, the same answered assumption, the same flagged term. A record that says the lesson was
+correction at acceptance, the same answered assumption — from different decisions: one decision copied into several
+stories is one answer, and the answer to a question tagged `pipeline` is none —, the same flagged term. A finding's
+place follows its class: a drifting word the glossary, a story the criterion, code a project rule only where a rule
+could check its type, else the agent instructions. An assumption lesson carries `## Draft`, the sentence the
+description would keep, and its description option names the file where the questions' tag says it. A lesson still
+open whose candidate the factory no longer draws is withdrawn — its file removed — when it fills the inbox again. A record that says the lesson was
 placed before and came back: the place did not hold it — say so, and weigh another place.
 `factory.sh lessons` lists the candidates with their counts; `factory-run/reference/file-contracts.md`, *A lesson*,
 holds the record's shape.

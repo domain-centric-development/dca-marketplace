@@ -17,6 +17,10 @@ class LessonRecords(OutputPort, typing.Protocol):
         """Whether a record by this id exists already."""
         ...
 
+    def withdraw(self, record: RecordId) -> None:
+        """Remove a lesson record nobody answered — its candidate no longer holds."""
+        ...
+
     def write(self, record: RecordId, candidate: Candidate, asked: Moment) -> str:
         """Write the candidate as a new open lesson record — its evidence, its places as options, the recommended one
         first — and say where, as a person reads it."""
@@ -37,6 +41,11 @@ class LessonProposals:
         written = []
         signals = Signals(tuple(self._signals.signals()))
         decided = self._signals.decided()
+        stale = signals.stale(decided)
+        for lesson in stale:
+            if lesson.record is not None:
+                self._records.withdraw(RecordId(lesson.record.value))
+        decided = [d for d in decided if d not in stale]
         waiting = Count(sum(1 for d in decided if d.place is None))
         drawn = signals.candidates(decided, self._signals.back_after())
         for candidate in signals.bounded(drawn, waiting, self._signals.open_at_once()):

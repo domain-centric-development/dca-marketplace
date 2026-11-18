@@ -19,9 +19,19 @@ from ....domain.model.words import Count, Detail, StoryId
 RULE_ID = re.compile(r"\b[A-Z]{2,}(?:-[A-Z]{2,})+-\d+[A-Z]?\b")
 #: The domain code a judge's finding opens with (`domain-term: …`).
 DOMAIN_CODE = re.compile(r"^\s*`?(domain-(?:concept|boundary|invariant|term))`?\s*:", re.I)
-#: The source an answered line ends with — `(US-1-01)`, `(product/domain.md)` —: the same answer from two records is
-#: the same assumption.
-CITATION = re.compile(r"\s*\([^()]*\)\s*$")
+#: The source an answered line ends with — `(US-1-01)`, `(product/domain.md)`, `(the person, WP-170 decision 4)`:
+#: the same answer from two records is the same assumption, and the same source in two stories one answer.
+CITATION = re.compile(r"\s*\(([^()]*)\)\s*$")
+#: The option a person chose, where the answer opens with it (`a — …`): the same words after another key are the
+#: same answer.
+OPTION_KEY = re.compile(r"^[a-z]\s+[—-]+\s+")
+#: The file of the project description a question's tag points to — where its answer would be said once.
+TAG_FILES = {
+    "scope": "overview.md", "behaviour": "overview.md", "page-layout": "overview.md",
+    "domain-term": "domain.md", "domain-boundary": "domain.md",
+    "failure": "tech.md", "test-level": "tech.md", "test-data": "tech.md", "persistence": "tech.md",
+    "integration": "tech.md", "dependency": "tech.md",
+}
 #: The first word in back ticks — the term a `domain-term` finding flags.
 TERM = re.compile(r"`([^`]{1,40})`")
 
@@ -31,8 +41,9 @@ Published = typing.Mapping[str, typing.Any]
 def finding_signals(story: StoryId, row: Published) -> typing.List[Signal]:
     """A finding's signals, finest first: its class as `<target>/<type>`, within it
     `<perspective>/<target>/<type>/<qualifier>`, within that the rule it names under its perspective; a row without a
-    class its rule, else its domain code; and for a `domain-term` finding the term it flags. A finding that names none
-    of them is counted nowhere: what is the same could not be told without guessing."""
+    class its rule alone; and for a `domain-term` finding the term it flags. A domain code alone is no key — it
+    throws different words together. A finding that names none of them is counted nowhere: what is the same could
+    not be told without guessing."""
     perspective, defect, outcome = row["perspective"], row["defect"], row.get("outcome", "")
     evidence = Evidence(story, Detail(f"{story.value}#{row['n']}" + (f" ({outcome})" if outcome else "")))
     rule = RULE_ID.search(defect)
@@ -44,8 +55,8 @@ def finding_signals(story: StoryId, row: Published) -> typing.List[Signal]:
         fine = f"{perspective}/{row['target']}/{row['type']}/{row['qualifier']}"
         found.append(Signal(LessonKind.FINDING, SignalKey(coarse), evidence))
         found.append(Signal(LessonKind.FINDING, SignalKey(fine), evidence, SignalKey(coarse)))
-    if rule or (code and fine is None):
-        found.append(Signal(LessonKind.FINDING, SignalKey(f"{perspective}/{rule.group(0) if rule else code.group(1)}"),  # type: ignore[union-attr]
+    if rule:
+        found.append(Signal(LessonKind.FINDING, SignalKey(f"{perspective}/{rule.group(0)}"),
                             evidence, SignalKey(fine) if fine is not None else None))
     if code and code.group(1).lower() == "domain-term":
         term = TERM.search(defect[code.end():])
@@ -54,14 +65,23 @@ def finding_signals(story: StoryId, row: Published) -> typing.List[Signal]:
     return found
 
 
-def assumption_signals(story: StoryId, answered: typing.Sequence[str]) -> typing.List[Signal]:
-    """The story's answered assumptions, each its own key — the source it ends with left out."""
+def assumption_signals(story: StoryId, answered: typing.Sequence[str],
+                       tags: typing.Optional[typing.Mapping[str, str]] = None) -> typing.List[Signal]:
+    """The story's answered assumptions, each its own key — the source it ends with aside, as its evidence: the same
+    source in several stories is one answer. A line without one is its story's own. Where the source is a record of
+    a known tag (<tags>: record id → tag), the file of the description that tag points to."""
     found = []
     for text in answered:
-        said = CITATION.sub("", text.strip().rstrip(".")).strip().rstrip(".")
-        if said:
-            found.append(Signal(LessonKind.ASSUMPTION, SignalKey(said),
-                                Evidence(story, Detail(f"{story.value} assumptions"))))
+        line = text.strip().rstrip(".")
+        cited = CITATION.search(line)
+        said = OPTION_KEY.sub("", CITATION.sub("", line).strip().rstrip("."))
+        if not said:
+            continue
+        source = cited.group(1).strip() if cited else ""
+        file = TAG_FILES.get((tags or {}).get(source, ""))
+        found.append(Signal(LessonKind.ASSUMPTION, SignalKey(said),
+                            Evidence(story, Detail(f"answered in {source}" if source else f"{story.value} assumptions")),
+                            said=Detail(said), file=Detail(file) if file else None))
     return found
 
 
@@ -86,15 +106,17 @@ class DeliverySignals(LessonSignals):
         found: typing.List[Signal] = []
         contexts: typing.Dict[str, str] = {}
         stories = delivery.stories(self._cwd, self._epics)
+        records = delivery.records(self._cwd, self._epics)
+        tags = {record["id"]: record["tag"] for record in records if record["tag"]}
         for story in stories:
             sid = StoryId(story["id"])
             contexts[sid.value] = story["context"]
-            found += assumption_signals(sid, story["answered"])
+            found += assumption_signals(sid, story["answered"], tags)
             for row in story["findings"]:
                 found += finding_signals(sid, row)
         for story in sorted(stories, key=lambda s: s["id"]):
             found += refusal_signals(StoryId(story["id"]), story["refusals"])
-        for record in delivery.records(self._cwd, self._epics):
+        for record in records:
             story, rid = StoryId(record["story"]), Detail(record["id"])
             if record["acceptance"]:
                 if record["correction"]:
@@ -125,5 +147,6 @@ class DeliverySignals(LessonSignals):
                 continue
             said = lesson["answer"]
             found.append(Decided(kind, SignalKey(lesson["key"]),
-                                 LessonPlace.named(Detail(said)) if said is not None else None, stories))
+                                 LessonPlace.named(Detail(said)) if said is not None else None, stories,
+                                 Detail(lesson["id"])))
         return found

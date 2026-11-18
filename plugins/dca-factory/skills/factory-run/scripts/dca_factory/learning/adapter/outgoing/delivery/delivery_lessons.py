@@ -29,7 +29,9 @@ WHY = {
                          "next brief carries it and the stage stops asking.",
     LessonKind.FINDING: "the judge finds the same flaw story after story; a rule catches it at the gate instead.",
     LessonKind.CORRECTION: "people correct the same thing at acceptance; said in the description, the plan carries it.",
-    LessonKind.ASSUMPTION: "the same assumption was answered the same way; said once, nobody needs to answer it again.",
+    LessonKind.ASSUMPTION: "the same answer stands in stories of different decisions; said once in the description, "
+                           "no stage needs to ask it again. Where the answer only told the pipeline to go on, it is the "
+                           "factory's to correct: `factory`.",
     LessonKind.TERM: "the word was flagged in several stories; in the glossary, the gate looks for it in the code.",
     LessonKind.REFUSAL: "the gate refuses the same check story after story; either the stages are not told what it "
                         "holds, or the check refuses wrongly — the factory's maintainers look at both.",
@@ -40,7 +42,8 @@ WHY_TARGET = {
     LessonPlace.CRITERION: "the stories lack it; a criterion asks for it before the plan.",
     LessonPlace.DESCRIPTION: "the plan or the documents miss it; said in the description, every brief carries it.",
     LessonPlace.PROJECT_RULE: "the code repeats it; a rule of the project's own catches it at the gate.",
-    LessonPlace.INSTRUCTIONS: "the tests repeat it; a line of the agent instructions tells the test stage first.",
+    LessonPlace.INSTRUCTIONS: "no rule can see it; a line of the agent instructions tells the stages before they write "
+                              "it.",
     LessonPlace.GLOSSARY: "the words drift; in the glossary, the gate looks for them.",
     LessonPlace.PROFILE_CHECK: "the profile lacks it; a check the profile names runs it at the gate.",
 }
@@ -55,9 +58,15 @@ DEFAULT_SKILLS = {
 }
 
 
-def option_text(place: LessonPlace, profile: typing.Mapping[str, str], record: RecordId) -> str:
-    """One option: the place, what it means, and who writes it."""
+def option_text(place: LessonPlace, profile: typing.Mapping[str, str], record: RecordId,
+                file: typing.Optional[str] = None) -> str:
+    """One option: the place, what it means — for the description, which file — and who writes it."""
     owner = place.owner
+    if place is LessonPlace.DESCRIPTION:
+        where = f"`product/{file}`" if file else "the description file it belongs in (`overview.md`, `tech.md` or " \
+                                                 "`domain.md`)"
+        return f"{place.value} — keep the draft below once in {where}, so the stages read it before they ask " \
+               f"(written by {DEFAULT_SKILLS[owner]})"
     if owner is Owner.NOBODY:
         return f"{place.value} — {place.says.value}"
     if owner is Owner.MAINTAINERS:
@@ -83,9 +92,15 @@ def lesson_text(record: RecordId, candidate: Candidate, asked: Moment, profile: 
     lines += [f"- {e.story.value}: {e.source.value}" for e in candidate.evidence]
     if candidate.contrast is not None:
         lines.append(f"- contrast: {candidate.contrast.value} — the same target without this finding")
+    if candidate.said is not None:
+        lines += ["", "## Draft", f"> {candidate.said.value}"]
     lines += ["", "## Options"]
-    lines += [f"- {keys[i]}: {option_text(place, profile, record)}" for i, place in enumerate(candidate.places)]
+    file = candidate.file.value if candidate.file is not None else None
+    lines += [f"- {keys[i]}: {option_text(place, profile, record, file)}" for i, place in enumerate(candidate.places)]
     why = WHY_TARGET.get(candidate.recommended, WHY[candidate.kind]) if candidate.key.target() is not None else WHY[candidate.kind]
+    if candidate.recommended is LessonPlace.FACTORY:
+        why = "the pipeline kept the stages from going on, story after story; its maintainers correct that, not the " \
+              "project."
     lines += ["", "## Recommendation", f"a — {candidate.recommended.value}: {why}", ""]
     return "\n".join(lines)
 
@@ -98,6 +113,9 @@ class DeliveryLessons(LessonRecords):
 
     def taken(self, record: RecordId) -> bool:
         return delivery.lesson_taken(self._cwd, record.value)
+
+    def withdraw(self, record: RecordId) -> None:
+        delivery.withdraw_lesson(self._cwd, record.value)
 
     def write(self, record: RecordId, candidate: Candidate, asked: Moment) -> str:
         profile = read_profile(resolve_profile(None, self._cwd))
