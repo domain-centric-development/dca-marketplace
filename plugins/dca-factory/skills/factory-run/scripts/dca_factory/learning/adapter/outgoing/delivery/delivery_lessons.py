@@ -98,7 +98,7 @@ def lesson_text(record: RecordId, candidate: Candidate, asked: Moment, profile: 
     file = candidate.file.value if candidate.file is not None else None
     lines += [f"- {keys[i]}: {option_text(place, profile, record, file)}" for i, place in enumerate(candidate.places)]
     why = WHY_TARGET.get(candidate.recommended, WHY[candidate.kind]) if candidate.key.target() is not None else WHY[candidate.kind]
-    if candidate.recommended is LessonPlace.FACTORY:
+    if candidate.kind is LessonKind.QUESTION and candidate.recommended is LessonPlace.FACTORY:
         why = "the pipeline kept the stages from going on, story after story; its maintainers correct that, not the " \
               "project."
     lines += ["", "## Recommendation", f"a — {candidate.recommended.value}: {why}", ""]

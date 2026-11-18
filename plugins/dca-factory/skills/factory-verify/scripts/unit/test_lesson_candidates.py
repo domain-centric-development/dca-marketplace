@@ -281,3 +281,10 @@ class HonestCountTest(unittest.TestCase):
         self.assertIn("## Draft\n> Prices are gross", text)
         self.assertIn("- a: description — keep the draft below once in `product/tech.md`", text)
         self.assertIn("- b: factory —", text)
+
+    def test_a_refusal_keeps_its_own_reason(self):
+        from dca_factory.learning.adapter.outgoing.delivery.delivery_lessons import lesson_text
+        from dca_factory.learning.domain.model.words import Moment, RecordId
+        found = drawn(signals(LessonKind.REFUSAL, 3))
+        text = lesson_text(RecordId(found[0].id.value), found[0], Moment("2026-11-18T10:00:00Z"), {})
+        self.assertIn("the gate refuses the same check story after story", text)
